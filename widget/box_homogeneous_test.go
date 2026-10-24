@@ -51,3 +51,34 @@ func TestBoxHomogeneousDefaultsOff(t *testing.T) {
 		t.Error("SetHomogeneous(false) left it on")
 	}
 }
+
+// The expanders' share of a width that does not divide evenly goes a
+// pixel more to the first of them, so the row ends flush, gaps or not;
+// an even width keeps the shares equal (#255).
+func TestBoxSpreadsTheRemainder(t *testing.T) {
+	for _, tc := range []struct {
+		width, spacing int
+		want           []int
+	}{
+		{337, 0, []int{85, 84, 84, 84}},
+		{340, 1, []int{85, 84, 84, 84}},
+		{336, 0, []int{84, 84, 84, 84}},
+	} {
+		row := NewBox(Row, tc.spacing, 0)
+		row.SetHomogeneous(true)
+		kids := make([]*Spacer, 4)
+		for i := range kids {
+			kids[i] = NewSpacer(10, 10)
+			row.Append(kids[i], true)
+		}
+		arrangeTree(t, row, tc.width, 20)
+		for i, k := range kids {
+			if k.Bounds().W != tc.want[i] {
+				t.Errorf("%dpx with spacing %d: child %d is %d wide, want %d", tc.width, tc.spacing, i, k.Bounds().W, tc.want[i])
+			}
+		}
+		if last := kids[3].Bounds(); last.X+last.W != tc.width {
+			t.Errorf("%dpx with spacing %d: the row ends at %d", tc.width, tc.spacing, last.X+last.W)
+		}
+	}
+}

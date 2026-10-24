@@ -534,9 +534,10 @@ func (b *Box) Arrange(r render.Rect) {
 }
 
 // arrangeBox is the programmatic box layout: expanding children share
-// the leftover main-axis space, every child stretches across the cross
-// axis. Out-of-flow children take no space; they are placed from where
-// the flow reached.
+// the leftover main-axis space, the first of them a pixel more each
+// until none is left (gtk_box_size_allocate), and every child stretches
+// across the cross axis. Out-of-flow children take no space; they are
+// placed from where the flow reached.
 func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 	spacing := b.gap(v)
 
@@ -560,7 +561,7 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 			expanders++
 		}
 	}
-	extra := max(0, free) / max(1, expanders)
+	extra, rem := max(0, free)/max(1, expanders), max(0, free)%max(1, expanders)
 	var takes []int
 	if free < 0 {
 		buf := shrinkBufs.push(2 * len(b.child))
@@ -591,6 +592,10 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 		size := b.main(c.nat)
 		if b.expands(c) {
 			size += extra
+			if rem > 0 {
+				size++
+				rem--
+			}
 		}
 		if takes != nil {
 			size -= takes[i]
