@@ -271,7 +271,7 @@ func TestExpanderTitleAndArrowNodes(t *testing.T) {
 // TestGoldenExpander pins shadcn's Collapsible trigger: the title at
 // the start and the chevron at the end, down when closed, up when open.
 func TestGoldenExpander(t *testing.T) {
-	defer anim.SetInstant(true)()
+	t.Cleanup(anim.SetInstant(true))
 	face := goldenFace(t)
 	for _, shot := range bothPalettes("expander") {
 		col := NewBox(Column, 8, 0)
