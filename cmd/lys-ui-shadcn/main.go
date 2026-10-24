@@ -459,6 +459,11 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 			ui.Item("Basic Item", "A simple item with title and description.").Variant(widget.ItemOutline).
 				AddAction(ui.Button(ui.Label("Action"), 0, 0).Classes(css.Outline, css.Small)),
 			ui.Item("Your profile has been verified.", "").Variant(widget.ItemMuted).Small(true),
+			ui.ItemGroup(
+				ui.Item("shadcn", "shadcn@vercel.com"),
+				ui.Item("maxleiter", "maxleiter@vercel.com"),
+				ui.Item("evilrabbit", "evilrabbit@vercel.com"),
+			).Classes(css.Card),
 		),
 		section("Kbd", ui.Row(ui.KbdGroup("Ctrl", "Shift", "P"), ui.Label("opens the command palette")).Spacing(12)),
 		section("Menubar", ui.Aligned(ui.MenuBar("File", "Edit", "View", "Profiles").Ref(&g.menubar).OnRoot(g.menubarRoot), widget.AlignStart)),

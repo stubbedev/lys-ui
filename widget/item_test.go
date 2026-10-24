@@ -47,3 +47,37 @@ func TestGoldenShadcnItemButtonGroup(t *testing.T) {
 		})
 	}
 }
+
+// An ItemGroup puts one separator between consecutive items and none
+// around them (#265).
+func TestItemGroupSeparators(t *testing.T) {
+	face := goldenFace(t)
+	g := NewItemGroup(NewItem(face, "shadcn", "shadcn@vercel.com"), NewItem(face, "maxleiter", "maxleiter@vercel.com"))
+	g.Append(NewItem(face, "evilrabbit", "evilrabbit@vercel.com"))
+	kids := g.box.Children()
+	seps := 0
+	for i, k := range kids {
+		_, isSep := k.(*Separator)
+		if isSep != (i%2 == 1) {
+			t.Fatalf("child %d is %T, want items and separators alternating", i, k)
+		}
+		if isSep {
+			seps++
+		}
+	}
+	if len(kids) != 5 || seps != 2 {
+		t.Errorf("%d children with %d separators, want 3 items and 2 separators", len(kids), seps)
+	}
+}
+
+func TestGoldenItemGroup(t *testing.T) {
+	face := goldenFace(t)
+	for _, shot := range bothPalettes("itemgroup") {
+		g := NewItemGroup(
+			NewItem(face, "shadcn", "shadcn@vercel.com"),
+			NewItem(face, "maxleiter", "maxleiter@vercel.com"),
+			NewItem(face, "evilrabbit", "evilrabbit@vercel.com"),
+		)
+		NewGolden(t, g, shot.name, goldenTheme(shot.th), goldenFrame(320, 250))
+	}
+}

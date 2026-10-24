@@ -144,3 +144,34 @@ func (g *ButtonGroup) Append(w Widget) {
 	}
 	g.box.Append(w, false)
 }
+
+// ItemGroup stacks Items into one list (shadcn/ui's Item Group), a
+// separator between each item and the next. It styles as the
+// `itemgroup` element.
+type ItemGroup struct {
+	composite
+	box   *Box
+	items int
+}
+
+// NewItemGroup returns a group of items, in order.
+func NewItemGroup(items ...Widget) *ItemGroup {
+	g := &ItemGroup{box: NewBox(Column, 0, 0)}
+	g.SetElement("itemgroup")
+	g.initComposite(g, g.box)
+	for _, it := range items {
+		g.Append(it)
+	}
+	g.boxed = true
+	return g
+}
+
+// Append adds w at the end, after a separator when the group already
+// holds an item.
+func (g *ItemGroup) Append(w Widget) {
+	if g.items > 0 {
+		g.box.Append(NewSeparator(Horizontal), false)
+	}
+	g.box.Append(w, false)
+	g.items++
+}

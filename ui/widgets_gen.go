@@ -4507,6 +4507,24 @@ func (b *ItemBuilder) WatchVariant(get func() widget.ItemVariant) *ItemBuilder {
 	return b
 }
 
+// ItemGroupBuilder builds a widget.ItemGroup.
+type ItemGroupBuilder struct {
+	base[*widget.ItemGroup, *ItemGroupBuilder]
+}
+
+// ItemGroup builds a widget.ItemGroup with widget.NewItemGroup.
+func ItemGroup(items ...Node) *ItemGroupBuilder {
+	b := &ItemGroupBuilder{}
+	b.init(b, func(s *Scope) *widget.ItemGroup { return widget.NewItemGroup(buildAll(s, items)...) })
+	return b
+}
+
+// Append calls (*widget.ItemGroup).Append.
+func (b *ItemGroupBuilder) Append(child Node) *ItemGroupBuilder {
+	b.do(func(s *Scope, w *widget.ItemGroup) { w.Append(build(s, child)) })
+	return b
+}
+
 // LabelBuilder builds a widget.Label.
 type LabelBuilder struct {
 	base[*widget.Label, *LabelBuilder]
