@@ -115,6 +115,7 @@ type gallery struct {
 	env           ui.Env
 	status        string
 	openSheet     func()
+	openDrawer    func()
 	sidebar       *widget.Sidebar
 	app           *app.Application
 	win           *app.Window
@@ -258,6 +259,29 @@ type payment struct {
 
 // dataTable is the Data Table section: a thousand payments, filtered by
 // email, sorted by amount, selectable, paged.
+// invoice is a row of the Table demo.
+type invoice struct{ id, status, method, amount string }
+
+// table is shadcn's plain table demo: a few invoices, no paging,
+// sorting or selection.
+func (g *gallery) table() ui.Node {
+	rows := widget.SliceModel[invoice]{
+		{"INV001", "Paid", "Credit Card", "$250.00"},
+		{"INV002", "Pending", "PayPal", "$150.00"},
+		{"INV003", "Unpaid", "Bank Transfer", "$350.00"},
+		{"INV004", "Paid", "Credit Card", "$450.00"},
+		{"INV005", "Paid", "PayPal", "$550.00"},
+	}
+	text := func(s string) widget.Widget { return widget.NewLabel(g.env.Face, 14, s, 0) }
+	cols := []widget.TableColumn[invoice]{
+		{Title: "Invoice", Width: 100, Cell: func(r invoice) widget.Widget { return text(r.id) }},
+		{Title: "Status", Width: 100, Cell: func(r invoice) widget.Widget { return text(r.status) }},
+		{Title: "Method", Width: 160, Expand: true, Cell: func(r invoice) widget.Widget { return text(r.method) }},
+		{Title: "Amount", Width: 100, Cell: func(r invoice) widget.Widget { return text(r.amount) }},
+	}
+	return ui.ColumnView[invoice](rows, cols).SizeRequest(0, 240)
+}
+
 func (g *gallery) dataTable() ui.Node {
 	statuses := []string{"success", "processing", "failed", "pending"}
 	rows := make(widget.SliceModel[payment], 1000)
@@ -409,6 +433,7 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 		section("Data Table", g.dataTable()),
 		section("Date Picker", g.datePickers()),
 		section("Dialog", ui.Aligned(ui.Button(ui.Label("Edit Profile"), 0, 0).Classes(css.Outline).OnClick(g.dialog), widget.AlignStart)),
+		section("Drawer", ui.Aligned(ui.Button(ui.Label("Open Drawer"), 0, 0).Classes(css.Outline).OnClick(func() { g.openDrawer() }), widget.AlignStart)),
 		section("Dropdown Menu", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).Ref(&g.menuButton).OnClick(g.dropdownMenu), widget.AlignStart)),
 		section("Empty", ui.StatusPage("", "No projects yet", "You haven't created any projects yet. Get started by creating your first project.").
 			Icon(ui.Symbol(widget.SymbolMaximize, 24)).
@@ -473,6 +498,7 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 		section("Sonner", ui.Aligned(ui.Button(ui.Label("Show Toast"), 0, 0).Classes(css.Outline).OnClick(g.toast), widget.AlignStart)),
 		section("Spinner", ui.Row(ui.Spinner(16), ui.Label("Processing payment...")).Spacing(8)),
 		section("Switch", ui.Row(ui.Switch(false), ui.Label("Airplane Mode")).Spacing(8)),
+		section("Table", g.table()),
 		section("Tabs", ui.Aligned(ui.Notebook().SizeRequest(400, 0).
 			AppendTab("Account", text("Make changes to your account here.")).
 			AppendTab("Password", text("Change your password here.")), widget.AlignStart)),
@@ -494,8 +520,14 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 			ui.Label("Enter your email address.").Classes(css.Muted),
 		),
 	).Spacing(40).Padding(render.UniformInsets(32)))).VerticalOnly(true).Classes(css.Background)
+	var drawer *widget.Sheet
 	g.openSheet = func() { sheet.SetOpen(true) }
-	return ui.Mount(cx, g.env, ui.Sheet(page, ui.Field("Name", ui.Entry().Text("Pedro Duarte")), widget.SheetRight).
+	g.openDrawer = func() { drawer.SetOpen(true) }
+	withDrawer := ui.Sheet(page, ui.Aligned(ui.Label("350 calories per day").Classes(css.H3), widget.AlignCenter), widget.SheetBottom).
+		Header(g.env.Face, "Move Goal", "Set your daily activity goal.").
+		Footer(ui.Button(ui.Label("Submit"), 0, 0).Classes(css.SuggestedAction).OnClick(func() { drawer.SetOpen(false) })).
+		Ref(&drawer)
+	return ui.Mount(cx, g.env, ui.Sheet(withDrawer, ui.Field("Name", ui.Entry().Text("Pedro Duarte")), widget.SheetRight).
 		Header(g.env.Face, "Edit profile", "Make changes to your profile here. Click save when you're done.").
 		Footer(ui.Button(ui.Label("Save changes"), 0, 0).Classes(css.SuggestedAction).OnClick(func() { sheet.SetOpen(false) })).
 		Ref(&sheet))

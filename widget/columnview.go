@@ -106,6 +106,7 @@ func NewColumnView[T any](face render.Font, sizePx float64, model ColumnModel[T]
 	column.Append(v.list, true)
 	v.initComposite(v, column)
 	v.boxed = true
+	v.SetElement("columnview")
 	v.buildHeader()
 	v.recompute()
 	return v
