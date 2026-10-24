@@ -110,7 +110,7 @@ func (a *AspectFrame) Measure(con Constraints) Size {
 	if sz, ok := a.measureHit(con); ok {
 		return sz
 	}
-	nat := a.root.Measure(con)
+	nat := measureChild(a, a.root, con)
 	r := a.effective(nat)
 	sz := nat
 	if float64(nat.W) < float64(nat.H)*r {
@@ -124,13 +124,12 @@ func (a *AspectFrame) Measure(con Constraints) Size {
 // Arrange fits the largest rect of the ratio inside r, centered.
 func (a *AspectFrame) Arrange(r render.Rect) {
 	a.node.Arrange(r)
-	ratio := a.effective(a.root.Measure(Constraints{Max: Size{W: r.W, H: r.H}}))
+	ratio := a.effective(measureChild(a, a.root, Constraints{Max: Size{W: r.W, H: r.H}}))
 	w, h := r.W, int(float64(r.W)/ratio+0.5)
 	if h > r.H {
 		w, h = int(float64(r.H)*ratio+0.5), r.H
 	}
-	a.root.Arrange(render.Rect{X: r.X + (r.W-w)/2, Y: r.Y + (r.H-h)/2, W: w, H: h})
-	setParents(a, a.root)
+	arrangeChild(a.root, render.Rect{X: r.X + (r.W-w)/2, Y: r.Y + (r.H-h)/2, W: w, H: h})
 }
 
 // SizeGroupMode picks the axes a SizeGroup equalizes.
@@ -184,7 +183,7 @@ func (m *sizeMember) Measure(con Constraints) Size {
 		return sz
 	}
 	m.lastCon, m.seen = con, true
-	sz := m.root.Measure(con)
+	sz := measureChild(m, m.root, con)
 	for _, o := range m.group.members {
 		if o == m {
 			continue
@@ -193,7 +192,7 @@ func (m *sizeMember) Measure(con Constraints) Size {
 		if o.seen {
 			oc = o.lastCon
 		}
-		os := o.root.Measure(oc)
+		os := measureChild(o, o.root, oc)
 		if m.group.mode&SizeGroupHorizontal != 0 {
 			sz.W = max(sz.W, os.W)
 		}

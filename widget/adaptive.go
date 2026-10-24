@@ -46,7 +46,7 @@ func (c *Clamp) Measure(con Constraints) Size {
 	if c.max > 0 {
 		inner.Max.W = min(inner.Max.W, c.max)
 	}
-	sz := c.root.Measure(inner)
+	sz := measureChild(c, c.root, inner)
 	return c.measureStore(con, clampSize(Size{W: con.Max.W, H: sz.H}, con))
 }
 
@@ -57,8 +57,7 @@ func (c *Clamp) Arrange(r render.Rect) {
 	if c.max > 0 {
 		w = min(w, c.max)
 	}
-	c.root.Arrange(render.Rect{X: r.X + (r.W-w)/2, Y: r.Y, W: w, H: r.H})
-	setParents(c, c.root)
+	arrangeChild(c.root, render.Rect{X: r.X + (r.W-w)/2, Y: r.Y, W: w, H: r.H})
 }
 
 // Breakpoint applies while the allocated width is at or below Max

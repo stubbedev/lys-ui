@@ -91,3 +91,18 @@ func TestGoldenFrame(t *testing.T) {
 	f := NewFrame(face, "Network", NewLabel(face, 14, "Wired connected", th.Text))
 	NewGolden(t, f, "frame", goldenTheme(th), goldenFrame(200, 90))
 }
+
+// The frame measures its child through its layout properties: a child
+// with a width request and no content of its own still sets the
+// frame's width and so its height.
+func TestAspectFrameHonorsTheChildSizeRequest(t *testing.T) {
+	inner := NewBox(Column, 0, 0)
+	inner.SetSizeRequest(360, 0)
+	a := NewAspectFrame(inner, 16.0/9)
+	host := NewBox(Column, 0, 0)
+	host.AppendAligned(a, false, AlignStart)
+	arrangeTree(t, host, 600, 600)
+	if got := inner.Bounds(); got.W != 360 || got.H != 203 {
+		t.Errorf("child %v, want 360x203 from its width request", got)
+	}
+}
