@@ -15,18 +15,18 @@ const (
 	// headerPadX/headerPadY inset the header row's content.
 	headerPadX = 8
 	headerPadY = 5
-	// chevronSize is the rotate glyph's box; headerGap spaces it from
-	// the title.
+	// chevronSize is the rotate glyph's box; headerGap spaces the
+	// title from it.
 	chevronSize = 12
 	headerGap   = 6
 	// bodyPadX insets the child from the expander's sides.
 	bodyPadX = 2
 )
 
-// Expander is a collapsible section: a header row (rotating chevron
-// plus title) toggles the child beneath it. Toggling animates the
-// height over the animation clock, with the chevron turning on the
-// same progress, and the open state is remembered — a collapsed
+// Expander is a collapsible section (shadcn/ui's Collapsible): a
+// header row (the title, and a chevron at the end turning from down to
+// up) toggles the child beneath it. Toggling animates the height over
+// the animation clock, with the chevron turning on the same progress, and the open state is remembered — a collapsed
 // expander reopens to where it was, and state survives being hidden
 // by a parent. Children exposes the child only while open, so focus
 // traversal never lands inside a closed section.
@@ -256,8 +256,8 @@ func (e *Expander) Measure(con Constraints) Size {
 	return e.measureStore(con, clampSize(Size{W: w, H: h}, con))
 }
 
-// Paint draws the header — hover shade, chevron at the reveal angle,
-// title — then the child, clipped to the revealed strip.
+// Paint draws the header — hover shade, title, chevron at the reveal
+// angle — then the child, clipped to the revealed strip.
 func (e *Expander) Paint(cv *render.Canvas) {
 	th := Current()
 	head := e.headerRect()
@@ -268,9 +268,9 @@ func (e *Expander) Paint(cv *render.Canvas) {
 		cv.RoundedRect(head, th.Radius, th.SurfaceHover)
 	}
 	av := e.arrow.style(&e.arrow)
-	cx := head.X + headerPadX + chevronSize/2
+	cx := head.X + head.W - headerPadX - chevronSize/2
 	cy := head.Y + head.H/2
-	paintChevron(cv, cx, cy, chevronSize, e.progress, pickc(0, av, style.PropColor, th.TextMuted))
+	strokeChevron(cv, cx, cy, chevronSize/3, math.Pi/2+math.Pi*math01(e.progress), pickc(0, av, style.PropColor, th.TextMuted))
 	if e.face != nil {
 		sh := e.face.Shape(e.title, e.sizePx)
 		baseline := head.Y + (head.H-sh.LineHeight())/2 + int(sh.Ascent()+0.5)
@@ -279,30 +279,13 @@ func (e *Expander) Paint(cv *render.Canvas) {
 			col = th.TextMuted
 		}
 		col = pickc(0, e.titleNode.style(&e.titleNode), style.PropColor, col)
-		e.face.Draw(cv, sh, head.X+headerPadX+chevronSize+headerGap, baseline, col)
+		e.face.Draw(cv, sh, head.X+headerPadX, baseline, col)
 	}
 	if e.progress > 0 && e.child != nil && !e.childRect.Empty() {
 		prev := cv.PushClip(e.childRect)
 		PaintChild(cv, e.child)
 		cv.PopClip(prev)
 	}
-}
-
-// paintChevron draws the reveal glyph: a triangle turning from
-// right-pointing (closed) to down-pointing (open) with progress.
-func paintChevron(cv *render.Canvas, cx, cy, size int, progress float64, col render.Color) {
-	ang := (math.Pi / 2) * math01(progress)
-	r := float64(size) / 2
-	rot := func(px, py float64) (int, int) {
-		c, s := math.Cos(ang), math.Sin(ang)
-		return cx + int(px*c-py*s+0.5), cy + int(px*s+py*c+0.5)
-	}
-	tipX, tipY := rot(r, 0)
-	lx, ly := rot(-r*0.4, -r*0.7)
-	rx, ry := rot(-r*0.4, r*0.7)
-	cv.Line(tipX, tipY, lx, ly, 1, col)
-	cv.Line(tipX, tipY, rx, ry, 1, col)
-	cv.Line(lx, ly, rx, ry, 1, col)
 }
 
 // HitTest resolves the header into the expander (clicks toggle) and

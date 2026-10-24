@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/render"
@@ -264,5 +265,20 @@ func TestExpanderTitleAndArrowNodes(t *testing.T) {
 	}
 	if got := pickc(0, e.arrow.style(&e.arrow), style.PropColor, 0); got != render.RGB(0x0a, 0x0b, 0x0c) {
 		t.Errorf("arrow color %v, want the arrow rule", got)
+	}
+}
+
+// TestGoldenExpander pins shadcn's Collapsible trigger: the title at
+// the start and the chevron at the end, down when closed, up when open.
+func TestGoldenExpander(t *testing.T) {
+	defer anim.SetInstant(true)()
+	face := goldenFace(t)
+	for _, shot := range bothPalettes("expander") {
+		col := NewBox(Column, 8, 0)
+		closed := NewExpander(face, "@peduarte starred 3 repositories", NewLabel(face, 14, "@radix-ui/colors", 0))
+		open := NewExpander(face, "@peduarte starred 3 repositories", NewLabel(face, 14, "@radix-ui/colors", 0))
+		open.Toggle()
+		col.Append(closed, false).Append(open, false)
+		NewGolden(t, col, shot.name, goldenTheme(shot.th), goldenFrame(320, 90))
 	}
 }
