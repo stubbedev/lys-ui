@@ -55,7 +55,7 @@ func run() error {
 	}
 	dialogs := widget.NewFlowBox(8, 8)
 	dialogs.Append(button("message", func() error {
-		_, err := application.MessageBox(w, app.Question, "Lunch?", "Where shall we eat?", []app.DialogButton{
+		_, err := application.MessageBox(w, "Lunch?", "Where shall we eat?", []app.DialogButton{
 			{Label: "Cancel", Response: "cancel", Role: app.ButtonRoleCancel},
 			{Label: "Kitchen", Response: "kitchen", Role: app.ButtonRoleDefault},
 		})

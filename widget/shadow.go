@@ -158,20 +158,18 @@ func (e *Elevation) Arrange(r render.Rect) {
 	e.ring.syncRing(&e.node, ringFor(e.bounds, blur))
 }
 
-// Paint draws shadow, optional plate, then the child. The stylesheet's
-// box-shadow, background-color (the plate a bare content tree floats
-// on), and border-radius override the constructor and theme values —
-// the dialog and popover cards style through this.
+// Paint draws shadow, optional plate and border, then the child. The
+// stylesheet's box-shadow, background-color (the plate a bare content
+// tree floats on), border and border-radius override the constructor
+// and theme values — the dialog and popover cards style through this.
 func (e *Elevation) Paint(cv *render.Canvas) {
 	t := Current()
-	radius := radiusOr(e.style(e), e.radius).TopLeft
+	v := e.style(e)
+	radii := radiusOr(v, e.radius)
 	if col, blur := effShadow(e, t); blur > 0 {
-		cv.Shadow(e.bounds, radius, blur, col)
+		cv.Shadow(e.bounds, radii.TopLeft, blur, col)
 	}
-	plate := pickc(e.plate, e.style(e), style.PropBackgroundColor, e.plate)
-	if plate != 0 {
-		cv.RoundedRect(e.bounds, radius, plate)
-	}
+	paintBoxBehind(cv, v, e.bounds, radii, borderOf(v), pickc(0, v, style.PropBackgroundColor, e.plate))
 	PaintChild(cv, e.child)
 }
 

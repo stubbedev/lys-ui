@@ -48,7 +48,9 @@ const (
 // dialog's initial size in logical pixels, like every size in the
 // toolkit; zero lets the compositor pick.
 type DialogConfig struct {
-	Title           string
+	Title string
+	// Width and Height size the window; a zero Height fits the dialog's
+	// content at Width.
 	Width, Height   uint32
 	Content         widget.Widget
 	Buttons         []DialogButton
@@ -111,6 +113,9 @@ func (w *Window) dialogWindow() *Window { return w }
 // window to parent to.
 func (l *LayerWindow) dialogWindow() *Window { return nil }
 
+// dialogMaxHeight caps the height a dialog sized to its content takes.
+const dialogMaxHeight = 4096
+
 // NewDialog opens a dialog parented to a window of this application.
 // A nil parent makes an application-level dialog that blocks every
 // other window while open (when Modal).
@@ -127,6 +132,9 @@ func (a *Application) NewDialog(parent DialogParent, cfg DialogConfig) (*Dialog,
 	root, background, err := a.dialogRoot(cfg, respond)
 	if err != nil {
 		return nil, err
+	}
+	if cfg.Height == 0 {
+		cfg.Height = uint32(root.Measure(widget.Constraints{Max: widget.Size{W: int(cfg.Width), H: dialogMaxHeight}}).H)
 	}
 
 	winCfg := WindowConfig{
@@ -503,85 +511,27 @@ func (a *Application) CalendarDialog(parent *Window, initial widget.Date, onSele
 	return d, err
 }
 
-// MessageBox opens the standard preset: a colored icon slot by kind, a
-// text body, and a button row.
-func (a *Application) MessageBox(parent *Window, kind MessageKind, title, text string, buttons []DialogButton) (*Dialog, error) {
+// MessageBox opens the standard preset, shadcn/ui's AlertDialog: the
+// title over the muted text, wrapped, above the buttons, the dialog as
+// tall as they need.
+func (a *Application) MessageBox(parent *Window, title, text string, buttons []DialogButton) (*Dialog, error) {
 	face := a.resolveFace(nil)
 	if face == nil {
 		return nil, ErrNoDialogFace
 	}
-	body := widget.NewBox(widget.Row, 16, 0)
-	body.Append(newMessageGlyph(kind, 40), false)
-	body.Append(widget.NewLabel(face, 14, text, 0), true)
-	cfg := DialogConfig{
+	body := widget.NewLabel(face, 14, text, 0)
+	body.SetWrap(true)
+	body.AddClass(css.DimLabel)
+	return a.NewDialog(parent, DialogConfig{
 		Title:           title,
-		Width:           420,
-		Height:          160,
+		Width:           440,
 		Content:         body,
 		Buttons:         buttons,
 		Modal:           true,
 		DefaultResponse: defaultResponse(buttons),
 		CancelResponse:  cancelResponse(buttons),
-	}
-	return a.NewDialog(parent, cfg)
+	})
 }
-
-// MessageKind selects the icon mood of a MessageBox.
-type MessageKind uint8
-
-// Message kinds.
-const (
-	Info MessageKind = iota
-	Question
-	Warning
-	Error
-)
-
-// messageColors maps each kind to its icon color.
-var messageColors = map[MessageKind]render.Color{
-	Info:     render.RGB(0x50, 0xa0, 0xe0),
-	Question: render.RGB(0x60, 0xc0, 0x90),
-	Warning:  render.RGB(0xf0, 0xc0, 0x40),
-	Error:    render.RGB(0xe0, 0x50, 0x50),
-}
-
-// newMessageGlyph paints a colored disc marking the message kind.
-func newMessageGlyph(kind MessageKind, size int) widget.Widget {
-	return &messageGlyph{size: size, color: messageColors[kind]}
-}
-
-// messageGlyph paints a filled disc in the message color.
-type messageGlyph struct {
-	size   int
-	color  render.Color
-	bounds render.Rect
-}
-
-func (g *messageGlyph) Measure(con widget.Constraints) widget.Size {
-	w, h := g.size, g.size
-	if con.Max.W < w {
-		w = con.Max.W
-	}
-	if con.Max.H < h {
-		h = con.Max.H
-	}
-	return widget.Size{W: w, H: h}
-}
-
-func (g *messageGlyph) Arrange(r render.Rect) { g.bounds = r }
-
-func (g *messageGlyph) Paint(cv *render.Canvas) {
-	cv.FillRect(g.bounds, g.color)
-}
-
-func (g *messageGlyph) HitTest(p widget.Point) widget.Widget {
-	if g.bounds.Contains(p.X, p.Y) {
-		return g
-	}
-	return nil
-}
-
-func (g *messageGlyph) Bounds() render.Rect { return g.bounds }
 
 // defaultResponse is the response Enter fires: the button marked
 // ButtonRoleDefault, else the first button (the positional fallback).
@@ -617,7 +567,9 @@ func cancelResponse(buttons []DialogButton) string {
 var ErrNoDialogFace = errors.New("app: dialog text face unavailable: no configured tooltip face and the system has no sans font")
 
 // dialogRoot builds the dialog window's root: the content in the
-// toolkit's card above a button row, or, Bare, the content alone.
+// toolkit's card, shadcn/ui's Dialog: the title, the content and the
+// footer of buttons, the default response's on the primary fill and the
+// others outlined; or, Bare, the content alone.
 func (a *Application) dialogRoot(cfg DialogConfig, respond func(string)) (widget.Widget, render.Color, error) {
 	if cfg.Bare {
 		return cfg.Content, cfg.Background, nil
@@ -625,27 +577,38 @@ func (a *Application) dialogRoot(cfg DialogConfig, respond func(string)) (widget
 	if len(cfg.Buttons) == 0 {
 		cfg.Buttons = []DialogButton{{Label: widget.Tr("OK"), Response: "ok"}}
 	}
-	// The button row's labels need a face; under the toolkit-wide
+	// The title and the button row need a face; under the toolkit-wide
 	// nil-face contract a nil face into a constructor panics, so a
 	// system without any usable font surfaces as an error here.
 	face := a.resolveFace(nil)
 	if face == nil {
 		return nil, 0, ErrNoDialogFace
 	}
-	buttons := widget.NewBox(widget.Row, 8, 0)
-	buttons.Append(widget.NewSpacer(0, 0), true)
+	primary := cfg.DefaultResponse
+	if primary == "" {
+		primary = defaultResponse(cfg.Buttons)
+	}
+	footer := widget.NewBox(widget.Row, 8, 0)
+	footer.Append(widget.NewSpacer(0, 0), true)
 	for _, b := range cfg.Buttons {
 		resp := b.Response
-		btn := widget.NewButton(
-			widget.NewBox(widget.Row, 6, 0).
-				Append(widget.NewLabel(face, 13, b.Label, 0), false),
-			10, 6)
+		btn := widget.NewButton(widget.NewLabel(face, 14, b.Label, 0), 0, 0)
+		variant := css.Outline
+		if resp == primary {
+			variant = css.SuggestedAction
+		}
+		btn.AddClass(variant)
 		btn.OnClick = func() { respond(resp) }
-		buttons.Append(btn, false)
+		footer.Append(btn, false)
 	}
-	content := widget.NewBox(widget.Column, 12, 12)
+	content := widget.NewBox(widget.Column, 16, 24)
+	if cfg.Title != "" {
+		title := widget.NewLabel(face, 18, cfg.Title, 0)
+		title.AddClass("title")
+		content.Append(title, false)
+	}
 	content.Append(cfg.Content, true)
-	content.Append(buttons, false)
+	content.Append(footer, false)
 	root, background := dialogCard(content)
 	return root, background, nil
 }

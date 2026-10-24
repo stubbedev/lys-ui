@@ -36,19 +36,6 @@ func TestDialogButtonRoles(t *testing.T) {
 	}
 }
 
-// TestQuestionKind pins the MessageBox Question mood: present in the
-// kind list and carrying its own glyph color.
-func TestQuestionKind(t *testing.T) {
-	if _, ok := messageColors[Question]; !ok {
-		t.Error("Question has no glyph color")
-	}
-	for _, kind := range []MessageKind{Info, Question, Warning, Error} {
-		if _, ok := messageColors[kind]; !ok {
-			t.Errorf("kind %d has no glyph color", kind)
-		}
-	}
-}
-
 // TestPaletteScopedPerApplication pins the #84 scoping: picks land in
 // the confirming application's palette only, deduped and most recent
 // first, capped.

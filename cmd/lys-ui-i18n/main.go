@@ -72,7 +72,7 @@ func (g *greeter) apply() {
 }
 
 func (g *greeter) ask() {
-	_, _ = g.app.MessageBox(nil, app.Question, widget.Tr("question"), widget.Tr("greeting"),
+	_, _ = g.app.MessageBox(nil, widget.Tr("question"), widget.Tr("greeting"),
 		[]app.DialogButton{
 			{Label: widget.Tr("Cancel"), Response: "cancel", Role: app.ButtonRoleCancel},
 			{Label: widget.Tr("OK"), Response: "ok", Role: app.ButtonRoleDefault},

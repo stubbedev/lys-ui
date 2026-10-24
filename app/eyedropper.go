@@ -67,7 +67,7 @@ func (a *Application) startEyedrop(chooser *widget.ColorChooser) {
 		a.Invoke(func() {
 			if err != nil {
 				debug.Log("shell", "eyedropper: capture: %v", err)
-				_, _ = a.MessageBox(nil, Error, widget.Tr("Pick from screen"), widget.Tr("The screen could not be captured on this compositor."), []DialogButton{{Label: widget.Tr("Close"), Response: "close", Role: ButtonRoleCancel}})
+				_, _ = a.MessageBox(nil, widget.Tr("Pick from screen"), widget.Tr("The screen could not be captured on this compositor."), []DialogButton{{Label: widget.Tr("Close"), Response: "close", Role: ButtonRoleCancel}})
 				return
 			}
 			a.openEyedrop(chooser, img)
