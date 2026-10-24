@@ -111,6 +111,10 @@ const (
 	// Small and Large step the control height down and up.
 	Small = "small"
 	Large = "large"
+	// Icon makes a button a square for an icon alone, 36px, or 32px and
+	// 40px with Small and Large (shadcn's size="icon", icon-sm,
+	// icon-lg); it composes with every variant.
+	Icon = "icon"
 )
 
 // Named colors, referenced in stylesheets as @name.
