@@ -42,9 +42,12 @@ type Icon struct {
 
 	kind iconKind
 	name string // theme icon name
-	path string // file path
-	svg  []byte // embedded SVG bytes
-	size int    // logical box for the non-static kinds
+	// fallbacks resolves name through its dash-shortened forms
+	// (NewThemeIconFallback).
+	fallbacks bool
+	path      string // file path
+	svg       []byte // embedded SVG bytes
+	size      int    // logical box for the non-static kinds
 
 	// tint pins the recolor color; zero follows the theme Accent.
 	tint Color
@@ -72,6 +75,18 @@ func NewIcon(ic *render.Icon) *Icon {
 // nothing and surface through Err.
 func NewThemeIcon(name string, size int) *Icon {
 	return &Icon{kind: iconTheme, name: name, size: size}
+}
+
+// NewThemeIconFallback is NewThemeIcon with GTK's default fallbacks
+// for app icons (GThemedIcon): a missing name resolves to its
+// dash-shortened forms in turn, preferences-system-network to
+// preferences-system, then preferences. A desktop entry's Icon= names
+// a specific icon a theme may lack; the fallback re-resolves when the
+// theme changes.
+func NewThemeIconFallback(name string, size int) *Icon {
+	i := NewThemeIcon(name, size)
+	i.fallbacks = true
+	return i
 }
 
 // ThemeIconExists reports whether name resolves in the current icon
@@ -319,10 +334,14 @@ func (i *Icon) rasterize(frac uint32, tint Color, dev, size int) (*render.Icon, 
 	switch i.kind {
 	case iconTheme:
 		cache := icons.Default()
-		if i.tint != 0 {
-			return cache.Tinted(i.name, size, frac, tint)
+		name := i.name
+		if i.fallbacks {
+			name = cache.FallbackName(name)
 		}
-		return cache.SymbolicIcon(i.name, size, frac, tint)
+		if i.tint != 0 {
+			return cache.Tinted(name, size, frac, tint)
+		}
+		return cache.SymbolicIcon(name, size, frac, tint)
 	case iconFile:
 		data, err := os.ReadFile(i.path)
 		if err != nil {

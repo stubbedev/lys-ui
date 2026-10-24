@@ -137,7 +137,7 @@ func findIconFile(base, theme, dir, name string) string {
 
 // nameCandidates lists the file stems tried for an icon name.
 func nameCandidates(name string) []string {
-	if base, ok := strings.CutSuffix(name, "-symbolic"); ok {
+	if base, ok := strings.CutSuffix(name, symbolicSuffix); ok {
 		return []string{name, base}
 	}
 	return []string{name}
@@ -147,4 +147,31 @@ func nameCandidates(name string) []string {
 func isFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()
+}
+
+// symbolicSuffix marks a symbolic icon name.
+const symbolicSuffix = "-symbolic"
+
+// FallbackName is the first of name and its dash-shortened forms that
+// resolves, GThemedIcon's default fallbacks: a missing
+// preferences-system-network tries preferences-system, then
+// preferences. A -symbolic suffix stays on every form. It returns name
+// itself when none resolves.
+func (c *Cache) FallbackName(name string) string {
+	base, suffix := strings.CutSuffix(name, symbolicSuffix)
+	tail := ""
+	if suffix {
+		tail = symbolicSuffix
+	}
+	for n := base; n != ""; {
+		if _, err := c.Lookup(n+tail, 16, 120); err == nil {
+			return n + tail
+		}
+		i := strings.LastIndexByte(n, '-')
+		if i < 0 {
+			break
+		}
+		n = n[:i]
+	}
+	return name
 }

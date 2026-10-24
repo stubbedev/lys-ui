@@ -203,15 +203,16 @@ func parseINI(data []byte) map[string]map[string]string {
 
 // themeChain walks the inheritance chain of themeName: the theme
 // itself, then its Inherits depth-first (each name resolves against the
-// first base directory holding its index.theme), then hicolor when the
-// chain does not reach it. Missing themes and inheritance cycles are
+// first base directory holding its index.theme), then DefaultTheme and
+// hicolor, the fallbacks GTK 4 always looks in. An inherited hicolor
+// waits for the end: the spec makes it the last resort, after Adwaita. Missing themes and inheritance cycles are
 // tolerated; the depth cap keeps a corrupt index from looping.
 func themeChain(themeName string, baseDirs []string) []*Theme {
 	var chain []*Theme
 	seen := map[string]bool{}
 	var walk func(name string, depth int)
 	walk = func(name string, depth int) {
-		if name == "" || depth > maxInheritDepth || seen[name] {
+		if name == "" || depth > maxInheritDepth || seen[name] || (depth > 0 && name == "hicolor") {
 			return
 		}
 		seen[name] = true
@@ -225,6 +226,7 @@ func themeChain(themeName string, baseDirs []string) []*Theme {
 		}
 	}
 	walk(themeName, 0)
+	walk(DefaultTheme, 0)
 	walk("hicolor", 0)
 	return chain
 }

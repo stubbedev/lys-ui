@@ -224,13 +224,17 @@ func NewApplication(sess *wlsession.Session) *Application {
 			win.router.Forget(w)
 		}
 	})
-	// Icon lookups follow the portal's live icon-theme setting: a
-	// switch swaps the resolution theme (an empty name keeps the
-	// previous one, Warn) and the cache generation moves, so live
-	// themed icons re-resolve. Any cache reset (that switch, new search
+	// Icon lookups start on settings.ini's gtk-icon-theme-name, for a
+	// session without a settings portal, and follow the portal's live
+	// icon-theme setting: a switch swaps the resolution theme (an empty
+	// name keeps the previous one, Warn) and the cache generation
+	// moves, so live themed icons re-resolve. Any cache reset (that switch, new search
 	// paths, a refresh) is bridged into the loop as the repaint that
 	// walks the damage and picks the change up.
 	a.portal = portalsettings.New()
+	if name := a.gtkSettings().IconThemeName; name != "" {
+		icons.Default().ApplyIconTheme(name)
+	}
 	a.stopIconFollow = a.portal.OnIconThemeChange(icons.Default().ApplyIconTheme)
 	a.repaintOnIconReset(icons.Default())
 	if inspect.Enabled() {

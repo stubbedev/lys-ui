@@ -14,10 +14,11 @@ gtk-application-prefer-dark-theme=1
 gtk-font-name = "Adwaita Sans 11"
 ; another comment
 gtk-xft-dpi=122880
+gtk-icon-theme-name=Papirus
 [Other]
 gtk-font-name=Ignored 9
 `)
-	if want := (Settings{FontName: "Adwaita Sans 11", DPI: 120}); got != want {
+	if want := (Settings{FontName: "Adwaita Sans 11", DPI: 120, IconThemeName: "Papirus"}); got != want {
 		t.Errorf("Parse = %+v, want %+v", got, want)
 	}
 }

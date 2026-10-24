@@ -98,7 +98,7 @@ var freedesktopLucide = map[string]string{
 // -symbolic, or a Lucide name - against the bundled set; "" when it has
 // none.
 func lookupBuiltin(name string) string {
-	stem := strings.TrimSuffix(name, "-symbolic")
+	stem := strings.TrimSuffix(name, symbolicSuffix)
 	if l, ok := freedesktopLucide[stem]; ok {
 		stem = l
 	}

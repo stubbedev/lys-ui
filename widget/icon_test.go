@@ -406,3 +406,33 @@ func TestIconPaintsCentered(t *testing.T) {
 		t.Errorf("icon in an exact fit painted %v, want its origin", got)
 	}
 }
+
+// A fallback theme icon resolves through its dash-shortened forms; a
+// plain one keeps the exact name (#258).
+func TestThemeIconFallback(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "hicolor", "scalable", "apps")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	index := "[Icon Theme]\nName=hicolor\nDirectories=scalable/apps\n\n[scalable/apps]\nSize=16\nType=Scalable\nMinSize=8\nMaxSize=512\n"
+	if err := os.WriteFile(filepath.Join(root, "hicolor", "index.theme"), []byte(index), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><rect width="16" height="16" fill="#ff0000"/></svg>`
+	if err := os.WriteFile(filepath.Join(dir, "preferences-system.svg"), []byte(svg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	SetIconSearchPaths([]string{root})
+	t.Cleanup(func() { SetIconSearchPaths(nil) })
+	inked := func(ic *Icon) bool {
+		buf := paintPixels(t, ic, 16, 16)
+		return pxAt(buf, 16, 8, 8).A() > 0
+	}
+	if !inked(NewThemeIconFallback("preferences-system-network", 16)) {
+		t.Error("the fallback icon painted nothing, want preferences-system")
+	}
+	if inked(NewThemeIcon("preferences-system-network", 16)) {
+		t.Error("an exact lookup of a missing name painted")
+	}
+}

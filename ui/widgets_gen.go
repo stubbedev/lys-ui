@@ -4110,6 +4110,13 @@ func ThemeIcon(name string, size int) *IconBuilder {
 	return b
 }
 
+// ThemeIconFallback builds a widget.Icon with widget.NewThemeIconFallback.
+func ThemeIconFallback(name string, size int) *IconBuilder {
+	b := &IconBuilder{}
+	b.init(b, func(s *Scope) *widget.Icon { return widget.NewThemeIconFallback(name, size) })
+	return b
+}
+
 // ThemeName calls (*widget.Icon).SetThemeName.
 func (b *IconBuilder) ThemeName(name string) *IconBuilder {
 	b.do(func(s *Scope, w *widget.Icon) { w.SetThemeName(name) })

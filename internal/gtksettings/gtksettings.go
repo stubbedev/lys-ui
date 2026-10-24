@@ -24,6 +24,8 @@ import (
 type Settings struct {
 	// FontName is gtk-font-name, "" when no file sets it.
 	FontName string
+	// IconThemeName is gtk-icon-theme-name, "" when no file sets it.
+	IconThemeName string
 	// DPI is gtk-xft-dpi in dots per inch, 0 when no file sets it (or
 	// sets -1, GTK's "default").
 	DPI float64
@@ -79,6 +81,9 @@ func (s Settings) merge(next Settings) Settings {
 	if next.DPI != 0 {
 		s.DPI = next.DPI
 	}
+	if next.IconThemeName != "" {
+		s.IconThemeName = next.IconThemeName
+	}
 	return s
 }
 
@@ -110,6 +115,8 @@ func Parse(data string) Settings {
 		switch strings.TrimSpace(key) {
 		case "gtk-font-name":
 			s.FontName = value
+		case "gtk-icon-theme-name":
+			s.IconThemeName = value
 		case "gtk-xft-dpi":
 			if dpi, err := strconv.Atoi(value); err == nil && dpi > 0 {
 				s.DPI = float64(dpi) / 1024

@@ -62,7 +62,12 @@ type Cache struct {
 	order   []cacheKey
 }
 
-// New returns a cache for the theme called name; empty means hicolor.
+// DefaultTheme is GTK's default icon theme, the one lookups start on
+// until a setting names another.
+const DefaultTheme = "Adwaita"
+
+// New returns a cache for the theme called name; empty means the
+// default chain alone (Adwaita, then hicolor).
 // Lookups search the standard XDG paths until SetSearchPaths overrides
 // them.
 func New(name string) *Cache {
@@ -75,9 +80,9 @@ var (
 )
 
 // Default returns the process-wide cache widget.NewThemeIcon resolves
-// through, starting on the hicolor theme.
+// through, starting on DefaultTheme, as GTK does.
 func Default() *Cache {
-	defaultOnce.Do(func() { defaultCache = New("hicolor") })
+	defaultOnce.Do(func() { defaultCache = New(DefaultTheme) })
 	return defaultCache
 }
 
@@ -88,8 +93,8 @@ func (c *Cache) Theme() string {
 	return c.theme
 }
 
-// SetTheme switches the theme icons resolve against (empty means
-// hicolor) and drops every cached raster.
+// SetTheme switches the theme icons resolve against (empty means the
+// default chain alone) and drops every cached raster.
 func (c *Cache) SetTheme(name string) {
 	c.mu.Lock()
 	if name == c.theme {

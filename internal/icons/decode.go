@@ -53,7 +53,7 @@ func hasJPEGMagic(data []byte) bool {
 // currentColor.
 func IsSymbolic(fileName string, data []byte) bool {
 	stem := strings.TrimSuffix(fileName, filepath.Ext(fileName))
-	if strings.Contains(stem, "-symbolic") {
+	if strings.Contains(stem, symbolicSuffix) {
 		return true
 	}
 	return bytes.Contains(data, []byte(currentColor))
