@@ -12,3 +12,9 @@ type stylePart struct{ node }
 func (*stylePart) Measure(con Constraints) Size { return clampSize(Size{}, con) }
 func (*stylePart) Paint(*render.Canvas)         {}
 func (*stylePart) HitTest(Point) Widget         { return nil }
+
+// styleParter is a style part: a node of its owner's own tree, which
+// restyles with the owner rather than as a child of its own.
+type styleParter interface{ partNode() *node }
+
+func (p *stylePart) partNode() *node { return &p.node }

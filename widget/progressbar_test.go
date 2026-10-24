@@ -54,3 +54,35 @@ func TestProgressBarUnstyledDefaults(t *testing.T) {
 		t.Errorf("programmatic trough %v, want the set color", got)
 	}
 }
+
+// The trough's min-height sizes the bar from the first layout and after
+// an ancestor's class change, and a bar arranged taller than its trough
+// paints only the trough's band, centered (#260).
+func TestProgressBarTroughHeight(t *testing.T) {
+	if got := NewProgressBar(0.5).Measure(Constraints{Max: Size{W: 400, H: 400}}); got != (Size{W: 160, H: 10}) {
+		t.Errorf("unstyled bar %v, want the 160x10 default", got)
+	}
+	loadCSS(t, `progressbar.x trough { min-height: 30px; } .osd trough { min-height: 8px; }`)
+	styled := NewProgressBar(0.5)
+	styled.AddClass("x")
+	if got := MeasureAsChild(styled, Constraints{Max: Size{W: 400, H: 400}}); got.H != 30 {
+		t.Errorf("30px trough rule measures %v", got)
+	}
+
+	bar := NewProgressBar(1)
+	host := NewBox(Column, 0, 0)
+	host.Append(bar, false)
+	arrangeTree(t, host, 160, 40)
+	host.AddClass("osd")
+	arrangeTree(t, host, 160, 40)
+	if got := bar.Bounds().H; got != 8 {
+		t.Fatalf("after the ancestor's class the bar is %d tall, want the 8px trough", got)
+	}
+	bar.Arrange(render.Rect{W: 160, H: 40})
+	buf := make([]byte, render.Stride(160)*40)
+	bar.Paint(render.New(buf, render.Stride(160), 160, 40))
+	painted := func(y int) bool { return render.ColorFromBytes(buf[y*render.Stride(160)+80*4:]).A() > 0 }
+	if painted(15) || !painted(16) || !painted(23) || painted(24) {
+		t.Errorf("a 40px bar painted rows 15/16/23/24 = %v/%v/%v/%v, want only the centered 8px band 16..23", painted(15), painted(16), painted(23), painted(24))
+	}
+}

@@ -62,24 +62,33 @@ func (m *meter) setValue(v float64) bool {
 	return true
 }
 
-// measureMeter wants the 160x10 trough, floored by the trough's min
-// sizes, inside self's CSS box, clamped to con.
+// troughSize is the trough's border box: 160x10, floored by the
+// trough's min sizes, GTK's progressbar trough gadget.
+func (m *meter) troughSize() Size {
+	tv := m.trough.style(&m.trough)
+	return Size{W: picki(tv, style.PropMinWidth, 160), H: picki(tv, style.PropMinHeight, 10)}
+}
+
+// measureMeter wants the trough inside self's CSS box, clamped to con.
 func (m *meter) measureMeter(self Widget, con Constraints) Size {
 	if sz, ok := m.measureHit(con); ok {
 		return sz
 	}
-	tv := m.trough.style(&m.trough)
-	w, h := picki(tv, style.PropMinWidth, 160), picki(tv, style.PropMinHeight, 10)
+	ts := m.troughSize()
 	v := m.style(self)
 	return m.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		return clampSize(Size{W: w, H: h}, inner)
+		return clampSize(ts, inner)
 	}))
 }
 
-// Arrange records the bar's box; the trough's border box is it.
+// Arrange records the bar's border box and lays the trough across its
+// content box at the trough's own height, centered, so a bar given
+// more height than its trough keeps a thin trough.
 func (m *meter) Arrange(r render.Rect) {
-	m.node.Arrange(r)
-	m.trough.Arrange(r)
+	border, inner := boxRects(boxOf(m.style(m.self), render.Insets{}), r)
+	m.node.Arrange(border)
+	h := min(inner.H, m.troughSize().H)
+	m.trough.Arrange(render.Rect{X: inner.X, Y: inner.Y + (inner.H-h)/2, W: inner.W, H: h})
 }
 
 // paintMeter draws the trough, then the fill over the [from, to)
@@ -90,9 +99,10 @@ func (m *meter) paintMeter(cv *render.Canvas, from, to float64) {
 	fx := pushEffects(cv, &m.node, tv, m.bounds, render.Corners{})
 	cv = fx.cv
 	defer fx.pop()
+	box := m.trough.bounds
 	tr := 0
 	if m.roundTrough {
-		tr = m.bounds.H / 2
+		tr = box.H / 2
 	}
 	fill := fallback(m.fillFill, t)
 	if m.self != nil {
@@ -102,8 +112,8 @@ func (m *meter) paintMeter(cv *render.Canvas, from, to float64) {
 	if m.troughFill != nil {
 		trough = m.troughFill(fill)
 	}
-	_, inner := boxRects(boxOf(tv, render.Insets{}), m.bounds)
-	paintBoxBehind(cv, tv, m.bounds, radiusOr(tv, tr), borderOf(tv), pickc(0, tv, style.PropBackgroundColor, trough))
+	_, inner := boxRects(boxOf(tv, render.Insets{}), box)
+	paintBoxBehind(cv, tv, box, radiusOr(tv, tr), borderOf(tv), pickc(0, tv, style.PropBackgroundColor, trough))
 	x0, x1 := int(float64(inner.W)*from), int(float64(inner.W)*to)
 	if x1 <= x0 {
 		return

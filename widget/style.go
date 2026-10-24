@@ -1612,12 +1612,40 @@ var (
 // style returns the widget's computed style — the paint path's entry
 // point, called exactly where Theme fields are read. Steady state is
 // two integer compares; after an invalidation the first read
-// recomputes and diff-invalidates.
+// recomputes and diff-invalidates, its style parts with it: a part
+// whose layout changed (a progress bar's trough min-height) then drops
+// the widget's measure before the widget answers from it.
 func (n *node) style(w Widget) *style.Values {
 	if !n.styleDirty && n.csGen == styleGen {
 		return &n.cs
 	}
-	return n.restyle(w)
+	v := n.restyle(w)
+	restyleParts(w)
+	return v
+}
+
+// partStack is restyleParts' per-depth kid buffers, reused across
+// restyles like styleStack; partDepth is the nesting in flight (a
+// part's restyle refreshes its own parts a level down).
+var (
+	partStack [][]Widget
+	partDepth int
+)
+
+// restyleParts refreshes w's style parts after w restyled.
+func restyleParts(w Widget) {
+	for len(partStack) <= partDepth {
+		partStack = append(partStack, nil)
+	}
+	kids := appendStyleKids(w, partStack[partDepth][:0])
+	partStack[partDepth] = kids
+	partDepth++
+	defer func() { partDepth-- }()
+	for _, k := range kids {
+		if p, ok := k.(styleParter); ok {
+			p.partNode().style(k)
+		}
+	}
 }
 
 // restyle recomputes the cascade and invalidates the smallest correct
