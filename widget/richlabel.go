@@ -182,17 +182,52 @@ func (l *RichLabel) Direction() Direction { return l.dir }
 // constructor's.
 func (l *RichLabel) px() float64 { return fontPx(l.style(l), l.sizePx) }
 
-// faceFor resolves the face a run shapes with: bold and italic runs
-// use the variants when one is installed, and every other run - and
-// any variant the provider cannot supply - uses the base face.
+// runPx is the size a run shapes at: its absolute size, else the
+// label's, times its scale.
+func (l *RichLabel) runPx(st TextStyle) float64 {
+	px := l.shapedPx
+	if st.SizePx > 0 {
+		px = st.SizePx
+	}
+	if st.Scale > 0 {
+		px *= st.Scale
+	}
+	return px
+}
+
+// faceFor resolves the face a run shapes with: a run in another family
+// resolves that family at its weight; bold and italic runs use the
+// variants when one is installed, and every other run - and any
+// variant the provider cannot supply - uses the base face. The run's
+// weight, letter spacing and features then apply.
 func (l *RichLabel) faceFor(st TextStyle) render.Font {
 	f := l.base
-	if l.variants != nil && (st.Bold || st.Italic) {
+	family := false
+	if st.Family != "" {
+		if rf, ok := resolveFace(st.Family, st.Weight, f); ok {
+			f, family = rf, true
+		}
+	}
+	if !family && l.variants != nil && (st.Bold || st.Italic) {
 		if v := l.variants(st.Bold, st.Italic); v != nil {
 			f = v
 		}
 	}
-	return l.faces.get(f, l.style(l), 0, int(l.px()))
+	return runFace(l.faces.get(f, l.style(l), st.Weight, int(l.runPx(st))), st)
+}
+
+// runFace is f with a run's own letter spacing and OpenType features.
+func runFace(f render.Font, st TextStyle) render.Font {
+	if st.LetterSpacing == 0 && st.Features == "" {
+		return f
+	}
+	switch t := f.(type) {
+	case *render.Typeface:
+		return t.WithFeatureSpec(st.Features).Spaced(st.LetterSpacing)
+	case *render.Chain:
+		return t.WithFeatureSpec(st.Features).Spaced(st.LetterSpacing)
+	}
+	return f
 }
 
 // styleRestyled implements styleRestyler: a changed letter spacing or
@@ -274,9 +309,11 @@ func (l *RichLabel) shapeOne(spans []MarkupRun) (*richLine, float64, float64) {
 				continue
 			}
 			face := l.faceFor(spans[k].Style)
-			sh := face.ShapeDir(string(rs[lo:hi]), l.shapedPx, dir)
-			asc = math.Max(asc, sh.Ascent())
-			desc = math.Max(desc, sh.Descent())
+			px := l.runPx(spans[k].Style)
+			sh := face.ShapeDir(string(rs[lo:hi]), px, dir)
+			rise := spans[k].Style.Shift * px
+			asc = math.Max(asc, sh.Ascent()+rise)
+			desc = math.Max(desc, sh.Descent()-rise)
 			adv += sh.Advance()
 			out.runs = append(out.runs, &richRun{sh: sh, face: face, style: spans[k].Style, start: lo})
 		}
@@ -409,7 +446,7 @@ func (l *RichLabel) wrapSpans(w int) [][]MarkupRun {
 			}
 			if i > start {
 				word := span.Text[start:i]
-				adv := l.faceFor(span.Style).Shape(word, l.shapedPx).Advance()
+				adv := l.faceFor(span.Style).Shape(word, l.runPx(span.Style)).Advance()
 				if lineW+adv > float64(w) && len(row) > 0 {
 					flush()
 				}
@@ -418,7 +455,7 @@ func (l *RichLabel) wrapSpans(w int) [][]MarkupRun {
 			}
 			start = i + 1
 			space := span.Text[i : i+1]
-			adv := l.faceFor(span.Style).Shape(space, l.shapedPx).Advance()
+			adv := l.faceFor(span.Style).Shape(space, l.runPx(span.Style)).Advance()
 			if lineW+adv > float64(w) && len(row) > 0 {
 				flush()
 				continue
@@ -428,7 +465,7 @@ func (l *RichLabel) wrapSpans(w int) [][]MarkupRun {
 		}
 		if start < len(span.Text) {
 			word := span.Text[start:]
-			adv := l.faceFor(span.Style).Shape(word, l.shapedPx).Advance()
+			adv := l.faceFor(span.Style).Shape(word, l.runPx(span.Style)).Advance()
 			if lineW+adv > float64(w) && len(row) > 0 {
 				flush()
 			}
@@ -711,9 +748,10 @@ func (l *RichLabel) rowGeom(i int) (float64, int) {
 	return x, top + i*lineH + int(math.Round(l.lineAsc))
 }
 
-// Paint draws the selection highlight, then each run: its variant
-// face, its color (a span color wins over the label color), and an
-// underline for link runs. Wrap mode lays one row per baseline.
+// Paint draws the selection highlight, then each run: its background,
+// its variant face off its baseline shift, its color (a span color wins
+// over the label color, faded by its alpha), and an underline for link
+// runs. Wrap mode lays one row per baseline.
 func (l *RichLabel) Paint(cv *render.Canvas) {
 	if start, end, on := l.selection(); on {
 		a := Current().Accent
@@ -750,15 +788,26 @@ func (l *RichLabel) paintLine(cv *render.Canvas, runs []*richRun, lineX float64,
 		if r.style.Color != 0 {
 			col = r.style.Color
 		}
-		r.face.Draw(cv, r.sh, dx, baseline, col)
+		if r.style.Alpha > 0 {
+			col = scaleAlpha(col, r.style.Alpha)
+		}
+		y := baseline - int(math.Round(r.style.Shift*l.runPx(r.style)))
+		if r.style.Background != 0 {
+			top := y - int(math.Ceil(r.sh.Ascent()))
+			cv.FillRect(render.Rect{X: dx, Y: top, W: int(math.Ceil(r.sh.Advance())), H: y + int(math.Ceil(r.sh.Descent())) - top}, r.style.Background)
+		}
+		r.face.Draw(cv, r.sh, dx, y, col)
 		deco := css
 		if r.style.Href != "" || r.style.Underline {
 			deco.Lines |= render.Underline
 		}
+		if r.style.Underline {
+			deco.Style = r.style.UnderlineStyle
+		}
 		if r.style.Strikethrough {
 			deco.Lines |= render.LineThrough
 		}
-		r.sh.DrawDecoration(cv, dx, baseline, deco, col)
+		r.sh.DrawDecoration(cv, dx, y, deco, col)
 		x += r.sh.Advance()
 	}
 }

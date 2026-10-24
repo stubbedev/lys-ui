@@ -490,6 +490,13 @@ func fromHLS(h, l, s float64) rgbaf {
 	return rgbaf{f(h + 120), f(h), f(h - 120), 1}
 }
 
+// NamedColor is the CSS named color name (lowercase), as markup
+// languages that share the table (Pango's) resolve them.
+func NamedColor(name string) (render.Color, bool) {
+	c, ok := namedColors[name]
+	return c, ok
+}
+
 // namedColors is the CSS named color table.
 var namedColors = func() map[string]render.Color {
 	src := map[string]uint32{

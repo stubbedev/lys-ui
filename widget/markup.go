@@ -15,12 +15,36 @@ import (
 type TextStyle struct {
 	// Bold and Italic select the face variant a run shapes with.
 	Bold, Italic bool
+	// Weight is the numeric weight (100 to 1000) a variable face shapes
+	// the run at, zero the label's; markup keeps Bold in step with it
+	// (600 and up), so a static family picks its bold variant.
+	Weight int
+	// Family is the font family the run shapes in, "" the label's.
+	Family string
+	// SizePx is the run's absolute size in pixels, zero the label's;
+	// Scale multiplies it, zero meaning 1: Pango's absolute and
+	// relative sizes, relative ones compounding as they nest.
+	SizePx, Scale float64
+	// Shift lifts the run off the baseline by that fraction of its size
+	// (superscript up, subscript down).
+	Shift float64
 	// Underline and Strikethrough draw the decoration lines over the
-	// run (Pango's <u> and <s>), in the run's color.
+	// run (Pango's <u> and <s>), in the run's color; UnderlineStyle is
+	// the underline's line (double, or wavy for Pango's error).
 	Underline, Strikethrough bool
+	UnderlineStyle           render.DecorationStyle
 	// Color overrides the label color while non-zero. Premultiplied,
 	// like every render.Color.
 	Color render.Color
+	// Alpha scales the run's opacity, in (0, 1]; zero leaves it.
+	Alpha float64
+	// Background fills behind the run while non-zero.
+	Background render.Color
+	// LetterSpacing adds pixels after each of the run's characters.
+	LetterSpacing float64
+	// Features are the OpenType features the run shapes with, in the
+	// canonical tag=value;tag=value form.
+	Features string
 	// Href is the link target of a run; empty for plain text.
 	Href string
 }
@@ -38,14 +62,19 @@ type MarkupRun struct {
 // a strict allowlist, not HTML:
 //
 //	<b>bold</b>  <i>italic</i>  <u>underlined</u>  <s>struck</s>
-//	<span color="#rrggbb">…</span>
+//	<big> <small> <tt> <sub> <sup>
+//	<span weight="light" size="small" foreground="#rrggbb">…</span>
 //	<a href="https://example.com">link</a>
 //
 // Tags nest and combine (bold italic, colors inheriting into nested
-// tags). Attribute values are single- or double-quoted. Color values
-// are #rgb, #rrggbb, or #rrggbbaa hex. Anything else - an unknown tag
-// or attribute, a stray or mismatched close tag, an unclosed tag,
-// self-closing syntax, uppercase tags - fails the parse.
+// tags, relative sizes compounding). Attribute values are single- or
+// double-quoted. A span takes Pango's attributes: foreground (fgcolor,
+// color), background (bgcolor), alpha (fgalpha), weight, style, size,
+// font_family (face), underline, strikethrough, letter_spacing and
+// font_features; colors are a CSS name or #rgb, #rrggbb, #rrggbbaa
+// hex. Anything else - an unknown tag or attribute, a malformed value,
+// a stray or mismatched close tag, an unclosed tag, self-closing
+// syntax, uppercase tags - fails the parse.
 //
 // Text and attribute values are escaped HTML-style: write &lt; &gt;
 // &amp; &quot; &apos; for the literal characters. A bare '&' or '<',
@@ -146,7 +175,7 @@ func (p *markupParser) tag() bool {
 		p.stack = append(p.stack, markupFrame{name, p.style})
 		switch name {
 		case "b":
-			p.style.Bold = true
+			p.style = withWeight(p.style, weightBold)
 		case "i":
 			p.style.Italic = true
 		case "u":
@@ -154,6 +183,13 @@ func (p *markupParser) tag() bool {
 		default:
 			p.style.Strikethrough = true
 		}
+	case "big", "small", "tt", "sub", "sup":
+		if !p.endTag() {
+			return false
+		}
+		p.flush()
+		p.stack = append(p.stack, markupFrame{name, p.style})
+		p.style = convenienceTag(name, p.style)
 	case "span":
 		return p.spanTag()
 	case "a":
@@ -164,7 +200,7 @@ func (p *markupParser) tag() bool {
 	return true
 }
 
-// spanTag parses <span> with an optional color attribute.
+// spanTag parses <span> and its Pango attributes.
 func (p *markupParser) spanTag() bool {
 	p.flush()
 	frame := markupFrame{"span", p.style}
@@ -180,18 +216,16 @@ func (p *markupParser) spanTag() bool {
 			break
 		}
 		attr, ok := p.name()
-		if !ok || attr != "color" || !p.eq() {
+		if !ok || !p.eq() {
 			return false
 		}
 		v, ok := p.quoted()
 		if !ok {
 			return false
 		}
-		col, ok := parseHexColor(v)
-		if !ok {
+		if st, ok = spanAttr(st, attr, v); !ok {
 			return false
 		}
-		st.Color = col
 	}
 	p.stack = append(p.stack, frame)
 	p.style = st
@@ -266,10 +300,11 @@ func (p *markupParser) entity(w *strings.Builder) bool {
 	return true
 }
 
-// name reads a lowercase tag or attribute name.
+// name reads a lowercase tag or attribute name (Pango's attributes
+// spell words with underscores: font_family).
 func (p *markupParser) name() (string, bool) {
 	start := p.pos
-	for p.pos < len(p.src) && p.src[p.pos] >= 'a' && p.src[p.pos] <= 'z' {
+	for p.pos < len(p.src) && (p.src[p.pos] >= 'a' && p.src[p.pos] <= 'z' || p.pos > start && p.src[p.pos] == '_') {
 		p.pos++
 	}
 	if p.pos == start {
