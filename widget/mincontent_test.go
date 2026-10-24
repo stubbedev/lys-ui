@@ -60,3 +60,28 @@ func TestMinWidthEllipsisRowRequestScroll(t *testing.T) {
 		t.Errorf("sideways scroll minimum %d, want 0", got)
 	}
 }
+
+// PreferredWidth is the natural width, except that wrapping text
+// counts at its widest word, or at its max-width-chars when set: an
+// ellipsizing long label keeps its natural width and widens a popover,
+// a wrapping one wraps inside it.
+func TestPreferredWidth(t *testing.T) {
+	face := testFace(t)
+	const text = "No treeman-managed worktrees are registered, or the treeman daemon is not running."
+	ell := NewLabel(face, 14, text, 0)
+	ell.SetEllipsize(EllipsizeEnd)
+	if got, want := PreferredWidth(ell), ell.Measure(unbounded).W; got != want {
+		t.Errorf("ellipsizing label prefers %d, want its natural %d", got, want)
+	}
+	wrap := NewLabel(face, 14, text, 0)
+	wrap.SetWrap(true)
+	if got, want := PreferredWidth(wrap), wrap.MinSize().W; got != want || got >= wrap.Measure(unbounded).W {
+		t.Errorf("wrapping label prefers %d, want its widest word %d", got, want)
+	}
+	capped := NewLabel(face, 14, text, 0)
+	capped.SetWrap(true)
+	capped.SetMaxWidthChars(20)
+	if got, want := PreferredWidth(capped), capped.Measure(unbounded).W; got != want || got <= wrap.MinSize().W {
+		t.Errorf("wrapping label with max-width-chars 20 prefers %d, want its 20 characters %d", got, want)
+	}
+}
