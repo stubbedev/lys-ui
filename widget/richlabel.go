@@ -40,6 +40,9 @@ type RichLabel struct {
 	variants VariantFunc
 	markup   string
 	sizePx   float64
+	// shapedPx is the font size the runs were shaped at: the cascade's,
+	// else sizePx. Measure re-shapes when the cascade moved it.
+	shapedPx float64
 	color    render.Color
 	align    render.Alignment
 	dir      Direction
@@ -175,6 +178,10 @@ func (l *RichLabel) SetDirection(d Direction) {
 // with.
 func (l *RichLabel) Direction() Direction { return l.dir }
 
+// px is the effective font size: the cascade's font-size, else the
+// constructor's.
+func (l *RichLabel) px() float64 { return fontPx(l.style(l), l.sizePx) }
+
 // faceFor resolves the face a run shapes with: bold and italic runs
 // use the variants when one is installed, and every other run - and
 // any variant the provider cannot supply - uses the base face.
@@ -185,7 +192,7 @@ func (l *RichLabel) faceFor(st TextStyle) render.Font {
 			f = v
 		}
 	}
-	return l.faces.get(f, l.style(l), 0, int(fontPx(l.style(l), l.sizePx)))
+	return l.faces.get(f, l.style(l), 0, int(l.px()))
 }
 
 // styleRestyled implements styleRestyler: a changed letter spacing or
@@ -211,6 +218,7 @@ func (l *RichLabel) retext() {
 	}
 	l.runs = spans
 	l.fitW = -1
+	l.shapedPx = l.px()
 	line, runes := spansText(spans)
 	l.text = line
 	l.runes = runes
@@ -266,7 +274,7 @@ func (l *RichLabel) shapeOne(spans []MarkupRun) (*richLine, float64, float64) {
 				continue
 			}
 			face := l.faceFor(spans[k].Style)
-			sh := face.ShapeDir(string(rs[lo:hi]), l.sizePx, dir)
+			sh := face.ShapeDir(string(rs[lo:hi]), l.shapedPx, dir)
 			asc = math.Max(asc, sh.Ascent())
 			desc = math.Max(desc, sh.Descent())
 			adv += sh.Advance()
@@ -276,7 +284,7 @@ func (l *RichLabel) shapeOne(spans []MarkupRun) (*richLine, float64, float64) {
 	if len(out.runs) == 0 {
 		// Empty text still reserves the font's line height, like
 		// Label.
-		sh := l.faceFor(TextStyle{}).Shape("", l.sizePx)
+		sh := l.faceFor(TextStyle{}).Shape("", l.shapedPx)
 		asc, desc = sh.Ascent(), sh.Descent()
 	}
 	out.advance = adv
@@ -401,7 +409,7 @@ func (l *RichLabel) wrapSpans(w int) [][]MarkupRun {
 			}
 			if i > start {
 				word := span.Text[start:i]
-				adv := l.faceFor(span.Style).Shape(word, l.sizePx).Advance()
+				adv := l.faceFor(span.Style).Shape(word, l.shapedPx).Advance()
 				if lineW+adv > float64(w) && len(row) > 0 {
 					flush()
 				}
@@ -410,7 +418,7 @@ func (l *RichLabel) wrapSpans(w int) [][]MarkupRun {
 			}
 			start = i + 1
 			space := span.Text[i : i+1]
-			adv := l.faceFor(span.Style).Shape(space, l.sizePx).Advance()
+			adv := l.faceFor(span.Style).Shape(space, l.shapedPx).Advance()
 			if lineW+adv > float64(w) && len(row) > 0 {
 				flush()
 				continue
@@ -420,7 +428,7 @@ func (l *RichLabel) wrapSpans(w int) [][]MarkupRun {
 		}
 		if start < len(span.Text) {
 			word := span.Text[start:]
-			adv := l.faceFor(span.Style).Shape(word, l.sizePx).Advance()
+			adv := l.faceFor(span.Style).Shape(word, l.shapedPx).Advance()
 			if lineW+adv > float64(w) && len(row) > 0 {
 				flush()
 			}
@@ -589,6 +597,9 @@ func (l *RichLabel) Measure(con Constraints) Size {
 	if s, ok := l.measureHit(con); ok {
 		return s
 	}
+	if l.px() != l.shapedPx {
+		l.retext()
+	}
 	limit := con.Max.W
 	if c := l.widthCap(); c > 0 {
 		limit = min(limit, c)
@@ -612,7 +623,7 @@ func (l *RichLabel) widthCap() int {
 	if l.maxChars <= 0 {
 		return 0
 	}
-	sh := l.faceFor(TextStyle{}).Shape(approxCharSample, l.sizePx)
+	sh := l.faceFor(TextStyle{}).Shape(approxCharSample, l.shapedPx)
 	avg := sh.Advance() / float64(len(approxCharSample))
 	return int(math.Ceil(avg * float64(l.maxChars)))
 }

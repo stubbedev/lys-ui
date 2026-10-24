@@ -533,3 +533,26 @@ func TestRichLabelDecorationRuns(t *testing.T) {
 		}
 	}
 }
+
+// A RichLabel shapes at the cascade's font-size like a Label, and
+// without a rule keeps its constructor size (#256).
+func TestRichLabelFollowsTheCSSFontSize(t *testing.T) {
+	face := testFace(t)
+	measure := func(w Widget) Size {
+		host := NewBox(Row, 0, 0)
+		host.Append(w, false)
+		arrangeTree(t, host, 600, 200)
+		return w.Measure(Constraints{Max: Size{W: 600, H: 200}})
+	}
+	plain := measure(NewRichLabel(face, 30, "Body text", 0))
+	if want := measure(NewLabel(face, 30, "Body text", 0)); plain != want {
+		t.Errorf("unstyled rich label %v, want the 30px label's %v", plain, want)
+	}
+	loadCSS(t, `.body { font-size: 12px; }`)
+	rich := NewRichLabel(face, 30, "Body text", 0)
+	rich.AddClass("body")
+	label := NewLabel(face, 12, "Body text", 0)
+	if got, want := measure(rich), measure(label); got != want {
+		t.Errorf("rich label under font-size 12px %v, want the 12px label's %v", got, want)
+	}
+}
