@@ -161,6 +161,17 @@ func TestGoldenCSSMediaQuery(t *testing.T) {
 	}
 }
 
+// TestGoldenToast pins Sonner's look: the popover card with its
+// border, and the action as a small primary button.
+func TestGoldenToast(t *testing.T) {
+	face := goldenFace(t)
+	for _, shot := range bothPalettes("toast") {
+		toast := NewToast(face, "Event has been created", 0)
+		toast.SetAction("Undo", func() {})
+		NewGolden(t, toast, shot.name, goldenTheme(shot.th), goldenAfterArrange(func() { toast.progress = 1 }))
+	}
+}
+
 func TestGoldenCSSToastShadow(t *testing.T) {
 	face := goldenFace(t)
 	toast := NewToast(face, "saved", 0)

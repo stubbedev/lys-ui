@@ -170,8 +170,9 @@ func TestGoldenChrome(t *testing.T) {
 	controls.ShowMaximize(true)
 	NewGolden(t, header, "headerbar", goldenTheme(th), goldenFrame(360, 44))
 
-	bar := NewMenuBar(face, 13, "File", "Edit", "View")
-	NewGolden(t, bar, "menubar", goldenTheme(th), goldenFrame(240, 36))
+	for _, shot := range bothPalettes("menubar") {
+		NewGolden(t, NewMenuBar(face, 13, "File", "Edit", "View"), shot.name, goldenTheme(shot.th))
+	}
 }
 
 // Buttons hidden and shown again (capabilities changing at runtime)

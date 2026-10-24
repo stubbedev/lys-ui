@@ -4,10 +4,12 @@ import (
 	"github.com/stubbedev/lys-ui/render"
 )
 
-// MenuBar is the in-window primary navigation (#91): a horizontal bar
-// of root buttons, each opening its menu below through the existing
-// popover machinery - the PopoverMenuBar shape. The bar never opens
-// popovers itself (that is app plumbing); it reports the activation.
+// MenuBar is the in-window primary navigation (#91, shadcn/ui's
+// Menubar): a bordered, rounded strip of root buttons, each opening
+// its menu below through the existing popover machinery - the
+// PopoverMenuBar shape. The bar never opens popovers itself (that is
+// app plumbing); it reports the activation. It styles as the `menubar`
+// element, its roots as `menubar > box > button`.
 //
 // Keyboard: F10 focuses the bar's first button when the app routes the
 // key to it - MenuBar implements KeyActionHandler for exactly that
@@ -29,17 +31,16 @@ func NewMenuBar(face render.Font, sizePx float64, roots ...string) *MenuBar {
 	face = requireFace("widget.NewMenuBar", face)
 	m := &MenuBar{face: face, sizePx: sizePx}
 	m.SetElement("menubar")
-	row := NewBox(Row, 2, 4)
+	row := NewBox(Row, 4, 0)
 	for i, label := range roots {
 		which := i
-		btn := NewButton(NewLabel(face, sizePx, label, 0), 10, 5)
+		btn := NewButton(NewLabel(face, sizePx, label, 0), 0, 0)
 		btn.OnClick = func() { m.fire(which) }
 		m.buttons = append(m.buttons, btn)
 		row.Append(btn, false)
 	}
 	m.initComposite(m, row)
-	m.fillWidth = true
-	m.surface = surfaceFill
+	m.boxed = true
 	return m
 }
 

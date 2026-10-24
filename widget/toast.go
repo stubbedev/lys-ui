@@ -16,14 +16,16 @@ const (
 	// table (KindToast), so overrides and the reduced-motion switches
 	// apply to toasts like every other surface.
 	toastSlide = 12
-	// toastPadX/toastPadY inset the card's content; toastGap separates
-	// text from the action button, whose own insets follow.
-	toastPadX = 14
-	toastPadY = 10
+	// toastPadX/toastPadY inset the card's content, Sonner's 16px;
+	// toastGap separates text from the action button, whose own insets
+	// and radius follow.
+	toastPadX = 16
+	toastPadY = 16
 	toastGap  = 12
 	// toastBtnPadX insets the action label inside its hit rect.
-	toastBtnPadX = 10
-	toastBtnPadY = 4
+	toastBtnPadX   = 8
+	toastBtnPadY   = 4
+	toastBtnRadius = 4
 )
 
 // Toast is a transient feedback card: one line of text, an optional
@@ -360,8 +362,9 @@ func (t *Toast) Measure(con Constraints) Size {
 // ring plus the slide when one is owed — so the animation never paints
 // outside its damage rect. The shadow rides the card (it shifts with
 // the same dy), which is why it clips to the extent, not the bounds.
-// The stylesheet's box-shadow, background-color, border-radius, and
-// color override the theme's.
+// The stylesheet's box-shadow, background-color, border, border-radius,
+// and color override the theme's; the action is Sonner's small button
+// on the primary fill.
 func (t *Toast) Paint(cv *render.Canvas) {
 	p := math01(t.progress)
 	if p <= 0 || t.bounds.Empty() {
@@ -370,33 +373,36 @@ func (t *Toast) Paint(cv *render.Canvas) {
 	th := Current()
 	v := t.style(t)
 	col, blur := effShadow(t, th)
-	radius := radiusOr(v, th.Radius).TopLeft
-	fill := pickc(0, v, style.PropBackgroundColor, th.Surface)
-	ink := pickc(0, v, style.PropColor, th.Text)
+	radii := radiusOr(v, th.Radius)
 	prev := cv.PushClip(t.paintExtent())
+	defer cv.PopClip(prev)
+	defer cv.PopAlpha(cv.PushAlpha(p))
 	dy := int((1 - p) * toastSlide)
 	card := t.bounds
 	card.Y += dy
 	if blur > 0 {
-		cv.Shadow(card, radius, blur, scaleAlpha(col, p))
+		cv.Shadow(card, radii.TopLeft, blur, col)
 	}
-	cv.RoundedRect(card, radius, scaleAlpha(fill, p))
-	if t.face != nil {
-		sh := t.face.Shape(t.text, t.sizePx)
-		baseline := card.Y + (card.H-sh.LineHeight())/2 + int(sh.Ascent()+0.5)
-		t.face.Draw(cv, sh, card.X+toastPadX, baseline, scaleAlpha(ink, p))
+	paintBoxBehind(cv, v, card, radii, borderOf(v), pickc(0, v, style.PropBackgroundColor, th.Surface))
+	if t.face == nil {
+		return
 	}
-	if t.action != "" && t.face != nil {
-		rect := t.actionRect
-		rect.Y += dy
-		if t.hovered && rect.Contains(t.hoverPt.X, t.hoverPt.Y) {
-			cv.RoundedRect(rect, radius, scaleAlpha(th.SurfaceHover, p))
-		}
-		sh := t.face.Shape(t.action, t.sizePx)
-		baseline := rect.Y + (rect.H-sh.LineHeight())/2 + int(sh.Ascent()+0.5)
-		t.face.Draw(cv, sh, rect.X+toastBtnPadX, baseline, scaleAlpha(th.Accent, p))
+	sh := t.face.Shape(t.text, t.sizePx)
+	baseline := card.Y + (card.H-sh.LineHeight())/2 + int(sh.Ascent()+0.5)
+	t.face.Draw(cv, sh, card.X+toastPadX, baseline, pickc(0, v, style.PropColor, th.Text))
+	if t.action == "" {
+		return
 	}
-	cv.PopClip(prev)
+	rect := t.actionRect
+	rect.Y += dy
+	fill := th.Accent
+	if t.hovered && rect.Contains(t.hoverPt.X, t.hoverPt.Y) {
+		fill = scaleAlpha(fill, 0.9)
+	}
+	cv.RoundedRect(rect, toastBtnRadius, fill)
+	sh = t.face.Shape(t.action, t.sizePx)
+	baseline = rect.Y + (rect.H-sh.LineHeight())/2 + int(sh.Ascent()+0.5)
+	t.face.Draw(cv, sh, rect.X+toastBtnPadX, baseline, th.OnAccent)
 }
 
 // HitTest returns the toast when p is inside its bounds; the toast
