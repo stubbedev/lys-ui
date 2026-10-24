@@ -104,3 +104,23 @@ func TestCheckButtonChild(t *testing.T) {
 		t.Errorf("childless: label parent %v, natural %v, check %v in %v", l.Parent(), nat, c.indicator, b)
 	}
 }
+
+// The theme spaces the child 8px after the check, shadcn's gap-2, and
+// the first measure already sees `checkbutton > check` rules: the check
+// is linked when the checkbox is built, not when it is arranged.
+func TestCheckButtonGapAndFirstMeasure(t *testing.T) {
+	c := NewCheckButton(false)
+	l := NewLabel(testFace(t), 14, "Accept", 0)
+	c.SetChild(l)
+	host := NewBox(Row, 0, 0)
+	host.Append(c, false)
+	frame(t, host, 300, 60)
+	if gap := l.Bounds().X - (c.indicator.X + c.indicator.W); gap != 8 {
+		t.Errorf("label %d px after the check, want 8", gap)
+	}
+
+	loadCSS(t, `checkbutton > check { min-width: 30px; min-height: 30px; }`)
+	if got := NewCheckButton(false).Measure(Constraints{Max: Size{W: 100, H: 100}}); got.W != 30 {
+		t.Errorf("first measure %v, want the 30px check rule", got)
+	}
+}

@@ -189,6 +189,7 @@ func NewCheckButton(checked bool) *CheckButton {
 	c := &CheckButton{checked: checked}
 	c.cursorName = "pointer"
 	c.check.SetElement("check")
+	setParents(c, &c.check)
 	return c
 }
 
@@ -280,13 +281,11 @@ func (c *CheckButton) Measure(con Constraints) Size {
 	}))
 }
 
-// Arrange records the box and links the check below it, so the
-// cascade reaches `checkbutton > check`. Without a child the check
-// fills the content box; with one it keeps its size at the start,
-// centered across, and the child takes the rest.
+// Arrange records the box. Without a child the check fills the
+// content box; with one it keeps its size at the start, centered
+// across, and the child takes the rest.
 func (c *CheckButton) Arrange(r render.Rect) {
 	c.node.Arrange(r)
-	setParents(c, &c.check)
 	v := c.style(c)
 	content := paddingOr(v, render.Insets{}).Shrink(borderOf(v).Shrink(c.bounds))
 	if c.child == nil {
@@ -297,7 +296,6 @@ func (c *CheckButton) Arrange(r render.Rect) {
 	ind.W, ind.H = min(ind.W, content.W), min(ind.H, content.H)
 	c.indicator = render.Rect{X: content.X, Y: content.Y + (content.H-ind.H)/2, W: ind.W, H: ind.H}
 	arrangeChild(c.child, render.Rect{X: content.X + ind.W, Y: content.Y, W: content.W - ind.W, H: content.H})
-	setParents(c, c.child)
 }
 
 // checkRing is the unstyled indicator's border width.

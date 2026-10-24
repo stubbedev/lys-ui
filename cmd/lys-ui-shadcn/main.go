@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/stubbedev/lys-ui/app"
 	"github.com/stubbedev/lys-ui/component"
@@ -44,7 +45,7 @@ func run() error {
 	application := app.NewApplication(sess)
 	widget.LoadStylesheet(galleryCSS)
 	var ctrl *component.Controller[galleryMsg, struct{}]
-	gal := &gallery{env: ui.Env{Face: app.FontFallback(face), Size: 14}}
+	gal := &gallery{env: ui.Env{Face: app.FontFallback(face), Size: 14}, app: application}
 	var win *app.Window
 	ctrl, win, err = component.Window(application, app.WindowConfig{
 		Title:      "lys-ui shadcn gallery",
@@ -56,6 +57,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	gal.win = win
 	for keys, action := range map[string]widget.Activatable{
 		"Escape": widget.NewAction("quit", application.Quit),
 		"Ctrl+T": widget.NewAction("palette", func() { ctrl.Send(togglePalette{}) }),
@@ -110,10 +112,95 @@ func (togglePalette) galleryMsg() {}
 func (submitted) galleryMsg()     {}
 
 type gallery struct {
-	env       ui.Env
-	status    string
-	openSheet func()
-	sidebar   *widget.Sidebar
+	env           ui.Env
+	status        string
+	openSheet     func()
+	sidebar       *widget.Sidebar
+	app           *app.Application
+	win           *app.Window
+	menuButton    *widget.Button
+	popoverButton *widget.Button
+	menubar       *widget.MenuBar
+}
+
+// demoMenu is the dropdown and menubar demos' menu.
+func demoMenu() []widget.MenuItem {
+	return []widget.MenuItem{
+		{Label: "Profile", Accel: "Shift+Ctrl+P"},
+		{Label: "Billing", Accel: "Ctrl+B"},
+		{Label: "Settings", Accel: "Ctrl+S"},
+		{Kind: widget.ItemSeparator},
+		{Label: "Log out", Accel: "Shift+Ctrl+Q"},
+	}
+}
+
+// dropdownMenu opens the Dropdown Menu demo under its button.
+func (g *gallery) dropdownMenu() {
+	widget.OpenMenu(g.menuButton, g.menuButton, g.env.Face, 14, demoMenu())
+}
+
+// menubarRoot opens a menubar root's menu under it.
+func (g *gallery) menubarRoot(_ int, anchor widget.Boundser) {
+	widget.OpenMenu(g.menubar, anchor, g.env.Face, 14, demoMenu())
+}
+
+// popover opens the Popover demo under its button.
+func (g *gallery) popover() {
+	content, view := ui.Build(g.env, ui.Column(
+		ui.Label("Dimensions").Classes(css.Heading),
+		ui.Label("Set the dimensions for the layer.").Classes(css.Muted),
+		ui.Field("Width", ui.Entry().Text("100%")),
+		ui.Field("Height", ui.Entry().Text("25px")),
+	).Spacing(8).Padding(render.UniformInsets(16)))
+	widget.OpenPopover(g.popoverButton, g.popoverButton, content, widget.PopoverOptions{OnClosed: view.Close})
+}
+
+// alertDialog opens the Alert Dialog demo.
+func (g *gallery) alertDialog() {
+	if _, err := g.app.MessageBox(g.win, "Are you absolutely sure?",
+		"This action cannot be undone. This will permanently delete your account and remove your data from our servers.",
+		[]app.DialogButton{{Label: "Cancel", Response: "cancel", Role: app.ButtonRoleCancel}, {Label: "Continue", Response: "continue", Role: app.ButtonRoleDefault}}); err != nil {
+		log.Printf("lys-ui-shadcn: alert dialog: %v", err)
+	}
+}
+
+// dialog opens the Dialog demo.
+func (g *gallery) dialog() {
+	content, view := ui.Build(g.env, ui.Column(
+		ui.Field("Name", ui.Entry().Text("Pedro Duarte")),
+		ui.Field("Username", ui.Entry().Text("@peduarte")),
+	).Spacing(16))
+	if _, err := g.app.NewDialog(g.win, app.DialogConfig{
+		Title: "Edit profile", Width: 425, Height: 260, Content: content, Modal: true, OnClosed: view.Close,
+		Buttons: []app.DialogButton{{Label: "Cancel", Response: "cancel", Role: app.ButtonRoleCancel}, {Label: "Save changes", Response: "save", Role: app.ButtonRoleDefault}},
+	}); err != nil {
+		log.Printf("lys-ui-shadcn: dialog: %v", err)
+	}
+}
+
+// toast shows the Sonner demo.
+func (g *gallery) toast() {
+	if _, err := g.app.ShowToast("Event has been created", 4*time.Second, nil); err != nil {
+		log.Printf("lys-ui-shadcn: toast: %v", err)
+	}
+}
+
+// radioGroup is the Radio Group demo.
+func (g *gallery) radioGroup() ui.Node {
+	first := ui.CheckButton(true).Child(ui.Label("Default"))
+	return ui.Column(first,
+		ui.CheckButton(false).Child(ui.Label("Comfortable")).Group(first),
+		ui.CheckButton(false).Child(ui.Label("Compact")).Group(first),
+	).Spacing(12)
+}
+
+// scrollArea is the Scroll Area demo: a fixed box of tags.
+func (g *gallery) scrollArea() ui.Node {
+	tags := make([]ui.Node, 0, 50)
+	for i := 50; i > 0; i-- {
+		tags = append(tags, ui.Label("v1.2.0-beta."+strconv.Itoa(i)))
+	}
+	return ui.Scroll(ui.Column(tags...).Spacing(8).Padding(render.UniformInsets(16))).VerticalOnly(true).MaxContentHeight(240).SizeRequest(200, 0).Classes(css.Card)
 }
 
 // sidebarDemo is the Sidebar section: a sidebar collapsing to an icon
@@ -257,11 +344,22 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 				Icon(ui.Symbol(widget.SymbolCrosshair, 16)),
 			ui.Alert("Unable to process your payment.", "Please verify your billing information and try again.").
 				Icon(ui.Symbol(widget.SymbolClose, 16)).Variant(widget.AlertDestructive)),
+		section("Alert Dialog", ui.Aligned(ui.Button(ui.Label("Show Dialog"), 0, 0).Classes(css.Outline).OnClick(g.alertDialog), widget.AlignStart)),
+		section("Aspect Ratio", ui.Aligned(ui.AspectFrame(ui.Column().SizeRequest(360, 0).Classes(css.Card), 16.0/9), widget.AlignStart)),
+		section("Avatar", ui.Row(ui.Avatar(40, "Ada Lovelace"), ui.Avatar(40, "Grace Hopper"), ui.Avatar(40, "")).Spacing(12)),
 		section("Badge", ui.Row(
 			ui.Badge("Default"),
 			ui.Badge("Secondary").Variant(widget.BadgeSecondary),
 			ui.Badge("Destructive").Variant(widget.BadgeDestructive),
 			ui.Badge("Outline").Variant(widget.BadgeOutline),
+		).Spacing(8)),
+		section("Button", ui.Row(
+			ui.Button(ui.Label("Button"), 0, 0).Classes(css.SuggestedAction),
+			ui.Button(ui.Label("Secondary"), 0, 0).Classes(css.Secondary),
+			ui.Button(ui.Label("Destructive"), 0, 0).Classes(css.DestructiveAction),
+			ui.Button(ui.Label("Outline"), 0, 0).Classes(css.Outline),
+			ui.Button(ui.Label("Ghost"), 0, 0).Classes(css.Ghost),
+			ui.Button(ui.Label("Link"), 0, 0).Classes(css.Link),
 		).Spacing(8)),
 		section("Button Group", ui.Aligned(ui.ButtonGroup(
 			ui.Button(ui.Label("Archive"), 0, 0).Classes(css.Outline),
@@ -271,6 +369,13 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 		section("Breadcrumb",
 			ui.Breadcrumb("Home", "Components", "Breadcrumb"),
 			ui.Breadcrumb("Home", "Docs", "Components", "Data", "Breadcrumb").MaxItems(3)),
+		section("Calendar", ui.Aligned(ui.Column(ui.Calendar(widget.Today())).Padding(render.UniformInsets(8)).Classes(css.Card), widget.AlignStart)),
+		section("Card", ui.Aligned(ui.Column(
+			ui.Label("Create project").Classes(css.Heading),
+			ui.Label("Deploy your new project in one click.").Classes(css.Muted),
+			ui.Field("Name", ui.Entry().Placeholder("Name of your project")),
+			ui.Row(ui.Expand(ui.Spacer(0, 0)), ui.Button(ui.Label("Cancel"), 0, 0).Classes(css.Outline), ui.Button(ui.Label("Deploy"), 0, 0).Classes(css.SuggestedAction)).Spacing(8),
+		).Spacing(16).Padding(render.UniformInsets(24)).SizeRequest(360, 0).Classes(css.Card), widget.AlignStart)),
 		section("Carousel", g.carousel()),
 		section("Chart", ui.Row(
 			ui.Expand(ui.Chart(widget.ChartBar, []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun"},
@@ -281,6 +386,10 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 				widget.ChartSeries{Name: "Visitors", Values: []float64{275, 200, 187, 173, 90}},
 			).Donut(true)),
 		).Spacing(16)),
+		section("Checkbox", ui.Aligned(ui.CheckButton(true).Child(ui.Label("Accept terms and conditions")), widget.AlignStart)),
+		section("Collapsible", ui.Expander("@peduarte starred 3 repositories", ui.Column(
+			ui.Label("@radix-ui/primitives"), ui.Label("@radix-ui/colors"), ui.Label("@stitches/react"),
+		).Spacing(8))),
 		section("Combobox", ui.Aligned(ui.Combobox("Select framework...",
 			widget.ComboboxOption[string]{Value: "next", Label: "Next.js"},
 			widget.ComboboxOption[string]{Value: "svelte", Label: "SvelteKit"},
@@ -299,6 +408,8 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 		).Classes("drop-zone")),
 		section("Data Table", g.dataTable()),
 		section("Date Picker", g.datePickers()),
+		section("Dialog", ui.Aligned(ui.Button(ui.Label("Edit Profile"), 0, 0).Classes(css.Outline).OnClick(g.dialog), widget.AlignStart)),
+		section("Dropdown Menu", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).Ref(&g.menuButton).OnClick(g.dropdownMenu), widget.AlignStart)),
 		section("Empty", ui.StatusPage("", "No projects yet", "You haven't created any projects yet. Get started by creating your first project.").
 			Icon(ui.Symbol(widget.SymbolMaximize, 24)).
 			Child(ui.Button(ui.Label("Create project"), 0, 0).Classes(css.SuggestedAction))),
@@ -311,6 +422,7 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 				ui.Label("Joined December 2021").Classes(css.Muted),
 			).Spacing(8),
 		), widget.AlignStart)),
+		section("Input", ui.Aligned(ui.Entry().Placeholder("Email").SizeRequest(320, 0), widget.AlignStart)),
 		section("Input Group",
 			ui.InputGroup(ui.Entry().Placeholder("Search...")).
 				Prepend(ui.Symbol(widget.SymbolCrosshair, 16)).Append(ui.Label("12 results")),
@@ -324,6 +436,7 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 			ui.Item("Your profile has been verified.", "").Variant(widget.ItemMuted).Small(true),
 		),
 		section("Kbd", ui.Row(ui.KbdGroup("Ctrl", "Shift", "P"), ui.Label("opens the command palette")).Spacing(12)),
+		section("Menubar", ui.Aligned(ui.MenuBar("File", "Edit", "View", "Profiles").Ref(&g.menubar).OnRoot(g.menubarRoot), widget.AlignStart)),
 		section("Navigation Menu", ui.Aligned(ui.NavigationMenu(
 			widget.NavigationMenuItem{Label: "Getting started", Content: widget.NewNavigationLinks(g.env.Face, 2,
 				widget.NavigationLink{Title: "Introduction", Description: "Re-usable components built on lys-ui's widgets."},
@@ -338,12 +451,38 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 			widget.NavigationMenuItem{Label: "Docs", OnActivate: func() {}},
 		), widget.AlignStart)),
 		section("Pagination", ui.Pagination(10, 5)),
+		section("Popover", ui.Aligned(ui.Button(ui.Label("Open popover"), 0, 0).Classes(css.Outline).Ref(&g.popoverButton).OnClick(g.popover), widget.AlignStart)),
+		section("Progress", ui.Aligned(ui.ProgressBar(0.66).SizeRequest(360, 0), widget.AlignStart)),
+		section("Radio Group", g.radioGroup()),
+		section("Resizable", ui.Column(ui.Expand(ui.Paned(widget.Row, ui.Label("One").HAlign(widget.AlignCenter), ui.Label("Two").HAlign(widget.AlignCenter)).Position(200))).SizeRequest(0, 160).Classes(css.Card)),
+		section("Scroll Area", ui.Aligned(g.scrollArea(), widget.AlignStart)),
+		section("Select", ui.Aligned(ui.Dropdown([]string{"Apple", "Banana", "Blueberry", "Grapes", "Pineapple"}, 0), widget.AlignStart)),
+		section("Separator", ui.Column(
+			ui.Label("Radix Primitives").Classes(css.Heading),
+			ui.Label("An open-source UI component library.").Classes(css.Muted),
+			ui.Separator(widget.Horizontal),
+			ui.Row(ui.Label("Blog"), ui.Label("Docs"), ui.Label("Source")).Spacing(16),
+		).Spacing(8)),
 		section("Sheet", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).OnClick(func() { g.openSheet() }), widget.AlignStart)),
 		section("Sidebar", g.sidebarDemo()),
 		section("Skeleton", ui.Row(
 			ui.Skeleton(48, 48),
 			ui.Column(ui.Skeleton(240, 14), ui.Skeleton(180, 14)).Spacing(8),
 		).Spacing(16)),
+		section("Slider", ui.Aligned(ui.Slider(0, 100, 1, 50).SizeRequest(360, 0), widget.AlignStart)),
+		section("Sonner", ui.Aligned(ui.Button(ui.Label("Show Toast"), 0, 0).Classes(css.Outline).OnClick(g.toast), widget.AlignStart)),
+		section("Spinner", ui.Row(ui.Spinner(16), ui.Label("Processing payment...")).Spacing(8)),
+		section("Switch", ui.Row(ui.Switch(false), ui.Label("Airplane Mode")).Spacing(8)),
+		section("Tabs", ui.Aligned(ui.Notebook().SizeRequest(400, 0).
+			AppendTab("Account", text("Make changes to your account here.")).
+			AppendTab("Password", text("Change your password here.")), widget.AlignStart)),
+		section("Textarea", ui.Aligned(ui.TextArea().Placeholder("Type your message here.").SizeRequest(400, 80), widget.AlignStart)),
+		section("Toggle", ui.Aligned(ui.ToggleButton(ui.Label("Bold"), 0, 0).Classes(css.Ghost), widget.AlignStart)),
+		section("Toggle Group", ui.Aligned(ui.ButtonGroup(
+			ui.ToggleButton(ui.Label("Bold"), 0, 0).Classes(css.Outline).Active(true),
+			ui.ToggleButton(ui.Label("Italic"), 0, 0).Classes(css.Outline),
+			ui.ToggleButton(ui.Label("Underline"), 0, 0).Classes(css.Outline),
+		), widget.AlignStart)),
 		section("Tooltip", ui.Aligned(ui.Button(ui.Label("Hover"), 0, 0).Classes(css.Outline).Tooltip("Add to library"), widget.AlignStart)),
 		section("Typography",
 			ui.Label("The Joke Tax Chronicles").Classes(css.H1),
