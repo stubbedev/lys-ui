@@ -216,16 +216,13 @@ func openTooltip(sess *wlsession.Session, host Host, face *render.Typeface, opts
 		debug.Log("input", "tooltip unavailable: host %T or nil face", host)
 		return nil, nil
 	}
-	var card widget.Widget = widget.NewLabel(face, 12, text, widget.Current().Text)
+	markup := false
 	if m, ok := hover.(widget.TooltipMarkupper); ok {
-		if markup, rich := m.TooltipMarkup(); rich {
-			card = widget.NewRichLabel(face, 12, markup, widget.Current().Text)
+		if source, rich := m.TooltipMarkup(); rich {
+			text, markup = source, true
 		}
 	}
-	box := widget.NewBox(widget.Row, 0, 8)
-	box.Append(card, false)
-	// The card styles as the `tooltip` element (css.md).
-	nameSurfaceElement(box, elemTooltip)
+	box := widget.NewTooltipCard(face, text, markup)
 	maxW, maxH := opts.maxSize()
 	size := box.Measure(widget.Constraints{Max: widget.Size{W: maxW, H: maxH}})
 	// The shadow gutter rides on the surface (see OpenPopover): the
@@ -239,9 +236,10 @@ func openTooltip(sess *wlsession.Session, host Host, face *render.Typeface, opts
 		X:           pointerX + dx - gutter,
 		Y:           pointerY + dy - gutter,
 		Width:       size.W + 2*gutter, Height: size.H + 2*gutter,
-		Gutter: gutter,
-		NoGrab: true,
-		Kind:   surfx.KindTooltip,
+		Gutter:  gutter,
+		NoGrab:  true,
+		NoPlate: true,
+		Kind:    surfx.KindTooltip,
 	})
 	if err != nil {
 		debug.Log("input", "tooltip popup: %v", err)

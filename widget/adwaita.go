@@ -318,6 +318,7 @@ func controlRules() [][2]string {
 		{"skeleton", "background-color: @muted_bg_color; border-radius: 6px;"},
 		{"bullets", "margin-left: 8px;"},
 		{"rows", "border: 1px solid @borders;"},
+		{"tooltip", "background-color: @accent_bg_color; color: @accent_fg_color; border-radius: 6px; padding: 6px 12px;"},
 		{"popover, menu", "background-color: @popover_bg_color; color: @popover_fg_color; border: 1px solid @borders; border-radius: 8px;"},
 	}
 }

@@ -7,13 +7,13 @@ import (
 
 // App-level CSS surface names (docs/css.md): the element-name list's
 // app half. Each surface names its card for the stylesheet in its
-// constructor; toast is a widget type and names itself. The dialog's
+// constructor; toast and the tooltip card are widgets and name
+// themselves. The dialog's
 // card is the floating plate (Elevation) when client shadows paint and
 // the plain root box when they do not.
 const (
 	elemDialog  = "dialog"
 	elemPopover = "popover"
-	elemTooltip = "tooltip"
 )
 
 // popoverClass is the style class GtkPopover's node carries; a

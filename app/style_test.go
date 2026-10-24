@@ -46,16 +46,11 @@ func TestCSSSurfaceElementNames(t *testing.T) {
 		})
 	}
 
-	// Popover and tooltip name whatever card tree they are given.
+	// A popover names whatever card tree it is given.
 	box := widget.NewBox(widget.Row, 0, 0)
 	nameSurfaceElement(box, elemPopover)
 	if box.Element() != elemPopover {
 		t.Errorf("popover card element = %q", box.Element())
-	}
-	tip := widget.NewBox(widget.Row, 0, 0)
-	nameSurfaceElement(tip, elemTooltip)
-	if tip.Element() != elemTooltip {
-		t.Errorf("tooltip card element = %q", tip.Element())
 	}
 
 	// A non-node-backed widget is skipped silently.

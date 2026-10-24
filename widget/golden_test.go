@@ -40,9 +40,6 @@ type goldenShot struct {
 	// frame is the rect the widget is arranged into; zero means the
 	// widget's measured natural size.
 	frame Size
-	// bg is the shot's background; zero means the theme's Bg. Tooltip
-	// cards paint over Surface, matching their popup host.
-	bg Color
 	// focus, when set, gets the keyboard focus ring drawn around it,
 	// exactly as the app window draws it.
 	focus Widget
@@ -75,10 +72,6 @@ func goldenTheme(t *Theme) goldenOption { return func(s *goldenShot) { s.theme =
 func goldenFrame(w, h int) goldenOption {
 	return func(s *goldenShot) { s.frame = Size{W: w, H: h} }
 }
-
-// goldenBackground paints the shot's background in c instead of the
-// theme's Bg.
-func goldenBackground(c Color) goldenOption { return func(s *goldenShot) { s.bg = c } }
 
 // goldenFocus draws the keyboard focus ring around w.
 func goldenFocus(w Widget) goldenOption { return func(s *goldenShot) { s.focus = w } }
@@ -121,10 +114,7 @@ func NewGolden(t *testing.T, w Widget, name string, opts ...goldenOption) {
 		cfg.afterArrange()
 	}
 
-	bg := cfg.bg
-	if bg == 0 {
-		bg = theme.Bg
-	}
+	bg := theme.Bg
 	bw, bh := frame.W+2*goldenPad, frame.H+2*goldenPad
 	stride := render.Stride(bw)
 	if cfg.focus != nil {
@@ -454,15 +444,13 @@ func TestGoldenFocusRing(t *testing.T) {
 	NewGolden(t, column, "focus-ring", goldenTheme(th), goldenFocus(button))
 }
 
-// TestGoldenTooltipCard paints the tooltip popup's contents: the same
-// Box-plus-Label composition app's openTooltip maps into a popup, over
-// the Surface color the popup painter clears with.
+// TestGoldenTooltipCard paints the card app's openTooltip maps into a
+// plateless popup, over the window it floats on.
 func TestGoldenTooltipCard(t *testing.T) {
 	face := goldenFace(t)
-	th := DarkTheme()
-	card := NewBox(Row, 0, 8)
-	card.Append(NewLabel(face, 12, "Tooltips appear after a short dwell", th.Text), false)
-	NewGolden(t, card, "tooltip-card", goldenTheme(th), goldenBackground(th.Surface))
+	for _, shot := range bothPalettes("tooltip-card") {
+		NewGolden(t, NewTooltipCard(face, "Tooltips appear after a short dwell", false), shot.name, goldenTheme(shot.th))
+	}
 }
 
 // TestGoldenLightTheme re-renders the core set under the light preset:
@@ -517,10 +505,6 @@ func TestGoldenLightTheme(t *testing.T) {
 		Append(button, false).
 		Append(NewLabel(face, 14, "unfocused label", th.TextMuted), false)
 	NewGolden(t, column, "focus-ring-light", light, goldenFocus(button))
-
-	card := NewBox(Row, 0, 8)
-	card.Append(NewLabel(face, 12, "Tooltips appear after a short dwell", th.Text), false)
-	NewGolden(t, card, "tooltip-card-light", light, goldenBackground(th.Surface))
 }
 
 // caretsForShot marks every entry and text area under w focused, so

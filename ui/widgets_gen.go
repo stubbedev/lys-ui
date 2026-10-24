@@ -836,6 +836,13 @@ func Skeleton(width int, height int) *BoxBuilder {
 	return b
 }
 
+// TooltipCard builds a widget.Box with widget.NewTooltipCard.
+func TooltipCard(text string, markup bool) *BoxBuilder {
+	b := &BoxBuilder{}
+	b.init(b, func(s *Scope) *widget.Box { return widget.NewTooltipCard(s.face(b.face), text, markup) })
+	return b
+}
+
 // Font overrides the environment's typeface and size for this widget; zero values keep the environment's.
 func (b *BoxBuilder) Font(face render.Font, sizePx float64) *BoxBuilder {
 	b.face, b.size = face, sizePx
