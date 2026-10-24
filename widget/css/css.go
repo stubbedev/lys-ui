@@ -156,6 +156,7 @@ const (
 	// input borders, the focus ring and the five chart colors
 	// (--chart-1 to --chart-5).
 	MutedBgColor     = "muted_bg_color"
+	SecondaryBgColor = "secondary_bg_color"
 	MutedFgColor     = "muted_fg_color"
 	InputBorderColor = "input_border_color"
 	RingColor        = "ring_color"

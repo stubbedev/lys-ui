@@ -3,6 +3,7 @@ package widget
 import (
 	"testing"
 
+	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget/css"
 )
 
@@ -36,5 +37,27 @@ func TestIconButtonSize(t *testing.T) {
 	textW := label.Measure(unbounded).W
 	if got := measure(label, css.Ghost); got.W != textW+32 {
 		t.Errorf("labelled ghost button %v wide, want the label %d plus 16px padding each side", got.W, textW)
+	}
+}
+
+// The secondary variant fills with the theme's Secondary token, so a
+// theme can keep it apart from the Surface panels it sits on (#267).
+func TestSecondaryButtonFill(t *testing.T) {
+	prev := Current()
+	t.Cleanup(func() { SetTheme(prev) })
+	fill := func() Color {
+		b := NewButton(NewLabel(testFace(t), 14, "Cancel", 0), 0, 0)
+		b.AddClass(css.Secondary)
+		arrangeTree(t, b, 200, 50)
+		return b.style(b).Background
+	}
+	SetTheme(DarkTheme())
+	if got := fill(); got != Current().SecondaryColor() {
+		t.Errorf("secondary fill %#x, want SecondaryColor %#x", uint32(got), uint32(Current().SecondaryColor()))
+	}
+	distinct := render.RGB(0x3f, 0x3f, 0x46)
+	SetTheme(DarkTheme().WithSecondary(distinct))
+	if got := fill(); got != distinct || got == Current().Surface {
+		t.Errorf("secondary fill %#x under a set Secondary, want %#x, apart from Surface", uint32(got), uint32(distinct))
 	}
 }

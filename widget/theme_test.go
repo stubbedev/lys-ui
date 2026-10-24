@@ -352,21 +352,23 @@ func TestThemeDerivations(t *testing.T) {
 	t.Run("surface tokens fall back to their source", func(t *testing.T) {
 		th := &Theme{Surface: render.RGB(1, 2, 3), Border: render.RGB(4, 5, 6), Accent: render.RGB(7, 8, 9)}
 		for name, tc := range map[string]struct{ got, want Color }{
-			"CardColor":    {th.CardColor(), th.Surface},
-			"PopoverColor": {th.PopoverColor(), th.Surface},
-			"MutedColor":   {th.MutedColor(), th.Surface},
-			"InputColor":   {th.InputColor(), th.Border},
-			"RingColor":    {th.RingColor(), th.Accent},
+			"CardColor":      {th.CardColor(), th.Surface},
+			"PopoverColor":   {th.PopoverColor(), th.Surface},
+			"MutedColor":     {th.MutedColor(), th.Surface},
+			"SecondaryColor": {th.SecondaryColor(), th.MutedColor()},
+			"InputColor":     {th.InputColor(), th.Border},
+			"RingColor":      {th.RingColor(), th.Accent},
 		} {
 			if tc.got != tc.want {
 				t.Errorf("%s = %v, want %v", name, tc.got, tc.want)
 			}
 		}
 		set := render.RGB(10, 11, 12)
-		th = th.WithCard(set).WithPopover(set).WithMuted(set).WithInput(set).WithRing(set)
+		th = th.WithCard(set).WithPopover(set).WithMuted(set).WithSecondary(set).WithInput(set).WithRing(set)
 		for name, got := range map[string]Color{
 			"CardColor": th.CardColor(), "PopoverColor": th.PopoverColor(), "MutedColor": th.MutedColor(),
-			"InputColor": th.InputColor(), "RingColor": th.RingColor(),
+			"SecondaryColor": th.SecondaryColor(),
+			"InputColor":     th.InputColor(), "RingColor": th.RingColor(),
 		} {
 			if got != set {
 				t.Errorf("%s = %v, want the explicit %v", name, got, set)

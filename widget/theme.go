@@ -51,6 +51,11 @@ type Theme struct {
 	// code spans. Leave it unset and MutedColor derives it from
 	// Surface.
 	Muted Color
+	// Secondary fills the secondary button and badge, shadcn's
+	// --secondary: a fill of its own, so an app that paints panels in
+	// Surface can keep the button visible on them. Leave it unset and
+	// SecondaryColor derives it from MutedColor.
+	Secondary Color
 	// Sidebar fills an application sidebar. Leave it unset and
 	// SidebarColor derives it from Surface.
 	Sidebar Color
@@ -324,6 +329,9 @@ func (t *Theme) WithPopover(c Color) *Theme { return t.with(func(n *Theme) { n.P
 // WithMuted returns a copy with the quiet-region fill set.
 func (t *Theme) WithMuted(c Color) *Theme { return t.with(func(n *Theme) { n.Muted = c }) }
 
+// WithSecondary returns a copy with the secondary variant's fill set.
+func (t *Theme) WithSecondary(c Color) *Theme { return t.with(func(n *Theme) { n.Secondary = c }) }
+
 // WithSidebar returns a copy with the sidebar fill set.
 func (t *Theme) WithSidebar(c Color) *Theme { return t.with(func(n *Theme) { n.Sidebar = c }) }
 
@@ -412,6 +420,10 @@ func (t *Theme) PopoverColor() Color { return t.or(t.Popover, t.Surface) }
 // MutedColor returns the quiet-region fill: Muted when set, otherwise
 // Surface.
 func (t *Theme) MutedColor() Color { return t.or(t.Muted, t.Surface) }
+
+// SecondaryColor returns the secondary variant's fill: Secondary when
+// set, otherwise MutedColor.
+func (t *Theme) SecondaryColor() Color { return t.or(t.Secondary, t.MutedColor()) }
 
 // ChartColor returns series i's color, cycling through the five chart
 // colors; an unset one is Accent.
