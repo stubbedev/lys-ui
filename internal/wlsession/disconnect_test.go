@@ -1,6 +1,7 @@
 package wlsession
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -220,4 +221,71 @@ func TestCloseIsIdempotent(t *testing.T) {
 	s := deadSocketSession(t)
 	s.Close()
 	s.Close()
+}
+
+// closedAfterVerdict connects a Session to a loopback compositor that,
+// when verdict is set, raises a wl_display.error on the display (code
+// 1, "invalid method") and then closes the connection: the client's
+// next action is a write, which hits the closed socket before the
+// verdict was read. It returns the session and that write's error.
+func closedAfterVerdict(t *testing.T, verdict bool) (*Session, error) {
+	t.Helper()
+	ln, _ := headlesstest.LoopbackDisplay(t, "wayland-verdict")
+	d, err := wl.Connect("")
+	if err != nil {
+		ln.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Context().Close() })
+	conn, err := ln.AcceptUnix()
+	ln.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Session{Display: d}
+	d.AddErrorHandler(s)
+	if verdict {
+		msg := "invalid method"
+		pad := (len(msg) + 1 + 3) &^ 3
+		frame := binary.NativeEndian.AppendUint32(nil, 1)
+		frame = binary.NativeEndian.AppendUint32(frame, uint32(8+4+4+4+pad)<<16)
+		frame = binary.NativeEndian.AppendUint32(frame, 1)
+		frame = binary.NativeEndian.AppendUint32(frame, 1)
+		frame = binary.NativeEndian.AppendUint32(frame, uint32(len(msg)+1))
+		frame = append(frame, msg...)
+		frame = append(frame, make([]byte, pad-len(msg))...)
+		if _, err := conn.Write(frame); err != nil {
+			t.Fatal(err)
+		}
+	}
+	conn.Close()
+	_, err = d.Sync()
+	if err == nil {
+		t.Fatal("a write to the closed compositor succeeded")
+	}
+	return s, err
+}
+
+// A verdict the compositor sent before closing is read back when the
+// next write finds the socket closed (#248): the disconnect is the
+// protocol error, naming the object, the code and the message.
+func TestWriteAfterVerdictKeepsTheVerdict(t *testing.T) {
+	s, werr := closedAfterVerdict(t, true)
+	err := s.Classify(werr)
+	de, ok := errors.AsType[*DisconnectError](err)
+	if !ok || de.Reason != DisconnectProtocol {
+		t.Fatalf("Classify(%v) = %v, want a protocol DisconnectError", werr, err)
+	}
+	if want := "*wl.Display@1: error 1: invalid method"; !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q, want it to carry %q", err, want)
+	}
+}
+
+// A compositor that closes without a verdict stays a lost connection.
+func TestWriteAfterSilentCloseIsConnectionLost(t *testing.T) {
+	s, werr := closedAfterVerdict(t, false)
+	de, ok := errors.AsType[*DisconnectError](s.Classify(werr))
+	if !ok || de.Reason != DisconnectConnectionLost || s.protoErr != nil {
+		t.Fatalf("Classify(%v) = %v, verdict %v; want a lost connection without one", werr, de, s.protoErr)
+	}
 }

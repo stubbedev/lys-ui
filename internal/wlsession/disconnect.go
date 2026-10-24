@@ -103,6 +103,9 @@ func (s *Session) asDisconnect(err error) error {
 	if err == nil {
 		return nil
 	}
+	if s.protoErr == nil && peerClosed(err) {
+		s.drainVerdict()
+	}
 	protocol := s.protoErr != nil || carriesExternal(err, wl.ErrContextRunProtocolError)
 	if !protocol && !isConnectionDeath(err) {
 		return s.withProtoErr(err)
@@ -116,6 +119,33 @@ func (s *Session) asDisconnect(err error) error {
 		cause = fmt.Errorf("%w (compositor: %w)", err, s.protoErr)
 	}
 	return &DisconnectError{Reason: reason, Err: cause}
+}
+
+// drainLimit bounds how many queued events drainVerdict dispatches.
+const drainLimit = 4096
+
+// drainVerdict dispatches what a closed compositor left in the socket,
+// up to its wl_display.error: a compositor raises the error and then
+// closes, so a write that hits the closed socket first fails before
+// the verdict was read. The peer is closed, so each read returns
+// queued data or fails at once; it never blocks.
+func (s *Session) drainVerdict() {
+	if s.Display == nil {
+		return
+	}
+	for range drainLimit {
+		if s.Display.Context().Run() != nil || s.protoErr != nil {
+			return
+		}
+	}
+}
+
+// peerClosed reports whether err is a write or read on a socket whose
+// peer has closed (EPIPE, ECONNRESET), the shapes after which the
+// queued events are still readable without blocking.
+func peerClosed(err error) bool {
+	errno, ok := errors.AsType[syscall.Errno](err)
+	return ok && (errno == syscall.EPIPE || errno == syscall.ECONNRESET)
 }
 
 // Classify maps a raw wire failure onto the disconnect taxonomy — the

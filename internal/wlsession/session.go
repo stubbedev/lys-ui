@@ -1352,9 +1352,19 @@ func (s *Session) Step() error {
 // error event leaves protoErr nil, which is itself diagnostic (the
 // compositor dropped us without saying why).
 func (s *Session) HandleDisplayError(ev wl.DisplayErrorEvent) {
-	s.protoErr = fmt.Errorf("object %T: %s", ev.ObjectId, ev.Message)
+	s.protoErr = fmt.Errorf("%s: error %d: %s", objectName(ev.ObjectId), ev.Code, ev.Message)
 	debug.Log("wire", "compositor fatal: %v", s.protoErr)
 	logutil.L().Error("wlsession: compositor fatal protocol error", slog.Any("err", s.protoErr))
+}
+
+// objectName names a protocol object for a log line: its proxy type
+// and its wire id, as in *wl.Surface@23; nil for an object the client
+// no longer knows.
+func objectName(p wl.Proxy) string {
+	if p == nil {
+		return "unknown object"
+	}
+	return fmt.Sprintf("%T@%d", p, p.Id())
 }
 
 // withProtoErr decorates a dispatch failure with the recorded protocol
