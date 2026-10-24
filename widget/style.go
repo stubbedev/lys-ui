@@ -150,14 +150,15 @@ func (s *Stylesheet) Load(css string) {
 	relayer()
 }
 
-// Remove uninstalls the stylesheet, stopping its file poll;
-// removing twice is a no-op.
+// Remove uninstalls the stylesheet and stops its file poll (a scoped
+// NewStylesheetFile sheet keeps styling where it is attached, but no
+// longer reloads); removing twice is a no-op.
 func (s *Stylesheet) Remove() {
+	unwatch(s)
 	if !s.live {
 		return
 	}
 	s.live = false
-	unwatch(s)
 	sheets = slices.DeleteFunc(sheets, func(o *Stylesheet) bool { return o == s })
 	relayer()
 }
@@ -537,6 +538,22 @@ func AddStylesheetFile(path string, priority int) (*Stylesheet, error) {
 	sheets = append(sheets, s)
 	watchSheet(s, f)
 	relayer()
+	return s, nil
+}
+
+// NewStylesheetFile reads the stylesheet at path into a scoped sheet
+// at priority, like NewStylesheet: attach it to the widgets whose
+// subtrees it styles. Its @import rules resolve relative to path, and
+// the hot-reload poll AddStylesheetFile starts reloads it on change
+// until Remove. A file that cannot be read or whose parse reports a
+// problem fails with an error naming the path.
+func NewStylesheetFile(path string, priority int) (*Stylesheet, error) {
+	sheet, f, err := readStylesheetFile(path)
+	if err != nil {
+		return nil, err
+	}
+	s := &Stylesheet{sheet: sheet, priority: priority, scoped: true}
+	watchSheet(s, f)
 	return s, nil
 }
 

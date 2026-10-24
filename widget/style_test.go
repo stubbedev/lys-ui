@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/render"
@@ -430,6 +431,62 @@ func TestAddStylesheetFilePriority(t *testing.T) {
 	CollectDamage(b)
 	if got := b.style(b).Radius.TopLeft; got != 9 {
 		t.Fatalf("after removing the app file radius = %d, want the theme's 9", got)
+	}
+}
+
+// A scoped sheet read from a file styles only the subtree it is
+// attached to, resolves its @import relative to the file, reloads on
+// change, and stops reloading on Remove (#249).
+func TestNewStylesheetFile(t *testing.T) {
+	resetWatches(t)
+	dir := t.TempDir()
+	write := func(name, css string) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(css), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	write("base.css", `button { border-radius: 7; }`)
+	index := write("index.css", `@import "base.css";`)
+	sheet, err := NewStylesheetFile(index, StylePriorityApplication)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(sheet.Remove)
+	face := goldenFace(t)
+	inside := NewButton(NewLabel(face, 14, "in", 0), 4, 4)
+	outside := NewButton(NewLabel(face, 14, "out", 0), 4, 4)
+	scope := NewBox(Row, 0, 0).Append(inside, false)
+	scope.AttachStylesheet(sheet)
+	root := NewBox(Row, 0, 0).Append(scope, false).Append(outside, false)
+	arrangeTree(t, root, 200, 40)
+	radius := func(b *Button) int { return b.style(b).Radius.TopLeft }
+	if radius(inside) != 7 || radius(outside) != 0 {
+		t.Fatalf("radius inside %d outside %d, want the imported 7 inside only", radius(inside), radius(outside))
+	}
+
+	later := time.Now().Add(time.Hour)
+	write("index.css", `@import "base.css"; button { border-radius: 3; }`)
+	if err := os.Chtimes(index, later, later); err != nil {
+		t.Fatal(err)
+	}
+	pollStylesheets()
+	CollectDamage(root)
+	if radius(inside) != 3 || radius(outside) != 0 {
+		t.Fatalf("after the reload: inside %d outside %d, want 3 inside only", radius(inside), radius(outside))
+	}
+
+	sheet.Remove()
+	write("index.css", `button { border-radius: 11; }`)
+	if err := os.Chtimes(index, later.Add(time.Hour), later.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	pollStylesheets()
+	CollectDamage(root)
+	if radius(inside) != 3 {
+		t.Errorf("a removed sheet reloaded: inside %d, want 3", radius(inside))
 	}
 }
 

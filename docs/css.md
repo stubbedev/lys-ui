@@ -28,7 +28,11 @@ box.AttachStylesheet(widget.NewStylesheet(css, widget.StylePriorityApplication))
 - **Priorities** follow GTK's provider priorities: `StylePriorityFallback`,
   `Theme` (regenerated on `SetTheme`), `Settings`, `Application` (the
   `LoadStylesheet` slot), and `User` (inline styles).
-- **Hot reload.** `AddStylesheetFile` and `LoadStylesheetFile` stat each
+- **Scoped files.** `NewStylesheetFile(path, priority)` reads a sheet
+  for `AttachStylesheet` from a file, so its `@import` rules resolve
+  relative to it; it hot-reloads like the installed file sheets.
+- **Hot reload.** `AddStylesheetFile`, `LoadStylesheetFile` and
+  `NewStylesheetFile` stat each
   loaded file once a second on the application's timer and reload it on
   change; one poller covers every file, starts with the first file load,
   and each sheet's `Remove` (or `Load`) stops its file. A file that
