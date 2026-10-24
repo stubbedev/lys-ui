@@ -366,3 +366,43 @@ func TestIconSearchPathsAndRefresh(t *testing.T) {
 		t.Errorf("nil search paths = %v, want the XDG default", got)
 	}
 }
+
+// An icon given more room than its size paints centered in it, as
+// GtkImage centers its paintable; an exact fit paints at its origin
+// (#251).
+func TestIconPaintsCentered(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	for i := range src.Pix {
+		src.Pix[i] = 0xff
+	}
+	ic, err := render.IconFromImage(src, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ink := func(w, h int) render.Rect {
+		icon := NewIcon(ic)
+		icon.Measure(Constraints{Max: Size{W: w, H: h}})
+		icon.Arrange(render.Rect{W: w, H: h})
+		buf := make([]byte, render.Stride(w)*h)
+		icon.Paint(render.New(buf, render.Stride(w), w, h))
+		box := render.Rect{X: w, Y: h}
+		right, bottom := 0, 0
+		for y := range h {
+			for x := range w {
+				if render.ColorFromBytes(buf[y*render.Stride(w)+x*4:]).A() == 0 {
+					continue
+				}
+				box.X, box.Y = min(box.X, x), min(box.Y, y)
+				right, bottom = max(right, x+1), max(bottom, y+1)
+			}
+		}
+		box.W, box.H = right-box.X, bottom-box.Y
+		return box
+	}
+	if got := ink(24, 16); got != (render.Rect{X: 8, Y: 4, W: 8, H: 8}) {
+		t.Errorf("icon in 24x16 painted %v, want centered at (8,4)", got)
+	}
+	if got := ink(8, 8); got != (render.Rect{W: 8, H: 8}) {
+		t.Errorf("icon in an exact fit painted %v, want its origin", got)
+	}
+}

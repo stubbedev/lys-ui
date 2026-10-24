@@ -315,12 +315,14 @@ func TestIconSizeAndTintFromStylesheet(t *testing.T) {
 	if got := ic.Measure(Constraints{Max: Size{W: 50, H: 50}}); got != (Size{W: 24, H: 24}) {
 		t.Errorf("inherited -gtk-icon-size: %+v", got)
 	}
-	if got := pxColorAt(paintTree(box, 50, 50), render.Stride(50), 12, 12); got != render.RGB(0, 0xff, 0) {
+	b := ic.Bounds()
+	cx, cy := b.X+b.W/2, b.Y+b.H/2
+	if got := pxColorAt(paintTree(box, 50, 50), render.Stride(50), cx, cy); got != render.RGB(0, 0xff, 0) {
 		t.Errorf("symbolic tint from the stylesheet color: %08x", uint32(got))
 	}
 	// A pinned tint outranks the stylesheet.
 	ic.SetTint(render.RGB(0xff, 0, 0))
-	if got := pxColorAt(paintTree(box, 50, 50), render.Stride(50), 12, 12); got != render.RGB(0xff, 0, 0) {
+	if got := pxColorAt(paintTree(box, 50, 50), render.Stride(50), cx, cy); got != render.RGB(0xff, 0, 0) {
 		t.Errorf("programmatic tint lost to the stylesheet: %08x", uint32(got))
 	}
 }

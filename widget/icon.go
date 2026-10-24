@@ -202,8 +202,9 @@ func (i *Icon) Arrange(r render.Rect) {
 	i.node.Arrange(border)
 }
 
-// Paint draws the icon at the top-left of the content box (the CSS box
-// layers first, when the stylesheet gives the icon any). Dynamic icons
+// Paint draws the icon centered in the content box, as GtkImage
+// centers its paintable (the CSS box layers first, when the stylesheet
+// gives the icon any). Dynamic icons
 // resolve first, re-rasterizing when the canvas device scale, the tint,
 // the stylesheet's size, or the icon theme cache moved on since the
 // last frame.
@@ -225,11 +226,13 @@ func (i *Icon) Paint(cv *render.Canvas) {
 		}
 	}
 	content := b.padding.Shrink(b.border.Shrink(i.bounds))
+	nat := i.natural()
+	x, y := content.X+(content.W-nat.W)/2, content.Y+(content.H-nat.H)/2
 	if v.Has(style.PropIconTransform) && v.IconXform.M != render.Identity {
-		i.ic.DrawXformed(cv, content.X, content.Y, v.IconXform.M)
+		i.ic.DrawXformed(cv, x, y, v.IconXform.M)
 		return
 	}
-	i.ic.Draw(cv, content.X, content.Y)
+	i.ic.Draw(cv, x, y)
 }
 
 // HitTest returns the icon when p is inside its bounds.
