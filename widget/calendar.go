@@ -3,6 +3,7 @@ package widget
 import (
 	"time"
 
+	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/render"
 )
 
@@ -166,6 +167,14 @@ type Calendar struct {
 	// nav holds the previous and next month buttons.
 	nav [2]*Button
 
+	// firstDay overrides the name set's first weekday when set;
+	// weekend marks the days the `.weekend` style part tints, and
+	// weekendPart is that part.
+	firstDay    time.Weekday
+	firstDaySet bool
+	weekend     [7]bool
+	weekendPart stylePart
+
 	cell    int
 	titleH  int
 	headerH int
@@ -213,6 +222,9 @@ func NewCalendar(face render.Font, sizePx float64, initial Date) *Calendar {
 	c.nav[0].OnClick = func() { c.showMonth(c.view.AddMonths(-1)) }
 	c.nav[1].OnClick = func() { c.showMonth(c.view.AddMonths(1)) }
 	c.SetElement("calendar")
+	c.weekend[time.Saturday], c.weekend[time.Sunday] = true, true
+	c.weekendPart.AddClass("weekend")
+	setParents(c, &c.weekendPart)
 	return c
 }
 
@@ -220,6 +232,38 @@ func NewCalendar(face render.Font, sizePx float64, initial Date) *Calendar {
 func (c *Calendar) SetNames(names CalendarNames) {
 	c.names = names
 	c.Invalidate()
+}
+
+// SetFirstWeekday makes day the week's first column, overriding the
+// name set's (lys-shell's calendar takes it from its config).
+func (c *Calendar) SetFirstWeekday(day time.Weekday) {
+	c.firstDay, c.firstDaySet = day, true
+	c.Invalidate()
+}
+
+// firstWeekday is the week's first column: SetFirstWeekday's day, else
+// the name set's.
+func (c *Calendar) firstWeekday() time.Weekday {
+	if c.firstDaySet {
+		return c.firstDay
+	}
+	return c.namesOf().FirstWeekday()
+}
+
+// SetWeekend names the weekend days, Saturday and Sunday by default:
+// their cells take the `calendar .weekend` rule's color and
+// background, which the theme leaves unset.
+func (c *Calendar) SetWeekend(days ...time.Weekday) {
+	c.weekend = [7]bool{}
+	for _, d := range days {
+		c.weekend[d] = true
+	}
+	c.Invalidate()
+}
+
+// appendStyleKids is the navigation buttons and the weekend part.
+func (c *Calendar) appendStyleKids(buf []Widget) []Widget {
+	return append(buf, c.nav[0], c.nav[1], &c.weekendPart)
 }
 
 // namesOf returns the active name set.
@@ -356,7 +400,7 @@ func (c *Calendar) reveal(d Date) {
 // firstOffset is the number of the previous month's days before day 1
 // of month m in the header's week order.
 func (c *Calendar) firstOffset(m Date) int {
-	return (int(m.Weekday()-c.namesOf().FirstWeekday()) + 7) % 7
+	return (int(m.Weekday()-c.firstWeekday()) + 7) % 7
 }
 
 // monthWidth is one month's grid width.
@@ -457,7 +501,7 @@ func (c *Calendar) Paint(cv *render.Canvas) {
 		title := names.MonthName(m.Month) + " " + itoa(m.Year)
 		c.face.DrawAligned(cv, title, render.Rect{X: x, Y: y, W: c.monthWidth(), H: c.titleH}, c.sizePx, th.Text, render.AlignCenter)
 		gx, _ := c.dayGrid(i)
-		start := names.FirstWeekday()
+		start := c.firstWeekday()
 		for col := range calendarCols {
 			wd := time.Weekday((int(start) + col) % 7)
 			c.face.DrawAligned(cv, names.WeekdayName(wd), render.Rect{X: gx + col*c.cell, Y: y + c.titleH, W: c.cell, H: c.headerH}, small, th.TextMuted, render.AlignCenter)
@@ -480,6 +524,13 @@ func (c *Calendar) paintDay(cv *render.Canvas, m, d Date, cell render.Rect, radi
 	outside := d.Month != m.Month
 	picked := !outside && c.picked(d)
 	col := th.Text
+	if c.weekend[d.Weekday()] && !outside {
+		wv := c.weekendPart.style(&c.weekendPart)
+		col = pickc(0, wv, style.PropColor, col)
+		if bg := pickc(0, wv, style.PropBackgroundColor, 0); bg != 0 {
+			cv.FillRect(cell, bg)
+		}
+	}
 	switch {
 	case outside:
 		col = th.TextMuted

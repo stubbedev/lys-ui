@@ -213,3 +213,39 @@ func TestGoldenShadcnCalendar(t *testing.T) {
 		})
 	}
 }
+
+// SetFirstWeekday overrides the name set's first column, and the
+// weekend days take the `calendar .weekend` rule, wherever SetWeekend
+// puts them (#264).
+func TestCalendarWeekStartAndWeekend(t *testing.T) {
+	face := goldenFace(t)
+	c := NewCalendar(face, 14, DateOf(time.Date(2026, time.October, 14, 0, 0, 0, 0, time.UTC)))
+	c.SetFirstWeekday(time.Monday)
+	if got := c.cellDate(0, 0, 0).Weekday(); got != time.Monday {
+		t.Errorf("first column is %v, want Monday", got)
+	}
+	loadCSS(t, `calendar .weekend { background-color: #ff0000; }`)
+	buf := paintPixels(t, c, 300, 360)
+	red := func(d Date) bool {
+		for row := range calendarRows {
+			for col := range calendarCols {
+				if c.cellDate(0, col, row) == d {
+					r := c.cellRect(0, col, row)
+					return pxAt(buf, 300, r.X+2, r.Y+2) == render.RGB(0xff, 0, 0)
+				}
+			}
+		}
+		t.Fatalf("%v is not shown", d)
+		return false
+	}
+	sat := DateOf(time.Date(2026, time.October, 17, 0, 0, 0, 0, time.UTC))
+	fri := DateOf(time.Date(2026, time.October, 16, 0, 0, 0, 0, time.UTC))
+	if !red(sat) || red(fri) {
+		t.Errorf("default weekend: Saturday tinted %v, Friday %v", red(sat), red(fri))
+	}
+	c.SetWeekend(time.Friday)
+	buf = paintPixels(t, c, 300, 360)
+	if red(sat) || !red(fri) {
+		t.Errorf("Friday weekend: Saturday tinted %v, Friday %v", red(sat), red(fri))
+	}
+}

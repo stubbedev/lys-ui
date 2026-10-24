@@ -1281,6 +1281,18 @@ func (b *CalendarBuilder) Font(face render.Font, sizePx float64) *CalendarBuilde
 	return b
 }
 
+// FirstWeekday calls (*widget.Calendar).SetFirstWeekday.
+func (b *CalendarBuilder) FirstWeekday(day time.Weekday) *CalendarBuilder {
+	b.do(func(s *Scope, w *widget.Calendar) { w.SetFirstWeekday(day) })
+	return b
+}
+
+// WatchFirstWeekday re-applies SetFirstWeekday with get's value after every update.
+func (b *CalendarBuilder) WatchFirstWeekday(get func() time.Weekday) *CalendarBuilder {
+	b.watch(func(w *widget.Calendar) { w.SetFirstWeekday(get()) })
+	return b
+}
+
 // Mode calls (*widget.Calendar).SetMode.
 func (b *CalendarBuilder) Mode(m widget.CalendarMode) *CalendarBuilder {
 	b.do(func(s *Scope, w *widget.Calendar) { w.SetMode(m) })
@@ -1332,6 +1344,12 @@ func (b *CalendarBuilder) Today(d widget.Date) *CalendarBuilder {
 // WatchToday re-applies SetToday with get's value after every update.
 func (b *CalendarBuilder) WatchToday(get func() widget.Date) *CalendarBuilder {
 	b.watch(func(w *widget.Calendar) { w.SetToday(get()) })
+	return b
+}
+
+// Weekend calls (*widget.Calendar).SetWeekend.
+func (b *CalendarBuilder) Weekend(days ...time.Weekday) *CalendarBuilder {
+	b.do(func(s *Scope, w *widget.Calendar) { w.SetWeekend(days...) })
 	return b
 }
 
