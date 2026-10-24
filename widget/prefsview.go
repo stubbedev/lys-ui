@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 type searchable interface {
@@ -139,7 +140,9 @@ func (v *PreferencesView) filter(text string) {
 		})
 	}
 	if len(v.results.Children()) == 0 {
-		v.results.AppendAligned(NewLabel(v.face, v.sizePx, Tr("No results found"), Current().TextMuted), false, AlignCenter)
+		none := NewLabel(v.face, v.sizePx, Tr("No results found"), 0)
+		none.AddClass(css.DimLabel)
+		v.results.AppendAligned(none, false, AlignCenter)
 	}
 	v.stack.Show("search")
 }

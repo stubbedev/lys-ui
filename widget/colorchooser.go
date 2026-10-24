@@ -65,7 +65,7 @@ func NewColorChooser(face render.Font, sizePx float64, initial render.Color) *Co
 	c.hex = NewEntry(face, sizePx, th.Text)
 	c.hex.SetText(c.hexText())
 	c.hex.OnChanged = func(s string) { c.applyHex(s) }
-	c.addTo = NewButton(NewLabel(face, sizePx, "+", th.Text), 6, 4)
+	c.addTo = NewButton(NewLabel(face, sizePx, "+", 0), 6, 4)
 	return c
 }
 

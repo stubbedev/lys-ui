@@ -4,7 +4,9 @@ import (
 	"image"
 	"strings"
 
+	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // AboutConfig declares an about dialog, the AdwAboutWindow content:
@@ -77,7 +79,6 @@ func (a *Application) AboutDialog(parent *Window, cfg AboutConfig) (*Dialog, err
 	if face == nil {
 		return nil, ErrNoDialogFace
 	}
-	th := widget.Current()
 	head := widget.NewBox(widget.Column, 4, 0)
 	if cfg.Logo != nil {
 		logo := widget.NewImage(cfg.Logo)
@@ -87,25 +88,25 @@ func (a *Application) AboutDialog(parent *Window, cfg AboutConfig) (*Dialog, err
 		head.Append(widget.NewBox(widget.Row, 0, 8).Append(logo, false), false)
 	}
 	if cfg.Name != "" {
-		head.Append(widget.NewLabel(face, 20, cfg.Name, th.Text), false)
+		head.Append(widget.NewLabel(face, 20, cfg.Name, 0), false)
 	}
 	if cfg.Version != "" {
-		head.Append(widget.NewLabel(face, 13, widget.Tr("Version")+" "+cfg.Version, th.TextMuted), false)
+		head.Append(aboutLabel(face, 13, widget.Tr("Version")+" "+cfg.Version, css.DimLabel), false)
 	}
 	if cfg.Comments != "" {
-		head.Append(widget.NewLabel(face, 13, cfg.Comments, th.TextMuted), false)
+		head.Append(aboutLabel(face, 13, cfg.Comments, css.DimLabel), false)
 	}
 	for _, link := range []string{cfg.Website, cfg.IssueURL} {
 		if link != "" {
-			head.Append(widget.NewLabel(face, 13, link, th.Accent), false)
+			head.Append(aboutLabel(face, 13, link, css.Accent), false)
 		}
 	}
 
 	body := widget.NewBox(widget.Column, 14, 0)
 	for _, s := range aboutSections(cfg) {
-		body.Append(widget.NewLabel(face, 12, strings.ToUpper(s.Heading), th.TextMuted), false)
+		body.Append(aboutLabel(face, 12, strings.ToUpper(s.Heading), css.DimLabel), false)
 		for _, line := range s.Lines {
-			body.Append(widget.NewLabel(face, 13, line, th.Text), false)
+			body.Append(widget.NewLabel(face, 13, line, 0), false)
 		}
 	}
 
@@ -124,4 +125,11 @@ func (a *Application) AboutDialog(parent *Window, cfg AboutConfig) (*Dialog, err
 		DefaultResponse: "close",
 		CancelResponse:  "close",
 	})
+}
+
+// aboutLabel is a line of the about dialog in the class's color.
+func aboutLabel(face *render.Typeface, sizePx float64, text, class string) *widget.Label {
+	l := widget.NewLabel(face, sizePx, text, 0)
+	l.AddClass(class)
+	return l
 }

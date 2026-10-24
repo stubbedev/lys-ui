@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // DialogButton is one button in a dialog's button row. Role, when
@@ -342,7 +343,7 @@ type fontRowModel struct {
 func (m *fontRowModel) Len() int { return len(m.fams) }
 
 func (m *fontRowModel) Row(i int) widget.Widget {
-	return widget.NewLabel(m.face, 13, sysfont.FamilyDisplay(m.fams[i]), widget.Current().Text)
+	return widget.NewLabel(m.face, 13, sysfont.FamilyDisplay(m.fams[i]), 0)
 }
 
 // FontChooserDialog opens a modal font picker (#74): a searchable,
@@ -396,7 +397,7 @@ func (a *Application) FontChooserDialog(parent *Window, initialFamily string, in
 
 	// The preview rebuilds its face through the production chain on
 	// every applied family or size change: what you see is what ships.
-	preview := widget.NewLabel(face, initialSize, "The quick brown fox jumps over the lazy dog 0123", th.Text)
+	preview := widget.NewLabel(face, initialSize, "The quick brown fox jumps over the lazy dog 0123", 0)
 	chosenSize := func() float64 {
 		if v, err := strconv.ParseFloat(strings.TrimSpace(sizeEntry.Text()), 64); err == nil && v > 0 && v <= 512 {
 			return v
@@ -432,7 +433,9 @@ func (a *Application) FontChooserDialog(parent *Window, initialFamily string, in
 	controls.Append(search, true)
 	controls.Append(mono, false)
 	sizeRow := widget.NewBox(widget.Row, 8, 0)
-	sizeRow.Append(widget.NewLabel(face, 12, "size", th.TextMuted), false)
+	sizeLabel := widget.NewLabel(face, 12, "size", 0)
+	sizeLabel.AddClass(css.DimLabel)
+	sizeRow.Append(sizeLabel, false)
 	sizeRow.Append(size, true)
 	sizeRow.Append(sizeEntry, false)
 	root := widget.NewBox(widget.Column, 8, 8)
@@ -509,7 +512,7 @@ func (a *Application) MessageBox(parent *Window, kind MessageKind, title, text s
 	}
 	body := widget.NewBox(widget.Row, 16, 0)
 	body.Append(newMessageGlyph(kind, 40), false)
-	body.Append(widget.NewLabel(face, 14, text, widget.Current().Text), true)
+	body.Append(widget.NewLabel(face, 14, text, 0), true)
 	cfg := DialogConfig{
 		Title:           title,
 		Width:           420,
@@ -635,7 +638,7 @@ func (a *Application) dialogRoot(cfg DialogConfig, respond func(string)) (widget
 		resp := b.Response
 		btn := widget.NewButton(
 			widget.NewBox(widget.Row, 6, 0).
-				Append(widget.NewLabel(face, 13, b.Label, widget.Current().Text), false),
+				Append(widget.NewLabel(face, 13, b.Label, 0), false),
 			10, 6)
 		btn.OnClick = func() { respond(resp) }
 		buttons.Append(btn, false)

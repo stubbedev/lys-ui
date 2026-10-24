@@ -203,7 +203,7 @@ func (a *Application) confirmBody(name string) widget.Widget {
 	th := widget.Current()
 	named := strings.ReplaceAll(widget.Tr("A file named \"{name}\" already exists."), "{name}", name)
 	return widget.NewBox(widget.Column, 8, 16).
-		Append(widget.NewLabel(face, 14, named, th.Text), false).
+		Append(widget.NewLabel(face, 14, named, 0), false).
 		Append(widget.NewLabel(face, 13, widget.Tr("Replacing it overwrites its contents."), th.TextMuted), false)
 }
 

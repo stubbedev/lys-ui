@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // FileChooser is the pure-Go file picker behind app.OpenFileDialog and
@@ -144,8 +145,10 @@ func NewFileChooser(face render.Font, sizePx float64, mode FileMode, startDir st
 	}
 	c.list.OnSelect = func(int) { c.syncFromSelection() }
 	c.list.OnActivate = func(i int) { c.activate(i) }
-	c.path = NewLabel(face, sizePx, "", th.TextMuted)
-	c.status = NewLabel(face, sizePx-2, "", th.Accent)
+	c.path = NewLabel(face, sizePx, "", 0)
+	c.path.AddClass(css.DimLabel)
+	c.status = NewLabel(face, sizePx-2, "", 0)
+	c.status.AddClass(css.Accent)
 	c.buildPlaces()
 	c.column = NewBox(Column, 10, 0)
 	c.column.Append(c.places, false)

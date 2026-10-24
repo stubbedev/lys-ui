@@ -120,7 +120,7 @@ var classRules = [][2]string{
 	{css.Success, "color: @success_color;"},
 	{css.Warning, "color: @warning_color;"},
 	{css.Error, "color: @error_color;"},
-	{css.DimLabel, "opacity: 0.55;"},
+	{css.DimLabel, "color: @muted_fg_color;"},
 	{css.Heading, "font-weight: 700;"},
 	{css.Caption, "font-size: 12px;"},
 	{css.CaptionHeading, "font-size: 12px; font-weight: 700;"},

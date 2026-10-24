@@ -255,15 +255,14 @@ type Banner struct {
 // button.
 func NewBanner(face render.Font, sizePx float64, title, buttonLabel string) *Banner {
 	face = requireFace("widget.NewBanner", face)
-	th := Current()
 	b := &Banner{}
 	b.SetElement("banner")
-	b.title = NewLabel(face, sizePx, title, th.Text)
+	b.title = NewLabel(face, sizePx, title, 0)
 	row := NewBox(Row, 12, 6)
 	row.Append(NewSpacer(0, 0), true)
 	row.AppendAligned(b.title, false, AlignCenter)
 	if buttonLabel != "" {
-		b.button = NewButton(NewLabel(face, sizePx, buttonLabel, th.Text), 6, 4)
+		b.button = NewButton(NewLabel(face, sizePx, buttonLabel, 0), 6, 4)
 		b.button.OnClick = func() {
 			if b.OnButton != nil {
 				b.OnButton()

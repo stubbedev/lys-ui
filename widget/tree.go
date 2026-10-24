@@ -33,7 +33,7 @@ type FlatRow[T any] struct {
 //	view := widget.NewColumnView(face, 14, tree, []widget.TableColumn[widget.FlatRow[item]]{{
 //		Title: "Name", Expand: true,
 //		Cell: widget.TreeCell(tree, 14, func(it item) Widget {
-//			return widget.NewLabel(face, 14, it.Name, widget.Current().Text)
+//			return widget.NewLabel(face, 14, it.Name, 0)
 //		}),
 //	}})
 type FlatTree[T any] struct {

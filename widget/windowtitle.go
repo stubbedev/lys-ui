@@ -1,6 +1,9 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/render"
+import (
+	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-ui/widget/css"
+)
 
 // WindowTitle is libadwaita's AdwWindowTitle: a title over a smaller,
 // muted subtitle, centered in a header bar, each ellipsized; an empty
@@ -19,9 +22,10 @@ func NewWindowTitle(face render.Font, sizePx float64, title, subtitle string) *W
 	face = requireFace("widget.NewWindowTitle", face)
 	w := &WindowTitle{
 		column:   NewBox(Column, 0, 0),
-		title:    NewLabel(face, sizePx, title, Current().Text),
-		subtitle: NewLabel(face, sizePx*0.85, subtitle, Current().TextMuted),
+		title:    NewLabel(face, sizePx, title, 0),
+		subtitle: NewLabel(face, sizePx*0.85, subtitle, 0),
 	}
+	w.subtitle.AddClass(css.DimLabel)
 	for _, l := range []*Label{w.title, w.subtitle} {
 		l.SetEllipsize(EllipsizeEnd)
 		l.SetAlignment(render.AlignCenter)

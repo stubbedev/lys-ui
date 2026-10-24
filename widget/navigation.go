@@ -45,12 +45,11 @@ type NavigationView struct {
 func NewNavigationView(face render.Font, sizePx float64, root *NavigationPage) *NavigationView {
 	face = requireFace("widget.NewNavigationView", face)
 	v := &NavigationView{face: face, sizePx: sizePx}
-	th := Current()
 	v.stack = NewStack()
 	v.stack.SetTransition(StackSlideLeftRight, navigationDuration)
 	v.back = NewButton(NewSymbol(SymbolChevronLeft, int(sizePx)), 8, 4)
 	v.back.OnClick = func() { v.Pop() }
-	v.title = NewLabel(face, sizePx, "", th.Text)
+	v.title = NewLabel(face, sizePx, "", 0)
 	v.bar = NewBox(Row, 6, 6)
 	v.bar.Append(v.back, false)
 	v.bar.Append(v.title, false)

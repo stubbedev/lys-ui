@@ -2,6 +2,7 @@ package widget
 
 import (
 	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // PreferencesGroup and PreferencesPage (#93): the labeled, bordered
@@ -29,9 +30,10 @@ func NewPreferencesGroup(face render.Font, sizePx float64, title string) *Prefer
 	face = requireFace("widget.NewPreferencesGroup", face)
 	g := &PreferencesGroup{}
 	g.SetElement("rows")
-	th := Current()
-	g.title = NewLabel(face, sizePx-1, title, th.TextMuted)
-	g.suffix = NewLabel(face, sizePx-1, "", th.Accent)
+	g.title = NewLabel(face, sizePx-1, title, 0)
+	g.title.AddClass(css.DimLabel)
+	g.suffix = NewLabel(face, sizePx-1, "", 0)
+	g.suffix.AddClass(css.Accent)
 	g.head = NewBox(Row, 8, 0)
 	g.head.Append(NewSpacer(0, 0), true)
 	g.head.Append(g.suffix, false)

@@ -34,7 +34,7 @@ func NewFrame(face render.Font, label string, child Widget) *Frame {
 	face = requireFace("widget.NewFrame", face)
 	f := &Frame{column: NewBox(Column, 6, 0), inner: NewBox(Column, 0, framePad)}
 	f.SetElement("frame")
-	f.label = NewLabel(face, 14, label, Current().Text)
+	f.label = NewLabel(face, 14, label, 0)
 	f.label.AddClass(css.Heading)
 	f.border = &frameBorder{}
 	f.border.SetElement("border")

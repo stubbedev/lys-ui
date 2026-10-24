@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/media"
 	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // MediaControls is GTK's GtkMediaControls: a play/pause button, a seek
@@ -41,8 +42,8 @@ func NewMediaControls(face render.Font, sizePx float64, stream *media.Stream) *M
 	m.play = NewButton(m.playIcon, 4, 4)
 	m.play.AddClass("play")
 	m.play.OnClick = m.togglePlay
-	m.clock = NewLabel(face, sizePx, "", Current().TextMuted)
-	m.clock.AddClass("time")
+	m.clock = NewLabel(face, sizePx, "", 0)
+	m.clock.AddClass("time", css.DimLabel)
 	m.muteIcon = NewThemeIcon("audio-volume-high-symbolic", icon)
 	m.mute = NewButton(m.muteIcon, 4, 4)
 	m.mute.AddClass("mute")

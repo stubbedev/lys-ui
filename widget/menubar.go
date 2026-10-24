@@ -32,7 +32,7 @@ func NewMenuBar(face render.Font, sizePx float64, roots ...string) *MenuBar {
 	row := NewBox(Row, 2, 4)
 	for i, label := range roots {
 		which := i
-		btn := NewButton(NewLabel(face, sizePx, label, Current().Text), 10, 5)
+		btn := NewButton(NewLabel(face, sizePx, label, 0), 10, 5)
 		btn.OnClick = func() { m.fire(which) }
 		m.buttons = append(m.buttons, btn)
 		row.Append(btn, false)

@@ -5,6 +5,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/sysfont"
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // The emoji chooser (#92): a popover over the internal/emoji table -
@@ -42,7 +43,6 @@ func (a *Application) EmojiChooser(host Host, onPick func(emoji string)) (*Popov
 	if glyph == nil {
 		glyph = face
 	}
-	th := widget.Current()
 
 	var pop *Popover
 	pick := func(e string) {
@@ -62,7 +62,7 @@ func (a *Application) EmojiChooser(host Host, onPick func(emoji string)) (*Popov
 			grid.SetMaxChildrenPerLine(9)
 			for _, e := range items {
 				item := e
-				btn := widget.NewButton(widget.NewLabel(glyph, 18, item.Glyph, th.Text), 6, 2)
+				btn := widget.NewButton(widget.NewLabel(glyph, 18, item.Glyph, 0), 6, 2)
 				btn.OnClick = func() { pick(item.Glyph) }
 				grid.Append(btn)
 			}
@@ -76,7 +76,9 @@ func (a *Application) EmojiChooser(host Host, onPick func(emoji string)) (*Popov
 			if len(cat.Items) == 0 {
 				continue
 			}
-			results.Append(widget.NewLabel(face, 12, cat.Name, th.TextMuted), false)
+			name := widget.NewLabel(face, 12, cat.Name, 0)
+			name.AddClass(css.DimLabel)
+			results.Append(name, false)
 			add(cat.Items)
 		}
 		results.InvalidateLayout()

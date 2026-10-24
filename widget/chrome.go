@@ -2,6 +2,7 @@ package widget
 
 import (
 	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // Client-side window chrome (#91): HeaderBar, ActionBar, and
@@ -72,10 +73,10 @@ type HeaderBar struct {
 func NewHeaderBar(face render.Font, sizePx float64) *HeaderBar {
 	face = requireFace("widget.NewHeaderBar", face)
 	h := &HeaderBar{face: face, sizePx: sizePx}
-	th := Current()
 	h.SetElement("headerbar")
-	h.title = NewLabel(face, sizePx, "", th.Text)
-	h.sub = NewLabel(face, sizePx-3, "", th.TextMuted)
+	h.title = NewLabel(face, sizePx, "", 0)
+	h.sub = NewLabel(face, sizePx-3, "", 0)
+	h.sub.AddClass(css.DimLabel)
 	h.title.SetElement("title")
 	h.sub.SetElement("subtitle")
 	h.center = NewBox(Column, 1, 0)

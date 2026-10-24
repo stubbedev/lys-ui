@@ -101,7 +101,7 @@ type FontButton struct {
 // NewFontButton returns a button naming initial, its label in face at
 // sizePx.
 func NewFontButton(face render.Font, sizePx float64, initial FontChoice) *FontButton {
-	label := NewLabel(face, sizePx, initial.String(), Current().Text)
+	label := NewLabel(face, sizePx, initial.String(), 0)
 	b := &FontButton{Button: *NewButton(label, 6, 6), label: label, choice: initial}
 	b.SetElement("fontbutton")
 	b.OnClick = func() {

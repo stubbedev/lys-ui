@@ -48,7 +48,7 @@ func (a *Application) NewOpenButton(parent *Window, cfg OpenButtonConfig) (*Open
 	if label == "" {
 		label = widget.Tr("Open")
 	}
-	btn := widget.NewButton(widget.NewLabel(face, 14, label, widget.Current().Text), 8, 6)
+	btn := widget.NewButton(widget.NewLabel(face, 14, label, 0), 8, 6)
 	btn.OnClick = ob.openDialog
 	ob.recents = widget.NewDropdown(face, 13, nil, -1)
 	ob.recents.OnSelect = func(int) { ob.choose(ob.paths[ob.recents.Selected()]) }

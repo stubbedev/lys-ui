@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/transfer"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // ColumnView is the virtualized table (#90): typed columns over a
@@ -246,7 +247,6 @@ func (v *ColumnView[T]) EnableRowDrag(on bool) {
 // column's width so rows and headers line up.
 func (v *ColumnView[T]) buildHeader() {
 	v.header.Clear()
-	th := Current()
 	for i, col := range v.cols {
 		if col.Head != nil {
 			head := NewBox(Row, 0, 0)
@@ -256,7 +256,9 @@ func (v *ColumnView[T]) buildHeader() {
 			continue
 		}
 		title := NewBox(Row, 4, 0)
-		title.AppendAligned(NewLabel(v.face, v.sizePx-1, col.Title, th.TextMuted), false, AlignCenter)
+		name := NewLabel(v.face, v.sizePx-1, col.Title, 0)
+		name.AddClass(css.DimLabel)
+		title.AppendAligned(name, false, AlignCenter)
 		if i == v.sortBy {
 			arrow := SymbolChevronDown
 			if v.sortUp {
@@ -346,7 +348,7 @@ func (v *ColumnView[T]) buildRow(i int) Widget {
 	val := v.Row(i)
 	row := NewBox(Row, 0, 0)
 	for _, col := range v.cols {
-		var cell Widget = NewLabel(v.face, v.sizePx, "", Current().Text)
+		var cell Widget = NewLabel(v.face, v.sizePx, "", 0)
 		if col.Cell != nil {
 			cell = col.Cell(val)
 		}

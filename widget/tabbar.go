@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/transfer"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // TabMime is the drag payload of a dragged tab: its page id, which
@@ -117,12 +118,13 @@ func (b *TabBar) newTab(p *TabPage) *tabWidget {
 		content.AppendAligned(NewThemeIcon(p.icon, int(b.sizePx)), false, AlignCenter)
 	}
 	if !p.pinned {
-		title := NewLabel(b.face, b.sizePx, p.title, Current().Text)
+		title := NewLabel(b.face, b.sizePx, p.title, 0)
 		title.SetEllipsize(EllipsizeEnd)
 		content.AppendAligned(title, true, AlignCenter)
 	}
 	if p.attention {
-		dot := NewLabel(b.face, b.sizePx, "•", Current().Accent)
+		dot := NewLabel(b.face, b.sizePx, "•", 0)
+		dot.AddClass(css.Accent)
 		dot.AddClass("needs-attention")
 		content.AppendAligned(dot, false, AlignCenter)
 	}
@@ -254,7 +256,7 @@ func (o *TabOverview) fillGrid() {
 		thumb.SetScale(ImageFit)
 		card := NewBox(Column, 4, 4)
 		card.Append(NewClamp(200, NewAspectFrame(thumb, float64(w)/float64(h))), false)
-		card.Append(NewLabel(o.face, o.sizePx, p.title, Current().Text), false)
+		card.Append(NewLabel(o.face, o.sizePx, p.title, 0), false)
 		btn := NewButton(card, 4, 8)
 		btn.SetElement("tabthumbnail")
 		btn.SetState(StateSelected, p == o.view.selected)
