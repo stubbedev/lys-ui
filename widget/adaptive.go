@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // The adaptive vocabulary of #94: Clamp, BreakpointBin, ViewSwitcher,
@@ -254,15 +255,26 @@ func NewStackSwitcher(face render.Font, sizePx float64, stack *Stack, titles map
 	return s
 }
 
-// Carousel is a horizontal swipeable page strip: pages side by side
-// at the carousel's width, pointer drags pan (the touch ticket adds
-// gestures; pointer drag works today), releases snap to the nearest
-// page on the animation clock, and the painted dots index position.
+// carouselNav is the previous and next buttons' size and their inset
+// from the carousel's sides.
+const (
+	carouselNav      = 32
+	carouselNavInset = 8
+)
+
+// Carousel is a horizontal swipeable page strip (shadcn/ui's
+// Carousel): pages side by side at the carousel's width, pointer drags
+// and touchpad swipes pan, releases snap to the nearest page on the
+// animation clock, the round previous and next buttons step a page
+// (disabled at the ends, Left and Right on them step too), and the
+// painted dots index the position. It styles as the `carousel`
+// element: the button.nav pair.
 type Carousel struct {
 	node
 	face   render.Font
 	sizePx float64
 	pages  []Widget
+	nav    [2]*Button
 	offset float64 // in pages, fractional
 	cancel anim.Cancel
 
@@ -277,14 +289,65 @@ type Carousel struct {
 
 // NewCarousel returns an empty carousel.
 func NewCarousel(face render.Font, sizePx float64) *Carousel {
-	face = requireFace("widget.NewCarousel", face)
-	return &Carousel{face: face, sizePx: sizePx, offset: 0}
+	c := &Carousel{face: requireFace("widget.NewCarousel", face), sizePx: sizePx}
+	c.SetElement("carousel")
+	for i, kind := range [2]SymbolKind{SymbolArrowLeft, SymbolArrowRight} {
+		b := NewButton(NewSymbol(kind, 16), 0, 0)
+		b.AddClass(css.Outline)
+		b.AddClass("nav")
+		b.SetSizeRequest(carouselNav, carouselNav)
+		step := 2*i - 1
+		b.OnClick = func() { c.step(step) }
+		c.nav[i] = b
+	}
+	c.nav[0].SetAccessibleName(Tr("Previous slide"))
+	c.nav[1].SetAccessibleName(Tr("Next slide"))
+	setParents(c, c.nav[0], c.nav[1])
+	c.syncNav()
+	return c
 }
 
 // Append adds a page at the end.
 func (c *Carousel) Append(w Widget) {
 	c.pages = append(c.pages, w)
+	setParents(c, w)
+	c.syncNav()
 	c.InvalidateLayout()
+}
+
+// step snaps d pages on from the shown one.
+func (c *Carousel) step(d int) { c.snapTo(c.Page() + d) }
+
+// syncNav enables the previous and next buttons where there is a page
+// to step to.
+func (c *Carousel) syncNav() {
+	c.nav[0].SetEnabled(c.Page() > 0)
+	c.nav[1].SetEnabled(c.Page() < len(c.pages)-1)
+}
+
+// Children are the pages and the previous and next buttons.
+func (c *Carousel) Children() []Widget { return c.appendChildren(nil) }
+
+// appendChildren appends the pages and the buttons, matching Children.
+func (c *Carousel) appendChildren(buf []Widget) []Widget {
+	return append(append(buf, c.pages...), c.nav[0], c.nav[1])
+}
+
+// InterceptKey implements KeyInterceptor: Left and Right on the
+// previous or next button step a page.
+func (c *Carousel) InterceptKey(target Widget, a KeyAction, _ Mods) bool {
+	if target != Widget(c.nav[0]) && target != Widget(c.nav[1]) {
+		return false
+	}
+	switch a {
+	case KeyLeft:
+		c.step(-1)
+	case KeyRight:
+		c.step(1)
+	default:
+		return false
+	}
+	return true
 }
 
 // Pages reports the page count.
@@ -297,6 +360,7 @@ func (c *Carousel) Page() int { return int(c.offset + 0.5) }
 func (c *Carousel) SetPage(i int) {
 	i = max(0, min(i, len(c.pages)-1))
 	c.offset = float64(i)
+	c.syncNav()
 	c.Invalidate()
 	if c.OnPage != nil {
 		c.OnPage(i)
@@ -318,19 +382,24 @@ func (c *Carousel) Measure(con Constraints) Size {
 	return c.measureStore(con, clampSize(best, con))
 }
 
-// Arrange lays the pages side by side at the carousel's width,
-// offset by the fractional page position.
+// Arrange lays the pages side by side at the carousel's width (each
+// aligned in its slot), offset by the fractional page position, and
+// the previous and next
+// buttons inside the sides, centered.
 func (c *Carousel) Arrange(r render.Rect) {
 	c.node.Arrange(r)
 	x := r.X - int(c.offset*float64(r.W))
 	for _, p := range c.pages {
-		p.Arrange(render.Rect{X: x, Y: r.Y, W: r.W, H: r.H})
+		arrangeChild(p, render.Rect{X: x, Y: r.Y, W: r.W, H: r.H})
 		x += r.W
 	}
-	setParents(c, c.pages...)
+	y := r.Y + (r.H-carouselNav)/2
+	c.nav[0].Arrange(render.Rect{X: r.X + carouselNavInset, Y: y, W: carouselNav, H: carouselNav})
+	c.nav[1].Arrange(render.Rect{X: r.X + r.W - carouselNavInset - carouselNav, Y: y, W: carouselNav, H: carouselNav})
 }
 
-// Paint draws the visible pages clipped, then the indicator dots.
+// Paint draws the visible pages clipped, then the indicator dots and
+// the buttons.
 func (c *Carousel) Paint(cv *render.Canvas) {
 	th := Current()
 	prev := cv.PushClip(c.bounds)
@@ -350,14 +419,22 @@ func (c *Carousel) Paint(cv *render.Canvas) {
 			if i == c.Page() {
 				col = th.Accent
 			}
-			cv.FillRect(render.Rect{X: x + dot, Y: y, W: dot, H: dot}, col)
+			cv.RoundedRect(render.Rect{X: x + dot, Y: y, W: dot, H: dot}, dot, col)
 			x += dot*2 + 4
 		}
 	}
+	for _, b := range c.nav {
+		PaintChild(cv, b)
+	}
 }
 
-// HitTest resolves inside the carousel.
+// HitTest resolves the buttons, else the carousel itself.
 func (c *Carousel) HitTest(p Point) Widget {
+	for _, b := range c.nav {
+		if hit := b.HitTest(p); hit != nil {
+			return hit
+		}
+	}
 	if c.bounds.Contains(p.X, p.Y) {
 		return c
 	}
@@ -413,15 +490,18 @@ func (c *Carousel) Gesture(g Gesture) bool {
 }
 
 // snap animates the offset to the nearest integer page.
-func (c *Carousel) snap() {
-	target := float64(max(0, min(len(c.pages)-1, int(c.offset+0.5))))
-	from := c.offset
+func (c *Carousel) snap() { c.snapTo(int(c.offset + 0.5)) }
+
+// snapTo animates the offset to page i, clamped.
+func (c *Carousel) snapTo(i int) {
+	page := max(0, min(len(c.pages)-1, i))
+	target, from := float64(page), c.offset
 	if c.cancel != nil {
 		c.cancel()
 	}
-	page := int(target)
 	c.cancel = anim.Start(220*time.Millisecond, func(t float64) {
 		c.offset = from + (target-from)*easeOut(t)
+		c.syncNav()
 		c.Invalidate()
 	})
 	if c.OnPage != nil {

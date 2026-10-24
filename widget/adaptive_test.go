@@ -156,6 +156,42 @@ func TestCarousel(t *testing.T) {
 	}
 }
 
+// TestCarouselNav pins the previous and next buttons: they step a page
+// and disable at the ends, Left and Right on them step too, and the
+// pages and buttons are the carousel's children.
+func TestCarouselNav(t *testing.T) {
+	defer anim.SetInstant(true)()
+	face := adaptiveFace(t)
+	c := NewCarousel(face, 14)
+	for i := range 3 {
+		c.Append(NewLabel(face, 20, string(rune('A'+i)), 0))
+	}
+	arrangeTree(t, c, 300, 120)
+	prev, next := c.nav[0], c.nav[1]
+	if IsEnabled(prev) || !IsEnabled(next) {
+		t.Fatalf("on the first page: previous %v next %v, want only next enabled", IsEnabled(prev), IsEnabled(next))
+	}
+	center := func(b *Button) Point { r := b.Bounds(); return Point{X: r.X + r.W/2, Y: r.Y + r.H/2} }
+	if hit := c.HitTest(center(next)); hit != Widget(next) {
+		t.Fatalf("hit on the next button %T, want the button", hit)
+	}
+	next.OnClick()
+	next.OnClick()
+	if c.Page() != 2 || !IsEnabled(prev) || IsEnabled(next) {
+		t.Errorf("after two nexts: page %d, previous %v next %v", c.Page(), IsEnabled(prev), IsEnabled(next))
+	}
+	if !c.InterceptKey(prev, KeyLeft, 0) || c.Page() != 1 {
+		t.Errorf("Left on the previous button left page %d, want 1", c.Page())
+	}
+	if c.InterceptKey(c.pages[0], KeyLeft, 0) {
+		t.Error("Left on a page's widget was taken from it")
+	}
+	kids := c.Children()
+	if len(kids) != 5 || kids[0] != c.pages[0] || kids[4] != Widget(next) {
+		t.Errorf("children %v, want the pages then the buttons", kids)
+	}
+}
+
 // TestNavigationView pins the shell: push deepens and re-titles, pop
 // returns (with the hook), the back keys pop, PopToRoot unwinds, and
 // the root never pops.
@@ -277,13 +313,13 @@ func TestGoldenAdaptive(t *testing.T) {
 	v.ReflectVisible()
 	NewGolden(t, v, "viewswitcher", goldenTheme(th), goldenFrame(220, 48))
 
-	c := NewCarousel(face, 14)
-	c.Append(page("A"))
-	c.Append(page("B"))
-	c.Append(page("C"))
-	c.Measure(Constraints{Max: Size{W: 220, H: 90}})
-	c.Arrange(render.Rect{X: 0, Y: 0, W: 220, H: 90})
-	NewGolden(t, c, "carousel", goldenTheme(th), goldenFrame(220, 90))
+	for _, shot := range bothPalettes("carousel") {
+		c := NewCarousel(face, 14)
+		for _, s := range [...]string{"A", "B", "C"} {
+			c.Append(NewLabel(face, 16, s, shot.th.Text))
+		}
+		NewGolden(t, c, shot.name, goldenTheme(shot.th), goldenFrame(220, 90))
+	}
 }
 
 // TestViewSwitcherCheckedFill pins the selection mark: the visible

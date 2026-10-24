@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/stubbedev/lys-ui/app"
@@ -225,6 +226,15 @@ func (g *gallery) form(cx *component.Context[galleryMsg, struct{}]) ui.Node {
 	).Spacing(24)
 }
 
+// carousel is shadcn's carousel demo: five numbered slides.
+func (g *gallery) carousel() ui.Node {
+	c := ui.Carousel().SizeRequest(0, 160)
+	for i := range 5 {
+		c.Append(ui.Label(strconv.Itoa(i + 1)).Classes(css.H1).HAlign(widget.AlignCenter).VAlign(widget.AlignCenter))
+	}
+	return c
+}
+
 func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widget {
 	section := func(title string, body ...ui.Node) ui.Node {
 		return ui.Column(append([]ui.Node{ui.Label(title).Classes(css.H4)}, body...)...).Spacing(12)
@@ -261,6 +271,7 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 		section("Breadcrumb",
 			ui.Breadcrumb("Home", "Components", "Breadcrumb"),
 			ui.Breadcrumb("Home", "Docs", "Components", "Data", "Breadcrumb").MaxItems(3)),
+		section("Carousel", g.carousel()),
 		section("Chart", ui.Row(
 			ui.Expand(ui.Chart(widget.ChartBar, []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun"},
 				widget.ChartSeries{Name: "Desktop", Values: []float64{186, 305, 237, 73, 209, 214}},

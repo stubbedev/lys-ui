@@ -50,6 +50,10 @@ const (
 	SymbolCalendar
 	// SymbolPanelLeft is a window with a left pane (a sidebar toggle).
 	SymbolPanelLeft
+	// SymbolArrowLeft is a left-pointing arrow (previous).
+	SymbolArrowLeft
+	// SymbolArrowRight is a right-pointing arrow (next).
+	SymbolArrowRight
 )
 
 // chevronAngle is each chevron kind's rotation from right-pointing.
@@ -147,6 +151,14 @@ func (s *Symbol) Paint(cv *render.Canvas) {
 		cv.Line(cx-r/3, cy-r, cx-r/3, cy+r, 1, col)
 	case SymbolMinus:
 		cv.Line(cx-r, cy, cx+r, cy, 1, col)
+	case SymbolArrowLeft, SymbolArrowRight:
+		tip, back := cx+r, -1
+		if s.kind == SymbolArrowLeft {
+			tip, back = cx-r, 1
+		}
+		cv.Line(cx-r, cy, cx+r, cy, 1, col)
+		cv.Line(tip, cy, tip+back*2*r/3, cy-2*r/3, 1, col)
+		cv.Line(tip, cy, tip+back*2*r/3, cy+2*r/3, 1, col)
 	case SymbolEllipsis:
 		d := max(2, s.size/8)
 		for _, x := range [...]int{cx - r, cx, cx + r} {

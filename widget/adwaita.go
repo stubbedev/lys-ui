@@ -312,6 +312,7 @@ func controlRules() [][2]string {
 		{tabLists, "background-color: @muted_bg_color; border-radius: 8px; padding: 3px;"},
 		{tabTriggers, "background-color: transparent; border-radius: 6px; min-height: 28px; padding: 0px 12px; font-weight: 500; color: @muted_fg_color;"},
 		{activeTabs, "background-color: @window_bg_color; color: @window_fg_color; box-shadow: 0px 1px 3px alpha(black, 0.1);"},
+		{"carousel button.nav", "min-width: 32px; min-height: 32px; padding: 0px; border-radius: 9999px;"},
 		{"tabbar .tab-close-button", "background-color: transparent; border-radius: 4px;"},
 		{"tabbar .tab-close-button:hover", "background-color: @muted_bg_color;"},
 		{"skeleton", "background-color: @muted_bg_color; border-radius: 6px;"},
