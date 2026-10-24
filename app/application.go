@@ -219,6 +219,7 @@ func NewApplication(sess *wlsession.Session) *Application {
 	// A GPUArea arranged on screen asks for its presentation surface: a
 	// subsurface of its window (gpuarea.go).
 	widget.SetGPUHost(a.gpuSurfaceFor)
+	widget.SetSurfaceOriginResolver(a.surfaceOrigin)
 	widget.SetRemovedHook(func(w widget.Widget) {
 		for _, win := range a.windows {
 			win.router.Forget(w)

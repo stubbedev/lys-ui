@@ -119,3 +119,67 @@ func TestSharedElementReducedMotionCrossFades(t *testing.T) {
 		t.Error("reduced motion showed nothing at the new rect mid-fade")
 	}
 }
+
+// A tagged widget opening on another surface morphs out of the source
+// rect carried into its surface's coordinates through both surfaces'
+// origins; with the destination unplaced there is no morph, and the
+// surface's own reveal stands in (#226).
+func TestSharedElementAcrossSurfaces(t *testing.T) {
+	loadCSS(t, `.hero { min-width: 20px; min-height: 20px; margin: 10px; background-color: #ff0000; }`)
+	now := time.Unix(1750000000, 0)
+	t.Cleanup(animclock.SetClock(func() time.Time { return now }))
+	animclock.Reset()
+	t.Cleanup(animclock.Reset)
+	t.Cleanup(func() { clear(sharedShots) })
+	window, popover := NewBox(Column, 0, 0), NewBox(Column, 0, 0)
+	placed := true
+	SetSurfaceOriginResolver(func(root Widget) (Point, bool) {
+		switch root {
+		case Widget(window):
+			return Point{}, true
+		case Widget(popover):
+			return Point{X: 100, Y: 50}, placed
+		}
+		return Point{}, false
+	})
+	t.Cleanup(func() { SetSurfaceOriginResolver(nil) })
+	paint := func(root *Box) {
+		root.Measure(Constraints{Max: Size{W: 120, H: 120}})
+		root.Arrange(render.Rect{W: 120, H: 120})
+		CollectDamage(root)
+		root.Paint(render.New(make([]byte, render.Stride(120)*120), render.Stride(120), 120, 120))
+	}
+	button := NewBox(Column, 0, 0)
+	button.AddClass("hero")
+	button.SetSharedElement("open")
+	window.Append(button, false)
+	paint(window)
+
+	card := NewBox(Column, 0, 0)
+	card.AddClass("hero")
+	card.SetSharedElement("open")
+	popover.Append(card, false)
+	if !SharedMorphPending(popover) {
+		t.Error("the popover's content does not report a morph pending")
+	}
+	paint(popover)
+	if card.shared == nil {
+		t.Fatal("no morph started across the surfaces")
+	}
+	if got, want := card.shared.from.rect, (render.Rect{X: 10 - 100, Y: 10 - 50, W: 100, H: 20}); got != want {
+		t.Errorf("morph starts at %v, want the button's rect in the popover's coordinates %v", got, want)
+	}
+
+	placed = false
+	clear(sharedShots)
+	paint(window)
+	other := NewBox(Column, 0, 0)
+	other.AddClass("hero")
+	other.SetSharedElement("open")
+	popover.Clear()
+	popover.Append(other, false)
+	paint(popover)
+	if other.shared != nil {
+		t.Error("an unplaced popover started a morph; want its own reveal")
+	}
+}

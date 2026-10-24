@@ -57,6 +57,7 @@ type Popup struct {
 
 	w          int32
 	h          int32
+	x, y       int32 // the placed position, relative to the parent
 	configured bool
 
 	// fx is the dismissal state machine: Dismarking the popup dismissed
@@ -132,6 +133,9 @@ type Config struct {
 	// Kind picks the animation profile; zero is the menu/popover one
 	// (pass surfx.KindTooltip for tooltips).
 	Kind surfx.Kind
+	// NoEnter opens the popup at rest, without its enter tween: a
+	// shared-element morph into its content carries the opening.
+	NoEnter bool
 }
 
 // New positions and maps a popup, then grabs the seat so clicks outside
@@ -227,7 +231,9 @@ func New(sess *wlsession.Session, cfg Config) (*Popup, error) {
 	// synchronously here, so Run's first paint is the hidden or offset
 	// first frame, never a flash of the finished surface. Reduced
 	// motion collapses the tween and lands at rest inside this call.
-	p.fx.Enter()
+	if !cfg.NoEnter {
+		p.fx.Enter()
+	}
 	return p, nil
 }
 
@@ -281,6 +287,13 @@ func (p *Popup) RequestedSize() (int, int) {
 	return p.cfg.Width, p.cfg.Height
 }
 
+// Position is where the compositor placed the popup's surface,
+// relative to its parent's (neither sets a window geometry, so it is
+// surface to surface); false before the first configure.
+func (p *Popup) Position() (x, y int, ok bool) {
+	return int(p.x), int(p.y), p.configured
+}
+
 // Gutter is the shadow margin the content sits inside.
 func (p *Popup) Gutter() int { return p.gutter }
 
@@ -294,6 +307,7 @@ func (p *Popup) HandleSurfaceConfigure(ev xdg.SurfaceConfigureEvent) {
 
 // HandlePopupConfigure records the placed geometry.
 func (p *Popup) HandlePopupConfigure(ev xdg.PopupConfigureEvent) {
+	p.x, p.y = ev.X, ev.Y
 	if ev.Width != 0 {
 		p.w = ev.Width
 	}

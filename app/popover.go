@@ -442,6 +442,16 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 			restoreKeys = func() { _ = km.holdKeyboard(KeyboardNone) }
 		}
 	}
+	// A tagged widget in the content that last showed on a placed
+	// surface morphs out of it; that morph carries the opening, so the
+	// popup skips its own enter tween (#200's anchor reveal). It needs
+	// this popup placed too, so a nested popover under an unplaced
+	// parent keeps the reveal.
+	base, basePlaced := widget.Point{}, true
+	if parent != nil {
+		base, basePlaced = a.originOf(parent)
+	}
+	pcfg.NoEnter = basePlaced && widget.SharedMorphPending(cfg.Content)
 	pop, err := popup.New(a.sess, pcfg)
 	if err != nil {
 		restoreKeys()
@@ -489,6 +499,9 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		popover:    p,
 		fireClosed: fireClosed,
 		unanchor:   unanchor,
+	}
+	if x, y, ok := pop.Position(); ok && basePlaced {
+		op.origin, op.placed = widget.Point{X: base.X + x, Y: base.Y + y}, true
 	}
 	if cfg.Focus != nil {
 		router.SetFocus(cfg.Focus)
@@ -542,6 +555,9 @@ type popSurface interface {
 	MarkFrame()
 	// RequestedSize, Gutter and Resize fit the surface to its content.
 	RequestedSize() (int, int)
+	// Position is where the compositor placed the surface relative to
+	// its parent, false before it did.
+	Position() (x, y int, ok bool)
 	Gutter() int
 	Resize(w, h int) bool
 }
@@ -565,6 +581,39 @@ type openPopover struct {
 	// unanchor ends the content's style anchoring, unless a newer open
 	// re-anchored it.
 	unanchor func()
+	// origin is where the popup's surface sits in its toplevel's
+	// coordinates, placed once the compositor placed it and its parent
+	// is placed too (shared-element morphs cross surfaces through it).
+	origin widget.Point
+	placed bool
+}
+
+// originOf is where the open popover p's surface sits in its
+// toplevel's coordinates, false while it is not placed.
+func (a *Application) originOf(p *Popover) (widget.Point, bool) {
+	for _, op := range a.openPopovers {
+		if op.popover == p {
+			return op.origin, op.placed
+		}
+	}
+	return widget.Point{}, false
+}
+
+// surfaceOrigin is the widget package's surface placement
+// (widget.SetSurfaceOriginResolver): a window's or layer's tree sits at
+// its own origin, a popover's where the compositor placed it.
+func (a *Application) surfaceOrigin(root widget.Widget) (widget.Point, bool) {
+	for _, op := range a.openPopovers {
+		if widget.RootOf(op.keyRoot.content) == root {
+			return op.origin, op.placed
+		}
+	}
+	for _, hw := range a.windows {
+		if widget.RootOf(hw.router.Root) == root {
+			return widget.Point{}, true
+		}
+	}
+	return widget.Point{}, false
 }
 
 // release frees what the open popover holds once its surface is gone:
