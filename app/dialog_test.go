@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // TestDialogRespondOnce pins the once-guard: the first Respond fires
@@ -175,5 +176,26 @@ func TestDialogCloseSkipsTheResponse(t *testing.T) {
 	d.Respond("ok")
 	if responses != 0 || !d.Closed() {
 		t.Errorf("responses=%d closed=%v after Close, want 0 and closed", responses, d.Closed())
+	}
+}
+
+// A dialog button's appearance picks its variant; the zero value
+// keeps the default response suggested and the rest plain (#268).
+func TestResponseAppearanceVariant(t *testing.T) {
+	for _, tc := range []struct {
+		a         ResponseAppearance
+		isDefault bool
+		want      string
+	}{
+		{AppearanceAuto, true, css.SuggestedAction},
+		{AppearanceAuto, false, css.Outline},
+		{AppearancePlain, true, css.Outline},
+		{AppearanceSuggested, false, css.SuggestedAction},
+		{AppearanceDestructive, true, css.DestructiveAction},
+		{AppearanceDestructive, false, css.DestructiveAction},
+	} {
+		if got := tc.a.variant(tc.isDefault); got != tc.want {
+			t.Errorf("appearance %d default %v = %q, want %q", tc.a, tc.isDefault, got, tc.want)
+		}
 	}
 }

@@ -27,6 +27,39 @@ type DialogButton struct {
 	Label    string
 	Response string
 	Role     DialogButtonRole
+	// Appearance styles the button (libadwaita's AdwResponseAppearance);
+	// the zero value styles the default response suggested and the
+	// others plain.
+	Appearance ResponseAppearance
+}
+
+// ResponseAppearance is a dialog button's look.
+type ResponseAppearance uint8
+
+// Response appearances.
+const (
+	// AppearanceAuto styles the default response suggested and the
+	// others plain.
+	AppearanceAuto ResponseAppearance = iota
+	// AppearancePlain is the outlined button.
+	AppearancePlain
+	// AppearanceSuggested is the primary fill.
+	AppearanceSuggested
+	// AppearanceDestructive is the destructive fill, for a response that
+	// deletes or resets.
+	AppearanceDestructive
+)
+
+// variant is the button class an appearance takes, the default
+// response's when it is that response.
+func (a ResponseAppearance) variant(isDefault bool) string {
+	switch {
+	case a == AppearanceSuggested, a == AppearanceAuto && isDefault:
+		return css.SuggestedAction
+	case a == AppearanceDestructive:
+		return css.DestructiveAction
+	}
+	return css.Outline
 }
 
 // DialogButtonRole is the keyboard role a dialog button opts into.
@@ -568,8 +601,8 @@ var ErrNoDialogFace = errors.New("app: dialog text face unavailable: no configur
 
 // dialogRoot builds the dialog window's root: the content in the
 // toolkit's card, shadcn/ui's Dialog: the title, the content and the
-// footer of buttons, the default response's on the primary fill and the
-// others outlined; or, Bare, the content alone.
+// footer of buttons, each in its appearance (by default the default
+// response's on the primary fill and the others outlined); or, Bare, the content alone.
 func (a *Application) dialogRoot(cfg DialogConfig, respond func(string)) (widget.Widget, render.Color, error) {
 	if cfg.Bare {
 		return cfg.Content, cfg.Background, nil
@@ -593,11 +626,7 @@ func (a *Application) dialogRoot(cfg DialogConfig, respond func(string)) (widget
 	for _, b := range cfg.Buttons {
 		resp := b.Response
 		btn := widget.NewButton(widget.NewLabel(face, 14, b.Label, 0), 0, 0)
-		variant := css.Outline
-		if resp == primary {
-			variant = css.SuggestedAction
-		}
-		btn.AddClass(variant)
+		btn.AddClass(b.Appearance.variant(resp == primary))
 		btn.OnClick = func() { respond(resp) }
 		footer.Append(btn, false)
 	}
