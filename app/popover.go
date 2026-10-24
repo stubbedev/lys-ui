@@ -276,8 +276,14 @@ func (r *popoverKeyRoot) Measure(con widget.Constraints) widget.Size {
 	return widget.MeasureAsChild(r.content, con)
 }
 
+// Arrange lays the content out at its measured size inside the
+// surface: the same rect while they agree, and while a shrinking
+// popover holds its larger surface (fitContent), the smaller one the
+// content springs down to.
 func (r *popoverKeyRoot) Arrange(rect render.Rect) {
 	r.bounds = rect
+	nat := widget.MeasureAsChild(r.content, widget.Constraints{Max: widget.Size{W: rect.W, H: rect.H}})
+	rect.W, rect.H = min(rect.W, nat.W), min(rect.H, nat.H)
 	widget.ArrangeAsChild(r.content, rect)
 }
 
@@ -604,6 +610,10 @@ func (a *Application) drivePopovers(all bool) error {
 // fitContent grows (or shrinks) an open popover to its content's
 // natural size when that changed - a tray menu re-publishing more rows
 // - measured as at open, against the same ceiling (popoverCeiling).
+// Growing, the surface grows at once and the content springs into it;
+// shrinking, the surface keeps its size while the content's layout
+// motion carries it down, and takes the final size, one reposition,
+// when the motion lands.
 func (op *openPopover) fitContent() {
 	if op.pop.Dismissed() {
 		return
@@ -611,7 +621,11 @@ func (op *openPopover) fitContent() {
 	size := op.keyRoot.Measure(widget.Constraints{Max: popoverCeiling(op.host, op.keyRoot.maxW, op.keyRoot.maxH)})
 	g := op.pop.Gutter()
 	w, h := size.W+2*g, size.H+2*g
-	if rw, rh := op.pop.RequestedSize(); rw != w || rh != h {
+	rw, rh := op.pop.RequestedSize()
+	if shown, ok := widget.LayoutShownSize(op.keyRoot.content); ok && shown != size {
+		w, h = max(w, rw), max(h, rh)
+	}
+	if rw != w || rh != h {
 		op.pop.Resize(w, h)
 	}
 }

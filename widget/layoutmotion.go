@@ -162,6 +162,20 @@ func ShownRect(w Widget) render.Rect {
 	return render.Rect{}
 }
 
+// LayoutShownSize is the size w is shown at and whether it animates
+// its layout: mid-motion the size its spring paints it at, else its
+// laid-out size. A surface sized from its content (a popover
+// shrinking) keeps its size until that is the content's new size, so
+// the content springs down inside it before the surface follows.
+func LayoutShownSize(w Widget) (Size, bool) {
+	n := nodeOf(w)
+	if n == nil || n.effLayoutMotion(w) == LayoutMotionNone {
+		return Size{}, false
+	}
+	r := ShownRect(w)
+	return Size{W: r.W, H: r.H}, true
+}
+
 // rectComps and compsRect convert a rect to and from spring components.
 func rectComps(r render.Rect) []float64 {
 	return []float64{float64(r.X), float64(r.Y), float64(r.W), float64(r.H)}

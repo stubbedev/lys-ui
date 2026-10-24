@@ -130,3 +130,57 @@ func TestLayoutMotionOffOrInstant(t *testing.T) {
 		})
 	}
 }
+
+// A removed widget with a layout motion paints its way out: shown
+// where it was on the first frame after the removal, taking no input
+// and no layout space, collapsing until it is gone and released; one
+// without a motion leaves at once (#225).
+func TestLayoutMotionRemovalPaintsOut(t *testing.T) {
+	s := newMotionScene(t)
+	leaving := swatch("moving")
+	s.root.Append(leaving, false)
+	s.root.Append(swatch("new"), false)
+	s.frame()
+	if !s.red(10) {
+		t.Fatal("the swatch did not paint")
+	}
+	s.root.Remove(leaving)
+	s.frame()
+	if !s.red(10) {
+		t.Error("the removed swatch vanished on the first frame instead of painting out")
+	}
+	if s.root.HitTest(Point{X: 50, Y: 5}) == Widget(leaving) || len(s.root.Children()) != 1 {
+		t.Error("the departing swatch still takes input or counts as a child")
+	}
+	for range 120 {
+		s.step()
+		s.frame()
+	}
+	if s.red(10) || leaving.Parent() != nil || len(s.root.departing) != 0 {
+		t.Errorf("settled: red %v, parent %v, departing %d; want gone and released", s.red(10), leaving.Parent(), len(s.root.departing))
+	}
+
+	still := swatch()
+	s.root.InsertAt(0, still, false)
+	s.frame()
+	s.root.Remove(still)
+	if still.Parent() != nil {
+		t.Error("a removed widget without a motion kept its parent")
+	}
+}
+
+// A departing widget appended elsewhere stops painting out and links
+// to its new parent at once.
+func TestLayoutMotionRemovalThenReappend(t *testing.T) {
+	s := newMotionScene(t)
+	w := swatch("moving")
+	s.root.Append(w, false)
+	s.frame()
+	s.root.Remove(w)
+	other := NewBox(Column, 0, 0)
+	other.Append(w, false)
+	other.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	if w.Parent() != Widget(other) || len(s.root.departing) != 0 {
+		t.Errorf("after re-appending: parent %v, departing %d; want the new box and no departure", w.Parent(), len(s.root.departing))
+	}
+}

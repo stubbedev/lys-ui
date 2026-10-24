@@ -8,6 +8,7 @@ import (
 	"github.com/unxed/xkb-go"
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
@@ -391,5 +392,57 @@ func TestPopoverFitHonorsTheContentsSizeRequest(t *testing.T) {
 	}
 	if got := surf.resizes[len(surf.resizes)-1]; got != [2]int{104, 124} {
 		t.Errorf("grown content fits %v, want 100x120 plus the gutter", got)
+	}
+}
+
+// A shrinking popover keeps its surface while the content's layout
+// motion carries it down, then resizes once to the final size; a
+// growing one grows at once (#225).
+func TestPopoverShrinkWaitsForTheContent(t *testing.T) {
+	now := time.Unix(1750000000, 0)
+	t.Cleanup(animclock.SetClock(func() time.Time { return now }))
+	animclock.Reset()
+	t.Cleanup(animclock.Reset)
+	content := widget.NewBox(widget.Column, 0, 0)
+	content.SetLayoutMotion(widget.LayoutMotionSmooth)
+	content.Append(widget.NewSpacer(50, 60), false)
+	op, surf, _, _ := newLoopPopover(content)
+	surf.w, surf.h = 54, 64
+	a := &Application{openPopovers: []*openPopover{op}}
+	a.popovers.openOrReplace(op.host, op.popover)
+	buf := make([]byte, render.Stride(100)*100)
+	cv := render.New(buf, render.Stride(100), 100, 100)
+	frame := func() {
+		t.Helper()
+		if err := a.drivePopovers(false); err != nil {
+			t.Fatal(err)
+		}
+		op.keyRoot.Arrange(render.Rect{X: 2, Y: 2, W: surf.w - 4, H: surf.h - 4})
+		widget.CollectDamage(op.keyRoot)
+		op.keyRoot.Paint(cv)
+	}
+	frame()
+	frame()
+	content.Clear()
+	content.Append(widget.NewSpacer(50, 20), false)
+	frame()
+	if len(surf.resizes) != 0 {
+		t.Fatalf("the surface resized at once to %v", surf.resizes)
+	}
+	for range 60 {
+		now = now.Add(animclock.FrameInterval)
+		animclock.Tick(now)
+		frame()
+		if widget.ShownRect(content).H > 20 && len(surf.resizes) != 0 {
+			t.Fatalf("the surface resized to %v while the content was still shown %v", surf.resizes, widget.ShownRect(content))
+		}
+	}
+	if len(surf.resizes) != 1 || surf.resizes[0] != [2]int{54, 24} {
+		t.Errorf("resizes %v, want one, to 54x24, after the content landed", surf.resizes)
+	}
+	content.Append(widget.NewSpacer(50, 40), false)
+	frame()
+	if last := surf.resizes[len(surf.resizes)-1]; last != [2]int{54, 64} {
+		t.Errorf("growing resized to %v, want 54x64 at once", last)
 	}
 }

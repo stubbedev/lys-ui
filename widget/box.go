@@ -75,6 +75,9 @@ type Box struct {
 	// box's height definite: the arrange resolves the items'
 	// percentage heights against it exactly when the measure did.
 	cssDefH bool
+	// departing are the removed children still painting their way out
+	// (departure.go).
+	departing []*departure
 }
 
 // Children exposes the box's children in append order for focus
@@ -159,7 +162,9 @@ func (b *Box) detachChild(i int) {
 	w := b.child[i].w
 	notifyRemoved(w)
 	b.child = slices.Delete(b.child, i, i+1)
-	clearParents(w)
+	if !b.depart(w) {
+		clearParents(w)
+	}
 	b.InvalidateLayout()
 	restyleChildren(b)
 }
@@ -203,6 +208,7 @@ func (b *Box) Clear() {
 		notifyRemoved(w)
 	}
 	b.child = nil
+	b.endDepartures()
 	clearParents(ws...)
 	b.InvalidateLayout()
 }
@@ -678,9 +684,11 @@ func (b *Box) paintBox(cv *render.Canvas, v *style.Values, radii render.Corners)
 	if clip, ok := b.overflowClip(v); ok {
 		prev := cv.PushClip(clip)
 		b.paintChildren(cv)
+		b.paintDepartures(cv)
 		cv.PopClip(prev)
 	} else {
 		b.paintChildren(cv)
+		b.paintDepartures(cv)
 	}
 	if own {
 		paintOutline(cv, v, b.bounds, radii)

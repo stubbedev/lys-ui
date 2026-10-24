@@ -105,6 +105,9 @@ type node struct {
 	layoutMotion LayoutMotion
 	motion       *layoutMotionState
 	shownWalk    uint64
+	// departingFrom is the box the widget is painting its way out of
+	// after a removal (departure.go), nil otherwise.
+	departingFrom *Box
 	// sharedTag is the shared-element tag (SetSharedElement) and shared
 	// the morph running into this widget.
 	sharedTag string
@@ -670,6 +673,9 @@ func (n *node) Parent() Widget {
 func (n *node) setParent(p, self Widget) {
 	if self != nil {
 		n.self = self
+	}
+	if b := n.departingFrom; b != nil && p != Widget(b) {
+		b.endDepartureOf(n)
 	}
 	if n.parent == nil && p != nil {
 		n.csGen = 0
