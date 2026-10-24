@@ -136,7 +136,7 @@ func (p *parser) fontFaceRule(ts []token, i int) int {
 		if p.resolve != nil || p.base != "" {
 			resolve := p.resolve
 			if resolve == nil {
-				resolve = fileImport
+				resolve = FileImport
 			}
 			rp, _, err := resolve(ref, p.base)
 			if err != nil {

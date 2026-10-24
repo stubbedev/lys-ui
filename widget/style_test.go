@@ -435,8 +435,8 @@ func TestAddStylesheetFilePriority(t *testing.T) {
 }
 
 // A scoped sheet read from a file styles only the subtree it is
-// attached to, resolves its @import relative to the file, reloads on
-// change, and stops reloading on Remove (#249).
+// attached to, resolves its @import relative to the file, reloads when
+// the file or an import changes, and stops reloading on Remove (#249).
 func TestNewStylesheetFile(t *testing.T) {
 	resetWatches(t)
 	dir := t.TempDir()
@@ -478,6 +478,23 @@ func TestNewStylesheetFile(t *testing.T) {
 		t.Fatalf("after the reload: inside %d outside %d, want 3 inside only", radius(inside), radius(outside))
 	}
 
+	write("base.css", `button { border-radius: 9; }`)
+	write("index.css", `@import "base.css";`)
+	if err := os.Chtimes(index, later.Add(time.Minute), later.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	pollStylesheets()
+	CollectDamage(root)
+	write("base.css", `button { border-radius: 5; }`)
+	if err := os.Chtimes(filepath.Join(dir, "base.css"), later.Add(2*time.Minute), later.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	pollStylesheets()
+	CollectDamage(root)
+	if radius(inside) != 5 {
+		t.Fatalf("after editing the import: inside %d, want its 5 (#250)", radius(inside))
+	}
+
 	sheet.Remove()
 	write("index.css", `button { border-radius: 11; }`)
 	if err := os.Chtimes(index, later.Add(time.Hour), later.Add(time.Hour)); err != nil {
@@ -485,8 +502,8 @@ func TestNewStylesheetFile(t *testing.T) {
 	}
 	pollStylesheets()
 	CollectDamage(root)
-	if radius(inside) != 3 {
-		t.Errorf("a removed sheet reloaded: inside %d, want 3", radius(inside))
+	if radius(inside) != 5 {
+		t.Errorf("a removed sheet reloaded: inside %d, want 5", radius(inside))
 	}
 }
 

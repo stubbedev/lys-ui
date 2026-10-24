@@ -894,7 +894,7 @@ found:
 	}
 	resolve := p.resolve
 	if resolve == nil {
-		resolve = fileImport
+		resolve = FileImport
 	}
 	path, content, err := resolve(ref, p.base)
 	if err != nil {

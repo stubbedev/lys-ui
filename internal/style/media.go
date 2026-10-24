@@ -795,9 +795,9 @@ func splitOnIdent(ts []token, name string) [][]token {
 // ref stands alone). An error drops the import with a warning.
 type ImportResolver func(ref, base string) (path, content string, err error)
 
-// fileImport is the default resolver: the filesystem, relative to the
+// FileImport is the default resolver: the filesystem, relative to the
 // importing file's directory.
-func fileImport(ref, base string) (string, string, error) {
+func FileImport(ref, base string) (string, string, error) {
 	p := ref
 	if base != "" && !filepath.IsAbs(ref) {
 		p = filepath.Join(filepath.Dir(base), ref)

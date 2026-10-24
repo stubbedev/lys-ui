@@ -65,9 +65,10 @@ type Stylesheet struct {
 	scoped bool
 	// attached counts the widgets the sheet is attached to.
 	attached int
-	// file is the file the sheet was loaded from, for the hot-reload
-	// poll; nil for a string-loaded sheet. Guarded by watchMu.
-	file *styleFile
+	// files are the file the sheet was loaded from and the files its
+	// @import rules loaded, for the hot-reload poll; nil for a
+	// string-loaded sheet. Guarded by watchMu.
+	files []styleFile
 }
 
 // sheets is every installed stylesheet in install order; layersNow is
@@ -495,6 +496,21 @@ type styleFile struct {
 	mod  time.Time
 }
 
+// statStyleFile stats path into the styleFile the poll compares.
+func statStyleFile(path string) (styleFile, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return styleFile{}, fmt.Errorf("stylesheet: stat %s: %w", path, err)
+	}
+	return styleFile{path: path, size: fi.Size(), mod: fi.ModTime()}, nil
+}
+
+// changed reports whether f no longer matches the file on disk.
+func (f styleFile) changed() bool {
+	now, err := statStyleFile(f.path)
+	return err != nil || now != f
+}
+
 // watches are the file-backed stylesheets, in load order; pollStarted
 // is whether the one poller is already scheduled. watchMu guards both
 // and each sheet's file.
@@ -573,32 +589,49 @@ func LoadStylesheetFile(path string) error {
 	return nil
 }
 
-// readStylesheetFile reads and parses the stylesheet at path; the
-// returned styleFile carries the stat the poll compares against. A
+// readStylesheetFile reads and parses the stylesheet at path, with
+// its @import rules resolved beside it; the returned files are the
+// stats the poll compares against: path's, then each import's. A
 // missing or unreadable file, or one whose parse reports a problem,
 // fails with an error carrying the path.
-func readStylesheetFile(path string) (*style.Sheet, styleFile, error) {
-	fi, err := os.Stat(path)
+func readStylesheetFile(path string) (*style.Sheet, []styleFile, error) {
+	main, err := statStyleFile(path)
 	if err != nil {
-		return nil, styleFile{}, fmt.Errorf("stylesheet: stat %s: %w", path, err)
+		return nil, nil, err
 	}
 	b, err := os.ReadFile(path) //nolint:gosec // path is the app's stylesheet argument
 	if err != nil {
-		return nil, styleFile{}, fmt.Errorf("stylesheet: read %s: %w", path, err)
+		return nil, nil, fmt.Errorf("stylesheet: read %s: %w", path, err)
 	}
-	sheet, warns := style.ParseImporting(string(b), path, nil)
+	files := []styleFile{main}
+	var statErr error
+	sheet, warns := style.ParseImporting(string(b), path, func(ref, base string) (string, string, error) {
+		p, content, err := style.FileImport(ref, base)
+		if err != nil {
+			return p, content, err
+		}
+		f, err := statStyleFile(p)
+		if err != nil {
+			statErr = err
+		}
+		files = append(files, f)
+		return p, content, nil
+	})
 	if len(warns) > 0 {
-		return nil, styleFile{}, fmt.Errorf("stylesheet: parse %s: %s", path, strings.Join(warns, "; "))
+		return nil, nil, fmt.Errorf("stylesheet: parse %s: %s", path, strings.Join(warns, "; "))
 	}
-	return sheet, styleFile{path: path, size: fi.Size(), mod: fi.ModTime()}, nil
+	if statErr != nil {
+		return nil, nil, statErr
+	}
+	return sheet, files, nil
 }
 
-// watchSheet adds s to the hot-reload poll under f, scheduling the
+// watchSheet adds s to the hot-reload poll under its files, scheduling the
 // poller once for the life of the process.
-func watchSheet(s *Stylesheet, f styleFile) {
+func watchSheet(s *Stylesheet, files []styleFile) {
 	watchMu.Lock()
 	defer watchMu.Unlock()
-	s.file = &f
+	s.files = files
 	watches = append(watches, s)
 	if pollStarted {
 		return
@@ -613,7 +646,7 @@ func watchSheet(s *Stylesheet, f styleFile) {
 func unwatch(s *Stylesheet) {
 	watchMu.Lock()
 	defer watchMu.Unlock()
-	s.file = nil
+	s.files = nil
 	watches = slices.DeleteFunc(watches, func(o *Stylesheet) bool { return o == s })
 }
 
@@ -630,34 +663,23 @@ func pollStylesheets() {
 	}
 }
 
-// pollFile stats the stylesheet's file once and reloads it on change.
+// pollFile stats the stylesheet's files once and reloads it when any
+// changed. A file that vanished or no longer parses keeps the last
+// good rules, reported through the parse-warning sink with its path.
 func (s *Stylesheet) pollFile() {
 	watchMu.Lock()
-	f := s.file
+	files := s.files
 	watchMu.Unlock()
-	if f == nil {
+	if len(files) == 0 || !slices.ContainsFunc(files, styleFile.changed) {
 		return
 	}
-	fi, err := os.Stat(f.path)
+	sheet, now, err := readStylesheetFile(files[0].path)
 	if err != nil {
-		style.Warn(fmt.Sprintf("hot reload: stat %s: %v", f.path, err))
-		return
-	}
-	if fi.Size() == f.size && fi.ModTime().Equal(f.mod) {
-		return
-	}
-	b, err := os.ReadFile(f.path)
-	if err != nil {
-		style.Warn(fmt.Sprintf("hot reload: read %s: %v", f.path, err))
-		return
-	}
-	sheet, warns := style.ParseImporting(string(b), f.path, nil)
-	if len(warns) > 0 {
-		style.Warn(fmt.Sprintf("hot reload: parse %s: %s", f.path, strings.Join(warns, "; ")))
+		style.Warn("hot reload: " + err.Error())
 		return
 	}
 	watchMu.Lock()
-	s.file = &styleFile{path: f.path, size: fi.Size(), mod: fi.ModTime()}
+	s.files = now
 	watchMu.Unlock()
 	s.sheet = sheet
 	relayer()
