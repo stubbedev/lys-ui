@@ -1145,14 +1145,15 @@ func (n *node) Element() string {
 }
 
 // elementOf is Element for the widget w embedding n: it resolves the
-// type name from w itself, so a sibling read before any container
-// arranged it (and recorded its self) still reports its name.
+// type name from w's style owner, so a sibling read before any
+// container arranged it (and recorded its self) still reports its
+// name, and a struct wrapping a widget reports the widget's.
 func (n *node) elementOf(w Widget) string {
 	if n.element != "" {
 		return n.element
 	}
 	if n.elemName == "" {
-		n.elemName = typeElementName(w)
+		n.elemName = typeElementName(styleOwner(w))
 	}
 	return n.elemName
 }
@@ -1654,6 +1655,7 @@ func restyleParts(w Widget) {
 // recompute that leaves the values Equal — the common restyle — costs
 // the compute and one comparison, and touches nothing.
 func (n *node) restyle(w Widget) *style.Values {
+	w = styleOwner(w)
 	firstStyle := n.styleSeen == 0
 	var parent *style.Values
 	if pw := styleParentOf(n); pw != nil {
