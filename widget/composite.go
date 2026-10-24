@@ -93,11 +93,12 @@ func (c *composite) Measure(con Constraints) Size {
 	return c.measureStore(con, clampSize(sz, con))
 }
 
-// Arrange lays the root over the whole rect.
+// Arrange lays the root over the content box, as its parent: inside
+// its margins and held to its CSS sizes, matching Measure.
 func (c *composite) Arrange(r render.Rect) {
 	c.node.Arrange(r)
-	c.root.Arrange(c.insets().outer().Shrink(r))
 	setParents(c.self, c.root)
+	arrangeChild(c.root, c.insets().outer().Shrink(r))
 }
 
 // Paint draws the surface (when configured) then the root.
