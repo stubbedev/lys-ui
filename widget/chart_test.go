@@ -100,3 +100,17 @@ func TestGoldenShadcnChart(t *testing.T) {
 		})
 	}
 }
+
+// Charts take the width they are given: two expanding side by side
+// share a row narrower than two wide plots, inside it.
+func TestChartsShareARow(t *testing.T) {
+	bar := NewChart(goldenFace(t), ChartBar, chartMonths, chartSeries...)
+	pie := NewChart(goldenFace(t), ChartPie, []string{"a", "b"}, ChartSeries{Name: "v", Values: []float64{3, 1}})
+	row := NewBox(Row, 16, 0)
+	row.Append(bar, true).Append(pie, true)
+	arrangeTree(t, row, 680, 300)
+	b, p := bar.Bounds(), pie.Bounds()
+	if p.X+p.W > 680 || b.W != p.W || b.W < chartWidth {
+		t.Errorf("bar %v pie %v, want two equal halves inside 680", b, p)
+	}
+}

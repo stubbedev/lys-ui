@@ -161,19 +161,23 @@ func (c *Chart) cartesian() bool {
 	return c.kind == ChartBar || c.kind == ChartArea || c.kind == ChartLine
 }
 
-// The chart's text and spacing.
+// The chart's text and spacing, and its natural size: the narrowest
+// plot that still reads, which a filling or expanding slot widens as
+// shadcn's full-width charts.
 const (
 	chartText   = 12
 	chartLegend = 28
 	chartTicks  = 4
+	chartWidth  = 240
+	chartHeight = 260
 )
 
-// Measure wants room for a plot: 480x260 when the space is open.
+// Measure wants the natural plot size.
 func (c *Chart) Measure(con Constraints) Size {
 	if sz, ok := c.measureHit(con); ok {
 		return sz
 	}
-	return c.measureStore(con, clampSize(Size{W: 480, H: 260}, con))
+	return c.measureStore(con, clampSize(Size{W: chartWidth, H: chartHeight}, con))
 }
 
 // niceMax is the axis top for a largest value v: chartTicks steps of
