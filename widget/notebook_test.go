@@ -178,7 +178,7 @@ func TestNotebookTabLabelsAndBoxes(t *testing.T) {
 	host.Append(n, true)
 	frame(t, host, 300, 100)
 
-	nat := label.Measure(tabNatural)
+	nat := label.Measure(unbounded)
 	first, second := n.tabRect(0), n.tabRect(1)
 	want := render.Rect{X: 5, Y: 5, W: nat.W + 20, H: first.H}
 	if first != want {

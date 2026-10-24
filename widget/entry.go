@@ -280,9 +280,9 @@ func (e *Entry) leadingRect() render.Rect {
 func (e *Entry) slotSize(w Widget) Size {
 	h := e.bounds.H
 	if h <= 0 {
-		h = 1 << 20
+		h = unboundedPx
 	}
-	return w.Measure(Constraints{Max: Size{W: 1 << 20, H: h}})
+	return w.Measure(Constraints{Max: Size{W: unboundedPx, H: h}})
 }
 
 // entryTrailingGap is the space between the text and the trailing icon.

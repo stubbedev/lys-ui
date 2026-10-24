@@ -58,10 +58,6 @@ const (
 	tabBarHeight = 26
 )
 
-// tabNatural is the open constraint a tab measures its natural size
-// under: the strip scrolls instead of squeezing tabs.
-var tabNatural = Constraints{Max: Size{W: 1 << 20, H: 1 << 20}}
-
 // notebookHeader is the tab bar's node tree (`notebook > header >
 // tabs > tab`): the header strip, the tab row, one tab part per page
 // (its :checked marks the selected one).
@@ -427,7 +423,7 @@ func (n *Notebook) layoutStrip(r render.Rect) notebookStrip {
 	for i, t := range n.tabs {
 		tv := t.part.style(t.part)
 		b := boxOf(tv, render.Insets{})
-		sz := measureBox(tv, b, tabNatural, func(c Constraints) Size { return n.tabContent(t, c) })
+		sz := measureBox(tv, b, unbounded, func(c Constraints) Size { return n.tabContent(t, c) })
 		if !tv.Has(style.PropMinWidth) {
 			sz.W = max(sz.W, tabWidth+b.margin.Left+b.margin.Right)
 		}

@@ -350,9 +350,9 @@ func (l *List) measureRowH() int {
 	setParents(l, l.probe)
 	w := l.viewW
 	if w <= 0 {
-		w = 1 << 20 // not arranged yet: the natural width
+		w = unboundedPx // not arranged yet: the natural width
 	}
-	s := l.probe.Measure(Constraints{Max: Size{W: w, H: 1 << 20}})
+	s := l.probe.Measure(Constraints{Max: Size{W: w, H: unboundedPx}})
 	l.rowH = max(1, s.H)
 	return l.rowH
 }

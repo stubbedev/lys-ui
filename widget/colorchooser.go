@@ -242,7 +242,7 @@ func (c *ColorChooser) Arrange(r render.Rect) {
 	c.hex.Arrange(render.Rect{X: c.sv.X, Y: entryY, W: 160 + 8 + 24, H: entryH})
 	btnX := c.hex.Bounds().X + c.hex.Bounds().W + 8
 	if c.custom != nil {
-		nat := c.addTo.Measure(Constraints{Max: Size{W: 1 << 20, H: 1 << 20}})
+		nat := c.addTo.Measure(unbounded)
 		c.addTo.Arrange(render.Rect{X: btnX, Y: entryY, W: nat.W, H: entryH})
 		c.addTo.OnClick = func() {
 			if c.addPick != nil {
@@ -252,7 +252,7 @@ func (c *ColorChooser) Arrange(r render.Rect) {
 		btnX = c.addTo.Bounds().X + c.addTo.Bounds().W + 8
 	}
 	if c.eyedrop != nil {
-		nat := c.pickFrom.Measure(Constraints{Max: Size{W: 1 << 20, H: 1 << 20}})
+		nat := c.pickFrom.Measure(unbounded)
 		c.pickFrom.Arrange(render.Rect{X: btnX, Y: entryY, W: nat.W, H: entryH})
 		c.pickFrom.OnClick = c.eyedrop
 	}
