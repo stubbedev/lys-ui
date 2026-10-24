@@ -557,3 +557,24 @@ func TestOverlayHiddenChildTakesNoPart(t *testing.T) {
 		t.Error("a shown child did not paint and hit on top again")
 	}
 }
+
+// An overlay measures and arranges through its CSS box like a Box: min
+// sizes floor it with only a zero-size filling child, padding insets
+// its children, and without CSS sizes it is its largest child (#254).
+func TestOverlayCSSBox(t *testing.T) {
+	loadCSS(t, `.ring { min-width: 64px; min-height: 64px; padding: 4px; }`)
+	fill := NewSpacer(0, 0)
+	ring := NewOverlay().Append(fill)
+	ring.AddClass("ring")
+	if got := ring.Measure(Constraints{Max: Size{W: 200, H: 200}}); got != (Size{W: 72, H: 72}) {
+		t.Errorf("styled overlay %v, want the 64px floor plus 4px padding each side", got)
+	}
+	ring.Arrange(render.Rect{W: 72, H: 72})
+	if got := fill.Bounds(); got != (render.Rect{X: 4, Y: 4, W: 64, H: 64}) {
+		t.Errorf("filling child %v, want the content box", got)
+	}
+	plain := NewOverlay().Append(NewSpacer(30, 20))
+	if got := plain.Measure(Constraints{Max: Size{W: 200, H: 200}}); got != (Size{W: 30, H: 20}) {
+		t.Errorf("unstyled overlay %v, want its largest child", got)
+	}
+}

@@ -365,32 +365,37 @@ func (o *Overlay) AppendAligned(w Widget, h, v Align) *Overlay {
 	return o
 }
 
-// Measure reports the largest child, clamped to con.
+// Measure reports the largest child inside the overlay's CSS box:
+// padding, border and min sizes, clamped to con.
 func (o *Overlay) Measure(con Constraints) Size {
 	if sz, ok := o.measureHit(con); ok {
 		return sz
 	}
-	best := Size{}
-	for _, k := range o.kids {
-		if !IsVisible(k) {
-			continue
+	v := o.style(o)
+	return o.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
+		best := Size{}
+		for _, k := range o.kids {
+			if !IsVisible(k) {
+				continue
+			}
+			nat := measureChild(o, k, inner)
+			best.W = max(best.W, nat.W)
+			best.H = max(best.H, nat.H)
 		}
-		nat := measureChild(o, k, con)
-		best.W = max(best.W, nat.W)
-		best.H = max(best.H, nat.H)
-	}
-	return o.measureStore(con, clampSize(best, con))
+		return clampSize(best, inner)
+	}))
 }
 
-// Arrange assigns the whole rect to every filling child and places the
-// aligned ones within it.
+// Arrange records the border box and assigns the content box to every
+// filling child, placing the aligned ones within it.
 func (o *Overlay) Arrange(r render.Rect) {
-	o.ArrangeRoot(r)
+	border, inner := boxRects(boxOf(o.style(o), render.Insets{}), r)
+	o.ArrangeRoot(border)
 	for i, k := range o.kids {
-		cell := r
+		cell := inner
 		if a := o.aligns[i]; a != [2]Align{} {
-			nat := measureChild(o, k, Constraints{Max: Size{W: r.W, H: r.H}})
-			cell = alignRect(r, nat, a[0], a[1])
+			nat := measureChild(o, k, Constraints{Max: Size{W: inner.W, H: inner.H}})
+			cell = alignRect(inner, nat, a[0], a[1])
 		}
 		arrangeChild(k, cell)
 		setParents(o, k)
@@ -402,8 +407,12 @@ func (o *Overlay) ArrangeRoot(r render.Rect) {
 	o.node.Arrange(r)
 }
 
-// Paint draws every child bottom to top.
+// Paint draws the overlay's CSS box, then every child bottom to top.
 func (o *Overlay) Paint(cv *render.Canvas) {
+	v := o.style(o)
+	if bg := pickc(0, v, style.PropBackgroundColor, 0); bg != 0 || hasBoxLayers(v) {
+		paintBoxBehind(cv, v, o.bounds, radiusOr(v, 0), borderOf(v), bg)
+	}
 	for _, k := range o.kids {
 		if !IsVisible(k) {
 			continue
