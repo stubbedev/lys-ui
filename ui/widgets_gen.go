@@ -5211,6 +5211,12 @@ func (b *NotebookBuilder) InsertTab(i int, name string, child Node) *NotebookBui
 	return b
 }
 
+// TabExpand calls (*widget.Notebook).SetTabExpand.
+func (b *NotebookBuilder) TabExpand(name string, on bool) *NotebookBuilder {
+	b.do(func(s *Scope, w *widget.Notebook) { w.SetTabExpand(name, on) })
+	return b
+}
+
 // TabLabel calls (*widget.Notebook).SetTabLabel.
 func (b *NotebookBuilder) TabLabel(name string, child Node) *NotebookBuilder {
 	b.do(func(s *Scope, w *widget.Notebook) { w.SetTabLabel(name, build(s, child)) })

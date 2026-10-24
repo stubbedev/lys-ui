@@ -533,6 +533,21 @@ func (b *Box) Arrange(r render.Rect) {
 	b.restack(mode)
 }
 
+// expandShare is the k-th of n expanders' share of free leftover
+// pixels, gtk_box_size_allocate's split: an equal share each, the
+// first free % n of them one pixel more, so the shares fill free
+// exactly. Nothing is shared when there is no leftover.
+func expandShare(free, n, k int) int {
+	if free <= 0 || n <= 0 {
+		return 0
+	}
+	share := free / n
+	if k < free%n {
+		share++
+	}
+	return share
+}
+
 // arrangeBox is the programmatic box layout: expanding children share
 // the leftover main-axis space, the first of them a pixel more each
 // until none is left (gtk_box_size_allocate), and every child stretches
@@ -561,7 +576,7 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 			expanders++
 		}
 	}
-	extra, rem := max(0, free)/max(1, expanders), max(0, free)%max(1, expanders)
+	shared := 0
 	var takes []int
 	if free < 0 {
 		buf := shrinkBufs.push(2 * len(b.child))
@@ -591,11 +606,8 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 		}
 		size := b.main(c.nat)
 		if b.expands(c) {
-			size += extra
-			if rem > 0 {
-				size++
-				rem--
-			}
+			size += expandShare(free, expanders, shared)
+			shared++
 		}
 		if takes != nil {
 			size -= takes[i]

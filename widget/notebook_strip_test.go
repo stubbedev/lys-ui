@@ -91,3 +91,40 @@ func TestGoldenNotebookStrip(t *testing.T) {
 	nb.SelectTab("Two")
 	NewGolden(t, nb, "notebook-strip", goldenTheme(th), goldenFrame(260, 60))
 }
+
+// Tabs whose labels expand, or that are set to expand, share the
+// strip's leftover width; the others keep their natural width (#261).
+func TestNotebookTabExpand(t *testing.T) {
+	face := chromeFace(t)
+	build := func(expand ...bool) *Notebook {
+		nb := NewNotebook(face)
+		for i, e := range expand {
+			name := string(rune('a' + i))
+			nb.AppendTab(name, NewSpacer(10, 10))
+			l := NewLabel(face, 13, name, 0)
+			l.SetHExpand(e)
+			nb.SetTabLabel(name, l)
+		}
+		frame(t, nb, 600, 100)
+		return nb
+	}
+	nb := build(true, true, true)
+	row := nb.strip.row
+	w := nb.tabRect(0).W
+	if last := nb.tabRect(2); last.X+last.W != row.X+row.W || nb.tabRect(1).W != w || last.W != w {
+		t.Errorf("expanding tabs %v %v %v in row %v, want equal widths ending at the row's end", nb.tabRect(0), nb.tabRect(1), last, row)
+	}
+	plain := build(false, false, false)
+	if last := plain.tabRect(2); last.X+last.W >= plain.strip.row.X+plain.strip.row.W {
+		t.Errorf("non-expanding tabs reach %d, want natural widths leaving the rest", last.X+last.W)
+	}
+	mixed := build(false, true, false)
+	if mixed.tabRect(0).W != plain.tabRect(0).W || mixed.tabRect(2).W != plain.tabRect(2).W || mixed.tabRect(1).W <= plain.tabRect(1).W {
+		t.Errorf("mixed tabs %v %v %v, want the leftover in the middle one only", mixed.tabRect(0), mixed.tabRect(1), mixed.tabRect(2))
+	}
+	plain.SetTabExpand("a", true)
+	frame(t, plain, 600, 100)
+	if last := plain.tabRect(2); last.X+last.W != plain.strip.row.X+plain.strip.row.W {
+		t.Errorf("SetTabExpand left the row ending at %d", last.X+last.W)
+	}
+}

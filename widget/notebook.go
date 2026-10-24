@@ -105,6 +105,9 @@ type notebookTab struct {
 	name string
 	w    Widget
 	part *notebookTabPart
+	// expand shares the strip's leftover width with the other expanding
+	// tabs (GTK's tab-expand).
+	expand bool
 }
 
 // notebookStrip is the arranged tab bar: the header's and the tab
@@ -187,7 +190,7 @@ func (n *Notebook) InsertTab(i int, name string, w Widget) {
 // The label styles as the tab's child (`tab > label`) and fills the
 // tab's content box. Unknown names are a no-op.
 func (n *Notebook) SetTabLabel(name string, w Widget) {
-	i := slices.IndexFunc(n.tabs, func(t notebookTab) bool { return t.name == name })
+	i := n.tabIndex(name)
 	if i < 0 {
 		return
 	}
@@ -205,7 +208,7 @@ func (n *Notebook) SetTabLabel(name string, w Widget) {
 // (gtk_notebook_get_tab_label); nil for a painted name or an unknown
 // page.
 func (n *Notebook) TabLabel(name string) Widget {
-	i := slices.IndexFunc(n.tabs, func(t notebookTab) bool { return t.name == name })
+	i := n.tabIndex(name)
 	if i < 0 {
 		return nil
 	}
@@ -326,7 +329,7 @@ func (n *Notebook) selectIndex(i int) {
 // removed. The closed page detaches like every tree mutation: parent
 // link cleared, removal hook fired.
 func (n *Notebook) CloseTab(name string) bool {
-	i := slices.IndexFunc(n.tabs, func(t notebookTab) bool { return t.name == name })
+	i := n.tabIndex(name)
 	if i < 0 {
 		return false
 	}
@@ -441,7 +444,55 @@ func (n *Notebook) layoutStrip(r render.Rect) notebookStrip {
 	var inHeader render.Rect
 	s.header, inHeader = boxRects(hb, render.Rect{X: r.X, Y: r.Y, W: r.W, H: s.height})
 	s.tabs, s.row = boxRects(tb, inHeader)
+	n.expandTabs(&s)
 	return s
+}
+
+// expandTabs shares the row's leftover width among the expanding tabs,
+// GTK's tab-expand: a tab set to expand, or one whose label wants
+// horizontal space. The others keep their width; a strip that
+// overflows has no leftover.
+func (n *Notebook) expandTabs(s *notebookStrip) {
+	expanding := 0
+	for _, t := range n.tabs {
+		if n.tabExpands(t) {
+			expanding++
+		}
+	}
+	free := s.row.W - s.total
+	if expanding == 0 || free <= 0 {
+		return
+	}
+	x, k := 0, 0
+	for i, t := range n.tabs {
+		s.tabX[i] = x
+		if n.tabExpands(t) {
+			s.tabW[i] += expandShare(free, expanding, k)
+			k++
+		}
+		x += s.tabW[i]
+	}
+	s.total = x
+}
+
+// tabExpands reports whether t shares the strip's leftover width.
+func (n *Notebook) tabExpands(t notebookTab) bool {
+	return t.expand || (t.part.label != nil && WantsExpand(t.part.label, Row))
+}
+
+// SetTabExpand makes the named tab share the strip's leftover width
+// with the other expanding tabs (gtk_notebook_set_tab_expand); a tab
+// whose label wants horizontal space expands without it.
+func (n *Notebook) SetTabExpand(name string, on bool) {
+	if i := n.tabIndex(name); i >= 0 && n.tabs[i].expand != on {
+		n.tabs[i].expand = on
+		n.InvalidateLayout()
+	}
+}
+
+// tabIndex is the named tab's index, -1 for none.
+func (n *Notebook) tabIndex(name string) int {
+	return slices.IndexFunc(n.tabs, func(t notebookTab) bool { return t.name == name })
 }
 
 // tabContent is a tab's content size: its label widget's natural size,
