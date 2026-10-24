@@ -260,7 +260,8 @@ func (a *Application) SetClipboard(c *clipboard.Clipboard) {
 // Default off. Needs a configured clipboard.
 func (a *Application) SetCopyOnSelect(on bool) { a.primary.copyOnSelect = on }
 
-// SetTooltipFace enables hover tooltips rendered with the given face.
+// SetTooltipFace sets the face hover tooltips render with; nil is the
+// system UI face.
 func (a *Application) SetTooltipFace(f *render.Typeface) { a.tooltipFace = f }
 
 // OnKey observes every key press on the focused window, after widget
@@ -906,13 +907,10 @@ func (a *Application) updateTips(now time.Time) {
 	for _, w := range a.windows {
 		w.tip.delay = a.tooltipOpts.Delay
 		w.tip.update(w.router, now, func(h widget.Widget, text string) (tooltipWindow, tooltipPainter) {
-			if a.tooltipFace == nil {
-				return nil, nil
-			}
 			// A nil *popup.Popup must not be wrapped: the interface
 			// would carry a typed nil that the nil checks below let
 			// through to a dereference.
-			tp, pc := openTooltip(w.sess, w.host, a.tooltipFace, a.tooltipOpts, w.frac120, int(w.input.x), int(w.input.y), h, text)
+			tp, pc := openTooltip(w.sess, w.host, a.resolveFace(nil), a.tooltipOpts, w.frac120, int(w.input.x), int(w.input.y), h, text)
 			if tp == nil {
 				return nil, nil
 			}

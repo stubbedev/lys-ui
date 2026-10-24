@@ -75,7 +75,7 @@ type Config struct {
 	// OnPointerMove, when set, receives raw pointer positions in
 	// surface (logical) coordinates, for anchoring context menus.
 	OnPointerMove func(x, y float64)
-	// TooltipFace renders hover tooltips; nil disables tooltips.
+	// TooltipFace renders hover tooltips; nil is the system UI face.
 	TooltipFace *render.Typeface
 	// Clipboard, when set, enables ctrl+c, ctrl+x, and ctrl+v on the
 	// focused widget's selection, middle-click paste of the primary

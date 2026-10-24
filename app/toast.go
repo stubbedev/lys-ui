@@ -154,7 +154,7 @@ func (a *Application) resolveFace(asked *render.Typeface) *render.Typeface {
 	}
 	f, err := sysfont.UI()
 	if err != nil {
-		debug.Log("input", "toast face: %v", err)
+		debug.Log("input", "ui face: %v", err)
 		return nil
 	}
 	return f

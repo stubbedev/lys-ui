@@ -74,7 +74,6 @@ func run() error {
 	}
 
 	application := app.NewApplication(sess)
-	application.SetTooltipFace(face)
 	application.SetClipboard(app.NewClipboard(sess))
 	application.SetInspect(true)
 
