@@ -44,7 +44,8 @@ that cannot draw an error from `Run`. Both paths paint the same pixels:
 the GPU runs the canvas's own arithmetic step for step (integer math,
 and float32 in one fixed order where the canvas evaluates a distance
 field, a gradient or a sample), and every widget golden is checked on
-both, byte for byte (`just gpu`). The Vulkan loader is found through
+both, byte for byte (`just gpu`), under the Vulkan validation layer,
+whose every error fails the test. The Vulkan loader is found through
 the library path, which the nix packages set. A GPU frame that fails
 at run time (a device lost) is logged and turns every window to the
 CPU; a reconnect agrees the renderer with the new compositor again.
