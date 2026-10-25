@@ -10,7 +10,7 @@ import (
 // Widgets with a subtree effect share pooled scratch layers: the first
 // paint at a new canvas size costs one layer buffer for twenty
 // translucent buttons, where each kept a canvas-sized buffer of its own
-// and reallocated it on every resize.
+// and reallocated it on every resize; a smaller size costs none.
 func TestSubtreeEffectsShareScratchLayers(t *testing.T) {
 	loadCSS(t, `.faded { opacity: 0.5; }`)
 	col := NewBox(Column, 4, 4)
@@ -32,5 +32,8 @@ func TestSubtreeEffectsShareScratchLayers(t *testing.T) {
 	const w, h = 420, 900
 	if got, layer := paintAt(w, h), uint64(render.Stride(w)*h); got >= 2*layer {
 		t.Errorf("the first paint at a new size allocated %d bytes, %d layers' worth; want one", got, got/layer)
+	}
+	if got, layer := paintAt(390, 880), uint64(render.Stride(390)*880); got >= layer {
+		t.Errorf("a paint at a smaller size allocated %d bytes, want the pooled layer reused", got)
 	}
 }
