@@ -184,3 +184,48 @@ func TestLayoutMotionRemovalThenReappend(t *testing.T) {
 		t.Errorf("after re-appending: parent %v, departing %d; want the new box and no departure", w.Parent(), len(s.root.departing))
 	}
 }
+
+// A card springing to a new size keeps its shadow on the edge it is
+// shown at: the card painted at its destination, clipped to the shown
+// rect without its ink, lost the shadow until the spring settled, so a
+// resizing dropdown's shadow seemed to trail behind it.
+func TestLayoutMotionShadowTracksTheShownEdge(t *testing.T) {
+	s := newMotionScene(t)
+	loadCSS(t, `.card { min-width: 60px; background-color: #ff0000; box-shadow: 0px 0px 0px 6px #00ff00; -lys-layout-motion: smooth; }`)
+	card := NewBox(Column, 0, 0)
+	card.AddClass("card")
+	card.SetSizeRequest(60, 20)
+	s.root.AppendAligned(card, false, AlignCenter)
+	s.root.SetPadding(render.UniformInsets(10))
+	s.frame()
+	card.SetSizeRequest(60, 90)
+	s.frame()
+	for range 3 {
+		s.step()
+		s.frame()
+	}
+	c := ShownRect(card)
+	if c == card.Bounds() {
+		t.Fatal("the card is not mid-motion")
+	}
+	green := func(x, y int) bool {
+		p := render.ColorFromBytes(s.data[y*render.Stride(100)+x*4:])
+		return p.G() > 200 && p.R() < 50
+	}
+	if !green(c.X+c.W/2, c.Y+c.H+3) || !green(c.X-3, c.Y+c.H/2) {
+		t.Errorf("mid-motion at %v the shadow is not around the shown edge", c)
+	}
+	if green(c.X+c.W/2, c.Y+c.H-3) {
+		t.Error("the shadow shows inside the shown card")
+	}
+	for range 120 {
+		s.step()
+		s.frame()
+	}
+	s.frame()
+	dmg := DamageGeneration()
+	s.frame()
+	if ShownRect(card) != card.Bounds() || DamageGeneration() != dmg {
+		t.Errorf("settled at %v of %v, damage %d→%d; want the destination and an idle frame", ShownRect(card), card.Bounds(), dmg, DamageGeneration())
+	}
+}

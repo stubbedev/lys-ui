@@ -47,7 +47,6 @@ type layoutMotionState struct {
 	// target is the laid-out rect it heads for, cur the rect it is
 	// shown at now.
 	target, cur render.Rect
-	layer       *render.Layer
 }
 
 // motionSpring maps a motion to its spring.
@@ -128,24 +127,21 @@ func (n *node) parentShownBefore(walk uint64) bool {
 	return before
 }
 
-// paintMoving paints w mid-motion: laid out at its destination, into
-// a layer that composites translated to the shown rect and clipped to
-// its size.
+// paintMoving paints w mid-motion: laid out for the paint at the rect
+// its spring shows it at, so its own box, border and shadow and every
+// box inside it track the animated edge, then laid out back at its
+// destination, where it hit-tests. What does not fit the shown rect is
+// clipped to it, its ink kept.
 func (n *node) paintMoving(cv *render.Canvas, w Widget) {
-	mo := n.motion
-	t, c := n.bounds, mo.cur
-	dev := cv.MapRect(t)
-	if dev.Empty() || c.Empty() {
+	t, c := n.bounds, n.motion.cur
+	if c.Empty() {
 		return
 	}
-	l := cv.Layer(mo.layer, dev)
-	mo.layer = l
-	w.Paint(l.Canvas())
-	num, denom := cv.DeviceScale()
-	f := float64(num) / float64(denom)
-	prev := cv.PushClip(c)
-	cv.Composite(l, dev, render.Translate(float64(c.X-t.X)*f, float64(c.Y-t.Y)*f), 1)
+	w.Arrange(c)
+	prev := cv.PushClip(n.ink.Grow(c))
+	w.Paint(cv)
 	cv.PopClip(prev)
+	w.Arrange(t)
 }
 
 // ShownRect is the rect w is shown at: its laid-out bounds, or
