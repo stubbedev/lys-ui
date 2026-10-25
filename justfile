@@ -75,7 +75,9 @@ headless:
     if [ -n "$LYS_UI_TEST_XCURSOR_PATH" ]; then
         export XCURSOR_PATH="$LYS_UI_TEST_XCURSOR_PATH" XCURSOR_THEME=Vanilla-DMZ
     fi
-    go test ./internal/headlesstest ./capture ./vinput ./app -count=1
+    # The packages share one compositor: run them one at a time, so no
+    # package's surfaces show in another's captures.
+    go test -p 1 ./internal/headlesstest ./capture ./vinput ./app -count=1
 
 # `check` plus the headless input gate - what CI runs. The gate is
 # required there: LYS_UI_HEADLESS=1 turns every skip into a failure.

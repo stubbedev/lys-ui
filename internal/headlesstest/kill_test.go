@@ -166,6 +166,15 @@ func TestHeadlessCompositorKillExitsCleanly(t *testing.T) {
 	// with the real socket holder forked off and reparented to init.
 	// Kill by the config path every candidate carries in its cmdline.
 	killCompositor()
+	// What runs after this test (the next package on the same env)
+	// needs a compositor: boot it again where the driver can.
+	if testEnv.CanRestartCompositor() {
+		t.Cleanup(func() {
+			if err := testEnv.RestartCompositor(); err != nil {
+				t.Errorf("restarting the compositor after the kill: %v", err)
+			}
+		})
+	}
 
 	// The client must exit on its own — the zombie scenario this issue
 	// kills is a client that parks forever on a dead fd.
