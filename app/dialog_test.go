@@ -243,3 +243,16 @@ func TestDialogHeaderPairsTitleAndDescription(t *testing.T) {
 		t.Errorf("description to buttons %dpx, want 16", gap)
 	}
 }
+
+// A dialog carries its parent window's app id, so the compositor groups
+// it with its application; it had none, and a compositor rule or a
+// taskbar keyed on the app id passed it by.
+func TestDialogTakesItsParentsAppID(t *testing.T) {
+	parent := &Window{cfg: WindowConfig{AppID: "dev.example.app"}}
+	if got := dialogAppID(parent); got != "dev.example.app" {
+		t.Errorf("dialog app id %q, want the parent's", got)
+	}
+	if got := dialogAppID(nil); got != "" {
+		t.Errorf("parentless dialog app id %q, want none", got)
+	}
+}

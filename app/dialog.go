@@ -145,6 +145,19 @@ type DialogParent interface {
 // dialogWindow implements DialogParent.
 func (w *Window) dialogWindow() *Window { return w }
 
+// dialogAppID is a dialog's app id: its parent window's, so the
+// compositor and taskbars group the dialog with its application, as a
+// GTK dialog is; none without a parent.
+func dialogAppID(parent DialogParent) string {
+	if parent == nil {
+		return ""
+	}
+	if pw := parent.dialogWindow(); pw != nil {
+		return pw.cfg.AppID
+	}
+	return ""
+}
+
 // dialogWindow implements DialogParent; layer surfaces have no xdg
 // window to parent to.
 func (l *LayerWindow) dialogWindow() *Window { return nil }
@@ -174,7 +187,7 @@ func (a *Application) NewDialog(parent DialogParent, cfg DialogConfig) (*Dialog,
 	}
 
 	winCfg := WindowConfig{
-		Title: cfg.Title, Width: cfg.Width, Height: cfg.Height,
+		Title: cfg.Title, AppID: dialogAppID(parent), Width: cfg.Width, Height: cfg.Height,
 		Root: root, Background: background,
 		OnKey: func(_ *widget.Router, code uint32, _ wlsession.Mods) {
 			if resp, ok := dialogResponseForKey(cfg, a.sess.KeySym(code)); ok {
