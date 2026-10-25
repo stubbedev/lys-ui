@@ -106,13 +106,16 @@ type Config struct {
 	// the Gravity side, centered on the rect across it, and the
 	// compositor flips it to the opposite side or slides it along when
 	// it would leave the output.
-	// Popovers anchor this way; menus and tooltips use the point.
+	// Popovers and tooltips anchor this way; menus use the point.
 	AnchorRect render.Rect
 	// Width, Height is the popup's size in surface pixels.
 	Width, Height int
 	// Gravity picks which side of the anchor the popup opens on; zero
 	// is below.
 	Gravity Gravity
+	// Gap is the distance between an AnchorRect and the content on the
+	// opening side; it follows the popup when the compositor flips it.
+	Gap int
 	// NoPlate skips the theme's plate (fill and shadow) behind the
 	// content: the content paints its own look, its stylesheet
 	// declaring the background, and the rest of the surface stays

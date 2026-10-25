@@ -50,6 +50,10 @@ func TestPlacementForARect(t *testing.T) {
 			t.Errorf("gravity %d = %+v, want %+v", tc.gravity, p, want)
 		}
 	}
+	// A gap moves the content off the anchor on the opening axis.
+	if p := placementFor(Config{AnchorRect: rect, Gutter: g, Gap: 4}); p.offsetY != -g+4 {
+		t.Errorf("gap offset = %d, want %d", p.offsetY, -g+4)
+	}
 	// No gutter, no offset.
 	if p := placementFor(Config{AnchorRect: rect}); p.offsetX != 0 || p.offsetY != 0 {
 		t.Errorf("gutterless offset = %d,%d", p.offsetX, p.offsetY)

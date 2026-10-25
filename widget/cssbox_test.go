@@ -366,6 +366,27 @@ func TestOutlineAndShadowGrowDamage(t *testing.T) {
 	}
 }
 
+// A tooltip surface reserved the theme's whole shadow gutter around a
+// card that painted no shadow, a transparent margin that reached over
+// the widget the card described. InkOutset is the room a card's own
+// style paints outside it, nothing when it paints nothing there.
+func TestInkOutsetIsWhatACardPaintsOutsideItself(t *testing.T) {
+	face := goldenFace(t)
+	loadCSS(t, `tooltip { padding: 6px; }`)
+	card := NewTooltipCard(face, "tip", false)
+	arrangeTree(t, card, 100, 40)
+	if ink := InkOutset(card); !ink.Zero() {
+		t.Errorf("a shadowless card's ink outset %+v, want none", ink)
+	}
+	loadCSS(t, `tooltip { box-shadow: 0 4px 6px #000000; }`)
+	card = NewTooltipCard(face, "tip", false)
+	arrangeTree(t, card, 100, 40)
+	want := render.Insets{Top: 2, Right: 6, Bottom: 10, Left: 6}
+	if ink := InkOutset(card); ink != want {
+		t.Errorf("a shadowed card's ink outset %+v, want its shadow's %+v", ink, want)
+	}
+}
+
 func TestButtonTransparentFillStrokesARoundedRing(t *testing.T) {
 	loadCSS(t, `button { border: 2px solid #ffffff; border-radius: 8px; }`)
 	b := NewButton(NewSpacer(20, 20), 0, 0)

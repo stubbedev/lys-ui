@@ -17,9 +17,9 @@ type placement struct {
 	offsetX, offsetY int32
 }
 
-// placementFor maps a Config onto the positioner. A point (menus,
-// tooltips) is a 1x1 rect the popup grows down and right of, sliding
-// on both axes and flipping up. A rect (popovers) opens on the Gravity
+// placementFor maps a Config onto the positioner. A point (menus) is
+// a 1x1 rect the popup grows down and right of, sliding on both axes
+// and flipping up. A rect (popovers, tooltips) opens on the Gravity
 // side centered on the anchor along the other axis, as GtkPopover
 // places itself (a bottom popover's rect anchor south, surface anchor
 // north), and may flip across the anchor on that axis and slide along
@@ -28,7 +28,7 @@ type placement struct {
 // side it shrinks on that axis (GtkPopover's resize), its content
 // giving way, rather than leave the output. The shadow gutter rides
 // on every side, so only the opening axis needs an offset to put the
-// content, not the gutter, against the anchor.
+// content, not the gutter, the Gap away from the anchor.
 func placementFor(cfg Config) placement {
 	const (
 		slideX  = xdg.PositionerConstraintAdjustmentSlideX
@@ -46,7 +46,7 @@ func placementFor(cfg Config) placement {
 			adjust:  slideX | slideY | flipY,
 		}
 	}
-	g := int32(cfg.Gutter)
+	g := int32(cfg.Gutter - cfg.Gap)
 	p := placement{rect: cfg.AnchorRect}
 	switch cfg.Gravity {
 	case GravityTop:

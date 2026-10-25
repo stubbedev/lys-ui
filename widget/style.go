@@ -1074,6 +1074,17 @@ func StylesBackground(w Widget) bool {
 	return v.Has(style.PropBackgroundColor) || hasBoxLayers(v)
 }
 
+// InkOutset is how far w paints outside its bounds: its box shadows,
+// outline, border image and filters. A surface whose card w is
+// reserves that room around it.
+func InkOutset(w Widget) render.Insets {
+	n := nodeOf(w)
+	if n == nil {
+		return render.Insets{}
+	}
+	return inkOf(n.style(w))
+}
+
 // CascadeColor resolves the widget's computed color: the CSS `color`,
 // inherited down the tree, which the canvas-drawn primitives take as
 // their ink (the progress ring's stroke). Zero paints nothing — the

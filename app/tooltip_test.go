@@ -248,15 +248,15 @@ func TestTooltipOptions(t *testing.T) {
 	if o.delay() != tooltipDelay {
 		t.Error("default delay")
 	}
-	if x, y := o.offset(); x != tooltipOffsetX || y != tooltipOffsetY {
-		t.Error("default offset")
+	if o.gap() != tooltipGap {
+		t.Error("default gap")
 	}
-	o = TooltipOptions{Delay: time.Second, OffsetY: 4, MaxWidth: 600}
+	o = TooltipOptions{Delay: time.Second, Gap: 8, MaxWidth: 600}
 	if w, h := o.maxSize(); w != 600 || h != tooltipMaxH {
 		t.Errorf("max size %dx%d", w, h)
 	}
-	if x, y := o.offset(); x != tooltipOffsetX || y != 4 {
-		t.Errorf("offset %d,%d", x, y)
+	if o.gap() != 8 {
+		t.Errorf("gap %d", o.gap())
 	}
 	tc := &tooltipCtl{delay: o.Delay}
 	if tc.dwell() != time.Second || (&tooltipCtl{}).dwell() != tooltipDelay {
@@ -346,19 +346,40 @@ func TestTooltipOpenedAcrossAPressIsDismissed(t *testing.T) {
 	}
 }
 
-// A tooltip centers under the widget it describes, or under the part a
+// A tooltip anchors on the widget it describes, or on the part a
 // TooltipAnchorer names, not at the pointer: it opened 12px right of
 // and 22px under wherever the pointer rested, off to one side of its
 // trigger.
-func TestTooltipCentersUnderItsWidget(t *testing.T) {
+func TestTooltipAnchorsOnItsWidget(t *testing.T) {
+	window := render.Rect{W: 640, H: 480}
 	btn := widget.NewButton(widget.NewSpacer(40, 20), 0, 0)
 	btn.Arrange(render.Rect{X: 100, Y: 50, W: 80, H: 36})
-	size := widget.Size{W: 60, H: 24}
-	if x, y := tooltipOrigin(btn, size, 170, 80); x != 100+40-30 || y != 50+36 {
-		t.Errorf("tooltip at (%d,%d), want (110,86): centered under the button", x, y)
+	if r := tooltipAnchor(btn, 170, 80, window); r != btn.Bounds() {
+		t.Errorf("tooltip anchor %v, want the button's %v", r, btn.Bounds())
 	}
-	if x, y := tooltipOrigin(anchorAt{widget.NewBox(widget.Row, 0, 0), render.Rect{X: 10, Y: 10, W: 20, H: 20}}, size, 0, 0); x != 10+10-30 || y != 30 {
-		t.Errorf("anchored tooltip at (%d,%d), want (-10,30): centered under the anchor", x, y)
+	day := render.Rect{X: 10, Y: 10, W: 20, H: 20}
+	if r := tooltipAnchor(anchorAt{widget.NewBox(widget.Row, 0, 0), day}, 0, 0, window); r != day {
+		t.Errorf("anchored tooltip on %v, want the named part %v", r, day)
+	}
+}
+
+// A widget taller than the output anchored its tooltip below its own
+// bottom edge, off the output, and the compositor slid the card back
+// up over the pointer, where it swallowed the pointer's wheel on
+// Hyprland. A tall widget's anchor is the band of it around the
+// pointer, clipped to the window as the positioner requires.
+func TestTooltipOfATallWidgetAnchorsByThePointer(t *testing.T) {
+	window := render.Rect{W: 640, H: 480}
+	list := widget.NewBox(widget.Column, 0, 0)
+	list.Arrange(render.Rect{X: 20, Y: 100, W: 300, H: 2000})
+	want := render.Rect{X: 20, Y: 200 - tooltipReach, W: 300, H: 2 * tooltipReach}
+	if r := tooltipAnchor(list, 150, 200, window); r != want {
+		t.Errorf("tall widget's anchor %v, want the band %v around the pointer", r, want)
+	}
+	list.Arrange(render.Rect{X: -50, Y: 400, W: 800, H: 2000})
+	want = render.Rect{X: 0, Y: 400, W: 640, H: 410 + tooltipReach - 400}
+	if r := tooltipAnchor(list, 150, 410, window); r != want {
+		t.Errorf("anchor %v, want %v clipped to the widget and the window", r, want)
 	}
 }
 

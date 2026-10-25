@@ -20,21 +20,21 @@ type TooltipOptions struct {
 	// Delay is how long the pointer rests on a widget before its
 	// tooltip opens.
 	Delay time.Duration
-	// OffsetX and OffsetY shift the card from its place centered under
-	// the hovered widget (its TooltipAnchor when it names one): right
-	// and down, OffsetY the gap below it.
-	OffsetX, OffsetY int
+	// Gap is the distance between the card and what it describes.
+	Gap int
 	// MaxWidth and MaxHeight cap the card; longer text wraps or clips.
 	MaxWidth, MaxHeight int
 }
 
 // Tooltip defaults.
 const (
-	tooltipDelay   = 500 * time.Millisecond
-	tooltipOffsetX = 0
-	tooltipOffsetY = 4
-	tooltipMaxW    = 400
-	tooltipMaxH    = 200
+	tooltipDelay = 500 * time.Millisecond
+	tooltipGap   = 4
+	tooltipMaxW  = 400
+	tooltipMaxH  = 200
+	// tooltipReach is how far above and below the pointer a tall
+	// widget's tooltip anchor reaches.
+	tooltipReach = 32
 )
 
 // orDefault is v, or def when v is zero.
@@ -48,9 +48,7 @@ func orDefault[T comparable](v, def T) T {
 
 func (o TooltipOptions) delay() time.Duration { return orDefault(o.Delay, tooltipDelay) }
 
-func (o TooltipOptions) offset() (int, int) {
-	return orDefault(o.OffsetX, tooltipOffsetX), orDefault(o.OffsetY, tooltipOffsetY)
-}
+func (o TooltipOptions) gap() int { return orDefault(o.Gap, tooltipGap) }
 
 func (o TooltipOptions) maxSize() (int, int) {
 	return orDefault(o.MaxWidth, tooltipMaxW), orDefault(o.MaxHeight, tooltipMaxH)
@@ -203,11 +201,15 @@ func cursorFor(hover widget.Widget) string {
 	return widget.CursorNameOf(hover)
 }
 
-// tooltipOrigin is where a tooltip of size sits before its offsets:
-// centered under the hovered widget, or its TooltipAnchor, the way a
-// reference tooltip sits under its trigger; under the pointer for a
-// widget that reports no bounds.
-func tooltipOrigin(hover widget.Widget, size widget.Size, pointerX, pointerY int) (int, int) {
+// tooltipAnchor is the rect a tooltip opens centered under, or above
+// when the output has no room below: the hovered widget, or the part
+// of it a TooltipAnchorer names, clipped to the window. A widget
+// taller than twice tooltipReach anchors on its band around the
+// pointer, so the card opens by the pointer and the compositor never
+// has to slide it over the pointer; a widget without bounds anchors on
+// the pointer.
+func tooltipAnchor(hover widget.Widget, pointerX, pointerY int, window render.Rect) render.Rect {
+	at := render.Rect{X: pointerX, Y: pointerY, W: 1, H: 1}
 	var r render.Rect
 	switch h := hover.(type) {
 	case widget.TooltipAnchorer:
@@ -215,9 +217,15 @@ func tooltipOrigin(hover widget.Widget, size widget.Size, pointerX, pointerY int
 	case widget.Boundser:
 		r = h.Bounds()
 	default:
-		return pointerX - size.W/2, pointerY
+		return at
 	}
-	return r.X + r.W/2 - size.W/2, r.Y + r.H
+	if r.H > 2*tooltipReach && pointerY >= r.Y && pointerY < r.Y+r.H {
+		r = r.Intersect(render.Rect{X: r.X, Y: pointerY - tooltipReach, W: r.W, H: 2 * tooltipReach})
+	}
+	if r = r.Intersect(window); r.Empty() {
+		return at
+	}
+	return r
 }
 
 // openTooltip maps a tooltip popup under the widget it describes, parented like a
@@ -244,17 +252,14 @@ func openTooltip(sess *wlsession.Session, host Host, face *render.Typeface, opts
 	box := widget.NewTooltipCard(face, text, markup)
 	maxW, maxH := opts.maxSize()
 	size := box.Measure(widget.Constraints{Max: widget.Size{W: maxW, H: maxH}})
-	// The shadow gutter rides on the surface (see OpenPopover): the
-	// tooltip's plate is inset by it and the pointer offset stays on
-	// the plate.
-	gutter := widget.Current().ShadowGutter()
-	dx, dy := opts.offset()
-	x, y := tooltipOrigin(hover, size, pointerX, pointerY)
+	gutter := widget.InkOutset(box).Max()
+	winW, winH := host.Size()
+	anchor := tooltipAnchor(hover, pointerX, pointerY, render.Rect{W: winW, H: winH})
 	tp, err := popup.New(sess, popup.Config{
 		Parent:      xdgParent,
 		LayerParent: layerParent,
-		X:           x + dx - gutter,
-		Y:           y + dy - gutter,
+		AnchorRect:  anchor,
+		Gap:         opts.gap(),
 		Width:       size.W + 2*gutter, Height: size.H + 2*gutter,
 		Gutter:  gutter,
 		NoGrab:  true,
@@ -272,6 +277,6 @@ func openTooltip(sess *wlsession.Session, host Host, face *render.Typeface, opts
 	// the region (double-buffered state persists until changed).
 	tp.SealInput()
 	painter := tp.NewPainter(sess, frac120, box, widget.Current().Surface)
-	debug.Log("input", "tooltip open %q at (%d,%d)", text, pointerX, pointerY)
+	debug.Log("input", "tooltip open %q under %+v", text, anchor)
 	return tp, painter
 }
