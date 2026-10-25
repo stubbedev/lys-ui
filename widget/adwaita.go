@@ -224,7 +224,7 @@ func controlRules() [][2]string {
 		{"checkbutton:checked check, checkbutton:indeterminate check", "border-color: @accent_bg_color; background-color: @accent_bg_color; color: @accent_fg_color;"},
 		{"checkbutton:checked radio", "color: @accent_bg_color;"},
 		{"checkbutton > :not(check)", "margin-left: 8px;"},
-		{"scale slider", "background-color: white; box-shadow: inset 0px 0px 0px 1px @accent_bg_color, 0px 1px 2px alpha(black, 0.05);"},
+		{"scale slider", "background-color: white; border: 1px solid @accent_bg_color; box-shadow: 0px 1px 3px alpha(black, 0.4);"},
 		{"entry, spinbutton, textview", "box-shadow: inset 0px 0px 0px 1px @input_border_color; border-radius: {r}; background-color: transparent;"},
 		{"textview", "min-height: 64px;"},
 		{"entry:focus, spinbutton:focus, textview:focus", "box-shadow: inset 0px 0px 0px 1px @ring_color;"},
