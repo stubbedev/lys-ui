@@ -34,7 +34,7 @@ func (p surfaceHost) OpenMenu(anchor widget.Boundser, face render.Font, sizePx f
 func (p surfaceHost) OpenPopover(anchor widget.Boundser, content widget.Widget, opts widget.PopoverOptions) func() {
 	pop, err := p.a.OpenPopover(p.host, PopoverConfig{
 		Anchor: anchor, Content: content, Focus: opts.Focus, Parent: p.parent,
-		NoAutohide: opts.NoGrab, OnClosed: opts.OnClosed, Gap: opts.Gap, Gravity: gravityOf(opts.Side),
+		NoAutohide: opts.NoGrab, OnClosed: opts.OnClosed, Gap: opts.Gap, Gravity: GravityOf(opts.Side),
 	})
 	if err != nil {
 		p.a.reportPopup(fmt.Errorf("app: open a widget's popover: %w", err))
@@ -43,8 +43,10 @@ func (p surfaceHost) OpenPopover(anchor widget.Boundser, content widget.Widget, 
 	return pop.Dismiss
 }
 
-// gravityOf is the popup gravity of a widget popover side.
-func gravityOf(s widget.PopoverSide) Gravity {
+// GravityOf is the popup gravity a widget popover side opens on, for a
+// PopoverConfig opened directly: a bar's popover away from its edge is
+// GravityOf(bar.Edge().PopoverSide()).
+func GravityOf(s widget.PopoverSide) Gravity {
 	switch s {
 	case widget.PopoverAbove:
 		return GravityTop
