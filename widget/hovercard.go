@@ -105,7 +105,7 @@ func (h *HoverCard) show() {
 	if h.Open() {
 		return
 	}
-	h.close = OpenPopover(h, h, h.body, PopoverOptions{NoGrab: true, OnClosed: func() { h.close = nil }})
+	h.close = OpenPopover(h, h, h.body, PopoverOptions{NoGrab: true, Gap: popoverGap, OnClosed: func() { h.close = nil }})
 }
 
 // hide closes the card.

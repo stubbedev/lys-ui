@@ -34,7 +34,7 @@ func (p surfaceHost) OpenMenu(anchor widget.Boundser, face render.Font, sizePx f
 func (p surfaceHost) OpenPopover(anchor widget.Boundser, content widget.Widget, opts widget.PopoverOptions) func() {
 	pop, err := p.a.OpenPopover(p.host, PopoverConfig{
 		Anchor: anchor, Content: content, Focus: opts.Focus, Parent: p.parent,
-		NoAutohide: opts.NoGrab, OnClosed: opts.OnClosed,
+		NoAutohide: opts.NoGrab, OnClosed: opts.OnClosed, Gap: opts.Gap,
 	})
 	if err != nil {
 		p.a.reportPopup(fmt.Errorf("app: open a widget's popover: %w", err))

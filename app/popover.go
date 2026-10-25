@@ -39,6 +39,9 @@ type PopoverConfig struct {
 	Anchor widget.Boundser
 	// Gravity picks the side; zero opens below the anchor.
 	Gravity Gravity
+	// Gap is the distance between the anchor and the popover, kept
+	// on whichever side the compositor places it.
+	Gap int
 	// Content is the popover's widget tree (a Menu is the common
 	// case). Content that sets no layout motion of its own gets a
 	// smooth one, so when it grows while open the popover springs to
@@ -413,6 +416,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		Width:      size.W + 2*gutter, Height: size.H + 2*gutter,
 		Gutter:  gutter,
 		Gravity: cfg.Gravity,
+		Gap:     cfg.Gap,
 		NoGrab:  cfg.NoAutohide && parent == nil,
 		// The theme's plate yields to a stylesheet that styles the
 		// popover's background, as GTK leaves a popover's look to CSS.

@@ -59,7 +59,12 @@ type PopoverOptions struct {
 	NoGrab bool
 	// OnClosed runs once the popover is gone, however it closed.
 	OnClosed func()
+	// Gap is the distance between the anchor and the popover.
+	Gap int
 }
+
+// popoverGap is the distance a widget's popover keeps from its trigger.
+const popoverGap = 4
 
 // OpenPopover opens content in a popover beside anchor through the
 // host of from's tree, and returns what closes it. The popover's own

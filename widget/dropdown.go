@@ -266,7 +266,7 @@ func (d *Dropdown) Open() {
 	list := d.newList()
 	list.SetSizeRequest(d.bounds.W, 0)
 	d.list = list
-	d.closeList = OpenPopover(d, d, list, PopoverOptions{Focus: list, OnClosed: func() { d.listClosed(list) }})
+	d.closeList = OpenPopover(d, d, list, PopoverOptions{Focus: list, Gap: popoverGap, OnClosed: func() { d.listClosed(list) }})
 	d.Invalidate()
 }
 
