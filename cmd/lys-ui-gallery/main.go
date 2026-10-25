@@ -312,11 +312,11 @@ func (g *gallery) radioGroup() ui.Node {
 
 // scrollArea is the Scroll Area demo: a fixed box of tags.
 func (g *gallery) scrollArea() ui.Node {
-	tags := make([]ui.Node, 0, 50)
+	tags := []ui.Node{ui.Label("Tags").Classes(css.Heading)}
 	for i := 50; i > 0; i-- {
-		tags = append(tags, ui.Label("v1.2.0-beta."+strconv.Itoa(i)))
+		tags = append(tags, ui.Label("v1.2.0-beta."+strconv.Itoa(i)), ui.Separator(widget.Horizontal))
 	}
-	return ui.Scroll(ui.Column(tags...).Spacing(8).Padding(render.UniformInsets(16))).VerticalOnly(true).MaxContentHeight(240).SizeRequest(200, 0).Classes(css.Card)
+	return ui.Scroll(ui.Column(tags...).Spacing(8).Padding(render.UniformInsets(16))).VerticalOnly(true).MaxContentHeight(288).SizeRequest(192, 0).Classes("bordered")
 }
 
 // sidebarDemo is the Sidebar section: a sidebar collapsing to an icon
@@ -358,9 +358,11 @@ func (g *gallery) datePickers(first **widget.DatePicker) ui.Node {
 }
 
 // galleryCSS styles the gallery's own pieces: the context menu's
-// dashed drop zone, the hover card's and the popover's widths.
+// dashed drop zone, the bordered demo frames, the hover card's and the
+// popover's widths.
 const galleryCSS = `
 .drop-zone { border: 1px dashed @borders; border-radius: 8px; padding: 48px; }
+.bordered { border: 1px solid @borders; border-radius: 8px; }
 .hovercard-content { width: 320px; padding: 16px; }
 .popover-demo { width: 320px; }
 .sidebar-demo { min-height: 360px; border: 1px solid @borders; border-radius: 8px; }
@@ -451,6 +453,11 @@ func (g *gallery) form(send func(galleryMsg)) ui.Node {
 			ui.Label("").Classes(css.Muted).WatchText(func() string { return g.status }),
 		).Spacing(16),
 	).Spacing(24)
+}
+
+// pane is a Resizable demo pane: its name centered in it.
+func pane(name string) ui.Node {
+	return ui.Label(name).Classes(css.Heading).HAlign(widget.AlignCenter).VAlign(widget.AlignCenter)
 }
 
 // carousel is the carousel demo: five numbered slides.
@@ -629,7 +636,10 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 		section("Popover", ui.Aligned(ui.Button(ui.Label("Open popover"), 0, 0).Classes(css.Outline).Ref(&g.popoverButton).OnClick(g.popover), widget.AlignStart)).opens(click, center(&g.popoverButton)),
 		section("Progress", ui.Aligned(ui.ProgressBar(0.66).SizeRequest(360, 0), widget.AlignStart)),
 		section("Radio Group", g.radioGroup()),
-		section("Resizable", ui.Column(ui.Expand(ui.Paned(widget.Row, ui.Label("One").HAlign(widget.AlignCenter), ui.Label("Two").HAlign(widget.AlignCenter)).Position(200))).SizeRequest(0, 160).Classes(css.Card)),
+		section("Resizable", ui.Aligned(ui.Column(ui.Expand(ui.Paned(widget.Row,
+			pane("One"),
+			ui.Paned(widget.Column, pane("Two"), pane("Three")).Position(56),
+		).Position(224))).SizeRequest(448, 200).Classes("bordered"), widget.AlignStart)),
 		section("Scroll Area", ui.Aligned(g.scrollArea(), widget.AlignStart)),
 		section("Select", ui.Aligned(ui.Dropdown([]string{"Apple", "Banana", "Blueberry", "Grapes", "Pineapple"}, 0).Ref(&selectMenu), widget.AlignStart)).opens(click, center(&selectMenu)).room(320, 320),
 		section("Separator", ui.Column(
