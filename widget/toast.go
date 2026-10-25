@@ -22,14 +22,16 @@ const (
 	toastPadX = 16
 	toastPadY = 16
 	toastGap  = 12
+	// toastLineGap separates the title from the description under it.
+	toastLineGap = 2
 	// toastBtnPadX insets the action label inside its hit rect.
 	toastBtnPadX   = 8
 	toastBtnPadY   = 4
 	toastBtnRadius = 4
 )
 
-// Toast is a transient feedback card: one line of text, an optional
-// action button, an auto-dismiss timer that hover pauses (hovering
+// Toast is a transient feedback card: a line of text, an optional
+// muted description under it, an optional action button, an auto-dismiss timer that hover pauses (hovering
 // cancels the pending dismissal — even a mid-exit toast snaps back —
 // and leaving arms a fresh full timeout), and a slide-and-fade
 // entrance plus fade-out exit, all on the animation clock. A toast out
@@ -42,6 +44,7 @@ type Toast struct {
 	node
 	face    render.Font
 	text    string
+	desc    string
 	sizePx  float64
 	timeout time.Duration
 
@@ -90,6 +93,29 @@ func (t *Toast) SetText(text string) {
 	}
 	t.text = text
 	t.InvalidateLayout()
+}
+
+// Description returns the line under the text, empty when there is
+// none.
+func (t *Toast) Description() string { return t.desc }
+
+// SetDescription sets the muted line under the text; empty removes it.
+func (t *Toast) SetDescription(desc string) {
+	if t.desc == desc {
+		return
+	}
+	t.desc = desc
+	t.InvalidateLayout()
+}
+
+// textHeight is the text block's height: the line, and the description
+// under it when there is one.
+func (t *Toast) textHeight() int {
+	h := t.face.Shape(t.text, t.sizePx).LineHeight()
+	if t.desc != "" {
+		h += toastLineGap + t.face.Shape(t.desc, t.sizePx).LineHeight()
+	}
+	return h
 }
 
 // SetAction attaches the optional action button; an empty label
@@ -343,9 +369,8 @@ func (t *Toast) Measure(con Constraints) Size {
 	w := 2 * toastPadX
 	h := 2 * toastPadY
 	if t.face != nil {
-		sh := t.face.Shape(t.text, t.sizePx)
-		w += int(sh.Advance() + 0.5)
-		h += sh.LineHeight()
+		w += int(max(t.face.Shape(t.text, t.sizePx).Advance(), t.face.Shape(t.desc, t.sizePx).Advance()) + 0.5)
+		h += t.textHeight()
 	}
 	if t.action != "" {
 		w += toastGap + t.actionWidth()
@@ -388,8 +413,13 @@ func (t *Toast) Paint(cv *render.Canvas) {
 		return
 	}
 	sh := t.face.Shape(t.text, t.sizePx)
-	baseline := card.Y + (card.H-sh.LineHeight())/2 + int(sh.Ascent()+0.5)
-	t.face.Draw(cv, sh, card.X+toastPadX, baseline, pickc(0, v, style.PropColor, th.Text))
+	top := card.Y + (card.H-t.textHeight())/2
+	t.face.Draw(cv, sh, card.X+toastPadX, top+int(sh.Ascent()+0.5), pickc(0, v, style.PropColor, th.Text))
+	if t.desc != "" {
+		top += sh.LineHeight() + toastLineGap
+		sh = t.face.Shape(t.desc, t.sizePx)
+		t.face.Draw(cv, sh, card.X+toastPadX, top+int(sh.Ascent()+0.5), th.TextMuted)
+	}
 	if t.action == "" {
 		return
 	}
@@ -401,7 +431,7 @@ func (t *Toast) Paint(cv *render.Canvas) {
 	}
 	cv.RoundedRect(rect, toastBtnRadius, fill)
 	sh = t.face.Shape(t.action, t.sizePx)
-	baseline = rect.Y + (rect.H-sh.LineHeight())/2 + int(sh.Ascent()+0.5)
+	baseline := rect.Y + (rect.H-sh.LineHeight())/2 + int(sh.Ascent()+0.5)
 	t.face.Draw(cv, sh, rect.X+toastBtnPadX, baseline, th.OnAccent)
 }
 

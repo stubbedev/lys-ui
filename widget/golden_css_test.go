@@ -172,6 +172,18 @@ func TestGoldenToast(t *testing.T) {
 	}
 }
 
+// TestGoldenToastDescription pins Sonner's two-line toast: the muted
+// description under the title, the block centered beside the action.
+func TestGoldenToastDescription(t *testing.T) {
+	face := goldenFace(t)
+	for _, shot := range bothPalettes("toast-description") {
+		toast := NewToast(face, "Event has been created", 0)
+		toast.SetDescription("Sunday, December 03, 2023 at 9:00 AM")
+		toast.SetAction("Undo", func() {})
+		NewGolden(t, toast, shot.name, goldenTheme(shot.th), goldenAfterArrange(func() { toast.progress = 1 }))
+	}
+}
+
 func TestGoldenCSSToastShadow(t *testing.T) {
 	face := goldenFace(t)
 	toast := NewToast(face, "saved", 0)

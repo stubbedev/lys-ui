@@ -225,3 +225,21 @@ func TestToastActionClick(t *testing.T) {
 		}
 	})
 }
+
+// A description is a second line under the text: the card grows by it
+// and is as wide as the longer line; clearing it restores the card.
+func TestToastDescriptionLine(t *testing.T) {
+	face := testFace(t)
+	toast := NewToast(face, "Saved", 0)
+	one := toast.Measure(Constraints{Max: Size{W: 1000, H: 1000}})
+	toast.SetDescription("Sunday, December 03, 2023 at 9:00 AM")
+	two := toast.Measure(Constraints{Max: Size{W: 1000, H: 1000}})
+	line := face.Shape(toast.Description(), toast.sizePx)
+	if two.H != one.H+toastLineGap+line.LineHeight() || two.W != 2*toastPadX+int(line.Advance()+0.5) {
+		t.Errorf("with a description %v, want %v grown by a line and as wide as it", two, one)
+	}
+	toast.SetDescription("")
+	if got := toast.Measure(Constraints{Max: Size{W: 1000, H: 1000}}); got != one {
+		t.Errorf("cleared description %v, want %v", got, one)
+	}
+}
