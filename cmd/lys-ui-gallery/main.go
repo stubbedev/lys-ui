@@ -296,9 +296,13 @@ func (g *gallery) dialog() {
 
 // toast shows the Sonner demo.
 func (g *gallery) toast() {
-	if _, err := g.app.ShowToast("Event has been created", 4*time.Second, nil); err != nil {
+	toast, err := g.app.ShowToast("Event has been created", 4*time.Second, nil)
+	if err != nil {
 		log.Printf("lys-ui-gallery: toast: %v", err)
+		return
 	}
+	toast.SetDescription("Sunday, October 25, 2026 at 9:00 AM")
+	toast.SetAction("Undo", func() {})
 }
 
 // radioGroup is the Radio Group demo.

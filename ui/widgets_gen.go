@@ -7679,6 +7679,18 @@ func (b *ToastBuilder) Action(label string, arg func()) *ToastBuilder {
 	return b
 }
 
+// Description calls (*widget.Toast).SetDescription.
+func (b *ToastBuilder) Description(desc string) *ToastBuilder {
+	b.do(func(s *Scope, w *widget.Toast) { w.SetDescription(desc) })
+	return b
+}
+
+// WatchDescription re-applies SetDescription with get's value after every update.
+func (b *ToastBuilder) WatchDescription(get func() string) *ToastBuilder {
+	b.watch(func(w *widget.Toast) { w.SetDescription(get()) })
+	return b
+}
+
 // Text calls (*widget.Toast).SetText.
 func (b *ToastBuilder) Text(text string) *ToastBuilder {
 	b.do(func(s *Scope, w *widget.Toast) { w.SetText(text) })
