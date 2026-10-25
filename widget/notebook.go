@@ -119,6 +119,9 @@ type notebookStrip struct {
 	height            int
 	tabX, tabW        []int
 	total             int
+	// natural is the strip's natural width: the tabs and the boxes
+	// around them.
+	natural int
 }
 
 // NewNotebook returns an empty notebook with tab labels painted in the
@@ -395,7 +398,9 @@ func (n *Notebook) Measure(con Constraints) Size {
 		best.W = max(best.W, s.W)
 		best.H = max(best.H, s.H)
 	}
-	best.H += n.layoutStrip(render.Rect{W: con.Max.W}).height
+	strip := n.layoutStrip(render.Rect{W: con.Max.W})
+	best.W = max(best.W, strip.natural)
+	best.H += strip.height
 	return n.measureStore(con, clampSize(best, con))
 }
 
@@ -441,6 +446,7 @@ func (n *Notebook) layoutStrip(r render.Rect) notebookStrip {
 	tb := boxOf(n.header.tabs.style(&n.header.tabs), render.Insets{})
 	ho, to := hb.outer(), tb.outer()
 	s.height = ho.Top + ho.Bottom + to.Top + to.Bottom + rowH
+	s.natural = ho.Left + ho.Right + to.Left + to.Right + s.total
 	var inHeader render.Rect
 	s.header, inHeader = boxRects(hb, render.Rect{X: r.X, Y: r.Y, W: r.W, H: s.height})
 	s.tabs, s.row = boxRects(tb, inHeader)

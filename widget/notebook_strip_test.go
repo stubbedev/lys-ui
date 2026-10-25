@@ -128,3 +128,17 @@ func TestNotebookTabExpand(t *testing.T) {
 		t.Errorf("SetTabExpand left the row ending at %d", last.X+last.W)
 	}
 }
+
+// A notebook is at least as wide as its tab strip: its natural width
+// was the widest page's, so a notebook of short pages, aligned to its
+// natural size, measured narrower than its own tabs (#281).
+func TestNotebookNaturalWidthHoldsItsTabs(t *testing.T) {
+	face := goldenFace(t)
+	n := NewNotebook(face)
+	n.AppendTab("Account", NewLabel(face, 14, "x", 0))
+	n.AppendTab("Password", NewLabel(face, 14, "y", 0))
+	got := n.Measure(Constraints{Max: Size{W: 1000, H: 400}})
+	if strip := n.layoutStrip(render.Rect{W: 1000}); got.W < strip.total {
+		t.Errorf("natural width %d, narrower than its tabs' %d", got.W, strip.total)
+	}
+}
