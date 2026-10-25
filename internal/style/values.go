@@ -886,6 +886,10 @@ type Scalars struct {
 	// LineHeight is the computed line-height in pixels; 0 is `normal`,
 	// the font's own line box.
 	LineHeight float64
+	// LineHeightFactor is the unitless number line-height was given,
+	// 0 for normal, a length or a percentage: a number inherits as
+	// itself, so each element resolves it against its own font-size.
+	LineHeightFactor float64
 	// Features is the font-feature-settings tag list in canonical form
 	// (`on=1;ss01=0;tnum=1`, sorted); empty is `normal`. The text
 	// shaper honors the tags it knows (tnum today).

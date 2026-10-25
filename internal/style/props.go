@@ -1122,31 +1122,41 @@ func parseFontSize(ts []token, cx *ctx, v *Values) bool {
 // length, percentage, or unitless number resolved against the computed
 // font-size into pixels.
 func parseLineHeight(ts []token, cx *ctx, v *Values) bool {
-	comps := components(ts)
-	if len(comps) != 1 {
+	// One component, iterated rather than collected: a number
+	// resolves against each element's font-size, so this parses per
+	// node.
+	var comp []token
+	n := 0
+	for c := range eachComponent(ts) {
+		comp = c
+		n++
+	}
+	if n != 1 {
 		return false
 	}
-	if comps[0][0].ident("normal") {
-		v.LineHeight = 0
+	if comp[0].ident("normal") {
+		v.LineHeight, v.LineHeightFactor = 0, 0
 		return true
 	}
-	n, ok := evalNumeric(comps[0], cx)
+	num, ok := evalNumeric(comp, cx)
 	if !ok {
 		return false
 	}
-	switch n.kind {
+	factor := 0.0
+	switch num.kind {
 	case numNumber:
-		n.v = cx.emPx() * n.v
+		factor = num.v
+		num.v = cx.emPx() * num.v
 	case numPercent:
-		n.v = cx.emPx() * n.v / 100
+		num.v = cx.emPx() * num.v / 100
 	case numLength:
 	default:
 		return false
 	}
-	if n.v < 0 || n.v > 1<<14 {
+	if num.v < 0 || num.v > 1<<14 {
 		return false
 	}
-	v.LineHeight = n.v
+	v.LineHeight, v.LineHeightFactor = num.v, factor
 	return true
 }
 
@@ -1640,7 +1650,7 @@ func lighterWeight(w int) int {
 // initial values, line-height to normal.
 func parseFont(ts []token, cx *ctx, v *Values) bool {
 	comps := components(ts)
-	v.Italic, v.FontWeight, v.LineHeight = false, 400, 0
+	v.Italic, v.FontWeight, v.LineHeight, v.LineHeightFactor = false, 400, 0, 0
 	i := 0
 	for ; i < len(comps); i++ {
 		if parseFontStyle(comps[i], cx, v) && !comps[i][0].ident("normal") {

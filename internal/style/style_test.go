@@ -945,12 +945,18 @@ func TestLineHeight(t *testing.T) {
 	if got := computeTree(s, el("label", "none")).LineHeight; got != 0 {
 		t.Errorf("line-height: normal = %v, want 0 (the font's own box)", got)
 	}
-	// Inherited: the span reads the parent label's line-height even with
-	// its own font-size; an explicit normal on the parent clears it.
+	// Inherited: a unitless number inherits as the number, so the span
+	// resolves it against its own 12px (it took the label's 40px); a
+	// percentage inherits as the label's computed length. An explicit
+	// normal on the parent clears it.
 	root := el("label")
 	kid := root.add("span")
-	if got := computeTree(s, kid).LineHeight; got != 40 {
-		t.Errorf("inherited line-height = %v, want 40", got)
+	if got := computeTree(s, kid).LineHeight; got != 24 {
+		t.Errorf("inherited line-height: 2 at 12px = %v, want 24", got)
+	}
+	pct := el("label", "wrap")
+	if got := computeTree(s, pct.add("span")).LineHeight; got != 30 {
+		t.Errorf("inherited line-height: 150%% = %v, want the parent's 30", got)
 	}
 	normal := parseOne(t, "label { line-height: normal; }")
 	if got := computeTree(normal, kid).LineHeight; got != 0 {

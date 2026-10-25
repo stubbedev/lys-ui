@@ -124,6 +124,10 @@ func (sc *Scratch) computeAll(layers []Layer, n Node, parent, old *Values, env E
 	blocked = blocked.Or(sc.computeProp(PropLineHeight, v, pv, cx))
 	if v.Has(PropLineHeight) {
 		cx.lh = v.LineHeight
+	} else if pv.LineHeightFactor > 0 {
+		// An inherited number resolves against this element's
+		// font-size, for the lh unit as for the property.
+		cx.lh = pv.LineHeightFactor * cx.emPx()
 	}
 	if cx.lh == 0 {
 		cx.lh = fontRatio(cx.font.LineHeight, fallbackLH) * cx.em
@@ -140,6 +144,9 @@ func (sc *Scratch) computeAll(layers []Layer, n Node, parent, old *Values, env E
 	v.Own = v.Set
 	inherit := inheritedProps.AndNot(v.Set).AndNot(blocked).And(pv.Set)
 	inherit.Each(func(p Prop) { copyProp(v, pv, p) })
+	if inherit.Has(PropLineHeight) && v.LineHeightFactor > 0 {
+		v.LineHeight = cx.lh
+	}
 	v.Set = v.Set.Or(inherit)
 	v.QuoteDepth = pv.QuoteDepth
 	sc.applyMeta(v, pv, cx, n)
@@ -1011,7 +1018,7 @@ func copyProp(dst, src *Values, p Prop) {
 	case PropLetterSpacing:
 		dst.LetterSpacing = src.LetterSpacing
 	case PropLineHeight:
-		dst.LineHeight = src.LineHeight
+		dst.LineHeight, dst.LineHeightFactor = src.LineHeight, src.LineHeightFactor
 	case PropFontFeatures:
 		dst.Features = src.Features
 	case PropFontVariations:

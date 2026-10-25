@@ -559,6 +559,17 @@ var confText = []confCase{
 		want: []confCheck{wantComputed("t", cpTxtLineHeight, 0.0)},
 	},
 	{
+		name: "a line-height number inherits as the number",
+		spec: "css-inline-3 §5.1 (line-height: computed value)",
+		css:  `#c { line-height: 1.5; font-size: 10px; } #big, #pctbig { font-size: 20px; } #pct { line-height: 150%; font-size: 10px; }`,
+		tree: nCol("#c", nText("#big", "x"), nText("#small", "x"), nCol("#pct", nText("#pctbig", "x"))),
+		want: []confCheck{
+			wantComputed("big", cpTxtLineHeight, 30.0),
+			wantComputed("small", cpTxtLineHeight, 15.0),
+			wantComputed("pctbig", cpTxtLineHeight, 15.0),
+		},
+	},
+	{
 		name: "line-height number and percentage",
 		spec: "css-inline-3 §5.1 (line-height)",
 		css:  `#a { line-height: 1.5; } #b { line-height: 150%; font-size: 20px; }`,
