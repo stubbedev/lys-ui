@@ -22,7 +22,7 @@ const comboboxWidth = 200
 
 // Combobox picks typed values from a searchable list (shadcn/ui's
 // Combobox): an outline button showing the selection that opens a
-// Command of the options in a popover, a check beside each selected
+// Command of the options in a popover, a check trailing each selected
 // one. A single-choice combobox closes on a pick, and picking the
 // selected option clears it; a multiple-choice one toggles the picked
 // option and stays open. It styles as the `combobox` element: the
@@ -120,7 +120,7 @@ func (c *Combobox[T]) open() {
 		check := NewBox(Column, 0, 0)
 		check.SetSizeRequest(16, 16)
 		c.checks = append(c.checks, check)
-		items[i] = CommandItem{Label: o.Label, Icon: check, OnSelect: func() { c.pick(o.Value) }}
+		items[i] = CommandItem{Label: o.Label, Trailing: check, OnSelect: func() { c.pick(o.Value) }}
 	}
 	list := NewCommand(c.face, "Search...", CommandGroup{Items: items})
 	list.SetSizeRequest(max(comboboxWidth, c.trigger.Bounds().W), 0)

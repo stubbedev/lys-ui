@@ -101,3 +101,26 @@ func TestGoldenShadcnCombobox(t *testing.T) {
 		})
 	}
 }
+
+// An option's check trails its row, after the label, and the trigger
+// reads its placeholder in the button's own color: shadcn's combobox,
+// where the check sat in a leading slot that indented every option
+// and the placeholder was muted (#281).
+func TestComboboxCheckTrailsTheOption(t *testing.T) {
+	c, host := newTestCombobox(t)
+	c.trigger.OnClick()
+	content := host.popovers[len(host.popovers)-1]
+	SetStyleAnchor(content, c)
+	arrangeTree(t, content, 300, 300)
+	cmd := content.(*Box).Children()[0].(*Command)
+	row := cmd.rows[0].Children()
+	if row[len(row)-1] != Widget(c.checks[0]) {
+		t.Errorf("the first option's row ends with %T, want its check", row[len(row)-1])
+	}
+	if _, ok := row[0].(*Label); !ok {
+		t.Errorf("the first option's row starts with %T, want its label", row[0])
+	}
+	if got, muted := c.text.textColor(c.text.style(c.text)), Current().DisabledText(); got == muted {
+		t.Errorf("the placeholder reads muted %#x, want the trigger's color", uint32(got))
+	}
+}

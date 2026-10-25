@@ -16,6 +16,8 @@ type CommandItem struct {
 	Shortcut string
 	// Icon leads the row; nil shows none.
 	Icon Widget
+	// Trailing ends the row, after the shortcut; nil shows none.
+	Trailing Widget
 	// OnSelect runs when the item is picked.
 	OnSelect func()
 	// Disabled shows the item without letting it be picked.
@@ -142,6 +144,9 @@ func (c *Command) newRow(g int, it CommandItem) *commandRow {
 		sc := NewLabel(c.face, 12, it.Shortcut, 0)
 		sc.AddClass("shortcut")
 		r.AppendAligned(sc, false, AlignCenter)
+	}
+	if it.Trailing != nil {
+		r.AppendAligned(it.Trailing, false, AlignCenter)
 	}
 	r.SetEnabled(!it.Disabled)
 	return r
