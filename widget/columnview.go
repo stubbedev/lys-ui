@@ -97,7 +97,7 @@ func NewColumnView[T any](face render.Font, sizePx float64, model ColumnModel[T]
 	}
 	v.vm.setModel(model)
 	v.rows = &columnRows[T]{view: v}
-	v.list = NewList(v.rows, int(sizePx)+12)
+	v.list = NewList(v.rows, 0)
 	v.header = NewBox(Row, 0, 0)
 	v.header.AddClass("header")
 	column := NewBox(Column, 0, 0)

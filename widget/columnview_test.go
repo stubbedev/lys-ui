@@ -341,3 +341,16 @@ func TestColumnViewCellsAndTitles(t *testing.T) {
 		t.Errorf("column title %vpx, dimmed %v: want 14px in the text color", title.SizePx(), HasClass(title, css.DimLabel))
 	}
 }
+
+// A row is as tall as its padded cells and its rule: a fixed row
+// height clipped the cells' bottom padding, so each row's text sat on
+// the rule under it.
+func TestColumnViewRowsFitTheirCells(t *testing.T) {
+	face := viewFace(t)
+	v := NewColumnView(face, 14, SliceModel[tableRow]{{"a", 1}, {"b", 2}}, tableCols(face))
+	arrangeTree(t, v, 300, 200)
+	cell := NewLabel(face, 14, "a", 0).Measure(Constraints{Max: Size{W: 300, H: 200}})
+	if want := cell.H + 2*cellInsetY + 1; v.list.rowH < want {
+		t.Errorf("rows are %d tall, want at least %d for the padded cell and its rule", v.list.rowH, want)
+	}
+}
