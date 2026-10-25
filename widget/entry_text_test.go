@@ -42,7 +42,7 @@ func inked(data []byte, stride int, sz Size, col render.Color) (first, n int) {
 func near(a, b uint8) bool { return int(a)-int(b) < 40 && int(b)-int(a) < 40 }
 
 const entryNodesCSS = `
-	entry { padding: 0px 10px; border: 1px solid #202020; background-color: #000000; }
+	entry { padding: 0px 10px; border: 1px solid #202020; background-color: #000000; min-height: 0px; }
 	entry > text { padding: 4px 3px; margin: 0px 2px; color: #ff0000; }
 	entry > text > placeholder { color: #00ff00; }
 	entry > text > selection { background-color: #0000ff; color: #ffff00; }
@@ -149,7 +149,7 @@ func TestEntryTextMinHeightFloorsTheLine(t *testing.T) {
 	if h := e.Measure(Constraints{Max: Size{W: 400, H: 100}}).H; h != 40 {
 		t.Errorf("height %d, want the text node's 40px floor", h)
 	}
-	loadCSS(t, `entry { padding: 0px; } entry > text { min-height: 2px; }`)
+	loadCSS(t, `entry { padding: 0px; min-height: 0px; } entry > text { min-height: 2px; }`)
 	e = NewEntry(entryFace(t), 14, 0)
 	lg := entryFace(t).Shape("lg", 14)
 	if h := e.Measure(Constraints{Max: Size{W: 400, H: 100}}).H; h != int(lg.Ascent()+lg.Descent()+0.5) {

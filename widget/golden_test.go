@@ -337,9 +337,8 @@ func TestGoldenMenuHover(t *testing.T) {
 		MenuItem{Kind: ItemCheck, Label: "Word wrap", Checked: true},
 		MenuItem{Label: "Sort by", Items: []MenuItem{{Label: "Name"}}},
 	)
-	itemH := face.Shape("lg", 14).LineHeight() + 12
 	NewGolden(t, m, "menu-hover", goldenTheme(th),
-		goldenAfterArrange(func() { hoverMenuRow(m, itemH, 1) }))
+		goldenAfterArrange(func() { hoverMenuRow(m, 1) }))
 }
 
 // TestGoldenMenuMnemonics pins the mnemonic underlines (#63): explicit
@@ -358,16 +357,12 @@ func TestGoldenMenuMnemonics(t *testing.T) {
 	)
 	m.SetMnemonicsVisible(true)
 	NewGolden(t, m, "menu-mnemonics", goldenTheme(th),
-		goldenAfterArrange(func() { hoverMenuRow(m, face.Shape("lg", 14).LineHeight()+12, 1) }))
+		goldenAfterArrange(func() { hoverMenuRow(m, 1) }))
 }
 
 // hoverMenuRow moves the menu's hover to row i, the pointer resting on
-// a row mid-popup. itemH is the row height NewMenu derives from the
-// face: Shape("lg", sizePx).LineHeight() + 12.
-func hoverMenuRow(m *Menu, itemH, i int) {
-	bs := m.Bounds()
-	m.HoverMove(Point{X: bs.X + 12, Y: bs.Y + 4 + i*itemH + itemH/2})
-}
+// a row mid-popup.
+func hoverMenuRow(m *Menu, i int) { m.HoverMove(rowCenter(m, i)) }
 
 // TestGoldenPaned pins both orientations of the splitter (#71): the
 // themed handle bar at the arranged position and the panes laid around
@@ -496,9 +491,8 @@ func TestGoldenLightTheme(t *testing.T) {
 		MenuSeparator(),
 		MenuItem{Label: "Read-only action"},
 	)
-	itemH := face.Shape("lg", 14).LineHeight() + 12
 	NewGolden(t, menu, "menu-hover-light", light,
-		goldenAfterArrange(func() { hoverMenuRow(menu, itemH, 1) }))
+		goldenAfterArrange(func() { hoverMenuRow(menu, 1) }))
 
 	button := NewButton(NewLabel(face, 14, "Focused", th.Text), 10, 8)
 	column := NewBox(Column, 10, 4).

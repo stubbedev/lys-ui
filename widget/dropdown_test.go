@@ -20,8 +20,7 @@ func newDropdown(t *testing.T, items ...string) *Dropdown {
 
 // rowPoint maps item i of the open list to a clickable point.
 func rowPoint(dd *Dropdown, i int) Point {
-	b := dd.menu.Bounds()
-	return Point{X: b.X + 10, Y: b.Y + 4 + i*dd.menu.itemH + dd.menu.itemH/2}
+	return Point{X: dd.menu.Bounds().X + 10, Y: rowCenter(dd.menu, i).Y}
 }
 
 func facePoint(dd *Dropdown) Point {
@@ -382,7 +381,7 @@ func TestDropdownPaintAndRole(t *testing.T) {
 		dd.Arrange(render.Rect{X: 0, Y: 0, W: dd.Bounds().W, H: dd.Bounds().H})
 		dd.Paint(cv)
 		for row := range 3 {
-			y := dd.menu.Bounds().Y + 4 + row*dd.menu.itemH + dd.menu.itemH/2
+			y := rowCenter(dd.menu, row).Y
 			ink := 0
 			for x := range dd.menu.Bounds().W {
 				if render.ColorFromBytes(data[y*render.Stride(b.W)+x*4:]).A() > 0 {

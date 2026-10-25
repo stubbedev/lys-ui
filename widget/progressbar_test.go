@@ -31,13 +31,13 @@ func TestProgressBarNodes(t *testing.T) {
 	}
 }
 
-// Unstyled, the bar is the theme's: a 160x10 surface trough with the
+// Unstyled, the bar is the theme's: a 160x8 surface trough with the
 // accent fill, unchanged.
 func TestProgressBarUnstyledDefaults(t *testing.T) {
 	p := NewProgressBar(0.5)
 	arrangeTree(t, p, 200, 40)
-	if got := p.Measure(Constraints{Max: Size{W: 200, H: 40}}); got.W != 160 || got.H != 10 {
-		t.Errorf("bar %v, want the 160x10 default", got)
+	if got := p.Measure(Constraints{Max: Size{W: 200, H: 40}}); got.W != 160 || got.H != 8 {
+		t.Errorf("bar %v, want the 160x8 default", got)
 	}
 	th := Current()
 	if got := p.troughFill(th.Accent); got != progressTrack(th.Accent) {
@@ -59,8 +59,8 @@ func TestProgressBarUnstyledDefaults(t *testing.T) {
 // an ancestor's class change, and a bar arranged taller than its trough
 // paints only the trough's band, centered (#260).
 func TestProgressBarTroughHeight(t *testing.T) {
-	if got := NewProgressBar(0.5).Measure(Constraints{Max: Size{W: 400, H: 400}}); got != (Size{W: 160, H: 10}) {
-		t.Errorf("unstyled bar %v, want the 160x10 default", got)
+	if got := NewProgressBar(0.5).Measure(Constraints{Max: Size{W: 400, H: 400}}); got != (Size{W: 160, H: 8}) {
+		t.Errorf("unstyled bar %v, want the 160x8 default", got)
 	}
 	loadCSS(t, `progressbar.x trough { min-height: 30px; } .osd trough { min-height: 8px; }`)
 	styled := NewProgressBar(0.5)

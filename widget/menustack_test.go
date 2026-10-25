@@ -27,7 +27,7 @@ func layStack(s *MenuStack) {
 }
 
 func stackRow(s *MenuStack, i int) Point {
-	return Point{X: 30, Y: 4 + i*s.Top().itemH + 3}
+	return Point{X: 30, Y: rowCenter(s.Top(), i).Y}
 }
 
 func TestMenuStackSlidesIntoSubmenus(t *testing.T) {

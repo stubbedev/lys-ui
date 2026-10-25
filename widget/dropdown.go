@@ -403,7 +403,9 @@ func (d *Dropdown) Measure(con Constraints) Size {
 		return sz
 	}
 	w := 80
-	h := d.face.Shape("lg", d.sizePx).LineHeight() + 12
+	// The face button's min-height floors the height, as it does a
+	// button's: 36px unstyled, an entry's height.
+	h := max(d.face.Shape("lg", d.sizePx).LineHeight()+12, picki(d.faceBtn.style(&d.faceBtn), style.PropMinHeight, entryMinHeight))
 	slot := d.iconSlot()
 	for _, label := range d.items {
 		if adv := int(d.face.Shape(label, d.sizePx).Advance()+0.5) + 14 + 24 + slot; adv > w {

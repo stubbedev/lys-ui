@@ -90,8 +90,8 @@ func TestEntrySelection(t *testing.T) {
 	t.Run("drag from the click point selects", func(t *testing.T) {
 		e := newEntry()
 		sh := e.face.Shape("hello world", 14)
-		e.ClickAt(Point{X: 8 + int(sh.CaretX(1)), Y: 15})
-		e.DragMove(Point{X: 8 + int(sh.CaretX(4)), Y: 15})
+		e.ClickAt(Point{X: entryPad.Left + int(sh.CaretX(1)), Y: 15})
+		e.DragMove(Point{X: entryPad.Left + int(sh.CaretX(4)), Y: 15})
 		start, end, active := e.Selection()
 		if !active || start != 1 || end != 4 {
 			t.Errorf("selection = %d..%d active=%v, want 1..4 true", start, end, active)
@@ -114,7 +114,7 @@ func TestEntrySelection(t *testing.T) {
 	t.Run("double-click selects the word under the pointer", func(t *testing.T) {
 		e := newEntry()
 		sh := e.face.Shape("hello world", 14)
-		e.DoubleClickAt(Point{X: 8 + int(sh.CaretX(7)), Y: 15})
+		e.DoubleClickAt(Point{X: entryPad.Left + int(sh.CaretX(7)), Y: 15})
 		start, end, active := e.Selection()
 		if !active || start != 6 || end != 11 {
 			t.Errorf("selection = %d..%d active=%v, want 6..11 true", start, end, active)
@@ -125,7 +125,7 @@ func TestEntrySelection(t *testing.T) {
 		e := newEntry()
 		sh := e.face.Shape("hello world", 14)
 		mid := (sh.CaretX(5) + sh.CaretX(6)) / 2
-		e.DoubleClickAt(Point{X: 8 + int(mid), Y: 15})
+		e.DoubleClickAt(Point{X: entryPad.Left + int(mid), Y: 15})
 		start, end, active := e.Selection()
 		if !active || start != 5 || end != 6 {
 			t.Errorf("selection = %d..%d active=%v, want 5..6 true", start, end, active)
@@ -135,7 +135,7 @@ func TestEntrySelection(t *testing.T) {
 	t.Run("a plain click collapses the selection", func(t *testing.T) {
 		e := newEntry()
 		e.MoveCursorExtending(3)
-		e.ClickAt(Point{X: 8 + int(e.face.Shape("hello world", 14).CaretX(8)), Y: 15})
+		e.ClickAt(Point{X: entryPad.Left + int(e.face.Shape("hello world", 14).CaretX(8)), Y: 15})
 		_, _, active := e.Selection()
 		if active || e.Cursor() != 8 {
 			t.Errorf("click must collapse: cursor %d active %v", e.Cursor(), active)

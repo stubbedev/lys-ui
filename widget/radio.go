@@ -45,9 +45,11 @@ type ToggleButton struct {
 	OnToggled func(active bool)
 }
 
-// NewToggleButton returns an inactive toggle around child.
+// NewToggleButton returns an inactive toggle around child. It styles
+// as GTK's toggle, button.toggle.
 func NewToggleButton(child Widget, padding, radius int) *ToggleButton {
 	t := &ToggleButton{Button: *NewButton(child, padding, radius)}
+	t.AddClass("toggle")
 	t.OnClick = t.clicked
 	return t
 }

@@ -217,7 +217,7 @@ func (s *shooter) one(i int, theme func() *widget.Theme, suffix string) (size sh
 		g = &gallery{env: s.env, app: s.app}
 		d = g.demos(func(galleryMsg) {})[i]
 		var root widget.Widget
-		root, view = ui.Build(s.env, d.host(ui.Column(d.body...).Padding(render.UniformInsets(shotPad)).Classes(css.Background)))
+		root, view = ui.Build(s.env, d.host(d.bodyNode().Padding(render.UniformInsets(shotPad)).Classes(css.Background)))
 		frame := d.windowSize(root)
 		win, err = s.app.NewWindow(app.WindowConfig{
 			Title: d.title, AppID: shotsAppID,

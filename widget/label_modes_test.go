@@ -14,9 +14,11 @@ import (
 
 const modePx = 14
 
+// modeLineH is one row of a modePx label: the theme's line box.
 func modeLineH(t *testing.T, face render.Font) int {
 	t.Helper()
-	return face.Shape("x", modePx).LineHeight()
+	l := NewLabel(face, modePx, "x", 0)
+	return l.lineBox(l.style(l))
 }
 
 // widthForLines returns a constraint width that wraps text into exactly

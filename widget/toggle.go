@@ -40,6 +40,7 @@ func (s *Switch) SetOn(on bool) {
 	}
 	s.on = on
 	s.SetState(StateChecked, on)
+	s.placeKnob()
 	s.Invalidate()
 	if s.OnChanged != nil {
 		s.OnChanged(on)
@@ -51,7 +52,7 @@ func (s *Switch) Toggle() {
 	s.SetOn(!s.on)
 }
 
-// Measure wants the 40x22 pill, floored by the stylesheet's min size,
+// Measure wants the 32x18 pill, floored by the stylesheet's min size,
 // inside its CSS box, clamped to con.
 func (s *Switch) Measure(con Constraints) Size {
 	if sz, ok := s.measureHit(con); ok {
@@ -59,18 +60,61 @@ func (s *Switch) Measure(con Constraints) Size {
 	}
 	v := s.style(s)
 	return s.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		if v.HasAny(style.PropMinWidth, style.PropMinHeight) {
-			return clampSize(Size{}, inner)
-		}
-		return clampSize(Size{W: 40, H: 22}, inner)
+		return clampSize(s.pill(v), inner)
 	}))
 }
 
-// Arrange keeps the border box inside the margins.
+// pill is the track's content size: the 32x18 pill, or none under the
+// stylesheet's min size, which then floors it.
+func (s *Switch) pill(v *style.Values) Size {
+	if v.HasAny(style.PropMinWidth, style.PropMinHeight) {
+		return Size{}
+	}
+	return Size{W: 32, H: 18}
+}
+
+// Arrange keeps the border box inside the margins, at the track's
+// natural size: a taller or wider slot (a row's cross stretch) centers
+// the pill across and keeps it at the start, the way a checkbox keeps
+// its indicator, instead of stretching the knob with it. The knob takes
+// its place here, not in Paint, so a first paint leaves nothing for the
+// next frame to repaint.
 func (s *Switch) Arrange(r render.Rect) {
-	border, _ := boxRects(boxOf(s.style(s), render.Insets{}), r)
+	v := s.style(s)
+	b := boxOf(v, render.Insets{})
+	border, _ := boxRects(b, r)
+	in := b.padding
+	bw := b.border
+	p := s.pill(v)
+	w := max(p.W, picki(v, style.PropMinWidth, 0)) + in.Left + in.Right + bw.Left + bw.Right
+	h := max(p.H, picki(v, style.PropMinHeight, 0)) + in.Top + in.Bottom + bw.Top + bw.Bottom
+	if border.H > h {
+		border.Y += (border.H - h) / 2
+		border.H = h
+	}
+	border.W = min(border.W, w)
 	s.node.Arrange(border)
 	setParents(s, &s.knob)
+	s.placeKnob()
+}
+
+// placeKnob arranges the knob at the track's start, or its end when
+// on, inset by the knob's margins (1px unstyled).
+func (s *Switch) placeKnob() {
+	v := s.style(s)
+	content := boxOf(v, render.Insets{}).padding.Shrink(borderOf(v).Shrink(s.bounds))
+	kv := s.knob.style(&s.knob)
+	m := render.UniformInsets(1)
+	if kv.HasAny(style.PropMarginTop, style.PropMarginRight, style.PropMarginBottom, style.PropMarginLeft) {
+		m = marginOf(kv)
+	}
+	d := max(0, content.H-m.Top-m.Bottom)
+	kw, kh := picki(kv, style.PropMinWidth, d), picki(kv, style.PropMinHeight, d)
+	kx := content.X + m.Left
+	if s.on {
+		kx = content.X + content.W - m.Right - kw
+	}
+	s.knob.Arrange(render.Rect{X: kx, Y: content.Y + m.Top + (d-kh)/2, W: kw, H: kh})
 }
 
 // Paint draws the track and knob. The knob sits at the right when on,
@@ -103,22 +147,9 @@ func (s *Switch) Paint(cv *render.Canvas) {
 	paintBoxBehind(cv, v, s.bounds, radii, bw, pickc(0, v, style.PropBackgroundColor, track))
 	defer paintOutline(cv, v, s.bounds, radii)
 
-	content := boxOf(v, render.Insets{}).padding.Shrink(bw.Shrink(s.bounds))
 	kv := s.knob.style(&s.knob)
-	m := render.Insets{Top: 3, Right: 3, Bottom: 3, Left: 3}
-	if kv.HasAny(style.PropMarginTop, style.PropMarginRight, style.PropMarginBottom, style.PropMarginLeft) {
-		m = marginOf(kv)
-	}
-	d := max(0, content.H-m.Top-m.Bottom)
-	kw, kh := picki(kv, style.PropMinWidth, d), picki(kv, style.PropMinHeight, d)
-	kx := content.X + m.Left
-	if s.on {
-		kx = content.X + content.W - m.Right - kw
-	}
-	ky := content.Y + m.Top + (d-kh)/2
-	knobRect := render.Rect{X: kx, Y: ky, W: kw, H: kh}
-	s.knob.Arrange(knobRect)
-	kr := radiusOr(kv, min(kw, kh)/2)
+	knobRect := s.knob.Bounds()
+	kr := radiusOr(kv, min(knobRect.W, knobRect.H)/2)
 	paintBoxBehind(cv, kv, knobRect, kr, borderOf(kv), pickc(0, kv, style.PropBackgroundColor, knob))
 }
 
@@ -260,7 +291,7 @@ func (c *CheckButton) Inconsistent() bool { return c.HasState(StateIndeterminate
 // 20x20 unstyled.
 func (c *CheckButton) indicatorSize() Size {
 	kv := c.check.style(&c.check)
-	return Size{W: picki(kv, style.PropMinWidth, 20), H: picki(kv, style.PropMinHeight, 20)}
+	return Size{W: picki(kv, style.PropMinWidth, 16), H: picki(kv, style.PropMinHeight, 16)}
 }
 
 // Measure sizes the indicator and the child after it, inside the

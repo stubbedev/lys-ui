@@ -172,12 +172,12 @@ func TestEntryGraphemeEditing(t *testing.T) {
 	t.Run("click and drag land on cluster starts", func(t *testing.T) {
 		e := newGraphemeEntry(t, "a"+familyEmoji+"b")
 		sh := e.face.Shape("a"+familyEmoji+"b", 14)
-		e.ClickAt(Point{X: 8 + int(sh.CaretX(6)), Y: 15})
+		e.ClickAt(Point{X: entryPad.Left + int(sh.CaretX(6)), Y: 15})
 		if got := e.Cursor(); got != 6 {
 			t.Fatalf("click cursor = %d, want 6", got)
 		}
 		// A click inside the family snaps back to its start.
-		e.ClickAt(Point{X: 8 + int(sh.CaretX(3)), Y: 15})
+		e.ClickAt(Point{X: entryPad.Left + int(sh.CaretX(3)), Y: 15})
 		if got := e.Cursor(); got != 1 {
 			t.Fatalf("mid-cluster click cursor = %d, want 1", got)
 		}
@@ -199,7 +199,7 @@ func TestEntryGraphemeEditing(t *testing.T) {
 	t.Run("double-click selects the accented cluster's word", func(t *testing.T) {
 		e := newGraphemeEntry(t, "caf"+accentedE+" blues")
 		sh := e.face.Shape("caf"+accentedE+" blues", 14)
-		e.DoubleClickAt(Point{X: 8 + int(sh.CaretX(2)), Y: 15})
+		e.DoubleClickAt(Point{X: entryPad.Left + int(sh.CaretX(2)), Y: 15})
 		if got, _ := e.SelectedText(); got != "caf"+accentedE {
 			t.Fatalf("selected = %q, want caf+accented cluster", got)
 		}

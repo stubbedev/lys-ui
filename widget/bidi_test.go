@@ -148,8 +148,8 @@ func TestEntryRTLDirection(t *testing.T) {
 		e.SetText("hello")
 		e.Measure(Constraints{Max: Size{W: 300, H: 40}})
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 40})
-		if got := e.lineX(e.shape(e.displayText())); got != e.bounds.X+8 {
-			t.Errorf("auto LTR line origin = %d, want %d", got, e.bounds.X+8)
+		if got := e.lineX(e.shape(e.displayText())); got != e.bounds.X+entryPad.Left {
+			t.Errorf("auto LTR line origin = %d, want %d", got, e.bounds.X+entryPad.Left)
 		}
 	})
 	t.Run("the caret starts at the reading edge and arrows move visually", func(t *testing.T) {

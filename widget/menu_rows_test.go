@@ -37,9 +37,9 @@ func TestMenuDisabledRows(t *testing.T) {
 		MenuItem{Label: "Share", Items: []MenuItem{{Label: "Mail", OnClick: func() {}}}, Disabled: true},
 		MenuItem{Label: "Quit", OnClick: func() { fired = "quit" }},
 	)
-	menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
-	menu.Arrange(render.Rect{X: 0, Y: 0, W: 160, H: 4*menu.itemH + 8})
-	rowY := func(i int) int { return 4 + i*menu.itemH + 3 }
+	sz := menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
+	menu.Arrange(render.Rect{X: 0, Y: 0, W: 160, H: sz.H})
+	rowY := func(i int) int { return rowCenter(menu, i).Y }
 
 	t.Run("a click on a disabled row neither fires nor dismisses", func(t *testing.T) {
 		dismissed := false
@@ -89,8 +89,8 @@ func TestMenuDisabledRows(t *testing.T) {
 
 	t.Run("a disabled check row keeps its state", func(t *testing.T) {
 		check := NewMenu(face, 14, MenuItem{Label: "Wrap", Kind: ItemCheck, Checked: true, OnClick: func() {}, Disabled: true})
-		check.Measure(Constraints{Max: Size{W: 300, H: 300}})
-		check.Arrange(render.Rect{W: 160, H: check.itemH + 8})
+		csz := check.Measure(Constraints{Max: Size{W: 300, H: 300}})
+		check.Arrange(render.Rect{W: 160, H: csz.H})
 		check.ClickAt(Point{X: 40, Y: rowY(0)})
 		if !check.items[0].Checked {
 			t.Error("a click toggled a disabled check row")
@@ -122,13 +122,13 @@ func TestMenuRowIcons(t *testing.T) {
 		cv := render.New(data, render.Stride(sz.W), sz.W, sz.H)
 		iconic.Arrange(render.Rect{W: sz.W, H: sz.H})
 		iconic.Paint(cv)
-		// Row 0 spans y 4..4+itemH-2; the slot starts at x 4+8.
-		y := 4 + (iconic.itemH-2)/2
+		// The slot starts at x 4+8, past the contents pad and the row's.
+		y := rowCenter(iconic, 0).Y
 		if got := render.ColorFromBytes(data[y*render.Stride(sz.W)+(4+8+6)*4:]); got != red {
 			t.Errorf("icon slot pixel = %v, want the red icon", got)
 		}
 		// Row 1 has no icon: its slot stays the menu surface.
-		y1 := 4 + iconic.itemH + (iconic.itemH-2)/2
+		y1 := rowCenter(iconic, 1).Y
 		if got := render.ColorFromBytes(data[y1*render.Stride(sz.W)+(4+8+6)*4:]); got == red {
 			t.Error("the icon-less row painted an icon")
 		}

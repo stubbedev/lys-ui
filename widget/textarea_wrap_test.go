@@ -74,7 +74,7 @@ func TestSoftWrap(t *testing.T) {
 		}
 		second := ta.rows[1]
 		lineH := ta.lineHeight()
-		p := Point{X: 8 + 4, Y: 6 + lineH + lineH/2}
+		p := Point{X: textPad.Left + 4, Y: textPad.Top + lineH + lineH/2}
 		got := ta.posAt(p)
 		if got.line != second.line {
 			t.Errorf("clicked line = %d, want %d", got.line, second.line)

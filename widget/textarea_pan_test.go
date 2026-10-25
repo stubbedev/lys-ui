@@ -30,7 +30,7 @@ func areaCaretX(ta *TextArea) int {
 // inner rect of the caret's line.
 func assertAreaCaretInside(t *testing.T, ta *TextArea) {
 	t.Helper()
-	left, right := ta.bounds.X+8, ta.bounds.X+8+ta.wrapWidth()
+	left, right := ta.bounds.X+textPad.Left, ta.bounds.X+textPad.Left+ta.wrapWidth()
 	if cx := areaCaretX(ta); cx < left || cx > right-1 {
 		t.Errorf("caret x = %d outside inner rect [%d,%d) (pan = %d)", cx, left, right, ta.linePan(ta.caretPos().line))
 	}
@@ -70,7 +70,7 @@ func TestTextAreaPanPerLogicalLine(t *testing.T) {
 		// A click on the short line maps unshifted — the long line's
 		// pan must not drag other lines sideways.
 		sh := ta.face.Shape("short", ta.sizePx)
-		ta.ClickAt(Point{X: ta.bounds.X + 8 + int(sh.CaretX(3)), Y: 6 + ta.lineHeight() + ta.lineHeight()/2})
+		ta.ClickAt(Point{X: ta.bounds.X + textPad.Left + int(sh.CaretX(3)), Y: textPad.Top + ta.lineHeight() + ta.lineHeight()/2})
 		if line, col := ta.CursorPos(); line != 1 || col != 3 {
 			t.Errorf("click on the unpanned line = %d:%d, want 1:3", line, col)
 		}
@@ -111,7 +111,7 @@ func TestTextAreaClickMapsThroughPan(t *testing.T) {
 	if k <= 0 {
 		t.Fatalf("no half-visible rune found (k = %d, pan = %d)", k, ta.linePan(0))
 	}
-	ta.ClickAt(Point{X: ta.bounds.X + 8 + int(sh.CaretX(k)+0.5) - ta.linePan(0), Y: 6 + ta.lineHeight()/2})
+	ta.ClickAt(Point{X: ta.bounds.X + textPad.Left + int(sh.CaretX(k)+0.5) - ta.linePan(0), Y: textPad.Top + ta.lineHeight()/2})
 	if line, col := ta.CursorPos(); line != 0 || col != k {
 		t.Errorf("click = %d:%d, want 0:%d (must map through x + pan)", line, col, k)
 	}
@@ -119,12 +119,12 @@ func TestTextAreaClickMapsThroughPan(t *testing.T) {
 
 func TestTextAreaDragAutoPans(t *testing.T) {
 	ta := newUnwrappedArea(t, strings.Repeat("M", 40))
-	ta.ClickAt(Point{X: ta.bounds.X + 10, Y: 6 + ta.lineHeight()/2})
+	ta.ClickAt(Point{X: ta.bounds.X + 10, Y: textPad.Top + ta.lineHeight()/2})
 	if line, col := ta.CursorPos(); line != 0 || col != 0 {
 		t.Fatalf("anchor = %d:%d, want 0:0", line, col)
 	}
 	for range 100 {
-		ta.DragMove(Point{X: ta.bounds.X + ta.bounds.W + 30, Y: 6 + ta.lineHeight()/2})
+		ta.DragMove(Point{X: ta.bounds.X + ta.bounds.W + 30, Y: textPad.Top + ta.lineHeight()/2})
 	}
 	if line, col := ta.CursorPos(); line != 0 || col != 40 {
 		t.Errorf("cursor = %d:%d, want 0:40 after dragging past the edge", line, col)

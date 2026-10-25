@@ -15,12 +15,12 @@ func TestMenu(t *testing.T) {
 		MenuItem{Label: "Copy", OnClick: func() { clicked = "copy" }},
 		MenuItem{Label: "Disabled"},
 	)
-	menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
-	menu.Arrange(render.Rect{X: 10, Y: 20, W: 120, H: 3 * menu.itemH})
+	sz := menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
+	menu.Arrange(render.Rect{X: 10, Y: 20, W: 120, H: sz.H})
 	menu.OnDismiss = func() {}
 
 	t.Run("hover tracks the row under the pointer", func(t *testing.T) {
-		menu.HoverMove(Point{X: 40, Y: 20 + 4 + menu.itemH + 3})
+		menu.HoverMove(rowCenter(menu, 1))
 		if menu.hovered != 1 {
 			t.Errorf("hovered = %d, want 1", menu.hovered)
 		}
@@ -33,7 +33,7 @@ func TestMenu(t *testing.T) {
 	t.Run("clicking a row fires it and dismisses", func(t *testing.T) {
 		fired := false
 		menu.OnDismiss = func() { fired = true }
-		menu.ClickAt(Point{X: 40, Y: 20 + 4 + menu.itemH + 3})
+		menu.ClickAt(rowCenter(menu, 1))
 		if clicked != "copy" {
 			t.Errorf("clicked = %q, want copy", clicked)
 		}
@@ -46,7 +46,7 @@ func TestMenu(t *testing.T) {
 		clicked = ""
 		fired := false
 		menu.OnDismiss = func() { fired = true }
-		menu.ClickAt(Point{X: 40, Y: 20 + 4 + 2*menu.itemH + 3})
+		menu.ClickAt(rowCenter(menu, 2))
 		if clicked != "" || fired {
 			t.Errorf("disabled row fired (%q, dismiss %v)", clicked, fired)
 		}
@@ -63,12 +63,12 @@ func TestMenu(t *testing.T) {
 
 	t.Run("painted menu leaves ink on every row", func(t *testing.T) {
 		menu.OnDismiss = nil
-		data := make([]byte, render.Stride(130)*90)
-		cv := render.New(data, render.Stride(130), 130, 90)
-		menu.Arrange(render.Rect{X: 0, Y: 0, W: 120, H: 3 * menu.itemH})
+		menu.Arrange(render.Rect{X: 0, Y: 0, W: 120, H: sz.H})
+		data := make([]byte, render.Stride(130)*sz.H)
+		cv := render.New(data, render.Stride(130), 130, sz.H)
 		menu.Paint(cv)
 		for row := range 3 {
-			y := 4 + row*menu.itemH + 10
+			y := rowCenter(menu, row).Y
 			ink := 0
 			for x := range 120 {
 				if render.ColorFromBytes(data[y*render.Stride(130)+x*4:]).A() > 0 {
@@ -153,4 +153,10 @@ func TestMenuKeyboardHighlightSurvivesStrayPointer(t *testing.T) {
 	if m.hovered != -1 {
 		t.Errorf("a pointer highlight stayed after the pointer left the rows: %d", m.hovered)
 	}
+}
+
+// rowCenter is the middle of menu row i, where a pointer rests on it.
+func rowCenter(m *Menu, i int) Point {
+	r := m.RowBounds(i)
+	return Point{X: r.X + r.W/2, Y: r.Y + r.H/2}
 }

@@ -66,7 +66,7 @@ func (m *meter) setValue(v float64) bool {
 // trough's min sizes, GTK's progressbar trough gadget.
 func (m *meter) troughSize() Size {
 	tv := m.trough.style(&m.trough)
-	return Size{W: picki(tv, style.PropMinWidth, 160), H: picki(tv, style.PropMinHeight, 10)}
+	return Size{W: picki(tv, style.PropMinWidth, 160), H: picki(tv, style.PropMinHeight, 8)}
 }
 
 // measureMeter wants the trough inside self's CSS box, clamped to con.

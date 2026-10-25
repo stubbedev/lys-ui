@@ -21,8 +21,8 @@ func paintSwitchTrack(t *testing.T) render.Color {
 	s.Measure(Constraints{Max: Size{W: 100, H: 100}})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 22})
 	s.Paint(cv)
-	// (38, 11) is inside the track, clear of the knob.
-	return render.ColorFromBytes(data[11*render.Stride(40)+38*4:])
+	// (28, 11) is inside the 32x18 pill, clear of the off knob.
+	return render.ColorFromBytes(data[11*render.Stride(40)+28*4:])
 }
 
 func TestThemeRestyles(t *testing.T) {

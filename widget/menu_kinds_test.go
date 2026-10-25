@@ -14,7 +14,7 @@ func TestMenuKeyboard(t *testing.T) {
 	}
 	menu := NewMenu(entryFace(t), 13, items...)
 	menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
-	menu.Arrange(render.Rect{X: 10, Y: 20, W: 120, H: 3 * menu.itemH})
+	menu.Arrange(render.Rect{X: 10, Y: 20, W: 120, H: menu.Measure(Constraints{Max: Size{W: 400, H: 400}}).H})
 
 	t.Run("arrows move and clamp at the ends (pinned)", func(t *testing.T) {
 		menu.KeyAction(KeyDown, 0)
@@ -68,21 +68,21 @@ func TestMenuKinds(t *testing.T) {
 	}
 	menu := NewMenu(entryFace(t), 13, items...)
 	menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
-	menu.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 3 * menu.itemH})
+	menu.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: menu.Measure(Constraints{Max: Size{W: 400, H: 400}}).H})
 
 	t.Run("check rows toggle on activate", func(t *testing.T) {
-		menu.ClickAt(Point{X: 100, Y: 4 + menu.itemH/2})
+		menu.ClickAt(rowCenter(menu, 0))
 		if menu.items[0].Checked {
 			t.Error("check row did not toggle off")
 		}
-		menu.ClickAt(Point{X: 100, Y: 4 + menu.itemH/2})
+		menu.ClickAt(rowCenter(menu, 0))
 		if !menu.items[0].Checked {
 			t.Error("check row did not toggle on")
 		}
 	})
 
 	t.Run("radio rows are exclusive within their group", func(t *testing.T) {
-		menu.ClickAt(Point{X: 100, Y: 4 + 2*menu.itemH + menu.itemH/2})
+		menu.ClickAt(rowCenter(menu, 2))
 		if menu.items[1].Checked {
 			t.Error("radio a stayed checked after choosing b")
 		}
@@ -100,14 +100,14 @@ func TestMenuSubmenu(t *testing.T) {
 	}
 	menu := NewMenu(entryFace(t), 13, items...)
 	menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
-	menu.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 2 * menu.itemH})
+	menu.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: menu.Measure(Constraints{Max: Size{W: 400, H: 400}}).H})
 
 	t.Run("activating a submenu row fires OnSubmenu without dismissing", func(t *testing.T) {
 		var got []MenuItem
 		dismissed := false
 		menu.OnSubmenu = func(i int, items []MenuItem) { got = items }
 		menu.OnDismiss = func() { dismissed = true }
-		menu.ClickAt(Point{X: 100, Y: 4 + menu.itemH/2})
+		menu.ClickAt(rowCenter(menu, 0))
 		if len(got) != 1 || got[0].Label != "child" {
 			t.Errorf("OnSubmenu items = %v, want the child items", got)
 		}

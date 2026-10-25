@@ -15,7 +15,7 @@ func TestEntryClickToCaret(t *testing.T) {
 
 	t.Run("clicking past the end puts the caret at the end", func(t *testing.T) {
 		textW := int(face.Shape("hello", 13).Advance())
-		e.ClickAt(Point{X: e.Bounds().X + 8 + textW + 50, Y: 15})
+		e.ClickAt(Point{X: e.Bounds().X + entryPad.Left + textW + 50, Y: 15})
 		if e.Cursor() != 5 {
 			t.Errorf("cursor = %d, want 5", e.Cursor())
 		}
@@ -23,7 +23,7 @@ func TestEntryClickToCaret(t *testing.T) {
 
 	t.Run("clicking mid-text splits the caret", func(t *testing.T) {
 		sh := face.Shape("hello", 13)
-		e.ClickAt(Point{X: e.Bounds().X + 8 + int(sh.CaretX(3)), Y: 15})
+		e.ClickAt(Point{X: e.Bounds().X + entryPad.Left + int(sh.CaretX(3)), Y: 15})
 		if e.Cursor() != 3 {
 			t.Errorf("cursor = %d, want 3", e.Cursor())
 		}
@@ -38,7 +38,7 @@ func TestEntryClickToCaret(t *testing.T) {
 
 	t.Run("typing after a click inserts at the caret", func(t *testing.T) {
 		sh := face.Shape("hello", 13)
-		e.ClickAt(Point{X: e.Bounds().X + 8 + int(sh.CaretX(2)), Y: 15})
+		e.ClickAt(Point{X: e.Bounds().X + entryPad.Left + int(sh.CaretX(2)), Y: 15})
 		e.InsertRune('X')
 		if got := e.Text(); got != "heXllo" {
 			t.Errorf("text = %q, want heXllo", got)

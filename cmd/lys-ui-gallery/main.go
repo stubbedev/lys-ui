@@ -182,8 +182,12 @@ func (d demo) host(content ui.Node) ui.Node {
 
 // node is the demo as a gallery section: its title over its body.
 func (d demo) node() ui.Node {
-	return ui.Column(append([]ui.Node{ui.Label(d.title).Classes(css.H4)}, d.body...)...).Spacing(12)
+	return ui.Column(ui.Label(d.title).Classes(css.H4), d.bodyNode()).Spacing(12)
 }
+
+// bodyNode is the demo's body, its parts 16px apart: the section's
+// content, and all a shot shows.
+func (d demo) bodyNode() *ui.BoxBuilder { return ui.Column(d.body...).Spacing(16) }
 
 type gallery struct {
 	env           ui.Env
@@ -278,7 +282,8 @@ func (g *gallery) dialog() {
 	).Spacing(16))
 	var err error
 	if g.shown, err = g.app.NewDialog(g.win, app.DialogConfig{
-		Title: "Edit profile", Width: 425, Content: content, Modal: true, OnClosed: view.Close,
+		Title: "Edit profile", Description: "Make changes to your profile here. Click save when you're done.",
+		Width: 425, Content: content, Modal: true, OnClosed: view.Close,
 		Buttons: []app.DialogButton{{Label: "Cancel", Response: "cancel", Role: app.ButtonRoleCancel}, {Label: "Save changes", Response: "save", Role: app.ButtonRoleDefault}},
 	}); err != nil {
 		log.Printf("lys-ui-gallery: dialog: %v", err)
@@ -521,11 +526,13 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			ui.Breadcrumb("Home", "Docs", "Components", "Data", "Breadcrumb").MaxItems(3)),
 		section("Calendar", ui.Aligned(ui.Column(ui.Calendar(widget.Today())).Padding(render.UniformInsets(8)).Classes(css.Card), widget.AlignStart)),
 		section("Card", ui.Aligned(ui.Column(
-			ui.Label("Create project").Classes(css.Heading),
-			ui.Label("Deploy your new project in one click.").Classes(css.Muted),
+			ui.Column(
+				ui.Label("Create project").Classes(css.Heading),
+				ui.Label("Deploy your new project in one click.").Classes(css.Muted),
+			).Spacing(6),
 			ui.Field("Name", ui.Entry().Placeholder("Name of your project")),
 			ui.Row(ui.Expand(ui.Spacer(0, 0)), ui.Button(ui.Label("Cancel"), 0, 0).Classes(css.Outline), ui.Button(ui.Label("Deploy"), 0, 0).Classes(css.SuggestedAction)).Spacing(8),
-		).Spacing(16).Padding(render.UniformInsets(24)).SizeRequest(360, 0).Classes(css.Card), widget.AlignStart)),
+		).Spacing(24).Padding(render.UniformInsets(24)).SizeRequest(360, 0).Classes(css.Card), widget.AlignStart)),
 		section("Carousel", g.carousel()),
 		section("Chart", ui.Row(
 			ui.Expand(ui.Chart(widget.ChartBar, []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun"},

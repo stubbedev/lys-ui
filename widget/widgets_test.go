@@ -131,8 +131,8 @@ func TestEntryMeasurePaint(t *testing.T) {
 	t.Run("empty entry without placeholder wants only padding", func(t *testing.T) {
 		e := NewEntry(face, 14, render.RGB(255, 255, 255))
 		got := e.Measure(Constraints{Max: Size{W: 500, H: 100}})
-		if got.W != 16 {
-			t.Errorf("empty entry width = %d, want 16", got.W)
+		if want := entryPad.Left + entryPad.Right; got.W != want {
+			t.Errorf("empty entry width = %d, want the padding %d", got.W, want)
 		}
 	})
 
@@ -576,5 +576,25 @@ func TestOverlayCSSBox(t *testing.T) {
 	plain := NewOverlay().Append(NewSpacer(30, 20))
 	if got := plain.Measure(Constraints{Max: Size{W: 200, H: 200}}); got != (Size{W: 30, H: 20}) {
 		t.Errorf("unstyled overlay %v, want its largest child", got)
+	}
+}
+
+// A switch in a taller row keeps its pill and knob at their natural
+// size, centered across, and paints nothing on the next frame: the
+// row's cross stretch grew the track and its knob with it, and the
+// knob was placed in Paint, so every first paint damaged it again
+// (#281).
+func TestSwitchKeepsItsPillWhenStretched(t *testing.T) {
+	row := NewBox(Row, 8, 0)
+	sw := NewSwitch(false)
+	row.Append(NewSpacer(10, 40), false)
+	row.Append(sw, false)
+	cv := render.New(make([]byte, render.Stride(200)*60), render.Stride(200), 200, 60)
+	paintFrame(cv, row, 200, 60, Current().Bg, render.Rect{W: 200, H: 60})
+	if b, k := sw.Bounds(), sw.knob.Bounds(); b.H != 18 || b.W != 32 || b.Y != (60-18)/2 || k.H != 16 {
+		t.Errorf("switch %v, knob %v: want the 32x18 pill centered in 60px and a 16px knob", b, k)
+	}
+	if _, rects := paintFrame(cv, row, 200, 60, Current().Bg, render.Rect{}); len(rects) != 0 {
+		t.Errorf("an unchanged frame damaged %v", rects)
 	}
 }

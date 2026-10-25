@@ -1008,7 +1008,7 @@ func (t *TextArea) px() float64 { return fontPx(t.style(t), t.sizePx) }
 func (t *TextArea) font() render.Font { return t.faces.get(t.face, t.style(t), 0, int(t.px())) }
 
 // textPad is an unstyled area's padding.
-var textPad = render.Insets{Top: 6, Right: 8, Bottom: 6, Left: 8}
+var textPad = render.Insets{Top: 8, Right: 12, Bottom: 8, Left: 12}
 
 // textInsets are the text's insets inside the area's bounds: the
 // border and padding (textPad where unstyled), the line-number gutter,

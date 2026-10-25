@@ -95,7 +95,7 @@ func TestGoldenMenu(t *testing.T) {
 				MenuItem{Label: "Colm Tuite", Kind: ItemRadio, Group: "people", OnClick: func() {}},
 			)
 			NewGolden(t, m, "menu-"+tc.name, goldenTheme(tc.th),
-				goldenAfterArrange(func() { hoverMenuRow(m, face.Shape("lg", 14).LineHeight()+12, 2) }))
+				goldenAfterArrange(func() { hoverMenuRow(m, 2) }))
 		})
 	}
 }

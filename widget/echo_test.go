@@ -32,7 +32,7 @@ func TestEntryEcho(t *testing.T) {
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 		e.SetEcho(EchoPassword)
 		sh := e.face.Shape(e.displayText(), 14)
-		e.ClickAt(Point{X: 8 + int(sh.CaretX(4)), Y: 15})
+		e.ClickAt(Point{X: entryPad.Left + int(sh.CaretX(4)), Y: 15})
 		if e.Cursor() != 4 {
 			t.Errorf("cursor = %d, want 4 (logical rune index)", e.Cursor())
 		}

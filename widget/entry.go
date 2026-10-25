@@ -309,8 +309,11 @@ func (e *Entry) appendStyleKids(buf []Widget) []Widget {
 	return buf
 }
 
-// entryPad is an unstyled field's padding: lineheight plus 12 tall.
-var entryPad = render.Insets{Top: 6, Right: 8, Bottom: 6, Left: 8}
+// entryPad is an unstyled field's padding, and entryMinHeight its
+// least height: 36px, the text 12px from either side.
+var entryPad = render.Insets{Top: 4, Right: 12, Bottom: 4, Left: 12}
+
+const entryMinHeight = 36
 
 // textInsets are the text area's insets inside the field's bounds:
 // the field's border and padding (entryPad where unstyled) and the
@@ -1065,7 +1068,7 @@ func (e *Entry) Measure(con Constraints) Size {
 	// the field claims at least the styled floor, overflowing if needed.
 	v := e.style(e)
 	w = max(w, picki(v, style.PropMinWidth, 0))
-	h = max(h, picki(v, style.PropMinHeight, 0))
+	h = max(h, picki(v, style.PropMinHeight, entryMinHeight))
 	// The stylesheet's margin sits outside the field, as in every CSS box.
 	m := marginOf(v)
 	sz := e.measureStore(con, clampSize(Size{W: w + m.Left + m.Right, H: h + m.Top + m.Bottom}, con))

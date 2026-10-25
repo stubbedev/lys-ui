@@ -385,15 +385,19 @@ func (m *Menu) Measure(con Constraints) Size {
 // unstyled label inset inside a row.
 var (
 	menuContentsPad = render.UniformInsets(4)
-	menuRowPad      = render.Insets{Right: 8, Left: 8}
+	menuRowPad      = render.Insets{Top: 6, Right: 8, Bottom: 6, Left: 8}
 )
 
-// menuRowGap is the gap below every row; menuSeparatorBand a
-// separator row's band, its 1px rule centered, so with the gaps the
-// rule keeps 4px from the rows either side.
+// menuRowText is a row's least text height, the 20px line box rows
+// lay out at.
+const menuRowText = 20
+
+// menuRowGap is the gap below every row, none: the rows stack, each
+// hover filling its own band; menuSeparatorBand is a separator row's
+// band, its 1px rule centered 4px from the rows either side.
 const (
-	menuRowGap        = 2
-	menuSeparatorBand = 5
+	menuRowGap        = 0
+	menuSeparatorBand = 9
 )
 
 // bandH is the laid-out band of an item row: the styled modelbuttons'
@@ -406,7 +410,7 @@ func (m *Menu) bandH() int {
 		}
 		rv := m.rows[i].style(&m.rows[i])
 		pad := boxOf(rv, menuRowPad).outer()
-		h = max(h, picki(rv, style.PropMinHeight, 0)+pad.Top+pad.Bottom)
+		h = max(h, picki(rv, style.PropMinHeight, menuRowText)+pad.Top+pad.Bottom)
 	}
 	return h
 }

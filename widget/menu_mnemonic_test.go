@@ -78,7 +78,7 @@ func TestMenuMnemonicActivation(t *testing.T) {
 	m.OnSubmenu = func(index int, items []MenuItem) { submenu++ }
 
 	m.Measure(Constraints{Max: Size{W: 200, H: 200}})
-	m.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 3*m.itemH + 8})
+	m.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: m.Measure(Constraints{Max: Size{W: 400, H: 400}}).H})
 
 	// Alt+b fires Beta (explicit), Alt+a fires Alpha (auto-resolved),
 	// both case-insensitively. Each fires once and dismisses.

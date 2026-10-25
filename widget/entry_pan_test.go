@@ -22,7 +22,7 @@ func newPanEntry(t *testing.T, s string) *Entry {
 // uses, display shape at -scrollX inside the padded field.
 func entryCaretX(e *Entry) int {
 	sh := e.face.Shape(e.displayText(), e.sizePx)
-	return e.bounds.X + 8 + int(sh.CaretX(e.panCaret())+0.5) - e.scrollX
+	return e.bounds.X + entryPad.Left + int(sh.CaretX(e.panCaret())+0.5) - e.scrollX
 }
 
 // assertCaretInside fails when the entry's caret sits outside the
@@ -104,7 +104,7 @@ func TestEntryClickMapsThroughPan(t *testing.T) {
 	if k <= 0 {
 		t.Fatalf("no half-visible rune found (k = %d, scrollX = %d)", k, e.ScrollX())
 	}
-	p := Point{X: e.bounds.X + 8 + int(sh.CaretX(k)+0.5) - e.ScrollX(), Y: 15}
+	p := Point{X: e.bounds.X + entryPad.Left + int(sh.CaretX(k)+0.5) - e.ScrollX(), Y: 15}
 	e.ClickAt(p)
 	if e.Cursor() != k {
 		t.Errorf("cursor = %d, want %d (click must map through x + scrollX)", e.Cursor(), k)
@@ -250,7 +250,7 @@ func TestEntryEchoPansByDisplayWidth(t *testing.T) {
 	if k <= 0 {
 		t.Fatalf("no half-visible dot found (k = %d)", k)
 	}
-	e.ClickAt(Point{X: e.bounds.X + 8 + int(sh.CaretX(k)+0.5) - e.ScrollX(), Y: 15})
+	e.ClickAt(Point{X: e.bounds.X + entryPad.Left + int(sh.CaretX(k)+0.5) - e.ScrollX(), Y: 15})
 	if e.Cursor() != k {
 		t.Errorf("cursor = %d, want %d (masked click maps through the pan)", e.Cursor(), k)
 	}
