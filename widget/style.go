@@ -2179,6 +2179,9 @@ func (n *node) invalidateState(changed style.State) {
 // the cascade is marked stale, and only a moved value repaints.
 func (n *node) restyleState(changed style.State) {
 	n.styleDirty = true
+	if n.unseen() {
+		return
+	}
 	markDamage()
 	n.scope(sensNow.states&changed != 0 || sensNow.has, sensNow.siblingFacts)
 }
@@ -2202,7 +2205,7 @@ func (n *node) invalidateClasses(changed []string) {
 // yet: its first restyle happens anyway.
 func (n *node) invalidateScope(sub, sib bool) {
 	n.invalidateStyle()
-	if sensNow.has {
+	if sensNow.has && !n.unseen() {
 		for p := parentNodeOf(n); p != nil; p = parentNodeOf(p) {
 			p.styleDirty = true
 		}
@@ -2223,6 +2226,9 @@ func (n *node) scope(sub, sib bool) {
 	}
 	if n.self != nil {
 		restyleSubtree(n.self)
+		return
+	}
+	if n.unseen() {
 		return
 	}
 	// The root (or a widget no container arranged yet): no link to walk

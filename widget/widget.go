@@ -490,9 +490,17 @@ func invalidateTree(self Widget) {
 func (n *node) Invalidate() {
 	checkLoop("Invalidate")
 	n.invalid = true
+	if n.unseen() {
+		return
+	}
 	markDamage()
 	n.markSub()
 }
+
+// unseen reports a widget nothing on screen derives from yet: never
+// styled and in no tree. Changing it owes no frame and stales no other
+// style; its first style and paint read it as it is then.
+func (n *node) unseen() bool { return n.parent == nil && n.csGen == 0 }
 
 // InvalidateRect schedules a repaint of r, an arbitrary rect in root
 // coordinates - for widgets that owe pixels outside their arranged
