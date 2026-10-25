@@ -520,6 +520,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 		alertButton, dialogButton, drawerButton, sheetButton, toastButton, hoverTrigger, tooltipButton *widget.Button
 		contextMenu                                                                                    *widget.ContextMenu
 		combobox                                                                                       *widget.Combobox[string]
+		colorButton                                                                                    *widget.ColorButton
 		datePicker                                                                                     *widget.DatePicker
 		navMenu                                                                                        *widget.NavigationMenu
 		selectMenu                                                                                     *widget.Dropdown
@@ -584,6 +585,8 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 		section("Collapsible", ui.Expander("@stubbedev starred 3 repositories", ui.Column(
 			ui.Label("stubbedev/lys-ui"), ui.Label("stubbedev/lys-shell"), ui.Label("stubbedev/lys-wm"),
 		).Spacing(8))),
+		section("Color Picker", ui.Aligned(ui.ColorButton(render.RGB(0x3b, 0x82, 0xf6)).Ref(&colorButton), widget.AlignStart)).
+			opens(click, center(&colorButton)).room(360, 240),
 		section("Combobox", ui.Aligned(ui.Combobox[string]("Select compositor...",
 			widget.ComboboxOption[string]{Value: "lys-wm", Label: "lys-wm"},
 			widget.ComboboxOption[string]{Value: "sway", Label: "sway"},

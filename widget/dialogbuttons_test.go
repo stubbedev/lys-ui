@@ -6,23 +6,34 @@ import (
 	"github.com/stubbedev/lys-ui/render"
 )
 
-func TestColorButtonOpensAndChooses(t *testing.T) {
-	b := NewColorButton(render.RGB(1, 2, 3))
-	var opened render.Color
+// A click opens the swatch picker under the button with the current
+// color ringed; a swatch picks, fires OnColorSet and closes; the
+// expanded chooser's edits fire it as they happen.
+func TestColorButtonOpensAPickerAndChooses(t *testing.T) {
+	b := NewColorButton(goldenFace(t), 14, render.RGB(1, 2, 3))
+	b.Presets = []render.Color{render.RGB(1, 2, 3), render.RGB(4, 5, 6)}
+	host := &fakeSurfaceHost{}
+	SetSurfaceHost(b, host)
+	arrangeTree(t, b, 100, 100)
 	var set []render.Color
-	b.OnOpen = func(c render.Color) { opened = c }
 	b.OnColorSet = func(c render.Color) { set = append(set, c) }
 	b.OnClick()
-	if opened != render.RGB(1, 2, 3) {
-		t.Errorf("opened at %v", opened)
+	if len(host.popovers) != 1 || host.opts[0].Gap != PopoverGap {
+		t.Fatalf("%d popovers with %+v, want one picker at the popover gap", len(host.popovers), host.opts)
+	}
+	p := host.popovers[0].(*Box).Children()[0].(*SwatchPicker)
+	arrangeTree(t, p, 400, 400)
+	swatches := swatchesOf(p)
+	if len(swatches) != 2 || !swatches[0].Selected() || swatches[1].Selected() {
+		t.Fatalf("swatches %v, want two with the current one ringed", swatches)
+	}
+	swatchButton(swatches[1]).OnClick()
+	if b.Color() != render.RGB(4, 5, 6) || len(set) != 1 || host.closed != 1 {
+		t.Errorf("color %v, %d sets, %d closes; want the pick shown, reported and closed", b.Color(), len(set), host.closed)
 	}
 	b.SetColor(render.RGB(9, 9, 9))
-	b.Choose(render.RGB(4, 5, 6))
-	if b.Color() != render.RGB(4, 5, 6) || len(set) != 1 {
-		t.Errorf("color %v, OnColorSet fired %d times; SetColor must stay silent", b.Color(), len(set))
-	}
-	if b.Element() != "colorbutton" {
-		t.Errorf("element %q", b.Element())
+	if len(set) != 1 {
+		t.Error("SetColor fired OnColorSet")
 	}
 	binding := NewBinding(render.RGB(7, 7, 7))
 	b.BindColor(binding)
@@ -31,6 +42,78 @@ func TestColorButtonOpensAndChooses(t *testing.T) {
 		t.Error("the binding did not follow the pick")
 	}
 }
+
+// The Custom entry opens the full chooser in place, whose edits report
+// as they happen and move the ring; the custom row lists its colors.
+func TestSwatchPickerCustom(t *testing.T) {
+	p := NewSwatchPicker(goldenFace(t), 14, DefaultSwatches(), render.RGB(0xef, 0x44, 0x44))
+	p.SetCustom([]render.Color{render.RGB(1, 1, 1)})
+	var edits []render.Color
+	p.OnEdited = func(c render.Color) { edits = append(edits, c) }
+	if n := len(swatchesOf(p)); n != len(DefaultSwatches())+1 {
+		t.Fatalf("%d swatches, want the presets and one custom", n)
+	}
+	p.more.OnClick()
+	if !p.Expanded() {
+		t.Fatal("Custom did not open the chooser")
+	}
+	p.chooser.SetColor(render.RGB(1, 1, 1))
+	if len(edits) != 1 || p.Color() != render.RGB(1, 1, 1) {
+		t.Fatalf("edits %v, color %v", edits, p.Color())
+	}
+	for _, sw := range swatchesOf(p) {
+		if sw.Selected() != (sw.Color() == render.RGB(1, 1, 1)) {
+			t.Errorf("swatch %v ringed %v after the edit", sw.Color(), sw.Selected())
+		}
+	}
+	p.SetCustom(nil)
+	if n := len(swatchesOf(p)); n != len(DefaultSwatches()) {
+		t.Errorf("%d swatches after clearing the custom row", n)
+	}
+}
+
+// A swatch takes its size from CSS.
+func TestColorSwatchSizesFromCSS(t *testing.T) {
+	sw := NewColorSwatch(render.RGB(1, 2, 3))
+	loadCSS(t, `colorswatch { min-width: 40px; min-height: 12px; }`)
+	if got := sw.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 40, H: 12}) {
+		t.Errorf("swatch measures %v, want 40x12", got)
+	}
+}
+
+// TestGoldenColorSwatches pins the picker: presets with one ringed, a
+// translucent custom color over the checkerboard, in both palettes.
+func TestGoldenColorSwatches(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		th   *Theme
+	}{{"dark", DarkTheme()}, {"light", LightTheme()}} {
+		t.Run(tc.name, func(t *testing.T) {
+			SetTheme(tc.th)
+			defer SetTheme(nil)
+			p := NewSwatchPicker(goldenFace(t), 14, DefaultSwatches(), render.RGB(0x3b, 0x82, 0xf6))
+			p.SetCustom([]render.Color{render.RGBA(0x80, 0x10, 0x10, 0x80)})
+			frame := NewBox(Column, 0, 12)
+			frame.AppendAligned(p, false, AlignStart)
+			NewGolden(t, frame, "swatchpicker-"+tc.name, goldenTheme(tc.th), goldenFrame(300, 200))
+		})
+	}
+}
+
+// swatchesOf is every swatch under w, in order.
+func swatchesOf(w Widget) []*ColorSwatch {
+	var out []*ColorSwatch
+	walkWidgets(w, func(x Widget) bool {
+		if sw, ok := x.(*ColorSwatch); ok {
+			out = append(out, sw)
+		}
+		return true
+	})
+	return out
+}
+
+// swatchButton is the button a picker wraps sw in.
+func swatchButton(sw *ColorSwatch) *Button { return parentOf(sw).(*Button) }
 
 func TestFontButtonShowsAndChooses(t *testing.T) {
 	b := NewFontButton(testFace(t), 13, FontChoice{Family: "Inter", Size: 13})

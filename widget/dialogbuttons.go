@@ -4,48 +4,58 @@ import (
 	"fmt"
 
 	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
-// ColorButton is GTK's ColorDialogButton: a swatch of the current
-// color that opens a color chooser on click. OnOpen is the opening
-// hook (app.Application.AttachColorButton installs the chooser
-// dialog); Choose applies the user's pick and fires OnColorSet.
+// ColorButton shows the current color as a swatch on an outline icon
+// button and opens a SwatchPicker under itself on click: a swatch
+// picks and closes, the picker's Custom entry edits any color in place.
+// Presets are the swatches offered, DefaultSwatches until set; Custom,
+// when set, lists the user's own colors under them.
 type ColorButton struct {
 	Button
-	swatch *colorSwatch
-	// OnOpen runs on click to show a chooser starting at the color.
-	OnOpen func(current render.Color)
-	// OnColorSet runs when the user picked a color (Choose), not on
+	face   render.Font
+	sizePx float64
+	swatch *ColorSwatch
+	// Presets are the picker's swatches.
+	Presets []render.Color
+	// Custom, when set, lists colors for the picker's custom row.
+	Custom func() []render.Color
+	// OnColorSet runs when the user picked or edited a color, not on
 	// SetColor.
 	OnColorSet func(c render.Color)
+	// close dismisses the open picker, nil while closed.
+	close func()
 }
 
-type colorSwatch struct {
-	node
-	color render.Color
+// NewColorButton returns a button showing c, its picker's text in face
+// at sizePx.
+func NewColorButton(face render.Font, sizePx float64, c render.Color) *ColorButton {
+	face = requireFace("widget.NewColorButton", face)
+	sw := NewColorSwatch(c)
+	sw.SetHAlign(AlignCenter)
+	sw.SetVAlign(AlignCenter)
+	b := &ColorButton{Button: *NewButton(sw, 0, 0), face: face, sizePx: sizePx, swatch: sw, Presets: DefaultSwatches()}
+	b.AddClass(css.Outline, css.Icon, "colorbutton")
+	b.SetAccessibleName(FormatColor(c))
+	b.OnClick = b.open
+	return b
 }
 
-func (s *colorSwatch) Measure(Constraints) Size { return Size{W: 32, H: 18} }
-
-func (s *colorSwatch) Paint(cv *render.Canvas) {
-	r := s.Bounds()
-	cv.RoundedRect(r, 4, Current().Border)
-	cv.RoundedRect(render.UniformInsets(1).Shrink(r), 3, s.color)
-}
-
-func (s *colorSwatch) HitTest(p Point) Widget { return s.HitLeaf(s, p) }
-
-// NewColorButton returns a button showing c.
-func NewColorButton(c render.Color) *ColorButton {
-	sw := &colorSwatch{color: c}
-	b := &ColorButton{Button: *NewButton(sw, 6, 6), swatch: sw}
-	b.SetElement("colorbutton")
-	b.OnClick = func() {
-		if b.OnOpen != nil {
-			b.OnOpen(b.swatch.color)
+// open shows the picker under the button.
+func (b *ColorButton) open() {
+	p := NewSwatchPicker(b.face, b.sizePx, b.Presets, b.swatch.color)
+	if b.Custom != nil {
+		p.SetCustom(b.Custom())
+	}
+	p.OnPicked = func(c render.Color) {
+		b.Choose(c)
+		if b.close != nil {
+			b.close()
 		}
 	}
-	return b
+	p.OnEdited = b.Choose
+	b.close = OpenPopover(b, b, p, PopoverOptions{Gap: PopoverGap, OnClosed: func() { b.close = nil }})
 }
 
 // Color returns the shown color.
@@ -53,10 +63,8 @@ func (b *ColorButton) Color() render.Color { return b.swatch.color }
 
 // SetColor shows c without firing OnColorSet.
 func (b *ColorButton) SetColor(c render.Color) {
-	if b.swatch.color != c {
-		b.swatch.color = c
-		b.swatch.Invalidate()
-	}
+	b.swatch.SetColor(c)
+	b.SetAccessibleName(FormatColor(c))
 }
 
 // Choose applies a color the user picked: it shows it and fires

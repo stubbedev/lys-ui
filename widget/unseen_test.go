@@ -43,8 +43,8 @@ func TestDecoratingAShownWidgetDamages(t *testing.T) {
 // every measure: each fresh icon is styled anew.
 func TestDropdownBuildsSlotIconsOnce(t *testing.T) {
 	built := 0
-	dot := func() *Icon { built++; return testDot() }
-	rows := []DropdownRow{{Label: "a", Icon: dot}, {Label: "b", Icon: dot}}
+	dot := func() Widget { built++; return testDot() }
+	rows := []DropdownRow{{Label: "a", Leading: dot}, {Label: "b", Leading: dot}}
 	d := NewDropdownRows(testFace(t), 13, rows, 0)
 	for range 5 {
 		d.InvalidateLayout()

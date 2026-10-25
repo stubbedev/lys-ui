@@ -311,16 +311,7 @@ func (c *ColorChooser) Paint(cv *render.Canvas) {
 
 	// The alpha strip: a checkerboard under the color-to-transparent
 	// gradient, the standard visualization.
-	cv.RoundedRect(c.alphaStrip, 4, th.Surface)
-	for y := 0; y < 160; y += 8 {
-		for x := 0; x < c.alphaStrip.W; x += 8 {
-			grey := th.Surface
-			if ((x/8)+(y/8))%2 == 0 {
-				grey = th.SurfaceHover
-			}
-			cv.FillRect(render.Rect{X: c.alphaStrip.X + x, Y: c.alphaStrip.Y + y, W: 8, H: 8}, grey)
-		}
-	}
+	paintChecker(cv, c.alphaStrip, render.UniformCorners(4))
 	cv.PaintGradient(c.alphaStrip, render.Corners{}, render.Linear(180, render.GradientStop{Pos: 0, Color: hsvColor(c.hue, c.sat, c.val, 1)}, render.GradientStop{Pos: 1, Color: hsvColor(c.hue, c.sat, c.val, 0)}))
 
 	// Cursors: a ring on the square, bars on the strips.

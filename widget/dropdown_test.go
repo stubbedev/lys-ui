@@ -455,15 +455,17 @@ func TestFocusRingIsCoveredByLaterSiblings(t *testing.T) {
 }
 
 // Rich rows: headers head the list's groups (never selected, typed to,
-// or stepped onto) and icons ride the list rows and the face.
+// or stepped onto) and leading widgets, icons and swatches, ride the
+// list rows and the face.
 func TestDropdownRows(t *testing.T) {
-	dot := func() *Icon {
+	dot := func() Widget {
 		return NewSVGIcon([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4"/></svg>`), 8)
 	}
+	blue := func() Widget { return NewColorSwatch(render.RGB(0, 0, 0xff)) }
 	rows := []DropdownRow{
 		{Label: "Colors", Header: true},
-		{Label: "Red", Icon: dot},
-		{Label: "Blue", Icon: dot},
+		{Label: "Red", Leading: dot},
+		{Label: "Blue", Leading: blue},
 		{Label: "Greys", Header: true},
 		{Label: "Black"},
 	}
@@ -494,8 +496,8 @@ func TestDropdownRows(t *testing.T) {
 	if len(list.headings) != 2 || list.headings[0].Text() != "Colors" || list.headings[1].Text() != "Greys" {
 		t.Error("the headers do not head the list's groups")
 	}
-	if list.rows[0].item.Icon == nil || list.rows[2].item.Icon != nil {
-		t.Error("the list rows did not take their icons")
+	if _, swatch := list.rows[1].item.Icon.(*ColorSwatch); list.rows[0].item.Icon == nil || !swatch || list.rows[2].item.Icon != nil {
+		t.Error("the list rows did not take their leading widgets")
 	}
 	if got := highlightedLabel(list); got != "Blue" {
 		t.Errorf("the list opened on %q, want the selection", got)

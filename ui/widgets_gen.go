@@ -1691,12 +1691,20 @@ func (b *ClampBuilder) WatchMaximum(get func() int) *ClampBuilder {
 // ColorButtonBuilder builds a widget.ColorButton.
 type ColorButtonBuilder struct {
 	base[*widget.ColorButton, *ColorButtonBuilder]
+	face render.Font
+	size float64
 }
 
 // ColorButton builds a widget.ColorButton with widget.NewColorButton.
 func ColorButton(c render.Color) *ColorButtonBuilder {
 	b := &ColorButtonBuilder{}
-	b.init(b, func(s *Scope) *widget.ColorButton { return widget.NewColorButton(c) })
+	b.init(b, func(s *Scope) *widget.ColorButton { return widget.NewColorButton(s.face(b.face), s.size(b.size), c) })
+	return b
+}
+
+// Font overrides the environment's typeface and size for this widget; zero values keep the environment's.
+func (b *ColorButtonBuilder) Font(face render.Font, sizePx float64) *ColorButtonBuilder {
+	b.face, b.size = face, sizePx
 	return b
 }
 
@@ -1724,9 +1732,15 @@ func (b *ColorButtonBuilder) BindAction(a widget.Activatable) *ColorButtonBuilde
 	return b
 }
 
-// OnOpen sets the widget's OnOpen field.
-func (b *ColorButtonBuilder) OnOpen(fn func(current render.Color)) *ColorButtonBuilder {
-	b.do(func(_ *Scope, w *widget.ColorButton) { w.OnOpen = fn })
+// Presets sets the widget's Presets field.
+func (b *ColorButtonBuilder) Presets(value []render.Color) *ColorButtonBuilder {
+	b.do(func(_ *Scope, w *widget.ColorButton) { w.Presets = value })
+	return b
+}
+
+// Custom sets the widget's Custom field.
+func (b *ColorButtonBuilder) Custom(fn func() []render.Color) *ColorButtonBuilder {
+	b.do(func(_ *Scope, w *widget.ColorButton) { w.Custom = fn })
 	return b
 }
 
@@ -1827,6 +1841,42 @@ func (b *ColorChooserBuilder) PaletteSource(colors func() []render.Color, add fu
 // OnChanged sets the widget's OnChanged field.
 func (b *ColorChooserBuilder) OnChanged(fn func(render.Color)) *ColorChooserBuilder {
 	b.do(func(_ *Scope, w *widget.ColorChooser) { w.OnChanged = fn })
+	return b
+}
+
+// ColorSwatchBuilder builds a widget.ColorSwatch.
+type ColorSwatchBuilder struct {
+	base[*widget.ColorSwatch, *ColorSwatchBuilder]
+}
+
+// ColorSwatch builds a widget.ColorSwatch with widget.NewColorSwatch.
+func ColorSwatch(c render.Color) *ColorSwatchBuilder {
+	b := &ColorSwatchBuilder{}
+	b.init(b, func(s *Scope) *widget.ColorSwatch { return widget.NewColorSwatch(c) })
+	return b
+}
+
+// Color calls (*widget.ColorSwatch).SetColor.
+func (b *ColorSwatchBuilder) Color(c render.Color) *ColorSwatchBuilder {
+	b.do(func(s *Scope, w *widget.ColorSwatch) { w.SetColor(c) })
+	return b
+}
+
+// WatchColor re-applies SetColor with get's value after every update.
+func (b *ColorSwatchBuilder) WatchColor(get func() render.Color) *ColorSwatchBuilder {
+	b.watch(func(w *widget.ColorSwatch) { w.SetColor(get()) })
+	return b
+}
+
+// Selected calls (*widget.ColorSwatch).SetSelected.
+func (b *ColorSwatchBuilder) Selected(on bool) *ColorSwatchBuilder {
+	b.do(func(s *Scope, w *widget.ColorSwatch) { w.SetSelected(on) })
+	return b
+}
+
+// WatchSelected re-applies SetSelected with get's value after every update.
+func (b *ColorSwatchBuilder) WatchSelected(get func() bool) *ColorSwatchBuilder {
+	b.watch(func(w *widget.ColorSwatch) { w.SetSelected(get()) })
 	return b
 }
 
@@ -7260,6 +7310,64 @@ func (b *StatusPageBuilder) Child(child Node) *StatusPageBuilder {
 // Icon calls (*widget.StatusPage).SetIcon.
 func (b *StatusPageBuilder) Icon(child Node) *StatusPageBuilder {
 	b.do(func(s *Scope, w *widget.StatusPage) { w.SetIcon(build(s, child)) })
+	return b
+}
+
+// SwatchPickerBuilder builds a widget.SwatchPicker.
+type SwatchPickerBuilder struct {
+	base[*widget.SwatchPicker, *SwatchPickerBuilder]
+	face render.Font
+	size float64
+}
+
+// SwatchPicker builds a widget.SwatchPicker with widget.NewSwatchPicker.
+func SwatchPicker(presets []render.Color, current render.Color) *SwatchPickerBuilder {
+	b := &SwatchPickerBuilder{}
+	b.init(b, func(s *Scope) *widget.SwatchPicker {
+		return widget.NewSwatchPicker(s.face(b.face), s.size(b.size), presets, current)
+	})
+	return b
+}
+
+// Font overrides the environment's typeface and size for this widget; zero values keep the environment's.
+func (b *SwatchPickerBuilder) Font(face render.Font, sizePx float64) *SwatchPickerBuilder {
+	b.face, b.size = face, sizePx
+	return b
+}
+
+// Color calls (*widget.SwatchPicker).SetColor.
+func (b *SwatchPickerBuilder) Color(c render.Color) *SwatchPickerBuilder {
+	b.do(func(s *Scope, w *widget.SwatchPicker) { w.SetColor(c) })
+	return b
+}
+
+// WatchColor re-applies SetColor with get's value after every update.
+func (b *SwatchPickerBuilder) WatchColor(get func() render.Color) *SwatchPickerBuilder {
+	b.watch(func(w *widget.SwatchPicker) { w.SetColor(get()) })
+	return b
+}
+
+// Custom calls (*widget.SwatchPicker).SetCustom.
+func (b *SwatchPickerBuilder) Custom(colors []render.Color) *SwatchPickerBuilder {
+	b.do(func(s *Scope, w *widget.SwatchPicker) { w.SetCustom(colors) })
+	return b
+}
+
+// WatchCustom re-applies SetCustom with get's value after every update.
+func (b *SwatchPickerBuilder) WatchCustom(get func() []render.Color) *SwatchPickerBuilder {
+	b.watch(func(w *widget.SwatchPicker) { w.SetCustom(get()) })
+	return b
+}
+
+// OnPicked sets the widget's OnPicked field.
+func (b *SwatchPickerBuilder) OnPicked(fn func(c render.Color)) *SwatchPickerBuilder {
+	b.do(func(_ *Scope, w *widget.SwatchPicker) { w.OnPicked = fn })
+	return b
+}
+
+// OnEdited sets the widget's OnEdited field.
+func (b *SwatchPickerBuilder) OnEdited(fn func(c render.Color)) *SwatchPickerBuilder {
+	b.do(func(_ *Scope, w *widget.SwatchPicker) { w.OnEdited = fn })
 	return b
 }
 

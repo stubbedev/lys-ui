@@ -41,12 +41,12 @@ type Dropdown struct {
 	// faceIcon is the selected row's icon on the face, built for
 	// faceFor.
 	entries  []DropdownRow
-	faceIcon *Icon
+	faceIcon Widget
 	faceFor  int
 	// slotIcons are the rows' icons the face's icon slot is measured
 	// over, built once per row set (nil until then): a factory's
 	// widget is fresh, and styling one each measure restyled the app.
-	slotIcons []*Icon
+	slotIcons []Widget
 
 	// list is the open popover's item list and closeList what closes
 	// it; both are nil while the list is closed.
@@ -80,14 +80,14 @@ func NewDropdown(face render.Font, sizePx float64, items []string, selected int)
 }
 
 // DropdownRow is one row of a dropdown built with NewDropdownRows,
-// GTK's DropDown with a row factory. Icon, when set, builds the row's
-// leading icon: it is called for the list row and for the face, so
-// each owns its instance. A Header row is a group caption: listed,
+// GTK's DropDown with a row factory. Leading, when set, builds the
+// row's leading widget, an icon or a ColorSwatch: it is called for the
+// list row and for the face, so each owns its instance. A Header row is a group caption: listed,
 // never selected, stepped onto, or matched by type-ahead.
 type DropdownRow struct {
-	Label  string
-	Icon   func() *Icon
-	Header bool
+	Label   string
+	Leading func() Widget
+	Header  bool
 }
 
 // NewDropdownRows is NewDropdown over rich rows. A selected index on
@@ -245,8 +245,8 @@ func (d *Dropdown) newList() *Command {
 			groups = append(groups, CommandGroup{})
 		}
 		it := CommandItem{Label: e.Label, Trailing: newCommandCheck(i == d.selected), OnSelect: func() { d.pick(i) }}
-		if e.Icon != nil {
-			it.Icon = e.Icon()
+		if e.Leading != nil {
+			it.Icon = e.Leading()
 		}
 		g := &groups[len(groups)-1]
 		g.Items = append(g.Items, it)
@@ -492,13 +492,13 @@ const dropdownIconGap = 6
 
 // selectedIcon is the face's icon for the selected row, rebuilt when
 // the selection moves; nil for a row without one.
-func (d *Dropdown) selectedIcon() *Icon {
-	if d.selected < 0 || d.selected >= len(d.entries) || d.entries[d.selected].Icon == nil {
+func (d *Dropdown) selectedIcon() Widget {
+	if d.selected < 0 || d.selected >= len(d.entries) || d.entries[d.selected].Leading == nil {
 		d.faceIcon, d.faceFor = nil, -1
 		return nil
 	}
 	if d.faceFor != d.selected || d.faceIcon == nil {
-		d.faceIcon, d.faceFor = d.entries[d.selected].Icon(), d.selected
+		d.faceIcon, d.faceFor = d.entries[d.selected].Leading(), d.selected
 	}
 	return d.faceIcon
 }
@@ -507,10 +507,10 @@ func (d *Dropdown) selectedIcon() *Icon {
 // face reserves it so a selection change never relayouts.
 func (d *Dropdown) iconSlot() int {
 	if d.slotIcons == nil {
-		d.slotIcons = make([]*Icon, 0, len(d.entries))
+		d.slotIcons = make([]Widget, 0, len(d.entries))
 		for _, e := range d.entries {
-			if e.Icon != nil {
-				d.slotIcons = append(d.slotIcons, e.Icon())
+			if e.Leading != nil {
+				d.slotIcons = append(d.slotIcons, e.Leading())
 			}
 		}
 	}

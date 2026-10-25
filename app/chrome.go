@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -97,14 +96,6 @@ func (w *Window) stateMaximized() bool {
 		return false
 	}
 	return hw.state().Maximized
-}
-
-// AttachColorButton makes b open the color chooser dialog over parent
-// on click and apply the pick.
-func (a *Application) AttachColorButton(parent *Window, b *widget.ColorButton) {
-	b.OnOpen = func(current render.Color) {
-		_, _ = a.ColorChooserDialog(parent, current, b.Choose)
-	}
 }
 
 // AttachFontButton makes b open the font chooser dialog over parent on
