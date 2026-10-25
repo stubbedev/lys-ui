@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"time"
 
 	"github.com/neurlang/wayland/wl"
 
@@ -56,10 +57,15 @@ type Clipboard struct {
 	// selectionMimes its advertised set.
 	selection      *wl.DataOffer
 	selectionMimes map[string]bool
-	// source is our claim on the selection, content what it serves.
-	// Exactly one claim lives at a time: the last write wins.
+	// source is our claim on the selection, content what it serves and
+	// serial the input serial it claimed with. Exactly one claim lives
+	// at a time: the last write wins.
 	source  *wl.DataSource
 	content transfer.Content
+	serial  uint32
+	// after runs fn on the event loop once d passed (SetScheduler);
+	// WriteExpiring needs it.
+	after func(d time.Duration, fn func())
 
 	// The primary selection mirrors the above over its own protocol
 	// objects; separate mimes map and payload, per-selection state.
@@ -307,38 +313,83 @@ func (c *Clipboard) ReadPrimary() (string, error) {
 // click that copied); before any it fails with
 // wlsession.ErrNoInputEvent.
 func (c *Clipboard) Write(content transfer.Content) error {
+	_, err := c.claim(content)
+	return err
+}
+
+// SetScheduler installs how the clipboard defers work to its event
+// loop: after runs fn on the loop goroutine once d passed. An
+// Application installs its own (Application.SetClipboard); WriteExpiring
+// needs one.
+func (c *Clipboard) SetScheduler(after func(d time.Duration, fn func())) { c.after = after }
+
+// WriteExpiring is Write with a lifetime, for a secret a password
+// manager copies: after ttl, if this claim still holds the selection -
+// no other client and no later write replaced it - the selection
+// clears (set_selection with no source, on the claim's serial). A
+// replaced claim is left alone, so a later, unrelated copy survives.
+func (c *Clipboard) WriteExpiring(content transfer.Content, ttl time.Duration) error {
+	if c.after == nil {
+		return errors.New("clipboard: WriteExpiring needs a scheduler (Application.SetClipboard)")
+	}
+	source, err := c.claim(content)
+	if err != nil {
+		return err
+	}
+	c.after(ttl, func() { c.expire(source) })
+	return nil
+}
+
+// expire clears the selection if source is still our claim.
+func (c *Clipboard) expire(source *wl.DataSource) {
+	if c.source != source || source == nil {
+		return
+	}
+	serial := c.serial
+	c.dropClaim()
+	if c.sess == nil {
+		return
+	}
+	if dev := c.sess.DataDevice(); dev != nil {
+		_ = dev.SetSelection(nil, serial)
+	}
+}
+
+// claim is Write: it claims the selection with content and returns the
+// claim.
+func (c *Clipboard) claim(content transfer.Content) (*wl.DataSource, error) {
 	if content.Empty() {
-		return errors.New("clipboard: empty content")
+		return nil, errors.New("clipboard: empty content")
 	}
 	if c.sess == nil {
-		return ErrUnavailable
+		return nil, ErrUnavailable
 	}
 	mgr := c.sess.DataDeviceManager()
 	dev := c.sess.DataDevice()
 	if mgr == nil || dev == nil {
-		return ErrUnavailable
+		return nil, ErrUnavailable
 	}
 	serial := c.sess.InputSerial()
 	if serial == 0 {
-		return fmt.Errorf("clipboard: set selection: %w", wlsession.ErrNoInputEvent)
+		return nil, fmt.Errorf("clipboard: set selection: %w", wlsession.ErrNoInputEvent)
 	}
 	source, err := mgr.CreateDataSource()
 	if err != nil {
-		return fmt.Errorf("clipboard: create source: %w", err)
+		return nil, fmt.Errorf("clipboard: create source: %w", err)
 	}
 	for _, m := range content.Mimes {
 		if err := source.Offer(m); err != nil {
-			return fmt.Errorf("clipboard: offer: %w", err)
+			return nil, fmt.Errorf("clipboard: offer: %w", err)
 		}
 	}
 	c.dropClaim()
-	c.source, c.content = source, content
+	c.source, c.content, c.serial = source, content, serial
 	source.AddSendHandler(c)
 	source.AddCancelledHandler(c)
 	if err := dev.SetSelection(source, serial); err != nil {
-		return fmt.Errorf("clipboard: set selection: %w", err)
+		return nil, fmt.Errorf("clipboard: set selection: %w", err)
 	}
-	return nil
+	return source, nil
 }
 
 // WriteText claims the selection with s as text.
@@ -390,7 +441,7 @@ func (c *Clipboard) dropClaim() {
 	if c.source != nil {
 		_ = c.source.Destroy()
 	}
-	c.source, c.content = nil, transfer.Content{}
+	c.source, c.content, c.serial = nil, transfer.Content{}, 0
 }
 
 // sendPayload writes content's payload for mime to a consumer's fd and

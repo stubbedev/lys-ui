@@ -254,10 +254,15 @@ func (a *Application) Clipboard() *Clipboard { return a.clip }
 
 // SetClipboard enables ctrl+c/x/v on every window's focused widget,
 // plus the primary-selection behavior (middle-click paste, and
-// copy-on-select once SetCopyOnSelect turns it on).
+// copy-on-select once SetCopyOnSelect turns it on), and gives the
+// clipboard the application's loop to expire claims on
+// (Clipboard.WriteExpiring).
 func (a *Application) SetClipboard(c *clipboard.Clipboard) {
 	a.clip = c
 	a.primary.src = c
+	if c != nil {
+		c.SetScheduler(func(d time.Duration, fn func()) { time.AfterFunc(d, func() { a.Invoke(fn) }) })
+	}
 }
 
 // SetCopyOnSelect turns X11-style copy-on-select on or off; a finished
