@@ -82,6 +82,9 @@ type Popup struct {
 	// gutter is the shadow margin (Config.Gutter) the painter insets
 	// the content by.
 	gutter int
+	// grabbing is whether the popup holds the seat grab, which only
+	// its destruction or the compositor's popup_done releases.
+	grabbing bool
 	// painter is the frame pipeline whoever paints this surface built
 	// (Run internally, or the application loop for tooltips).
 	painter *Painter
@@ -215,6 +218,7 @@ func New(sess *wlsession.Session, cfg Config) (*Popup, error) {
 		if err := pop.Grab(sess.Seat(), serial); err != nil {
 			return nil, fmt.Errorf("popup: grab: %w", err)
 		}
+		p.grabbing = true
 	}
 	if err := surf.Commit(); err != nil {
 		return nil, fmt.Errorf("popup: commit: %w", err)
@@ -328,6 +332,7 @@ func (p *Popup) HandlePopupConfigure(ev xdg.PopupConfigureEvent) {
 // grab dropped while the popup is mapped is exactly the wire state
 // the exit needs).
 func (p *Popup) HandlePopupPopupDone(xdg.PopupPopupDoneEvent) {
+	p.grabbing = false
 	p.Dismiss()
 }
 
@@ -374,13 +379,21 @@ func (p *Popup) SetOnClosed(f func()) { p.fx.SetOnDismissed(f) }
 // events), the exit tween keeps the surface mapped and repainting
 // until it lands, and only then does the wire teardown run. A second
 // Dismiss mid-exit — another outside click, another Esc — is a no-op.
+// A popup still holding the seat grab tears down at once instead: the
+// grab outlives any exit tween, and a toplevel the dismissing pick or
+// click maps meanwhile never gets the keyboard focus the grab held.
 func (p *Popup) Dismiss() {
 	if p == nil || p.Destroyed() {
 		return
 	}
-	if p.fx.Dismiss() && p.WLSurface != nil {
+	if p.WLSurface != nil && !p.Dismissed() {
 		debug.Log("input", "popup %d dismissed", p.WLSurface.Id())
 	}
+	if p.grabbing {
+		p.Close()
+		return
+	}
+	p.fx.Dismiss()
 }
 
 // Close tears the popup down on the spot: the teardown path through

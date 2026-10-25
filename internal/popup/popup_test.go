@@ -303,3 +303,31 @@ func TestGrabWithoutAnInputEventIsRefused(t *testing.T) {
 		t.Errorf("a popup without a grab needs no input event: %v", err)
 	}
 }
+
+// A popup holding the seat grab keeps it until the popup is destroyed,
+// so its exit tween held the keyboard: a dialog the dismissing pick or
+// click opened mapped without focus, and keys typed meanwhile went to
+// the dying popup. A grabbing popup the client dismisses tears down at
+// once; one the compositor dismissed (popup_done, the grab already
+// gone) still runs its exit.
+func TestDismissingAGrabbingPopupReleasesTheGrabAtOnce(t *testing.T) {
+	p, _ := wireFreePopup(t, surfx.KindMenu)
+	p.grabbing = true
+	closed := 0
+	p.SetOnClosed(func() { closed++ })
+	p.Dismiss()
+	if !p.Destroyed() || closed != 1 {
+		t.Errorf("a dismissed grabbing popup: destroyed %v, OnClosed fired %d times; want torn down, once", p.Destroyed(), closed)
+	}
+
+	done, drive := wireFreePopup(t, surfx.KindMenu)
+	done.grabbing = true
+	done.HandlePopupPopupDone(xdg.PopupPopupDoneEvent{})
+	if done.Destroyed() {
+		t.Fatal("popup_done tore down at once; the grab was already gone, so the exit should run")
+	}
+	drive()
+	if !done.Destroyed() {
+		t.Error("the exit landed but the teardown never ran")
+	}
+}
