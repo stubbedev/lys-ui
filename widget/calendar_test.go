@@ -260,3 +260,21 @@ func TestCalendarSelectZeroClears(t *testing.T) {
 		t.Errorf("after clearing: selection %v, shown %v, cursor %v; want none, October 2026, the 14th", c.Selection(), c.Shown(), c.cursor)
 	}
 }
+
+// Week rows sit 8px apart, as the reference calendar spaces its weeks,
+// and a point in the gap between two rows picks no day; the rows were
+// flush, packing the month into a block (#281).
+func TestCalendarWeekRowsAreSpaced(t *testing.T) {
+	c := NewCalendar(goldenFace(t), 14, Date{2026, time.October, 25})
+	arrangeTree(t, c, 400, 400)
+	first, second := c.cellRect(0, 0, 0), c.cellRect(0, 0, 1)
+	if gap := second.Y - (first.Y + first.H); gap != calendarRowGap {
+		t.Errorf("rows %v and %v are %dpx apart, want %d", first, second, gap, calendarRowGap)
+	}
+	if _, ok := c.dayAt(Point{X: first.X + first.W/2, Y: first.Y + first.H + calendarRowGap/2}); ok {
+		t.Error("a point between two week rows picked a day")
+	}
+	if d, ok := c.dayAt(Point{X: second.X + second.W/2, Y: second.Y + second.H/2}); !ok || d != c.cellDate(0, 0, 1) {
+		t.Errorf("the second row's first cell maps to %v %v", d, ok)
+	}
+}

@@ -13,6 +13,8 @@ import (
 const (
 	calendarCols = 7
 	calendarRows = 6
+	// calendarRowGap is the space between the week rows.
+	calendarRowGap = 8
 	// calendarMonthGap separates months shown side by side.
 	calendarMonthGap = 16
 )
@@ -431,8 +433,15 @@ func (c *Calendar) cellDate(i, col, row int) Date {
 // cellRect is month i's cell at (col, row).
 func (c *Calendar) cellRect(i, col, row int) render.Rect {
 	x, y := c.dayGrid(i)
-	return render.Rect{X: x + col*c.cell, Y: y + row*c.cell, W: c.cell, H: c.cell}
+	return render.Rect{X: x + col*c.cell, Y: y + row*c.rowStride(), W: c.cell, H: c.cell}
 }
+
+// rowStride is a week row's height and the gap below it.
+func (c *Calendar) rowStride() int { return c.cell + calendarRowGap }
+
+// gridHeight is the day grid's height: the week rows and the gaps
+// between them.
+func (c *Calendar) gridHeight() int { return calendarRows*c.rowStride() - calendarRowGap }
 
 // dayRect is d's cell in the shown month holding it, and whether one
 // does.
@@ -455,7 +464,7 @@ func (c *Calendar) Measure(con Constraints) Size {
 		return sz
 	}
 	w := c.months*c.monthWidth() + (c.months-1)*calendarMonthGap
-	h := c.titleH + c.headerH + calendarRows*c.cell
+	h := c.titleH + c.headerH + c.gridHeight()
 	return c.measureStore(con, clampSize(Size{W: w, H: h}, con))
 }
 
@@ -617,10 +626,10 @@ func (c *Calendar) HitTest(p Point) Widget {
 func (c *Calendar) dayAt(p Point) (Date, bool) {
 	for i := range c.months {
 		gx, gy := c.dayGrid(i)
-		if p.X < gx || p.Y < gy || p.X >= gx+c.monthWidth() || p.Y >= gy+calendarRows*c.cell {
+		if p.X < gx || p.Y < gy || p.X >= gx+c.monthWidth() || p.Y >= gy+c.gridHeight() || (p.Y-gy)%c.rowStride() >= c.cell {
 			continue
 		}
-		return c.cellDate(i, (p.X-gx)/c.cell, (p.Y-gy)/c.cell), true
+		return c.cellDate(i, (p.X-gx)/c.cell, (p.Y-gy)/c.rowStride()), true
 	}
 	return Date{}, false
 }
