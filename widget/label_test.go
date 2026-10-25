@@ -246,10 +246,11 @@ func TestLabelLineHeight(t *testing.T) {
 	l := NewLabel(face, px, "Hamburgefonstiv", render.RGBA(0, 0, 0, 255))
 	root.Append(l, false)
 	got := root.Measure(con)
-	// The unitless number scales the cascade's font-size: the 16px
-	// root default here, not the label's constructor 14px.
-	if got.H != 32 {
-		t.Errorf("line-height: 2 at the 16px root size measured %v, want 32", got.H)
+	// The unitless number scales the size the label paints at: its
+	// constructor 14px, which no font-size rule overrides here, not the
+	// 16px root default the cascade would otherwise read.
+	if got.H != 28 {
+		t.Errorf("line-height: 2 on a 14px label measured %v, want 28", got.H)
 	}
 
 	// The wrapped row pitch: two rows stand at one line box apart.

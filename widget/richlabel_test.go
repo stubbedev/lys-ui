@@ -199,6 +199,8 @@ func TestRichLabelClustersAcrossRuns(t *testing.T) {
 // run, one shared baseline, and a line height that is the maximum over
 // the runs - never their sum, never a single run's metrics.
 func TestRichLabelMixedMetrics(t *testing.T) {
+	// The glyphs' own metrics, without the theme's line box.
+	loadCSS(t, `label { line-height: normal; }`)
 	face := testFace(t)
 	tall := tallFace(t)
 	con := Constraints{Max: Size{W: 500, H: 100}}
@@ -281,8 +283,8 @@ func TestRichLabelSelectionBands(t *testing.T) {
 	face := testFace(t)
 	l := NewRichLabel(face, richPx, "ab<b>cd</b>ef", render.RGB(255, 255, 255))
 	con := Constraints{Max: Size{W: 500, H: 100}}
-	l.Measure(con)
-	box := render.Rect{X: 40, Y: 7, W: l.natural.W + 12, H: l.natural.H}
+	size := l.Measure(con)
+	box := render.Rect{X: 40, Y: 7, W: l.natural.W + 12, H: size.H}
 	l.Arrange(box)
 
 	t.Run("empty and inverted ranges have no bands", func(t *testing.T) {

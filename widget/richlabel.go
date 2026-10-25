@@ -660,11 +660,47 @@ func (l *RichLabel) measureText(con Constraints) Size {
 		for _, line := range l.lines {
 			w = max(w, int(math.Ceil(line.advance)))
 		}
-		return clampSize(Size{W: w, H: len(l.lines) * l.natural.H}, con)
+		lineH, _ := l.lineBox()
+		return clampSize(Size{W: w, H: len(l.lines) * lineH}, con)
 	}
-	nat := l.natural
-	nat.W = min(nat.W, limit)
+	lineH, _ := l.lineBox()
+	nat := Size{W: min(l.natural.W, limit), H: lineH}
 	return clampSize(nat, con)
+}
+
+// lineBox is a row's height and its baseline's depth below the row's
+// top, as a plain label's: under a CSS line-height a unitless number
+// gives each run a box that many times its own size, centered on its
+// glyphs, and the row spans them all on the shared baseline; a length
+// is the row's height, the glyphs centered in it; with neither the
+// row is the glyphs' ascent plus descent.
+func (l *RichLabel) lineBox() (int, float64) {
+	glyphs := l.lineAsc + l.lineDesc
+	h := float64(l.natural.H)
+	if v := l.style(l); v.Has(style.PropLineHeight) {
+		if f := v.LineHeightFactor; f > 0 {
+			above, below := 0.0, 0.0
+			for i, r := range l.shaped {
+				asc, desc := r.sh.Ascent(), r.sh.Descent()
+				lead := (f*l.runPx(r.style) - (asc + desc)) / 2
+				if i == 0 || asc+lead > above {
+					above = asc + lead
+				}
+				if i == 0 || desc+lead > below {
+					below = desc + lead
+				}
+			}
+			if len(l.shaped) == 0 {
+				lead := (f*l.shapedPx - glyphs) / 2
+				above, below = l.lineAsc+lead, l.lineDesc+lead
+			}
+			return int(math.Ceil(above + below)), above
+		}
+		if v.LineHeight > 0 {
+			h = math.Ceil(v.LineHeight)
+		}
+	}
+	return int(h), (h-glyphs)/2 + l.lineAsc
 }
 
 // widthCap is the max-width-chars cap in pixels: n approximate
@@ -711,7 +747,7 @@ func (l *RichLabel) MinSize() Size {
 // false when the arranged box cannot hold one line, the same guard a
 // plain label's DrawAligned applies.
 func (l *RichLabel) lineGeom() (lineX float64, baseline int, ok bool) {
-	lineH := l.natural.H
+	lineH, depth := l.lineBox()
 	if l.content.H < lineH {
 		return 0, 0, false
 	}
@@ -732,7 +768,7 @@ func (l *RichLabel) lineGeom() (lineX float64, baseline int, ok bool) {
 	default:
 		lineX = float64(l.content.X)
 	}
-	baseline = l.content.Y + int(math.Round((float64(l.content.H)-float64(lineH))/2+l.lineAsc))
+	baseline = l.content.Y + int(math.Round(float64(l.content.H-lineH)/2+depth))
 	return lineX, baseline, true
 }
 
@@ -758,9 +794,9 @@ func (l *RichLabel) rowGeom(i int) (float64, int) {
 	default:
 		x = float64(l.content.X)
 	}
-	lineH := l.natural.H
+	lineH, baseline := l.lineBox()
 	top := l.content.Y + max(0, (l.content.H-len(l.lines)*lineH)/2)
-	return x, top + i*lineH + int(math.Round(l.lineAsc))
+	return x, top + i*lineH + int(math.Round(baseline))
 }
 
 // Paint draws the selection highlight, then each run: its background,
@@ -908,7 +944,7 @@ func (l *RichLabel) linkAt(p Point) (string, bool) {
 		return "", false
 	}
 	if l.wrap && l.lines != nil {
-		lineH := l.natural.H
+		lineH, _ := l.lineBox()
 		top := l.content.Y + max(0, (l.content.H-len(l.lines)*lineH)/2)
 		row := (p.Y - top) / lineH
 		if row < 0 || row >= len(l.lines) {
@@ -995,7 +1031,7 @@ func (l *RichLabel) SelectedText() (string, bool) {
 // caret table of the run under its x.
 func (l *RichLabel) runeAt(p Point) int {
 	if l.wrap && l.lines != nil {
-		lineH := l.natural.H
+		lineH, _ := l.lineBox()
 		top := l.content.Y + max(0, (l.content.H-len(l.lines)*lineH)/2)
 		row := max(0, (p.Y-top)/lineH)
 		if row >= len(l.lines) {

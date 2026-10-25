@@ -497,9 +497,15 @@ func (l *Label) retext() {
 }
 
 // lineBox is the line height the label lays text out at: the CSS
-// line-height when the style sets one, else the shaped line's natural
-// ascent plus descent.
+// line-height when the style sets one - a unitless number resolved
+// against the size the label paints at, which a cascade without a
+// font-size does not know - else the shaped line's natural ascent plus
+// descent.
 func (l *Label) lineBox(v *style.Values) int {
+	if v.Has(style.PropLineHeight) && v.LineHeightFactor > 0 {
+		_, px := l.effStyleIn(v)
+		return int(math.Ceil(v.LineHeightFactor * px))
+	}
 	if lh := pickf(v, style.PropLineHeight, 0); lh > 0 {
 		return int(math.Ceil(lh))
 	}
@@ -693,16 +699,17 @@ func (l *Label) paintText(cv *render.Canvas, v *style.Values, content render.Rec
 	if ell := l.ellOf(v); ell != EllipsizeNone && l.shaped.Advance() > float64(line.W) {
 		text = render.EllipsizeText(face, text, ell, float64(line.W), px)
 	}
-	// A CSS line-height taller than the glyphs centers them in the
-	// taller box (half-leading); a smaller one lets them overflow the
-	// box, centered, rather than skipping the draw. Unstyled labels
-	// keep the plain centering draw.
+	// The CSS line box, centered in the content box (or overflowing a
+	// shorter one), holds the glyphs centered in it: half-leading for a
+	// line-height taller than the glyphs, overflow for a smaller one,
+	// never a skipped draw. Unstyled labels keep the plain centering
+	// draw.
 	if v.Has(style.PropLineHeight) {
 		if h := l.lineBox(v); h > line.H {
 			line.H = h
 		} else if h < line.H {
-			line.Y += (line.H - l.shaped.LineHeight()) / 2
-			line.H = l.shaped.LineHeight()
+			line.Y += (line.H - h) / 2
+			line.H = h
 		}
 	}
 	if fl := PseudoStyle(l, "first-letter"); fl != nil && text != "" &&
