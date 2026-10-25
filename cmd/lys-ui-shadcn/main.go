@@ -209,14 +209,44 @@ func demoMenu() []widget.MenuItem {
 	}
 }
 
-// dropdownMenu opens the Dropdown Menu demo under its button.
-func (g *gallery) dropdownMenu() {
-	widget.OpenMenu(g.menuButton, g.menuButton, g.env.Face, 14, demoMenu())
+// menubarMenus are the Menubar demo's menus, shadcn's menubar-demo.
+func menubarMenus() []widget.MenuBarMenu {
+	item := func(label, accel string) widget.MenuItem {
+		return widget.MenuItem{Label: label, Accel: accel, OnClick: func() {}}
+	}
+	return []widget.MenuBarMenu{
+		{Label: "File", Items: []widget.MenuItem{
+			item("New Tab", "Ctrl+T"), item("New Window", "Ctrl+N"),
+			{Label: "New Incognito Window", Disabled: true},
+			widget.MenuSeparator(),
+			{Label: "Share", Items: []widget.MenuItem{item("Email link", ""), item("Messages", ""), item("Notes", "")}},
+			widget.MenuSeparator(),
+			item("Print...", "Ctrl+P"),
+		}},
+		{Label: "Edit", Items: []widget.MenuItem{
+			item("Undo", "Ctrl+Z"), item("Redo", "Shift+Ctrl+Z"), widget.MenuSeparator(),
+			item("Cut", ""), item("Copy", ""), item("Paste", ""),
+		}},
+		{Label: "View", Items: []widget.MenuItem{
+			{Label: "Always Show Bookmarks Bar", Kind: widget.ItemCheck, OnClick: func() {}},
+			{Label: "Always Show Full URLs", Kind: widget.ItemCheck, Checked: true, OnClick: func() {}},
+			widget.MenuSeparator(),
+			item("Reload", "Ctrl+R"),
+			{Label: "Force Reload", Accel: "Shift+Ctrl+R", Disabled: true},
+		}},
+		{Label: "Profiles", Items: []widget.MenuItem{
+			{Label: "Andy", Kind: widget.ItemRadio, Group: "profile", OnClick: func() {}},
+			{Label: "Benoit", Kind: widget.ItemRadio, Group: "profile", Checked: true, OnClick: func() {}},
+			{Label: "Luis", Kind: widget.ItemRadio, Group: "profile", OnClick: func() {}},
+			widget.MenuSeparator(),
+			item("Edit...", ""), item("Add Profile...", ""),
+		}},
+	}
 }
 
-// menubarRoot opens a menubar root's menu under it.
-func (g *gallery) menubarRoot(_ int, anchor widget.Boundser) {
-	widget.OpenMenu(g.menubar, anchor, g.env.Face, 14, demoMenu())
+// dropdownMenu opens the Dropdown Menu demo under its button.
+func (g *gallery) dropdownMenu() {
+	widget.OpenMenu(g.menuButton, g.menuButton, g.env.Face, 14, demoMenu(), nil)
 }
 
 // popover opens the Popover demo under its button.
@@ -569,7 +599,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			).Classes(css.Card),
 		),
 		section("Kbd", ui.Row(ui.KbdGroup("Ctrl", "Shift", "P"), ui.Label("opens the command palette")).Spacing(12)),
-		section("Menubar", ui.Aligned(ui.MenuBar("File", "Edit", "View", "Profiles").Ref(&g.menubar).OnRoot(g.menubarRoot), widget.AlignStart)).
+		section("Menubar", ui.Aligned(ui.MenuBar(menubarMenus()...).Ref(&g.menubar), widget.AlignStart)).
 			opens(click, func() image.Point { b := g.menubar.Root(0).Bounds(); return image.Pt(b.X+b.W/2, b.Y+b.H/2) }),
 		section("Navigation Menu", ui.Aligned(ui.NavigationMenu(
 			widget.NavigationMenuItem{Label: "Getting started", Content: widget.NewNavigationLinks(g.env.Face, 2,

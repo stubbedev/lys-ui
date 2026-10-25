@@ -249,5 +249,5 @@ func (t *DataTable[T]) openColumns() {
 			t.SetColumnVisible(i, t.hidden[i])
 		}})
 	}
-	OpenMenu(t, t.columns, t.face, 14, items)
+	OpenMenu(t, t.columns, t.face, 14, items, nil)
 }

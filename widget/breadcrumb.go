@@ -118,7 +118,7 @@ func (b *Breadcrumb) ellipsis(from, to int) *Button {
 		for i := from; i < to; i++ {
 			items = append(items, MenuItem{Label: b.path[i], OnClick: func() { b.navigate(i) }})
 		}
-		OpenMenu(more, more, b.face, breadcrumbSize, items)
+		OpenMenu(more, more, b.face, breadcrumbSize, items, nil)
 	}
 	return more
 }

@@ -117,25 +117,31 @@ func TestActionBarPacks(t *testing.T) {
 	}
 }
 
-// TestMenuBarRootsAndKeyboard pins the bar's activation: roots report
-// their anchors, clicks and the F10-style key handoff fire OnRoot.
+// TestMenuBarRootsAndKeyboard pins the bar's activation: a click and
+// the F10-style key handoff open the root's menu, and the root is
+// :checked while its menu is open - it never was, so the open root
+// went unmarked (#281).
 func TestMenuBarRootsAndKeyboard(t *testing.T) {
 	face := chromeFace(t)
-	bar := NewMenuBar(face, 14, "File", "Edit")
+	file := []MenuItem{{Label: "New Tab", OnClick: func() {}}}
+	edit := []MenuItem{{Label: "Undo", OnClick: func() {}}}
+	bar := NewMenuBar(face, 14, MenuBarMenu{Label: "File", Items: file}, MenuBarMenu{Label: "Edit", Items: edit})
+	host := &fakeSurfaceHost{}
+	SetSurfaceHost(bar, host)
 	if bar.Roots() != 2 || bar.Root(0) == nil || bar.Root(2) != nil {
 		t.Fatalf("roots = %d", bar.Roots())
 	}
-	var opened []int
-	bar.OnRoot = func(i int, anchor Boundser) {
-		if anchor == nil {
-			t.Error("root activation carried no anchor")
-		}
-		opened = append(opened, i)
-	}
 	bar.buttons[1].OnClick()
+	if len(host.menus) != 1 || host.menus[0][0].Label != "Undo" || !bar.buttons[1].HasState(StateChecked) || bar.buttons[0].HasState(StateChecked) {
+		t.Fatalf("after clicking Edit: menus %v, roots checked %v %v", host.menus, bar.buttons[0].HasState(StateChecked), bar.buttons[1].HasState(StateChecked))
+	}
+	host.menuClosers[0]()
+	if bar.buttons[1].HasState(StateChecked) {
+		t.Error("the root stayed checked after its menu closed")
+	}
 	bar.KeyAction(KeyEnter, 0)
-	if len(opened) != 2 || opened[0] != 1 || opened[1] != 0 {
-		t.Errorf("opened = %v, want [1 0]", opened)
+	if len(host.menus) != 2 || host.menus[1][0].Label != "New Tab" || !bar.buttons[0].HasState(StateChecked) {
+		t.Errorf("the key handoff opened %v", host.menus)
 	}
 }
 
@@ -171,7 +177,7 @@ func TestGoldenChrome(t *testing.T) {
 	NewGolden(t, header, "headerbar", goldenTheme(th), goldenFrame(360, 44))
 
 	for _, shot := range bothPalettes("menubar") {
-		NewGolden(t, NewMenuBar(face, 13, "File", "Edit", "View"), shot.name, goldenTheme(shot.th))
+		NewGolden(t, NewMenuBar(face, 13, MenuBarMenu{Label: "File"}, MenuBarMenu{Label: "Edit"}, MenuBarMenu{Label: "View"}), shot.name, goldenTheme(shot.th))
 	}
 }
 

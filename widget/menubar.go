@@ -6,10 +6,9 @@ import (
 
 // MenuBar is the in-window primary navigation (#91, shadcn/ui's
 // Menubar): a bordered, rounded strip of root buttons, each opening
-// its menu below through the existing popover machinery - the
-// PopoverMenuBar shape. The bar never opens popovers itself (that is
-// app plumbing); it reports the activation. It styles as the `menubar`
-// element, its roots as `menubar > box > button`.
+// its menu below through the surface's host - the PopoverMenuBar
+// shape. It styles as the `menubar` element, its roots as
+// `menubar > box > button`, the root whose menu is open :checked.
 //
 // Keyboard: F10 focuses the bar's first button when the app routes the
 // key to it - MenuBar implements KeyActionHandler for exactly that
@@ -19,22 +18,26 @@ type MenuBar struct {
 	face   render.Font
 	sizePx float64
 
-	// OnRoot fires when root i activates (click or keyboard): the app
-	// opens the menu popover anchored at that root's button.
-	OnRoot func(i int, anchor Boundser)
-
+	menus   []MenuBarMenu
 	buttons []*Button
 }
 
-// NewMenuBar returns a bar with one button per root label.
-func NewMenuBar(face render.Font, sizePx float64, roots ...string) *MenuBar {
+// MenuBarMenu is one root of a MenuBar: its label and the menu it
+// opens.
+type MenuBarMenu struct {
+	Label string
+	Items []MenuItem
+}
+
+// NewMenuBar returns a bar with one root button per menu.
+func NewMenuBar(face render.Font, sizePx float64, menus ...MenuBarMenu) *MenuBar {
 	face = requireFace("widget.NewMenuBar", face)
-	m := &MenuBar{face: face, sizePx: sizePx}
+	m := &MenuBar{face: face, sizePx: sizePx, menus: menus}
 	m.SetElement("menubar")
 	row := NewBox(Row, 4, 0)
-	for i, label := range roots {
+	for i, menu := range menus {
 		which := i
-		btn := NewButton(NewLabel(face, sizePx, label, 0), 0, 0)
+		btn := NewButton(NewLabel(face, sizePx, menu.Label, 0), 0, 0)
 		btn.OnClick = func() { m.fire(which) }
 		m.buttons = append(m.buttons, btn)
 		row.Append(btn, false)
@@ -61,10 +64,12 @@ func (m *MenuBar) SetFocused(on bool) {
 	m.Invalidate()
 }
 
+// fire opens root i's menu below its button, the root :checked until
+// the menu closes.
 func (m *MenuBar) fire(i int) {
-	if m.OnRoot != nil {
-		m.OnRoot(i, m.buttons[i])
-	}
+	root := m.buttons[i]
+	root.SetState(StateChecked, true)
+	OpenMenu(m, root, m.face, m.sizePx, m.menus[i].Items, func() { root.SetState(StateChecked, false) })
 }
 
 // KeyAction handles the F10 handoff: it activates the first root,

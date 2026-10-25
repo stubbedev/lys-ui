@@ -79,6 +79,9 @@ type fakeSurfaceHost struct {
 	popovers []Widget
 	opts     []PopoverOptions
 	closed   int
+	// menuClosers are the menus' onClosed callbacks, which a test runs
+	// to close them.
+	menuClosers []func()
 }
 
 func (h *fakeSurfaceHost) Focus(Widget) {}
@@ -89,8 +92,9 @@ func (h *fakeSurfaceHost) OpenPopover(_ Boundser, content Widget, opts PopoverOp
 	return func() { h.closed++ }
 }
 
-func (h *fakeSurfaceHost) OpenMenu(_ Boundser, _ render.Font, _ float64, items []MenuItem) {
+func (h *fakeSurfaceHost) OpenMenu(_ Boundser, _ render.Font, _ float64, items []MenuItem, onClosed func()) {
 	h.menus = append(h.menus, items)
+	h.menuClosers = append(h.menuClosers, onClosed)
 }
 
 // A long path collapses its middle into an ellipsis whose menu lists
@@ -139,7 +143,7 @@ func TestOpenMenuWithoutHostPanics(t *testing.T) {
 		}
 	}()
 	b := NewButton(NewSpacer(0, 0), 0, 0)
-	OpenMenu(b, b, goldenFace(t), 14, nil)
+	OpenMenu(b, b, goldenFace(t), 14, nil, nil)
 }
 
 // SetAccessibleName outranks the tooltip and the content's name.

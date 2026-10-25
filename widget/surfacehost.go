@@ -13,8 +13,9 @@ import (
 // reports its own failures.
 type SurfaceHost interface {
 	// OpenMenu opens items as a popup menu beside anchor, whose bounds
-	// are in the tree's coordinates, painted with face at sizePx.
-	OpenMenu(anchor Boundser, face render.Font, sizePx float64, items []MenuItem)
+	// are in the tree's coordinates, painted with face at sizePx;
+	// onClosed, when set, runs once the menu goes away.
+	OpenMenu(anchor Boundser, face render.Font, sizePx float64, items []MenuItem, onClosed func())
 	// OpenPopover opens content in a popover beside anchor, and returns
 	// what closes it.
 	OpenPopover(anchor Boundser, content Widget, opts PopoverOptions) (close func())
@@ -43,9 +44,9 @@ func hostOf(w Widget, what string) SurfaceHost {
 }
 
 // OpenMenu opens items as a popup menu beside anchor through the host
-// of from's tree.
-func OpenMenu(from Widget, anchor Boundser, face render.Font, sizePx float64, items []MenuItem) {
-	hostOf(from, "OpenMenu").OpenMenu(anchor, face, sizePx, items)
+// of from's tree; onClosed, when set, runs once the menu goes away.
+func OpenMenu(from Widget, anchor Boundser, face render.Font, sizePx float64, items []MenuItem, onClosed func()) {
+	hostOf(from, "OpenMenu").OpenMenu(anchor, face, sizePx, items, onClosed)
 }
 
 // PopoverOptions shape a widget-opened popover.

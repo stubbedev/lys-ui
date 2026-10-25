@@ -22,8 +22,8 @@ type surfaceHost struct {
 func (p surfaceHost) Focus(w widget.Widget) { p.router.SetFocus(w) }
 
 // OpenMenu implements widget.SurfaceHost.
-func (p surfaceHost) OpenMenu(anchor widget.Boundser, face render.Font, sizePx float64, items []widget.MenuItem) {
-	cfg := MenuPopoverConfig{Anchor: anchor, Face: face, SizePx: sizePx, Items: items, Parent: p.parent}
+func (p surfaceHost) OpenMenu(anchor widget.Boundser, face render.Font, sizePx float64, items []widget.MenuItem, onClosed func()) {
+	cfg := MenuPopoverConfig{Anchor: anchor, Face: face, SizePx: sizePx, Items: items, Parent: p.parent, OnClosed: onClosed}
 	if _, err := p.a.OpenMenuPopover(p.host, cfg); err != nil {
 		p.a.reportPopup(fmt.Errorf("app: open a widget's menu: %w", err))
 	}

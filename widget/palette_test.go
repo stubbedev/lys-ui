@@ -10,7 +10,7 @@ func TestLabelsFollowAPaletteSwitch(t *testing.T) {
 	t.Cleanup(func() { SetTheme(prev) })
 	SetTheme(DarkTheme())
 	face := testFace(t)
-	bar := NewMenuBar(face, 14, "File")
+	bar := NewMenuBar(face, 14, MenuBarMenu{Label: "File"})
 	title := NewWindowTitle(face, 14, "Title", "Subtitle")
 	SetTheme(LightTheme())
 	th := Current()

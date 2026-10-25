@@ -5096,21 +5096,15 @@ type MenuBarBuilder struct {
 }
 
 // MenuBar builds a widget.MenuBar with widget.NewMenuBar.
-func MenuBar(roots ...string) *MenuBarBuilder {
+func MenuBar(menus ...widget.MenuBarMenu) *MenuBarBuilder {
 	b := &MenuBarBuilder{}
-	b.init(b, func(s *Scope) *widget.MenuBar { return widget.NewMenuBar(s.face(b.face), s.size(b.size), roots...) })
+	b.init(b, func(s *Scope) *widget.MenuBar { return widget.NewMenuBar(s.face(b.face), s.size(b.size), menus...) })
 	return b
 }
 
 // Font overrides the environment's typeface and size for this widget; zero values keep the environment's.
 func (b *MenuBarBuilder) Font(face render.Font, sizePx float64) *MenuBarBuilder {
 	b.face, b.size = face, sizePx
-	return b
-}
-
-// OnRoot sets the widget's OnRoot field.
-func (b *MenuBarBuilder) OnRoot(fn func(i int, anchor widget.Boundser)) *MenuBarBuilder {
-	b.do(func(_ *Scope, w *widget.MenuBar) { w.OnRoot = fn })
 	return b
 }
 
