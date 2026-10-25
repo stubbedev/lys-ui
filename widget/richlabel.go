@@ -418,10 +418,9 @@ func (l *RichLabel) reflow(w int) {
 	if l.fitW == w && l.lines != nil {
 		return
 	}
-	rows := l.wrapSpans(w)
+	rows, starts := l.wrapSpans(w)
 	if n := l.maxLines; n > 0 && l.ell != EllipsizeNone && len(rows) > n {
-		_, start := l.rowRange(rows, n-1)
-		merged := sliceSpans(l.runs, start, l.runes)
+		merged := sliceSpans(l.runs, starts[n-1], l.runes)
 		rows = append(rows[:n-1], merged)
 		rows[n-1] = l.fitLine(rows[n-1], w)
 	}
@@ -434,77 +433,77 @@ func (l *RichLabel) reflow(w int) {
 }
 
 // wrapSpans breaks the spans into rows of at most w pixels: greedy
-// word wrap, spaces riding with the word before them and dropped at a
-// break.
-func (l *RichLabel) wrapSpans(w int) [][]MarkupRun {
+// over the text's line-break opportunities (UAX #14, as a plain label
+// breaks), the spaces after a word riding with it and dropped at a
+// break. A word wider than a row breaks between grapheme clusters, as
+// Pango's word wrap falls back to, so nothing runs past the label.
+// starts are the rows' first rune offsets in the text.
+func (l *RichLabel) wrapSpans(w int) (rows [][]MarkupRun, starts []int) {
 	lineW := 0.0
-	var rows [][]MarkupRun
+	pos := 0
 	var row []MarkupRun
 	flush := func() {
-		rows = append(rows, row)
+		rows = append(rows, trimRowEnd(row))
 		row, lineW = nil, 0
 	}
+	add := func(s string, st TextStyle, adv float64) {
+		if len(row) == 0 {
+			starts = append(starts, pos)
+		}
+		pos += utf8.RuneCountInString(s)
+		if n := len(row); n > 0 && row[n-1].Style == st {
+			row[n-1].Text += s
+		} else {
+			row = append(row, MarkupRun{Text: s, Style: st})
+		}
+		lineW += adv
+	}
 	for _, span := range l.runs {
-		start := 0
-		for i, r := range span.Text {
-			if r != ' ' && r != '\t' {
+		face, px := l.faceFor(span.Style), l.runPx(span.Style)
+		advance := func(s string) float64 { return face.Shape(s, px).Advance() }
+		for _, seg := range text.LineSegments(span.Text) {
+			word := strings.TrimRight(seg, " \t")
+			wordW := advance(word)
+			if lineW+wordW > float64(w) && len(row) > 0 {
+				flush()
+			}
+			if wordW <= float64(w) {
+				add(seg, span.Style, advance(seg))
 				continue
 			}
-			if i > start {
-				word := span.Text[start:i]
-				adv := l.faceFor(span.Style).Shape(word, l.runPx(span.Style)).Advance()
-				if lineW+adv > float64(w) && len(row) > 0 {
+			rs := []rune(seg)
+			for i := 0; i < len(rs); {
+				j := text.NextCluster(rs, i)
+				g := string(rs[i:j])
+				gw := advance(g)
+				if lineW+gw > float64(w) && len(row) > 0 {
 					flush()
 				}
-				row = append(row, MarkupRun{Text: word, Style: span.Style})
-				lineW += adv
+				add(g, span.Style, gw)
+				i = j
 			}
-			start = i + 1
-			space := span.Text[i : i+1]
-			adv := l.faceFor(span.Style).Shape(space, l.runPx(span.Style)).Advance()
-			if lineW+adv > float64(w) && len(row) > 0 {
-				flush()
-				continue
-			}
-			row = append(row, MarkupRun{Text: space, Style: span.Style})
-			lineW += adv
-		}
-		if start < len(span.Text) {
-			word := span.Text[start:]
-			adv := l.faceFor(span.Style).Shape(word, l.runPx(span.Style)).Advance()
-			if lineW+adv > float64(w) && len(row) > 0 {
-				flush()
-			}
-			row = append(row, MarkupRun{Text: word, Style: span.Style})
-			lineW += adv
 		}
 	}
 	if len(row) > 0 {
-		rows = append(rows, row)
+		rows = append(rows, trimRowEnd(row))
 	}
 	if rows == nil {
-		rows = [][]MarkupRun{l.runs}
+		rows, starts = [][]MarkupRun{l.runs}, []int{0}
 	}
-	return rows
+	return rows, starts
 }
 
-// rowRange is the flat rune range [start, end) the first runes of row
-// i cover, counting the rows' tokens.
-func (l *RichLabel) rowRange(rows [][]MarkupRun, i int) (int, int) {
-	count := 0
-	start := 0
-	for r, row := range rows {
-		n := 0
-		for _, run := range row {
-			n += utf8.RuneCountInString(run.Text)
+// trimRowEnd drops the spaces a row ends with, which a break swallows.
+func trimRowEnd(row []MarkupRun) []MarkupRun {
+	for len(row) > 0 {
+		last := &row[len(row)-1]
+		last.Text = strings.TrimRight(last.Text, " \t")
+		if last.Text != "" {
+			break
 		}
-		if r == i {
-			return count, count + n
-		}
-		count += n
-		start = count
+		row = row[:len(row)-1]
 	}
-	return start, l.runes
+	return row
 }
 
 // fitLine is one row ellipsized to w, the truncation mode placing the
@@ -733,7 +732,8 @@ func (l *RichLabel) MinSize() Size {
 	floor := Size{H: l.natural.H}
 	if l.wrap && l.text != "" {
 		w := 0.0
-		for _, tok := range l.wrapSpans(1) {
+		rows, _ := l.wrapSpans(1)
+		for _, tok := range rows {
 			line, _, _ := l.shapeOne(tok)
 			w = math.Max(w, line.advance)
 		}
