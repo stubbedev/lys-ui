@@ -848,6 +848,9 @@ func (w *hostWindow) draw() bool {
 		return true
 	}
 
+	if w.renderer != nil && w.renderer.failed != nil {
+		w.dropRenderer()
+	}
 	b, err := w.pool.Acquire()
 	if errors.Is(err, buffer.ErrBusy) {
 		// The release event wakes the park below; stay dirty. The
@@ -891,9 +894,20 @@ func (w *hostWindow) draw() bool {
 	if b.Target != nil {
 		cv := w.renderer.rec.ResetRecorder(b.Width, b.Height, w.devNum(), scale.Denom)
 		w.paintTree(cv, region)
-		if err := w.renderer.dev.Render(cv.Recording(), b.Target); err != nil {
-			w.drawErr = fmt.Errorf("app: GPU frame: %w", err)
-			return false
+		if err := w.renderer.render(cv.Recording(), b.Target); err != nil {
+			if w.renderer.required {
+				w.drawErr = fmt.Errorf("app: GPU frame: %w", err)
+				return false
+			}
+			// The frame never reached the compositor: its buffer goes
+			// back, the window turns to the CPU, and the next pass
+			// repaints it whole into shared memory.
+			w.renderer.fail(err)
+			b.Release()
+			w.dropRenderer()
+			w.pendingRects = append(w.pendingRects, render.Rect{W: bw, H: bh})
+			w.dirty = true
+			return true
 		}
 		w.paintedPixels = region.W * region.H
 	} else {
@@ -934,6 +948,14 @@ func (w *hostWindow) draw() bool {
 	w.framePending = true
 	w.frameArmedAt = time.Now()
 	return true
+}
+
+// dropRenderer turns the window to the CPU after its renderer failed:
+// the pool retires its dmabuf buffers and makes shared-memory ones,
+// fully stale, so the next frame repaints everything.
+func (w *hostWindow) dropRenderer() {
+	w.renderer = nil
+	w.pool.Resize(w.allocator())
 }
 
 // paintTree paints the window's tree onto cv within the device region:

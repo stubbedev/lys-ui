@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-ui/gpu"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/debug"
+	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/render"
 )
@@ -25,10 +26,28 @@ const rendererEnv = "LYS_UI_RENDERER"
 // glyph uploads are shared.
 type gpuRenderer struct {
 	dev       *gpu.Device
+	name      string
 	modifiers []uint64
 	// rec is the recording canvas a frame paints into before the GPU
 	// renders it; windows paint one at a time, on the loop.
 	rec *render.Canvas
+	// required is LYS_UI_RENDERER=gpu: a failed frame is fatal rather
+	// than a switch to the CPU.
+	required bool
+	// failed is the first frame error; once set, every window draws on
+	// the CPU from its next frame.
+	failed error
+	// render is the device's Render, a seam for tests.
+	render func(*render.List, *gpu.Target) error
+}
+
+// fail records a frame error and reports the switch to the CPU, once.
+func (r *gpuRenderer) fail(err error) {
+	if r.failed != nil {
+		return
+	}
+	r.failed = err
+	logutil.L().Error("app: a GPU frame failed; every window draws on the CPU from now on", "device", r.name, "err", err)
 }
 
 // renderer is the application's GPU renderer, opened on first use;
@@ -49,6 +68,9 @@ func (a *Application) renderer() (*gpuRenderer, error) {
 		return nil, a.gpuErr
 	}
 	r, err := a.openRenderer()
+	if err == nil {
+		r.required = mode == "gpu"
+	}
 	if err != nil {
 		if mode == "gpu" {
 			a.gpuErr = fmt.Errorf("app: %s=gpu: %w", rendererEnv, err)
@@ -83,7 +105,7 @@ func (a *Application) openRenderer() (*gpuRenderer, error) {
 		dev.Close()
 		return nil, fmt.Errorf("%s renders ARGB8888 in no modifier the compositor imports", dev.Name())
 	}
-	return &gpuRenderer{dev: dev, modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1)}, nil
+	return &gpuRenderer{dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render}, nil
 }
 
 // newBuffer is a dmabuf buffer of r for a bufW x bufH window.
