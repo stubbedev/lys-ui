@@ -41,9 +41,20 @@ shared modifier), records each frame and renders it into a dmabuf
 buffer. The CPU canvas draws otherwise, into shared memory.
 `LYS_UI_RENDERER=cpu` always draws on the CPU, and `=gpu` makes a GPU
 that cannot draw an error from `Run`. Both paths paint the same pixels:
-the GPU mirrors the canvas's integer arithmetic, and every widget
-golden is checked on both (`just gpu`). The Vulkan loader is found
-through the library path, which the nix packages set.
+the GPU runs the canvas's own arithmetic step for step (integer math,
+and float32 in one fixed order where the canvas evaluates a distance
+field, a gradient or a sample), and every widget golden is checked on
+both, byte for byte (`just gpu`). The Vulkan loader is found through
+the library path, which the nix packages set. A GPU frame that fails
+at run time (a device lost) is logged and turns every window to the
+CPU; a reconnect agrees the renderer with the new compositor again.
+
+An image the GPU should upload once and keep is a `render.StillImage`:
+an `*image.RGBA` its owner never changes. Icons, the image widget's
+decoded sources and cached rasters are still; any other image draws
+from its pixels at each draw, so changing one in place between frames
+(a video frame resampled into the same raster) always shows. An app
+that draws an image it never changes wraps it to save the uploads.
 
 Each layer talks only to its neighbors: widgets never touch the wire,
 the session never knows widgets exist, and everything above the session
