@@ -51,12 +51,10 @@ func (s *Separator) Paint(cv *render.Canvas) {
 	}
 	col := Current().Border
 	if s.orientation == Horizontal {
-		y := b.Y + max(0, (b.H-sepThickness)/2)
-		cv.Line(b.X, y, b.X+b.W-sepThickness, y, sepThickness, col)
+		cv.FillRect(render.Rect{X: b.X, Y: b.Y + max(0, (b.H-sepThickness)/2), W: b.W, H: min(sepThickness, b.H)}, col)
 		return
 	}
-	x := b.X + max(0, (b.W-sepThickness)/2)
-	cv.Line(x, b.Y, x, b.Y+b.H-sepThickness, sepThickness, col)
+	cv.FillRect(render.Rect{X: b.X + max(0, (b.W-sepThickness)/2), Y: b.Y, W: min(sepThickness, b.W), H: b.H}, col)
 }
 
 // HitTest returns the separator when p is inside its bounds.
