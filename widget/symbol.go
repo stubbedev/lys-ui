@@ -54,6 +54,8 @@ const (
 	SymbolArrowLeft
 	// SymbolArrowRight is a right-pointing arrow (next).
 	SymbolArrowRight
+	// SymbolUser is a head over shoulders (a person, an account).
+	SymbolUser
 )
 
 // chevronAngle is each chevron kind's rotation from right-pointing.
@@ -101,18 +103,21 @@ func (s *Symbol) Arrange(r render.Rect) { s.node.Arrange(r) }
 
 // Paint strokes the glyph centered in the bounds.
 func (s *Symbol) Paint(cv *render.Canvas) {
-	col := pickc(0, s.style(s), style.PropColor, Current().TextMuted)
-	b := s.bounds
+	paintSymbol(cv, s.kind, s.bounds, s.size, pickc(0, s.style(s), style.PropColor, Current().TextMuted))
+}
+
+// paintSymbol strokes kind in col, centered in b at most size wide.
+func paintSymbol(cv *render.Canvas, kind SymbolKind, b render.Rect, size int, col render.Color) {
 	cx, cy := b.X+b.W/2, b.Y+b.H/2
-	r := min(b.W, b.H, s.size) / 3
-	if ang, ok := chevronAngle[s.kind]; ok {
+	r := min(b.W, b.H, size) / 3
+	if ang, ok := chevronAngle[kind]; ok {
 		strokeChevron(cv, cx, cy, r, ang, col)
 		return
 	}
-	switch s.kind {
+	switch kind {
 	case SymbolDoubleLeft, SymbolDoubleRight:
 		ang := 0.0
-		if s.kind == SymbolDoubleLeft {
+		if kind == SymbolDoubleLeft {
 			ang = math.Pi
 		}
 		strokeChevron(cv, cx-r/2, cy, r, ang, col)
@@ -153,14 +158,18 @@ func (s *Symbol) Paint(cv *render.Canvas) {
 		cv.Line(cx-r, cy, cx+r, cy, 1, col)
 	case SymbolArrowLeft, SymbolArrowRight:
 		tip, back := cx+r, -1
-		if s.kind == SymbolArrowLeft {
+		if kind == SymbolArrowLeft {
 			tip, back = cx-r, 1
 		}
 		cv.Line(cx-r, cy, cx+r, cy, 1, col)
 		cv.Line(tip, cy, tip+back*2*r/3, cy-2*r/3, 1, col)
 		cv.Line(tip, cy, tip+back*2*r/3, cy+2*r/3, 1, col)
+	case SymbolUser:
+		fx, fy, fr := float64(cx), float64(cy), float64(r)
+		cv.Arc(fx, fy-fr/2, fr/2, 1, 0, 2*math.Pi, col)
+		cv.Arc(fx, fy+1.2*fr, 0.95*fr, 1, math.Pi, math.Pi, col)
 	case SymbolEllipsis:
-		d := max(2, s.size/8)
+		d := max(2, size/8)
 		for _, x := range [...]int{cx - r, cx, cx + r} {
 			cv.RoundedRect(render.Rect{X: x - d/2, Y: cy - d/2, W: d, H: d}, d, col)
 		}

@@ -292,7 +292,7 @@ func (b *Banner) Revealed() bool { return b.reveal.Revealed() }
 
 // Avatar is the round portrait: an image cropped
 // to a circle, or the fallback of the name's initials on the muted
-// fill. It styles as the `avatar` element: background-color is the
+// fill, a person's outline for a name without any. It styles as the `avatar` element: background-color is the
 // fallback's fill and color its initials.
 type Avatar struct {
 	node
@@ -355,7 +355,12 @@ func (a *Avatar) Paint(cv *render.Canvas) {
 	}
 	v, th := a.style(a), Current()
 	cv.RoundedRect(r, d/2, pickc(0, v, style.PropBackgroundColor, th.MutedColor()))
-	a.face.DrawAligned(cv, a.Initials(), r, float64(d)*0.4, pickc(0, v, style.PropColor, th.Text), render.AlignCenter)
+	fg := pickc(0, v, style.PropColor, th.Text)
+	if initials := a.Initials(); initials != "" {
+		a.face.DrawAligned(cv, initials, r, float64(d)*0.4, fg, render.AlignCenter)
+		return
+	}
+	paintSymbol(cv, SymbolUser, r, d/2, fg)
 }
 
 // HitTest resolves inside the bounds.

@@ -97,6 +97,19 @@ func TestAvatar(t *testing.T) {
 	}
 }
 
+// An avatar for a name without letters painted the bare fill, an empty
+// disc: it shows a person's outline instead, a head over shoulders.
+func TestAvatarWithoutInitialsShowsAPerson(t *testing.T) {
+	a := NewAvatar(adaptiveFace(t), 48, "")
+	px := paintPixels(t, a, 48, 48)
+	if head := pxAt(px, 48, 24, 16); head == Current().MutedColor() {
+		t.Errorf("the head's outline at (24,16) is the bare fill %v", head)
+	}
+	if got := pxAt(px, 48, 24, 4); got != Current().MutedColor() {
+		t.Errorf("fill %v above the outline, want the muted fill", got)
+	}
+}
+
 // TestSplitButton pins the halves: the main fires OnClick, the arrow
 // fires OnMenu with itself as the anchor.
 func TestSplitButton(t *testing.T) {
