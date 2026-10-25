@@ -182,3 +182,19 @@ func TestWeightedResolvesAFamilyByAnotherOfItsNames(t *testing.T) {
 		t.Error("an unknown family resolved to the alias face")
 	}
 }
+
+// A family's display name keys to the name Families lists it under.
+func TestFamilyKeyMatchesFamilies(t *testing.T) {
+	if got := FamilyKey("JetBrains Mono"); got != font.NormalizeFamily("jetbrainsmono") || got != "jetbrainsmono" {
+		t.Errorf("FamilyKey(JetBrains Mono) = %q, want jetbrainsmono", got)
+	}
+	fams, err := Families()
+	if err != nil {
+		t.Skip(err)
+	}
+	for _, f := range fams {
+		if FamilyKey(FamilyDisplay(f)) != f {
+			t.Errorf("family %q displays as %q, which keys to %q", f, FamilyDisplay(f), FamilyKey(FamilyDisplay(f)))
+		}
+	}
+}

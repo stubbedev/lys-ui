@@ -357,6 +357,11 @@ var (
 	familiesErr  error
 )
 
+// FamilyKey is the key Families lists a family under: name
+// normalized the way the matcher normalizes it (lowercased, spaces and
+// separators dropped), so "JetBrains Mono" finds "jetbrainsmono".
+func FamilyKey(name string) string { return font.NormalizeFamily(name) }
+
 // Families enumerates the system store's installed font families,
 // sorted and deduped: the normalized names the matcher - and Best -
 // accept, the set a font chooser offers. The store's own scan shares
