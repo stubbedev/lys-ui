@@ -345,3 +345,27 @@ func TestTooltipOpenedAcrossAPressIsDismissed(t *testing.T) {
 		t.Errorf("a tooltip whose open saw a press stayed up: opened %v, open %v", opened, ctl.open)
 	}
 }
+
+// A tooltip centers under the widget it describes, or under the part a
+// TooltipAnchorer names, not at the pointer: it opened 12px right of
+// and 22px under wherever the pointer rested, off to one side of its
+// trigger.
+func TestTooltipCentersUnderItsWidget(t *testing.T) {
+	btn := widget.NewButton(widget.NewSpacer(40, 20), 0, 0)
+	btn.Arrange(render.Rect{X: 100, Y: 50, W: 80, H: 36})
+	size := widget.Size{W: 60, H: 24}
+	if x, y := tooltipOrigin(btn, size, 170, 80); x != 100+40-30 || y != 50+36 {
+		t.Errorf("tooltip at (%d,%d), want (110,86): centered under the button", x, y)
+	}
+	if x, y := tooltipOrigin(anchorAt{widget.NewBox(widget.Row, 0, 0), render.Rect{X: 10, Y: 10, W: 20, H: 20}}, size, 0, 0); x != 10+10-30 || y != 30 {
+		t.Errorf("anchored tooltip at (%d,%d), want (-10,30): centered under the anchor", x, y)
+	}
+}
+
+// anchorAt is a widget whose tooltip belongs to one rect of it.
+type anchorAt struct {
+	*widget.Box
+	r render.Rect
+}
+
+func (a anchorAt) TooltipAnchor() render.Rect { return a.r }

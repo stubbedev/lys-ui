@@ -92,6 +92,13 @@ type TooltipTexter interface {
 	TooltipText() string
 }
 
+// TooltipAnchorer is a widget whose tooltip belongs to a part of it,
+// a calendar's hovered day: the tooltip centers under that rect, in the
+// tree's coordinates, rather than under the widget's bounds.
+type TooltipAnchorer interface {
+	TooltipAnchor() render.Rect
+}
+
 // IsInteractive reports whether w or any ancestor consumes presses:
 // buttons, sliders, toggles, text inputs, and scroll areas. Hit tests
 // return the deepest widget, often a plain label inside a control, so

@@ -657,6 +657,23 @@ func (c *Calendar) SetHovered(on bool) {
 	}
 }
 
+// TooltipAnchor implements TooltipAnchorer: the hovered day's cell
+// while its Detail names the tooltip, else the whole calendar.
+func (c *Calendar) TooltipAnchor() render.Rect {
+	if c.Detail != nil && !c.hover.IsZero() && c.Detail(c.hover) != "" {
+		for i := range c.months {
+			for row := range calendarRows {
+				for col := range calendarCols {
+					if c.cellDate(i, col, row) == c.hover {
+						return c.cellRect(i, col, row)
+					}
+				}
+			}
+		}
+	}
+	return c.bounds
+}
+
 // TooltipText is the hovered day's Detail, else the calendar's own
 // tooltip.
 func (c *Calendar) TooltipText() string {
