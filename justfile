@@ -166,8 +166,10 @@ docshots dir="docs/public/components":
     trap 'just test-env-stop "$env"' EXIT INT TERM
     . "$env/client.env"
     export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$env"
-    # Scale 2, so the shots stay sharp on high-density screens.
-    swaymsg -s "$(ls "$env"/sway-ipc.*.sock)" output '*' scale 2 >/dev/null || exit 1
+    # Scale 2, so the shots stay sharp on high-density screens, on a
+    # mode 1280 logical pixels wide: a floating window wider than the
+    # output is centered over its edges, cropping the shot.
+    swaymsg -s "$(ls "$env"/sway-ipc.*.sock)" output '*' mode 2560x1600 scale 2 >/dev/null || exit 1
     go run ./cmd/lys-ui-gallery -shots "{{dir}}"
 
 # Run the application-model demo (lys-ui-multi): per-output bars,

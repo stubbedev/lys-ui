@@ -255,12 +255,16 @@ func (g *gallery) dropdownMenu() {
 
 // popover opens the Popover demo under its button.
 func (g *gallery) popover() {
+	field := func(label, value string) ui.Node {
+		return ui.Field(label, ui.Entry().Text(value)).Orientation(widget.FieldHorizontal)
+	}
 	content, view := ui.Build(g.env, ui.Column(
-		ui.Label("Dimensions").Classes(css.Heading),
-		ui.Label("Set the dimensions for the layer.").Classes(css.Muted),
-		ui.Field("Width", ui.Entry().Text("100%")),
-		ui.Field("Height", ui.Entry().Text("25px")),
-	).Spacing(8).Padding(render.UniformInsets(16)).Classes("popover-demo"))
+		ui.Column(
+			ui.Label("Dimensions").Classes(css.Heading),
+			ui.Label("Set the dimensions for the layer.").Classes(css.Muted),
+		).Spacing(8),
+		ui.Column(field("Width", "100%"), field("Max. width", "300px"), field("Height", "25px"), field("Max. height", "none")).Spacing(8),
+	).Spacing(16).Padding(render.UniformInsets(16)).Classes("popover-demo"))
 	widget.OpenPopover(g.popoverButton, g.popoverButton, content, widget.PopoverOptions{OnClosed: view.Close})
 }
 
@@ -357,7 +361,7 @@ func (g *gallery) datePickers(first **widget.DatePicker) ui.Node {
 // dashed drop zone, the hover card's and the popover's widths.
 const galleryCSS = `
 .drop-zone { border: 1px dashed @borders; border-radius: 8px; padding: 48px; }
-.hovercard-content { min-width: 280px; padding: 16px; }
+.hovercard-content { width: 320px; padding: 16px; }
 .popover-demo { width: 320px; }
 .sidebar-demo { min-height: 360px; border: 1px solid @borders; border-radius: 8px; }
 .datatable-demo { min-height: 520px; }
@@ -582,15 +586,15 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 		section("Hover Card", ui.Aligned(ui.HoverCard(
 			ui.Button(ui.Label("@nextjs"), 0, 0).Classes(css.Link).Ref(&hoverTrigger),
 			ui.Column(
-				ui.Label("@nextjs").Classes(css.H4),
+				ui.Label("@nextjs").Classes(css.Heading),
 				ui.Label("The React Framework - created and maintained by @vercel.").Wrap(true),
-				ui.Label("Joined December 2021").Classes(css.Muted),
-			).Spacing(8),
+				ui.Label("Joined December 2021").Classes(css.Caption, css.DimLabel),
+			).Spacing(4),
 		), widget.AlignStart)).opens(hover, center(&hoverTrigger)).room(360, 240),
 		section("Input", ui.Aligned(ui.Entry().Placeholder("Email").SizeRequest(320, 0), widget.AlignStart)),
 		section("Input Group",
 			ui.InputGroup(ui.Entry().Placeholder("Search...")).
-				Prepend(ui.Symbol(widget.SymbolCrosshair, 16)).Append(ui.Label("12 results")),
+				Prepend(ui.Symbol(widget.SymbolSearch, 16)).Append(ui.Label("12 results")),
 			ui.InputGroup(ui.Entry().Text("example.com")).
 				Prepend(ui.Label("https://")).
 				Append(ui.Button(ui.Label("Copy"), 0, 0).Classes(css.Ghost, css.Small))),
