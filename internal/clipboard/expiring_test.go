@@ -7,6 +7,7 @@ import (
 
 	"github.com/neurlang/wayland/wl"
 
+	"github.com/stubbedev/lys-ui/internal/headlesstest"
 	"github.com/stubbedev/lys-ui/transfer"
 )
 
@@ -36,6 +37,33 @@ func TestExpiringClaim(t *testing.T) {
 	c.expire(stale)
 	if c.source != later {
 		t.Error("expiring a replaced claim dropped the claim that replaced it")
+	}
+}
+
+// The expiry's set_selection reaches the wire as the null source and
+// the claim's serial. The generated SetSelection(nil, serial) panicked
+// in the encoder over a real connection, with its send lock held, and
+// froze the client (#277).
+func TestClearSelectionSendsTheNullSource(t *testing.T) {
+	frames := headlesstest.WireServer(t, "wayland-clipboard")
+	disp, err := wl.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = disp.Context().Close() })
+	dev := &wl.DataDevice{}
+	disp.Context().Register(dev)
+	// No compositor answers here, so drop the id from the unsent
+	// bookkeeping a later new-id request would wait on.
+	dev.Unregister()
+	if err := clearSelection(dev, 42); err != nil {
+		t.Fatal(err)
+	}
+	f := headlesstest.WaitForFrame(t, frames, "set_selection", func(f headlesstest.WireFrame) bool {
+		return f.Obj == uint32(dev.Id()) && f.Opcode == dataDeviceSetSelection
+	})
+	if len(f.Body) != 8 || f.Word(0) != 0 || f.Word(1) != 42 {
+		t.Errorf("set_selection payload %v, want the null source and serial 42", f.Body)
 	}
 }
 
