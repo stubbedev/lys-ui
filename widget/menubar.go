@@ -64,12 +64,39 @@ func (m *MenuBar) SetFocused(on bool) {
 	m.Invalidate()
 }
 
-// fire opens root i's menu below its button, the root :checked until
-// the menu closes.
+// fire opens root i's menu below the bar, under its button, the root
+// :checked until the menu closes.
 func (m *MenuBar) fire(i int) {
 	root := m.buttons[i]
 	root.SetState(StateChecked, true)
-	OpenMenu(m, root, m.face, m.sizePx, m.menus[i].Items, MenuOptions{Gap: PopoverGap, OnClosed: func() { root.SetState(StateChecked, false) }})
+	OpenMenu(m, barSpan{bar: m, item: root}, m.face, m.sizePx, m.menus[i].Items, MenuOptions{Gap: PopoverGap, OnClosed: func() { root.SetState(StateChecked, false) }})
+}
+
+// barSpan is a menu's anchor: its item's columns across the bar's
+// rows, so the menu keeps its gap from the bar's edge rather than
+// from the item inside the bar's padding. The item is what the menu
+// styles under (AnchorWidget).
+type barSpan struct {
+	bar  Boundser
+	item *Button
+}
+
+func (s barSpan) Bounds() render.Rect {
+	b, it := s.bar.Bounds(), s.item.Bounds()
+	return render.Rect{X: it.X, Y: b.Y, W: it.W, H: b.H}
+}
+
+// AnchorWidget is the widget a popup opened against anchor styles
+// under, nil for a bare rect: the anchor itself, or the item a
+// menubar's menu opens beneath.
+func AnchorWidget(anchor Boundser) Widget {
+	switch a := anchor.(type) {
+	case barSpan:
+		return a.item
+	case Widget:
+		return a
+	}
+	return nil
 }
 
 // KeyAction handles the F10 handoff: it activates the first root,

@@ -376,7 +376,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	if c, ok := cfg.Content.(interface{ AddClass(...string) }); ok {
 		c.AddClass(popoverClass)
 	}
-	styleAnchor, _ := cfg.Anchor.(widget.Widget)
+	styleAnchor := widget.AnchorWidget(cfg.Anchor)
 	if styleAnchor != nil {
 		widget.SetStyleAnchor(cfg.Content, styleAnchor)
 	}

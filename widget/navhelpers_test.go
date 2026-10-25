@@ -82,6 +82,10 @@ type fakeSurfaceHost struct {
 	// menuOpts are the menus' options; a test runs their OnClosed to
 	// close them.
 	menuOpts []MenuOptions
+	// menuAnchors are the rects the menus opened against, and
+	// menuAnchorers the anchors themselves.
+	menuAnchors   []render.Rect
+	menuAnchorers []Boundser
 }
 
 func (h *fakeSurfaceHost) Focus(Widget) {}
@@ -92,8 +96,10 @@ func (h *fakeSurfaceHost) OpenPopover(_ Boundser, content Widget, opts PopoverOp
 	return func() { h.closed++ }
 }
 
-func (h *fakeSurfaceHost) OpenMenu(_ Boundser, _ render.Font, _ float64, items []MenuItem, opts MenuOptions) {
+func (h *fakeSurfaceHost) OpenMenu(anchor Boundser, _ render.Font, _ float64, items []MenuItem, opts MenuOptions) {
 	h.menus = append(h.menus, items)
+	h.menuAnchors = append(h.menuAnchors, anchor.Bounds())
+	h.menuAnchorers = append(h.menuAnchorers, anchor)
 	h.menuOpts = append(h.menuOpts, opts)
 }
 

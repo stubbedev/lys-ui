@@ -200,7 +200,7 @@ func (m *NavigationMenu) show(i int, keyboard bool) {
 	if m.close != nil {
 		m.close()
 	}
-	opts := PopoverOptions{NoGrab: !keyboard, OnClosed: m.closed}
+	opts := PopoverOptions{NoGrab: !keyboard, Gap: PopoverGap, OnClosed: m.closed}
 	if keyboard {
 		opts.Focus = firstFocusable(m.items[i].Content)
 	}
