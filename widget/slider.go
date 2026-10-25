@@ -117,14 +117,14 @@ func (s *Slider) troughProps() (length, thickness style.Prop) {
 	return style.PropMinWidth, style.PropMinHeight
 }
 
-// troughRect is the trough inside the content box: its thickness (4px
+// troughRect is the trough inside the content box: its thickness (6px
 // unstyled) centered across the axis, the content's length along it
 // (less the unstyled inset).
 func (s *Slider) troughRect() render.Rect {
 	_, c := boxRects(boxOf(s.style(s), render.Insets{}), s.bounds)
 	tv := s.trough.style(&s.trough)
 	_, thickProp := s.troughProps()
-	th := picki(tv, thickProp, 4)
+	th := picki(tv, thickProp, 6)
 	pad := sliderPad
 	if tv.Has(thickProp) || tv.Has(style.PropBackgroundColor) {
 		pad = 0
@@ -152,7 +152,7 @@ func (s *Slider) along(tr render.Rect) (origin, span int) {
 // knobSize is the knob's min size (14px unstyled).
 func (s *Slider) knobSize() (w, h int) {
 	kv := s.trough.knob.style(&s.trough.knob)
-	return picki(kv, style.PropMinWidth, 14), picki(kv, style.PropMinHeight, 14)
+	return picki(kv, style.PropMinWidth, 16), picki(kv, style.PropMinHeight, 16)
 }
 
 // Value returns the current value.
