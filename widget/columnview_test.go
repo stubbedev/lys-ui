@@ -354,3 +354,16 @@ func TestColumnViewRowsFitTheirCells(t *testing.T) {
 		t.Errorf("rows are %d tall, want at least %d for the padded cell and its rule", v.list.rowH, want)
 	}
 }
+
+// The model's last row carries no rule under it, as a table's last row
+// draws none: its rule ran across the table's rounded bottom border.
+func TestColumnViewLastRowHasNoRule(t *testing.T) {
+	face := viewFace(t)
+	v := NewColumnView(face, 14, SliceModel[tableRow]{{"a", 1}, {"b", 2}}, tableCols(face))
+	arrangeTree(t, v, 300, 200)
+	paintTree(v, 300, 200)
+	first, last := v.list.rows[0], v.list.rows[1]
+	if CascadeBorder(first).Bottom != 1 || CascadeBorder(last).Bottom != 0 {
+		t.Errorf("rules under the rows %d and %d, want 1 then 0", CascadeBorder(first).Bottom, CascadeBorder(last).Bottom)
+	}
+}

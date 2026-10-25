@@ -417,12 +417,23 @@ func (l *List) visible() (first, last int) {
 		}
 	}
 	for i := first; i < last; i++ {
-		if _, ok := l.rows[i]; !ok {
-			l.rows[i] = l.newRow(i)
+		r, ok := l.rows[i]
+		if !ok {
+			r = l.newRow(i)
+			l.rows[i] = r
+		}
+		if i == n-1 {
+			r.AddClass(listRowLast)
+		} else {
+			r.RemoveClass(listRowLast)
 		}
 	}
 	return first, last
 }
+
+// listRowLast marks the model's last row, which the cascade cannot
+// tell by position: the virtualized rows are only those in view.
+const listRowLast = "last"
 
 // newRow wraps model row i in its proxy, claiming the checkbox of a
 // checkbox row in multiple mode and syncing it to membership.
