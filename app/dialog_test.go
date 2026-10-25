@@ -199,3 +199,47 @@ func TestResponseAppearanceVariant(t *testing.T) {
 		}
 	}
 }
+
+// The title and the description form the header, 8px apart, and the
+// header stands 16px above the buttons: the description was the
+// dialog's content, 16px under the title like any content (#281).
+func TestDialogHeaderPairsTitleAndDescription(t *testing.T) {
+	face, err := render.LoadFont(goregular.TTF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &Application{tooltipFace: face}
+	root, _, err := a.dialogRoot(DialogConfig{Title: "Are you absolutely sure?", Description: "This action cannot be undone."}, func(string) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sz := root.Measure(widget.Constraints{Max: widget.Size{W: 440, H: 600}})
+	root.Arrange(render.Rect{W: 440, H: sz.H})
+	var labels []*widget.Label
+	var footer widget.Widget
+	var walk func(w widget.Widget)
+	walk = func(w widget.Widget) {
+		if l, ok := w.(*widget.Label); ok && (l.Text() == "Are you absolutely sure?" || l.Text() == "This action cannot be undone.") {
+			labels = append(labels, l)
+		}
+		if b, ok := w.(*widget.Box); ok && widget.HasClass(b, "footer") {
+			footer = b
+		}
+		if c, ok := w.(interface{ Children() []widget.Widget }); ok {
+			for _, k := range c.Children() {
+				walk(k)
+			}
+		}
+	}
+	walk(root)
+	if len(labels) != 2 || footer == nil {
+		t.Fatalf("found %d header labels and footer %v", len(labels), footer)
+	}
+	title, desc := labels[0].Bounds(), labels[1].Bounds()
+	if gap := desc.Y - (title.Y + title.H); gap != 8 {
+		t.Errorf("title to description %dpx, want 8", gap)
+	}
+	if gap := footer.(widget.Boundser).Bounds().Y - (desc.Y + desc.H); gap != 16 {
+		t.Errorf("description to buttons %dpx, want 16", gap)
+	}
+}

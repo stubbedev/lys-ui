@@ -82,6 +82,9 @@ const (
 // toolkit; zero lets the compositor pick.
 type DialogConfig struct {
 	Title string
+	// Description is muted text under the title, 8px below it: the
+	// header's second line. A dialog with one may have no Content.
+	Description string
 	// Width and Height size the window; a zero Height fits the dialog's
 	// content at Width.
 	Width, Height   uint32
@@ -153,8 +156,8 @@ const dialogMaxHeight = 4096
 // A nil parent makes an application-level dialog that blocks every
 // other window while open (when Modal).
 func (a *Application) NewDialog(parent DialogParent, cfg DialogConfig) (*Dialog, error) {
-	if cfg.Content == nil {
-		return nil, errors.New("app: dialog needs content")
+	if cfg.Content == nil && (cfg.Bare || cfg.Description == "") {
+		return nil, errors.New("app: dialog needs content or, in its card, a description")
 	}
 	var d *Dialog
 	respond := func(response string) {
@@ -570,17 +573,10 @@ func (a *Application) CalendarDialog(parent *Window, initial widget.Date, onSele
 // title over the muted text, wrapped, above the buttons, the dialog as
 // tall as they need.
 func (a *Application) MessageBox(parent *Window, title, text string, buttons []DialogButton) (*Dialog, error) {
-	face := a.resolveFace(nil)
-	if face == nil {
-		return nil, ErrNoDialogFace
-	}
-	body := widget.NewLabel(face, 14, text, 0)
-	body.SetWrap(true)
-	body.AddClass(css.DimLabel, "description")
 	return a.NewDialog(parent, DialogConfig{
 		Title:           title,
+		Description:     text,
 		Width:           440,
-		Content:         body,
 		Buttons:         buttons,
 		Modal:           true,
 		DefaultResponse: defaultResponse(buttons),
@@ -622,7 +618,8 @@ func cancelResponse(buttons []DialogButton) string {
 var ErrNoDialogFace = errors.New("app: dialog text face unavailable: no configured tooltip face and the system has no sans font")
 
 // dialogRoot builds the dialog window's root: the content in the
-// toolkit's card: the title, the content and the footer of buttons,
+// toolkit's card: the header (the title over the description), the
+// content and the footer of buttons, 16px apart,
 // each in its appearance (by default the default response's on the
 // primary fill and the others outlined); or, Bare, the content alone.
 func (a *Application) dialogRoot(cfg DialogConfig, respond func(string)) (widget.Widget, render.Color, error) {
@@ -654,12 +651,25 @@ func (a *Application) dialogRoot(cfg DialogConfig, respond func(string)) (widget
 		footer.Append(btn, false)
 	}
 	content := widget.NewBox(widget.Column, 16, 24)
+	header := widget.NewBox(widget.Column, 8, 0)
+	header.AddClass("header")
 	if cfg.Title != "" {
 		title := widget.NewLabel(face, 18, cfg.Title, 0)
 		title.AddClass("title")
-		content.Append(title, false)
+		header.Append(title, false)
 	}
-	content.Append(cfg.Content, true)
+	if cfg.Description != "" {
+		desc := widget.NewLabel(face, 14, cfg.Description, 0)
+		desc.SetWrap(true)
+		desc.AddClass(css.DimLabel, "description")
+		header.Append(desc, false)
+	}
+	if len(header.Children()) > 0 {
+		content.Append(header, false)
+	}
+	if cfg.Content != nil {
+		content.Append(cfg.Content, true)
+	}
 	content.Append(footer, false)
 	root, background := dialogCard(content)
 	return root, background, nil
