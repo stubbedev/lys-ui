@@ -119,3 +119,31 @@ func TestBackgroundClassOnlyPaintsWindowRoots(t *testing.T) {
 		t.Errorf("popover content background = %v, want the popover's %v", v.Background, th.PopoverColor())
 	}
 }
+
+// The theme layer's corners follow the palette's Radius: each rule's
+// step keeps its offset from it (a card 6px above, an outline button
+// on it), and pills stay round. The rules wrote literal pixels, so an
+// app that set Radius rounded only what painted the theme radius
+// itself (#281).
+func TestThemeRulesRoundFromRadius(t *testing.T) {
+	prev := Current()
+	t.Cleanup(func() { SetTheme(prev) })
+	SetTheme(DarkTheme().WithRadius(12))
+	card := NewBox(Column, 0, 0)
+	card.AddClass(css.Card)
+	btn := NewButton(NewLabel(testFace(t), 14, "Outline", 0), 0, 0)
+	btn.AddClass(css.Outline)
+	badge := NewBadge(testFace(t), "New")
+	root := NewBox(Column, 0, 0)
+	root.Append(card, false).Append(btn, false).Append(badge, false)
+	arrangeTree(t, root, 300, 200)
+	for _, tc := range []struct {
+		name string
+		w    Widget
+		want int
+	}{{"card", card, 18}, {"outline button", btn, 12}, {"badge", badge, 9999}} {
+		if got := radiusOr(nodeOf(tc.w).style(tc.w), 0).TopLeft; got != tc.want {
+			t.Errorf("%s radius %d at Radius 12, want %d", tc.name, got, tc.want)
+		}
+	}
+}

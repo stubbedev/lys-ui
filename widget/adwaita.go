@@ -3,6 +3,7 @@ package widget
 import (
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -135,16 +136,16 @@ var classRules = [][2]string{
 	{css.DestructiveAction, "background-color: @destructive_bg_color; color: @destructive_fg_color;"},
 	{css.Pill, "border-radius: 9999px; padding: 10px 32px;"},
 	{css.Circular, "border-radius: 9999px;"},
-	{css.Glass, "background-color: alpha(@card_bg_color, 0.55); backdrop-filter: blur(16px) saturate(1.5); border: 1px solid alpha(@window_fg_color, 0.12); border-radius: 12px; box-shadow: 0px 8px 24px alpha(black, 0.18);"},
-	{css.LiquidGlass, "background-color: alpha(@card_bg_color, 0.18); backdrop-filter: -lys-refract(18px 10px) blur(2px) saturate(1.8); border: 1px solid alpha(white, 0.3); border-radius: 24px; box-shadow: inset 0px 1px 0px alpha(white, 0.5), inset 0px -1px 0px alpha(black, 0.12), 0px 10px 30px alpha(black, 0.22);"},
-	{css.Frosted, "background-color: alpha(mix(@card_bg_color, white, 0.08), 0.62); background-image: -lys-grain(0.05); backdrop-filter: blur(24px) saturate(1.4); border: 1px solid alpha(@window_fg_color, 0.12); border-radius: 12px; box-shadow: 0px 8px 24px alpha(black, 0.18);"},
+	{css.Glass, "background-color: alpha(@card_bg_color, 0.55); backdrop-filter: blur(16px) saturate(1.5); border: 1px solid alpha(@window_fg_color, 0.12); border-radius: {r+4}; box-shadow: 0px 8px 24px alpha(black, 0.18);"},
+	{css.LiquidGlass, "background-color: alpha(@card_bg_color, 0.18); backdrop-filter: -lys-refract(18px 10px) blur(2px) saturate(1.8); border: 1px solid alpha(white, 0.3); border-radius: {r+16}; box-shadow: inset 0px 1px 0px alpha(white, 0.5), inset 0px -1px 0px alpha(black, 0.12), 0px 10px 30px alpha(black, 0.22);"},
+	{css.Frosted, "background-color: alpha(mix(@card_bg_color, white, 0.08), 0.62); background-image: -lys-grain(0.05); backdrop-filter: blur(24px) saturate(1.4); border: 1px solid alpha(@window_fg_color, 0.12); border-radius: {r+4}; box-shadow: 0px 8px 24px alpha(black, 0.18);"},
 	{css.Glass + "." + css.BlurUnavailable + ", ." + css.Frosted + "." + css.BlurUnavailable, "background-color: @card_bg_color;"},
-	{css.Card, "background-color: @card_bg_color; color: @card_fg_color; border: 1px solid @borders; border-radius: 14px; box-shadow: 0px 1px 2px alpha(black, 0.05);"},
-	{css.BoxedList, "background-color: @card_bg_color; border-radius: 12px;"},
+	{css.Card, "background-color: @card_bg_color; color: @card_fg_color; border: 1px solid @borders; border-radius: {r+6}; box-shadow: 0px 1px 2px alpha(black, 0.05);"},
+	{css.BoxedList, "background-color: @card_bg_color; border-radius: {r+4};"},
 	{css.OSD, "background-color: #000000b3; color: #ffffff;"},
 	{css.View, "background-color: @view_bg_color; color: @view_fg_color;"},
 	{css.Toolbar, "padding: 6px;"},
-	{css.Keycap, "font-size: 12px; line-height: 16px; font-weight: 500; padding: 0px 4px; min-height: 20px; min-width: 20px; border-radius: 6px; background-color: @muted_bg_color; color: @muted_fg_color;"},
+	{css.Keycap, "font-size: 12px; line-height: 16px; font-weight: 500; padding: 0px 4px; min-height: 20px; min-width: 20px; border-radius: {r-2}; background-color: @muted_bg_color; color: @muted_fg_color;"},
 	{css.H1, "font-size: 36px; line-height: 40px; font-weight: 800;"},
 	{css.H2, "font-size: 30px; line-height: 36px; font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid @borders;"},
 	{css.H3, "font-size: 24px; line-height: 32px; font-weight: 600;"},
@@ -154,7 +155,7 @@ var classRules = [][2]string{
 	{css.SmallText, "font-size: 14px; font-weight: 500;"},
 	{css.Muted, "font-size: 14px; color: @muted_fg_color;"},
 	{css.Blockquote, "font-style: italic; padding-left: 24px; border-left: 2px solid @borders;"},
-	{css.InlineCode, "font-family: \"" + uifont.MonoFamily + "\"; font-size: 14px; font-weight: 600; padding: 2px 5px; border-radius: 4px; background-color: @muted_bg_color;"},
+	{css.InlineCode, "font-family: \"" + uifont.MonoFamily + "\"; font-size: 14px; font-weight: 600; padding: 2px 5px; border-radius: {r-4}; background-color: @muted_bg_color;"},
 }
 
 // tabLists and tabTriggers are the three tab strips' lists and tabs -
@@ -188,9 +189,9 @@ func controlRules() [][2]string {
 		{":root", "line-height: 1.428571;"},
 		{":root." + css.Background, "background-color: @window_bg_color; color: @window_fg_color;"},
 		{"button", "font-weight: 500;"},
-		{all.String(), "min-height: 36px; padding: 0px 16px; border-radius: 8px; box-sizing: border-box;"},
-		{"button." + css.Small, "min-height: 32px; padding: 0px 12px; border-radius: 8px; box-sizing: border-box;"},
-		{"button." + css.Large, "min-height: 40px; padding: 0px 24px; border-radius: 8px; box-sizing: border-box;"},
+		{all.String(), "min-height: 36px; padding: 0px 16px; border-radius: {r}; box-sizing: border-box;"},
+		{"button." + css.Small, "min-height: 32px; padding: 0px 12px; border-radius: {r}; box-sizing: border-box;"},
+		{"button." + css.Large, "min-height: 40px; padding: 0px 24px; border-radius: {r}; box-sizing: border-box;"},
 		{"button." + css.Icon, "min-width: 36px; min-height: 36px; padding: 0px; box-sizing: border-box;"},
 		{"button." + css.Icon + "." + css.Small, "min-width: 32px; min-height: 32px; padding: 0px; box-sizing: border-box;"},
 		{"button." + css.Icon + "." + css.Large, "min-width: 40px; min-height: 40px; padding: 0px; box-sizing: border-box;"},
@@ -210,7 +211,7 @@ func controlRules() [][2]string {
 		{"button." + css.Ghost + ":disabled, button." + css.Link + ":disabled, button." + css.Outline + ":disabled", "background-color: transparent;"},
 		{"button." + css.Link, "color: @accent_color;"},
 		{"button." + css.Link + ":hover label", "text-decoration-line: underline;"},
-		{"dropdown > button", "background-color: transparent; box-shadow: inset 0px 0px 0px 1px @input_border_color; border-radius: 8px; padding: 0px 12px;"},
+		{"dropdown > button", "background-color: transparent; box-shadow: inset 0px 0px 0px 1px @input_border_color; border-radius: {r}; padding: 0px 12px;"},
 		{"dropdown > button:hover", "background-color: @muted_bg_color;"},
 		{"checkbutton check, checkbutton radio", "border: 1px solid @input_border_color; background-color: transparent;"},
 		{"progressbar trough", "border-radius: 9999px;"},
@@ -218,34 +219,34 @@ func controlRules() [][2]string {
 		{"checkbutton:checked radio", "color: @accent_bg_color;"},
 		{"checkbutton > :not(check)", "margin-left: 8px;"},
 		{"scale slider", "background-color: @window_bg_color; box-shadow: inset 0px 0px 0px 1px @accent_bg_color;"},
-		{"entry, spinbutton, textview", "box-shadow: inset 0px 0px 0px 1px @input_border_color; border-radius: 8px; background-color: transparent;"},
+		{"entry, spinbutton, textview", "box-shadow: inset 0px 0px 0px 1px @input_border_color; border-radius: {r}; background-color: transparent;"},
 		{"textview", "min-height: 64px;"},
 		{"entry:focus, spinbutton:focus, textview:focus", "box-shadow: inset 0px 0px 0px 1px @ring_color;"},
 		{"badge", "padding: 2px 8px; border: 1px solid transparent; border-radius: 9999px; font-size: 12px; line-height: 16px; font-weight: 500; background-color: @accent_bg_color; color: @accent_fg_color;"},
 		{"badge." + css.Secondary, "background-color: @secondary_bg_color; color: @window_fg_color;"},
 		{"badge." + css.Destructive, "background-color: @destructive_bg_color; color: @destructive_fg_color;"},
 		{"badge." + css.Outline, "background-color: transparent; color: @window_fg_color; border-color: @borders;"},
-		{"alert", "padding: 12px 16px; border: 1px solid @borders; border-radius: 10px; background-color: @card_bg_color; color: @card_fg_color;"},
+		{"alert", "padding: 12px 16px; border: 1px solid @borders; border-radius: {r+2}; background-color: @card_bg_color; color: @card_fg_color;"},
 		{"alert." + css.Destructive, "color: @destructive_color;"},
 		{"alert .title", "font-weight: 500;"},
 		{"alert .description", "color: @muted_fg_color;"},
 		{"alert." + css.Destructive + " .description", "color: alpha(@destructive_color, 0.9);"},
-		{"statuspage .icon", "border-radius: 8px; background-color: @muted_bg_color; color: @window_fg_color;"},
+		{"statuspage .icon", "border-radius: {r}; background-color: @muted_bg_color; color: @window_fg_color;"},
 		{"statuspage .title", "font-size: 1.125rem; font-weight: 500;"},
 		{"statuspage .description", "font-size: 0.875rem; color: @muted_fg_color;"},
 		{"accordion .item", "border-bottom: 1px solid @borders;"},
 		{"accordion .item:last-child", "border-bottom: none;"},
-		{"accordion button.trigger", "background-color: transparent; padding: 16px 0px; border-radius: 6px; color: @window_fg_color;"},
+		{"accordion button.trigger", "background-color: transparent; padding: 16px 0px; border-radius: {r-2}; color: @window_fg_color;"},
 		{"accordion button.trigger:hover label", "text-decoration-line: underline;"},
 		{"accordion .chevron", "color: @muted_fg_color; transition: transform 200ms;"},
 		{"accordion .item:checked .chevron", "transform: rotate(180deg);"},
 		{"accordion .content", "padding-bottom: 16px;"},
 		{"breadcrumb", "color: @muted_fg_color;"},
-		{"breadcrumb button.crumb", "background-color: transparent; padding: 0px; min-height: 0px; border-radius: 4px; color: @muted_fg_color; font-weight: 400; transition: color 150ms;"},
+		{"breadcrumb button.crumb", "background-color: transparent; padding: 0px; min-height: 0px; border-radius: {r-4}; color: @muted_fg_color; font-weight: 400; transition: color 150ms;"},
 		{"breadcrumb button.crumb:hover", "color: @window_fg_color;"},
 		{"breadcrumb .page", "color: @window_fg_color;"},
-		{"breadcrumb button.ellipsis", "background-color: transparent; padding: 0px; min-width: 36px; min-height: 36px; border-radius: 6px; color: @window_fg_color;"},
-		{"pagination button", "background-color: transparent; min-height: 36px; border-radius: 8px; color: @window_fg_color;"},
+		{"breadcrumb button.ellipsis", "background-color: transparent; padding: 0px; min-width: 36px; min-height: 36px; border-radius: {r-2}; color: @window_fg_color;"},
+		{"pagination button", "background-color: transparent; min-height: 36px; border-radius: {r}; color: @window_fg_color;"},
 		{"pagination button.page-link", "min-width: 36px; padding: 0px;"},
 		{"pagination button.previous", "padding: 0px 10px 0px 8px;"},
 		{"pagination button.next", "padding: 0px 8px 0px 10px;"},
@@ -256,20 +257,20 @@ func controlRules() [][2]string {
 		{"field .description, fieldset .description", "color: @muted_fg_color;"},
 		{"field.invalid .title, field ." + css.Error, "color: @destructive_color;"},
 		{"entry." + css.Error + ", spinbutton." + css.Error + ", textview." + css.Error, "color: @window_fg_color; box-shadow: inset 0px 0px 0px 1px @destructive_color;"},
-		{"inputgroup", "box-shadow: inset 0px 0px 0px 1px @input_border_color; border-radius: 8px; color: @muted_fg_color; min-height: 36px;"},
+		{"inputgroup", "box-shadow: inset 0px 0px 0px 1px @input_border_color; border-radius: {r}; color: @muted_fg_color; min-height: 36px;"},
 		{"inputgroup:focus-within", "box-shadow: inset 0px 0px 0px 1px @ring_color;"},
 		{"inputgroup." + css.Error, "color: @muted_fg_color; box-shadow: inset 0px 0px 0px 1px @destructive_color;"},
 		{"inputgroup entry, inputgroup entry:focus", "box-shadow: none; padding-left: 0px; padding-right: 0px; color: @window_fg_color;"},
 		{"inputotp .slot", "border-top: 1px solid @input_border_color; border-bottom: 1px solid @input_border_color; border-right: 1px solid @input_border_color;"},
-		{"inputotp .slot:first-child", "border-left: 1px solid @input_border_color; border-radius: 8px 0px 0px 8px;"},
-		{"inputotp .slot:last-child", "border-radius: 0px 8px 8px 0px;"},
-		{"inputotp .slot:only-child", "border-radius: 8px;"},
+		{"inputotp .slot:first-child", "border-left: 1px solid @input_border_color; border-radius: {r} 0px 0px {r};"},
+		{"inputotp .slot:last-child", "border-radius: 0px {r} {r} 0px;"},
+		{"inputotp .slot:only-child", "border-radius: {r};"},
 		{"inputotp:focus .slot:checked", "box-shadow: inset 0px 0px 0px 1px @ring_color;"},
-		{"command", "background-color: @popover_bg_color; color: @popover_fg_color; border-radius: 8px;"},
+		{"command", "background-color: @popover_bg_color; color: @popover_fg_color; border-radius: {r};"},
 		{"command .input", "min-height: 36px; border-bottom: 1px solid @borders; color: @muted_fg_color;"},
 		{"command .input entry, command .input entry:focus", "box-shadow: none; padding-left: 0px; padding-right: 0px; background-color: transparent; color: @popover_fg_color;"},
 		{"command .heading", "font-weight: 500; line-height: 16px; color: @muted_fg_color; padding: 6px 8px;"},
-		{"command .item", "border-radius: 4px;"},
+		{"command .item", "border-radius: {r-4};"},
 		{"command .item:selected", "background-color: @muted_bg_color;"},
 		{"command .item:disabled", "color: @muted_fg_color;"},
 		{"command .shortcut", "color: @muted_fg_color; letter-spacing: 1px;"},
@@ -278,33 +279,33 @@ func controlRules() [][2]string {
 		{"combobox > button." + css.Outline + ", datepicker > button." + css.Outline, "padding: 0px 12px;"},
 		{"datepicker > button." + css.Outline, "font-weight: 400;"},
 		{"datepicker .placeholder", "color: @muted_fg_color;"},
-		{"calendar button.nav", "background-color: transparent; border-radius: 8px; color: @window_fg_color;"},
+		{"calendar button.nav", "background-color: transparent; border-radius: {r}; color: @window_fg_color;"},
 		{"calendar button.nav:hover", "background-color: @muted_bg_color; color: @window_fg_color;"},
 		{"sheet .title", "font-weight: 600;"},
 		{"sheet .description", "color: @muted_fg_color;"},
-		{"sheet button.close", "background-color: transparent; border-radius: 4px; color: @muted_fg_color;"},
+		{"sheet button.close", "background-color: transparent; border-radius: {r-4}; color: @muted_fg_color;"},
 		{"sheet button.close:hover", "color: @window_fg_color;"},
 		{"sidebar .panel", "background-color: @sidebar_bg_color; color: @sidebar_fg_color; border-right: 1px solid @borders; overflow: hidden;"},
 		{"sidebar .sheet-panel", "padding: 0px;"},
 		{"sidebar .group-label", "font-size: 0.75rem; font-weight: 500; color: @muted_fg_color; padding: 8px 8px 4px 8px;"},
 		{"sidebar button.item label", "font-size: 0.875rem;"},
-		{"sidebar button.group-label", "background-color: transparent; min-height: 0px; border-radius: 6px; font-size: 0.75rem;"},
+		{"sidebar button.group-label", "background-color: transparent; min-height: 0px; border-radius: {r-2}; font-size: 0.75rem;"},
 		{"sidebar button.group-label:hover", "background-color: @muted_bg_color;"},
-		{"sidebar button.item", "background-color: transparent; min-height: 32px; padding: 0px 8px; border-radius: 6px; font-weight: 400; color: @sidebar_fg_color;"},
+		{"sidebar button.item", "background-color: transparent; min-height: 32px; padding: 0px 8px; border-radius: {r-2}; font-weight: 400; color: @sidebar_fg_color;"},
 		{"sidebar button.item:hover", "background-color: @muted_bg_color;"},
 		{"sidebar button.item:checked", "background-color: @muted_bg_color; font-weight: 500;"},
 		{"sidebar button.item .badge", "font-size: 0.75rem; font-weight: 500;"},
 		{"sidebar .sub", "border-left: 1px solid @borders; margin-left: 14px; padding-left: 8px;"},
-		{"sidebar button.trigger", "background-color: transparent; border-radius: 6px;"},
+		{"sidebar button.trigger", "background-color: transparent; border-radius: {r-2};"},
 		{"sidebar button.trigger:hover", "background-color: @muted_bg_color;"},
-		{"navigationmenu button.trigger", "background-color: transparent; min-height: 36px; padding: 0px 16px; border-radius: 6px; font-weight: 500;"},
+		{"navigationmenu button.trigger", "background-color: transparent; min-height: 36px; padding: 0px 16px; border-radius: {r-2}; font-weight: 500;"},
 		{"navigationmenu button.trigger:hover, navigationmenu button.trigger:checked", "background-color: @muted_bg_color;"},
 		{"navigationmenu .chevron", "transition: transform 300ms;"},
 		{"navigationmenu button.trigger:checked .chevron", "transform: rotate(180deg);"},
 		{"navigationmenu .viewport", "padding: 8px;"},
-		{"navigationmenu button.link", "background-color: transparent; padding: 12px; border-radius: 6px; font-weight: 400;"},
+		{"navigationmenu button.link", "background-color: transparent; padding: 12px; border-radius: {r-2}; font-weight: 400;"},
 		{"navigationmenu button.link:hover", "background-color: @muted_bg_color;"},
-		{"datatable .table", "border: 1px solid @borders; border-radius: 8px;"},
+		{"datatable .table", "border: 1px solid @borders; border-radius: {r};"},
 		{"columnview listview", "background-color: transparent;"},
 		{"columnview .header", "min-height: 40px; border-bottom: 1px solid @borders;"},
 		{"columnview .header button", "background-color: transparent; font-weight: 500;"},
@@ -312,41 +313,41 @@ func controlRules() [][2]string {
 		{"columnview row", "border-bottom: 1px solid @borders;"},
 		{"columnview row:hover", "background-color: alpha(@muted_bg_color, 0.5);"},
 		{"columnview row:selected", "background-color: @muted_bg_color;"},
-		{"item", "padding: 16px; border: 1px solid transparent; border-radius: 8px;"},
+		{"item", "padding: 16px; border: 1px solid transparent; border-radius: {r};"},
 		{"item." + css.Small, "padding: 12px 16px;"},
 		{"item." + css.Outline, "border-color: @borders;"},
 		{"item." + css.Muted, "background-color: alpha(@muted_bg_color, 0.5); font-size: inherit; color: inherit;"},
 		{"item .title", "font-size: 0.875rem; font-weight: 500;"},
 		{"item .description", "font-size: 0.875rem; color: @muted_fg_color;"},
-		{"item .media", "background-color: @muted_bg_color; border-radius: 4px;"},
+		{"item .media", "background-color: @muted_bg_color; border-radius: {r-4};"},
 		{"item." + css.Activatable + ":hover", "background-color: alpha(@muted_bg_color, 0.5);"},
 		{"buttongroup > box > *:nth-child(n)", "border-radius: 0px;"},
-		{"buttongroup > box > *:first-child", "border-top-left-radius: 8px; border-bottom-left-radius: 8px;"},
-		{"buttongroup > box > *:last-child", "border-top-right-radius: 8px; border-bottom-right-radius: 8px;"},
+		{"buttongroup > box > *:first-child", "border-top-left-radius: {r}; border-bottom-left-radius: {r};"},
+		{"buttongroup > box > *:last-child", "border-top-right-radius: {r}; border-bottom-right-radius: {r};"},
 		{"buttongroup > box > *:not(:first-child)", "border-left-width: 0px;"},
-		{"buttongroup.vertical > box > *:first-child", "border-radius: 8px 8px 0px 0px;"},
-		{"buttongroup.vertical > box > *:last-child", "border-radius: 0px 0px 8px 8px;"},
+		{"buttongroup.vertical > box > *:first-child", "border-radius: {r} {r} 0px 0px;"},
+		{"buttongroup.vertical > box > *:last-child", "border-radius: 0px 0px {r} {r};"},
 		{"buttongroup.vertical > box > *:not(:first-child)", "border-left-width: 1px; border-top-width: 0px;"},
-		{"buttongroup > box > *:only-child", "border-radius: 8px;"},
-		{tabLists, "background-color: @muted_bg_color; border-radius: 10px; padding: 3px;"},
-		{tabTriggers, "background-color: transparent; border-radius: 8px; min-height: 28px; padding: 0px 12px; font-weight: 500; color: @muted_fg_color;"},
+		{"buttongroup > box > *:only-child", "border-radius: {r};"},
+		{tabLists, "background-color: @muted_bg_color; border-radius: {r+2}; padding: 3px;"},
+		{tabTriggers, "background-color: transparent; border-radius: {r}; min-height: 28px; padding: 0px 12px; font-weight: 500; color: @muted_fg_color;"},
 		{activeTabs, "background-color: @window_bg_color; color: @window_fg_color; box-shadow: 0px 1px 3px alpha(black, 0.1);"},
 		{"carousel button.nav", "min-width: 32px; min-height: 32px; padding: 0px; border-radius: 9999px;"},
 		{"notebook > header", "margin-bottom: 8px;"},
-		{"tabbar .tab-close-button", "background-color: transparent; border-radius: 4px;"},
+		{"tabbar .tab-close-button", "background-color: transparent; border-radius: {r-4};"},
 		{"tabbar .tab-close-button:hover", "background-color: @muted_bg_color;"},
-		{"skeleton", "background-color: @muted_bg_color; border-radius: 8px;"},
+		{"skeleton", "background-color: @muted_bg_color; border-radius: {r};"},
 		{"bullets", "margin-left: 8px;"},
 		{"rows", "border: 1px solid @borders;"},
-		{"dialog", "border: 1px solid @borders; border-radius: 10px;"},
+		{"dialog", "border: 1px solid @borders; border-radius: {r+2};"},
 		{"dialog .title", "font-size: 1.125rem; font-weight: 600;"},
 		{"dialog .description, dialog .footer label", "font-size: 0.875rem;"},
-		{"toast", "background-color: @popover_bg_color; color: @popover_fg_color; border: 1px solid @borders; border-radius: 8px;"},
-		{"menubar", "background-color: @window_bg_color; border: 1px solid @borders; border-radius: 8px; padding: 4px; box-shadow: 0px 1px 2px alpha(black, 0.05);"},
-		{"menubar > box > button", "background-color: transparent; border-radius: 4px; padding: 4px 8px; min-height: 0px; font-weight: 500;"},
+		{"toast", "background-color: @popover_bg_color; color: @popover_fg_color; border: 1px solid @borders; border-radius: {r};"},
+		{"menubar", "background-color: @window_bg_color; border: 1px solid @borders; border-radius: {r}; padding: 4px; box-shadow: 0px 1px 2px alpha(black, 0.05);"},
+		{"menubar > box > button", "background-color: transparent; border-radius: {r-4}; padding: 4px 8px; min-height: 0px; font-weight: 500;"},
 		{"menubar > box > button:hover, menubar > box > button:checked", "background-color: @muted_bg_color;"},
-		{"tooltip", "background-color: @window_fg_color; color: @window_bg_color; border-radius: 8px; padding: 6px 12px; font-size: 12px; line-height: 16px;"},
-		{"popover, menu", "background-color: @popover_bg_color; color: @popover_fg_color; border: 1px solid @borders; border-radius: 8px;"},
+		{"tooltip", "background-color: @window_fg_color; color: @window_bg_color; border-radius: {r}; padding: 6px 12px; font-size: 12px; line-height: 16px;"},
+		{"popover, menu", "background-color: @popover_bg_color; color: @popover_fg_color; border: 1px solid @borders; border-radius: {r};"},
 	}
 }
 
@@ -401,6 +402,24 @@ func motionTokens(t *Theme) [][2]string {
 	}
 }
 
+// radiusToken is a rule's corner radius as an offset from the theme's
+// Radius, {r} itself or {r-2} and {r+6}: the steps below and above it,
+// so a palette with another Radius rounds every rule in proportion.
+var radiusToken = regexp.MustCompile(`\{r([+-]\d+)?\}`)
+
+// radii resolves css's radius tokens against radius, a step never
+// below zero.
+func radii(css string, radius int) string {
+	return radiusToken.ReplaceAllStringFunc(css, func(tok string) string {
+		d := 0
+		if off := radiusToken.FindStringSubmatch(tok)[1]; off != "" {
+			// The pattern admits only a signed integer here.
+			d, _ = strconv.Atoi(off)
+		}
+		return strconv.Itoa(max(0, radius+d)) + "px"
+	})
+}
+
 // themeCSS renders the theme layer for t.
 func themeCSS(t *Theme) string {
 	var b strings.Builder
@@ -429,7 +448,7 @@ func themeCSS(t *Theme) string {
 	for _, r := range partRules {
 		fmt.Fprintf(&b, "%s { %s }\n", r[0], r[1])
 	}
-	return b.String()
+	return radii(b.String(), t.Radius)
 }
 
 // init installs the theme layer for the default palette, so the named
