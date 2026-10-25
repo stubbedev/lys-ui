@@ -56,6 +56,8 @@ const (
 	SymbolArrowRight
 	// SymbolUser is a head over shoulders (a person, an account).
 	SymbolUser
+	// SymbolFolder is a folder with its tab (a project, a directory).
+	SymbolFolder
 )
 
 // chevronAngle is each chevron kind's rotation from right-pointing.
@@ -164,6 +166,12 @@ func paintSymbol(cv *render.Canvas, kind SymbolKind, b render.Rect, size int, co
 		cv.Line(cx-r, cy, cx+r, cy, 1, col)
 		cv.Line(tip, cy, tip+back*2*r/3, cy-2*r/3, 1, col)
 		cv.Line(tip, cy, tip+back*2*r/3, cy+2*r/3, 1, col)
+	case SymbolFolder:
+		top := cy - r/2
+		cv.RoundedBorder(render.Rect{X: cx - r, Y: top, W: 2 * r, H: r + r/2 + 1}, render.UniformCorners(2), render.UniformInsets(1), col)
+		cv.Line(cx-r, top, cx-r, cy-r, 1, col)
+		cv.Line(cx-r, cy-r, cx-r/4, cy-r, 1, col)
+		cv.Line(cx-r/4, cy-r, cx, top, 1, col)
 	case SymbolUser:
 		fx, fy, fr := float64(cx), float64(cy), float64(r)
 		cv.Arc(fx, fy-fr/2, fr/2, 1, 0, 2*math.Pi, col)
