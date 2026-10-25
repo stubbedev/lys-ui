@@ -59,9 +59,6 @@ type Box struct {
 	// (gtk_box_layout's homogeneous): a segmented control's buttons all
 	// measure as wide as the widest label.
 	homogeneous bool
-	// layer memoizes the offscreen the transform paints through, so a
-	// hovering swatch reuses its buffer instead of allocating per frame.
-	layer *render.Layer
 	// stack is the children's paint order by their CSS stacking keys
 	// (z-index, position, floats, order), indexes into child; empty
 	// means tree order. Arrange computes it, so paint and hit testing
@@ -667,7 +664,7 @@ func (b *Box) Paint(cv *render.Canvas) {
 		return
 	}
 	radii := radiusOr(v, 0)
-	fx := pushEffects(cv, &b.node, v, b.bounds, radii)
+	fx := pushEffects(cv, v, b.bounds, radii)
 	b.paintBox(fx.cv, v, radii)
 	fx.pop()
 }
@@ -768,7 +765,7 @@ func (b *Box) paintTransformed(cv *render.Canvas, v *style.Values) {
 	if backfaceHidden(v) {
 		return
 	}
-	paintBackdropOf(cv, &b.node, v, b.bounds, radii)
+	paintBackdropOf(cv, v, b.bounds, radii)
 	frac, off := v.Origin()
 	ox := float64(b.bounds.X) + frac[0]*float64(b.bounds.W) + off[0]
 	oy := float64(b.bounds.Y) + frac[1]*float64(b.bounds.H) + off[1]
@@ -790,9 +787,9 @@ func (b *Box) paintTransformed(cv *render.Canvas, v *style.Values) {
 	f := float64(num) / float64(denom)
 	toDev, toLogical := render.Scale(f, f), render.Scale(1/f, 1/f)
 	dev := cv.MapRect(region)
-	l := cv.Layer(b.layer, dev)
-	b.layer = l
-	fx := pushLayerEffects(l.Canvas(), &b.node, v, b.bounds, radii)
+	l := cv.ScratchLayer(dev)
+	defer l.Release()
+	fx := pushLayerEffects(l.Canvas(), v, b.bounds, radii)
 	b.paintBox(fx.cv, v, radii)
 	fx.pop()
 	if v.Transform.P != render.Identity3 || v.Perspective > 0 {

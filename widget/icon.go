@@ -227,7 +227,7 @@ func (i *Icon) Paint(cv *render.Canvas) {
 	v := i.style(i)
 	b := boxOf(v, render.Insets{})
 	radii := radiusOr(v, 0)
-	fx := pushEffects(cv, &i.node, v, i.bounds, radii)
+	fx := pushEffects(cv, v, i.bounds, radii)
 	cv = fx.cv
 	defer fx.pop()
 	if bg := pickc(0, v, style.PropBackgroundColor, 0); bg != 0 || hasBoxLayers(v) {

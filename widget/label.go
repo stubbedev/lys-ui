@@ -62,10 +62,7 @@ type Label struct {
 	// (GTK lines); 0 is uncapped.
 	maxLines int
 	shaped   *render.ShapedText
-	// shadow is the offscreen layer a blurred text-shadow paints
-	// through, reused across frames.
-	shadow  *render.Layer
-	natural Size
+	natural  Size
 	// measured is the last Measure result, what ShrinkableWidth gives
 	// from.
 	measured Size
@@ -666,7 +663,7 @@ func (l *Label) Paint(cv *render.Canvas) {
 	v := l.style(l)
 	b := boxOf(v, render.Insets{})
 	radii := radiusOr(v, 0)
-	fx := pushEffects(cv, &l.node, v, l.bounds, radii)
+	fx := pushEffects(cv, v, l.bounds, radii)
 	cv = fx.cv
 	if bg := pickc(0, v, style.PropBackgroundColor, 0); bg != 0 || hasBoxLayers(v) {
 		paintBoxBehind(cv, v, l.bounds, radii, b.border, bg)
@@ -849,10 +846,11 @@ func (l *Label) drawShadows(cv *render.Canvas, sh *render.ShapedText, x, baselin
 		if region.Empty() {
 			continue
 		}
-		l.shadow = cv.Layer(l.shadow, region)
-		drawShaped(l.shadow.Canvas(), sh, x+s.X, baseline+s.Y, s.Color, justify)
-		render.ApplyFilters(l.shadow, region, &blur, render.FilterShape{})
-		cv.DrawLayer(l.shadow, region, render.BlendNormal)
+		shadow := cv.ScratchLayer(region)
+		drawShaped(shadow.Canvas(), sh, x+s.X, baseline+s.Y, s.Color, justify)
+		render.ApplyFilters(shadow, region, &blur, render.FilterShape{})
+		cv.DrawLayer(shadow, region, render.BlendNormal)
+		shadow.Release()
 	}
 }
 

@@ -581,14 +581,14 @@ func (n *Notebook) Paint(cv *render.Canvas) {
 	th := Current()
 	v := n.style(n)
 	radii := radiusOr(v, th.Radius)
-	fx := pushEffects(cv, &n.node, v, n.bounds, radii)
+	fx := pushEffects(cv, v, n.bounds, radii)
 	cv = fx.cv
 	paintBoxBehind(cv, v, n.bounds, radii, borderOf(v), pickc(0, v, style.PropBackgroundColor, th.Surface))
 	paintOutline(cv, v, n.bounds, radii)
 	fx.pop()
 
-	paintPart(cv, &n.header.node, n.header.style(&n.header), n.strip.header, 0)
-	paintPart(cv, &n.header.tabs.node, n.header.tabs.style(&n.header.tabs), n.strip.tabs, 0)
+	paintPart(cv, n.header.style(&n.header), n.strip.header, 0)
+	paintPart(cv, n.header.tabs.style(&n.header.tabs), n.strip.tabs, 0)
 
 	strip := cv.PushClip(n.tabViewport())
 	for i, t := range n.tabs {
@@ -600,7 +600,7 @@ func (n *Notebook) Paint(cv *render.Canvas) {
 		if i == n.selected {
 			fill = th.SurfaceHover
 		}
-		paintPart(cv, &tp.node, tv, rect, fill)
+		paintPart(cv, tv, rect, fill)
 		if i == n.selected && !tv.Has(style.PropBoxShadow) && !tv.Has(style.PropBackgroundColor) {
 			cv.FillRect(render.Rect{X: rect.X, Y: rect.Y + rect.H - 3, W: rect.W, H: 3}, th.Accent)
 		}
@@ -640,9 +640,9 @@ func (n *Notebook) Paint(cv *render.Canvas) {
 
 // paintPart paints a tab bar node's box at its border box: effects,
 // background (fill where the stylesheet sets none), border, outline.
-func paintPart(cv *render.Canvas, nd *node, v *style.Values, border render.Rect, fill render.Color) {
+func paintPart(cv *render.Canvas, v *style.Values, border render.Rect, fill render.Color) {
 	radii := radiusOr(v, 0)
-	fx := pushEffects(cv, nd, v, border, radii)
+	fx := pushEffects(cv, v, border, radii)
 	paintBoxBehind(fx.cv, v, border, radii, borderOf(v), pickc(0, v, style.PropBackgroundColor, fill))
 	paintOutline(fx.cv, v, border, radii)
 	fx.pop()

@@ -229,7 +229,7 @@ func (s *Slider) Paint(cv *render.Canvas) {
 		troughCol, fillCol, knobCol = t.DisabledText(), t.DisabledAccent(), t.DisabledText()
 	}
 	fillCol = accentOf(v, fillCol)
-	fx := pushEffects(cv, &s.node, v, s.bounds, render.Corners{})
+	fx := pushEffects(cv, v, s.bounds, render.Corners{})
 	cv = fx.cv
 	defer fx.pop()
 	tr := s.troughRect()
@@ -256,7 +256,7 @@ func (s *Slider) Paint(cv *render.Canvas) {
 	if s.axis == Column {
 		knob = render.Rect{X: tr.X + tr.W/2 - kw/2, Y: at - kh/2, W: kw, H: kh}
 	}
-	kfx := pushEffects(cv, &s.trough.knob.node, kv, knob, radiusOr(kv, min(kw, kh)/2))
+	kfx := pushEffects(cv, kv, knob, radiusOr(kv, min(kw, kh)/2))
 	paintBoxBehind(kfx.cv, kv, knob, radiusOr(kv, min(kw, kh)/2), borderOf(kv), pickc(0, kv, style.PropBackgroundColor, knobCol))
 	kfx.pop()
 	paintOutline(cv, v, s.bounds, radiusOr(v, 0))

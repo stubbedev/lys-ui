@@ -459,7 +459,7 @@ func (m *Menu) Paint(cv *render.Canvas) {
 	t := Current()
 	v := m.style(m)
 	radii := radiusOr(v, t.Radius)
-	fx := pushEffects(cv, &m.node, v, m.bounds, radii)
+	fx := pushEffects(cv, v, m.bounds, radii)
 	cv = fx.cv
 	paintBoxBehind(cv, v, m.bounds, radii, borderOf(v), pickc(0, v, style.PropBackgroundColor, t.Surface))
 	paintOutline(cv, v, m.bounds, radii)
@@ -470,7 +470,7 @@ func (m *Menu) Paint(cv *render.Canvas) {
 	_, rowsRect := boxRects(boxOf(cw, menuContentsPad), inside)
 	m.contents.Arrange(rowsRect)
 	cradii := radiusOr(cw, 0)
-	cfx := pushEffects(cv, &m.contents.node, cw, rowsRect, cradii)
+	cfx := pushEffects(cv, cw, rowsRect, cradii)
 	paintBoxBehind(cfx.cv, cw, rowsRect, cradii, borderOf(cw), pickc(0, cw, style.PropBackgroundColor, 0))
 	cfx.pop()
 
@@ -489,7 +489,7 @@ func (m *Menu) Paint(cv *render.Canvas) {
 		row := pad.margin.Shrink(slotRect)
 		rp.Arrange(row)
 		rradii := radiusOr(rv, t.Radius)
-		rfx := pushEffects(cv, &rp.node, rv, row, rradii)
+		rfx := pushEffects(cv, rv, row, rradii)
 		var hoverBg render.Color
 		if i == m.hovered && m.selectable(i) {
 			hoverBg = t.MutedColor()

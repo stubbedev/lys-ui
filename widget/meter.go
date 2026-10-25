@@ -96,7 +96,7 @@ func (m *meter) Arrange(r render.Rect) {
 func (m *meter) paintMeter(cv *render.Canvas, from, to float64) {
 	t := Current()
 	tv := m.trough.style(&m.trough)
-	fx := pushEffects(cv, &m.node, tv, m.bounds, render.Corners{})
+	fx := pushEffects(cv, tv, m.bounds, render.Corners{})
 	cv = fx.cv
 	defer fx.pop()
 	box := m.trough.bounds
@@ -121,7 +121,7 @@ func (m *meter) paintMeter(cv *render.Canvas, from, to float64) {
 	fr := render.Rect{X: inner.X + x0, Y: inner.Y, W: x1 - x0, H: inner.H}
 	m.trough.fill.Arrange(fr)
 	fv := m.trough.fill.style(&m.trough.fill)
-	fxp := pushEffects(cv, &m.trough.fill.node, fv, fr, radiusOr(fv, inner.H/2))
+	fxp := pushEffects(cv, fv, fr, radiusOr(fv, inner.H/2))
 	cv = fxp.cv
 	paintBoxBehind(cv, fv, fr, radiusOr(fv, inner.H/2), borderOf(fv), pickc(0, fv, style.PropBackgroundColor, fill))
 	fxp.pop()

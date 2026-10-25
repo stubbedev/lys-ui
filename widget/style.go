@@ -1121,7 +1121,7 @@ func PaintBoxLayers(cv *render.Canvas, w Widget) {
 	}
 	v := n.style(w)
 	radii := radiusOr(v, 0)
-	fx := pushEffects(cv, n, v, n.bounds, radii)
+	fx := pushEffects(cv, v, n.bounds, radii)
 	cv = fx.cv
 	defer fx.pop()
 	bg := pickc(0, v, style.PropBackgroundColor, 0)

@@ -111,7 +111,7 @@ func (b *Button) Paint(cv *render.Canvas) {
 		fill = prog
 	}
 	radii := radiusOr(v, b.radius)
-	fx := pushEffects(cv, &b.node, v, b.bounds, radii)
+	fx := pushEffects(cv, v, b.bounds, radii)
 	cv = fx.cv
 	paintBoxBehind(cv, v, b.bounds, radii, borderOf(v), fill)
 	if IsEnabled(b) {

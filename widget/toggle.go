@@ -140,7 +140,7 @@ func (s *Switch) Paint(cv *render.Canvas) {
 		}
 	}
 	radii := radiusOr(v, s.bounds.H/2)
-	fx := pushEffects(cv, &s.node, v, s.bounds, radii)
+	fx := pushEffects(cv, v, s.bounds, radii)
 	cv = fx.cv
 	defer fx.pop()
 	bw := borderOf(v)
@@ -340,7 +340,7 @@ const checkRing = 2
 func (c *CheckButton) Paint(cv *render.Canvas) {
 	t := Current()
 	kv := c.check.style(&c.check)
-	fx := pushEffects(cv, &c.node, kv, c.bounds, radiusOr(kv, min(c.bounds.W, c.bounds.H)/2))
+	fx := pushEffects(cv, kv, c.bounds, radiusOr(kv, min(c.bounds.W, c.bounds.H)/2))
 	cv = fx.cv
 	defer fx.pop()
 	box := c.indicator

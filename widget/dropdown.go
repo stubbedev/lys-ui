@@ -340,7 +340,7 @@ func (d *Dropdown) Paint(cv *render.Canvas) {
 	}
 	bv := d.faceBtn.style(&d.faceBtn)
 	radii := radiusOr(bv, t.Radius)
-	fx := pushEffects(cv, &d.faceBtn.node, bv, d.bounds, radii)
+	fx := pushEffects(cv, bv, d.bounds, radii)
 	cv = fx.cv
 	d.faceBtn.Arrange(d.bounds)
 	paintBoxBehind(cv, bv, d.bounds, radii, borderOf(bv), pickc(0, bv, style.PropBackgroundColor, bg))
