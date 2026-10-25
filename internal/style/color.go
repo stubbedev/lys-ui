@@ -260,8 +260,8 @@ func commaToWS(args []token) []token {
 // interpolation runs on premultiplied channels in the named space
 // with the named hue method, and a sum under 100 scales the alpha.
 func colorMix(args []token, cx *ctx) (colorVal, bool) {
-	parts := splitTop(args, tkComma)
-	if len(parts) != 3 {
+	var parts [3][]token
+	if !splitArgs(args, parts[:]) {
 		return colorVal{}, false
 	}
 	space := components(parts[0])
@@ -384,8 +384,8 @@ func mixPremul(a, b render.Color, wa, scale float64) render.Color {
 
 // gtkAlpha is GTK's alpha(color, factor): the alpha scaled.
 func gtkAlpha(args []token, cx *ctx) (colorVal, bool) {
-	parts := splitTop(args, tkComma)
-	if len(parts) != 2 {
+	var parts [2][]token
+	if !splitArgs(args, parts[:]) {
 		return colorVal{}, false
 	}
 	cv, ok := parseColor(parts[0], cx)
@@ -400,8 +400,8 @@ func gtkAlpha(args []token, cx *ctx) (colorVal, bool) {
 
 // gtkShade is GTK's shade(color, factor): lightness scaled in HLS.
 func gtkShade(args []token, cx *ctx) (colorVal, bool) {
-	parts := splitTop(args, tkComma)
-	if len(parts) != 2 {
+	var parts [2][]token
+	if !splitArgs(args, parts[:]) {
 		return colorVal{}, false
 	}
 	cv, ok := parseColor(parts[0], cx)
@@ -420,8 +420,8 @@ func gtkShade(args []token, cx *ctx) (colorVal, bool) {
 
 // gtkMix is GTK's mix(a, b, factor): straight interpolation toward b.
 func gtkMix(args []token, cx *ctx) (colorVal, bool) {
-	parts := splitTop(args, tkComma)
-	if len(parts) != 3 {
+	var parts [3][]token
+	if !splitArgs(args, parts[:]) {
 		return colorVal{}, false
 	}
 	a, ok1 := parseColor(parts[0], cx)

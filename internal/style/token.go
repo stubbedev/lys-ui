@@ -336,6 +336,23 @@ func eachTop(ts []token, sep tokKind) iter.Seq[[]token] {
 	}
 }
 
+// splitArgs splits a function's arguments at their top-level commas
+// into exactly len(parts) parts, filling parts in place: the per-node
+// color functions use it with a fixed array, so a named color inside
+// alpha() or mix() costs no allocation per restyle. False when the
+// count differs.
+func splitArgs(args []token, parts [][]token) bool {
+	n := 0
+	for p := range eachTop(args, tkComma) {
+		if n == len(parts) {
+			return false
+		}
+		parts[n] = p
+		n++
+	}
+	return n == len(parts)
+}
+
 // components splits a value into its top-level component values,
 // dropping the whitespace between them: `1px solid calc(2 * 3px)`
 // yields three components, the function kept whole.
