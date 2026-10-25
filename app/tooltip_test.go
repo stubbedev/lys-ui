@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -263,7 +264,8 @@ func TestTooltipOptions(t *testing.T) {
 	}
 }
 
-// Point and rect anchors, and the popover ceiling's defaults.
+// Point and rect anchors, and the popover ceiling's defaults: the
+// widest output, not the host window, bounds an unset width (#279).
 func TestAnchorsAndPopoverCeiling(t *testing.T) {
 	if b := AnchorAt(30, 40).Bounds(); b != (render.Rect{X: 30, Y: 40, W: 1, H: 1}) {
 		t.Errorf("AnchorAt = %+v", b)
@@ -272,11 +274,11 @@ func TestAnchorsAndPopoverCeiling(t *testing.T) {
 	if AnchorRect(r).Bounds() != r {
 		t.Error("AnchorRect")
 	}
-	host := &fakeHost{w: 800, h: 600}
-	if got := popoverCeiling(host, 0, 0); got != (widget.Size{W: 800, H: popoverMaxH}) {
-		t.Errorf("default ceiling %+v", got)
+	outputs := []*wlsession.Output{{LogicalW: 1280, LogicalH: 800}, {LogicalW: 2560, LogicalH: 1440}}
+	if got := popoverCeiling(outputs, 0, 0); got != (widget.Size{W: 2560, H: popoverMaxH}) {
+		t.Errorf("default ceiling %+v, want the widest output's width", got)
 	}
-	if got := popoverCeiling(host, 300, 200); got != (widget.Size{W: 300, H: 200}) {
+	if got := popoverCeiling(outputs, 300, 200); got != (widget.Size{W: 300, H: 200}) {
 		t.Errorf("set ceiling %+v", got)
 	}
 }

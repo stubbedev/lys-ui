@@ -382,7 +382,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 			widget.SetStyleAnchor(cfg.Content, nil)
 		}
 	}
-	size := widget.MeasureAsChild(cfg.Content, widget.Constraints{Max: popoverCeiling(host, cfg.MaxWidth, cfg.MaxHeight)})
+	size := widget.MeasureAsChild(cfg.Content, widget.Constraints{Max: popoverCeiling(a.outputs(), cfg.MaxWidth, cfg.MaxHeight)})
 	// The positioner anchors to the anchor widget's rect on the gravity
 	// side and the compositor flips or slides it against the output (a
 	// bar is never tall enough to judge room by). The shadow gutter rides
@@ -643,7 +643,7 @@ func (a *Application) drivePopovers(all bool) error {
 			continue
 		}
 		if _, damaged := widget.CollectDamage(op.keyRoot); damaged || all {
-			op.fitContent()
+			op.fitContent(a.outputs())
 			op.pop.MarkFrame()
 		}
 		if _, err := op.painter.Pass(); err != nil {
@@ -663,11 +663,11 @@ func (a *Application) drivePopovers(all bool) error {
 // shrinking, the surface keeps its size while the content's layout
 // motion carries it down, and takes the final size, one reposition,
 // when the motion lands.
-func (op *openPopover) fitContent() {
+func (op *openPopover) fitContent(outputs []*wlsession.Output) {
 	if op.pop.Dismissed() {
 		return
 	}
-	size := op.keyRoot.Measure(widget.Constraints{Max: popoverCeiling(op.host, op.keyRoot.maxW, op.keyRoot.maxH)})
+	size := op.keyRoot.Measure(widget.Constraints{Max: popoverCeiling(outputs, op.keyRoot.maxW, op.keyRoot.maxH)})
 	g := op.pop.Gutter()
 	w, h := size.W+2*g, size.H+2*g
 	rw, rh := op.pop.RequestedSize()
@@ -730,13 +730,22 @@ type keyboardModer interface {
 // for a config that names no ceiling of its own.
 const popoverMaxH = 600
 
+// outputs is the session's outputs; a wireless application (tests)
+// has none.
+func (a *Application) outputs() []*wlsession.Output {
+	if a.sess == nil {
+		return nil
+	}
+	return a.sess.Outputs()
+}
+
 // popoverCeiling is the content's measure ceiling: maxW and maxH, or
-// the host's width and popoverMaxH where unset - the one rule the open
-// and every refit share.
-func popoverCeiling(host Host, maxW, maxH int) widget.Size {
-	bw, _ := host.Size()
+// where unset the largest output's width (fitBounds) and popoverMaxH -
+// the one rule the open and every refit share. A popup may outgrow the
+// window it hangs from; the positioner keeps it on its output.
+func popoverCeiling(outputs []*wlsession.Output, maxW, maxH int) widget.Size {
 	if maxW <= 0 {
-		maxW = bw
+		maxW = fitBounds(nil, outputs).W
 	}
 	if maxH <= 0 {
 		maxH = popoverMaxH
