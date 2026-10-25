@@ -69,7 +69,7 @@ func (m *MenuBar) SetFocused(on bool) {
 func (m *MenuBar) fire(i int) {
 	root := m.buttons[i]
 	root.SetState(StateChecked, true)
-	OpenMenu(m, root, m.face, m.sizePx, m.menus[i].Items, func() { root.SetState(StateChecked, false) })
+	OpenMenu(m, root, m.face, m.sizePx, m.menus[i].Items, MenuOptions{Gap: PopoverGap, OnClosed: func() { root.SetState(StateChecked, false) }})
 }
 
 // KeyAction handles the F10 handoff: it activates the first root,

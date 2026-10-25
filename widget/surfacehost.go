@@ -13,9 +13,8 @@ import (
 // reports its own failures.
 type SurfaceHost interface {
 	// OpenMenu opens items as a popup menu beside anchor, whose bounds
-	// are in the tree's coordinates, painted with face at sizePx;
-	// onClosed, when set, runs once the menu goes away.
-	OpenMenu(anchor Boundser, face render.Font, sizePx float64, items []MenuItem, onClosed func())
+	// are in the tree's coordinates, painted with face at sizePx.
+	OpenMenu(anchor Boundser, face render.Font, sizePx float64, items []MenuItem, opts MenuOptions)
 	// OpenPopover opens content in a popover beside anchor, and returns
 	// what closes it.
 	OpenPopover(anchor Boundser, content Widget, opts PopoverOptions) (close func())
@@ -43,10 +42,18 @@ func hostOf(w Widget, what string) SurfaceHost {
 	panic(fmt.Sprintf("widget: %s from %T: no surface hosts its tree", what, w))
 }
 
+// MenuOptions shape a widget-opened menu.
+type MenuOptions struct {
+	// OnClosed, when set, runs once the menu goes away.
+	OnClosed func()
+	// Gap is the distance between the anchor and the root menu.
+	Gap int
+}
+
 // OpenMenu opens items as a popup menu beside anchor through the host
-// of from's tree; onClosed, when set, runs once the menu goes away.
-func OpenMenu(from Widget, anchor Boundser, face render.Font, sizePx float64, items []MenuItem, onClosed func()) {
-	hostOf(from, "OpenMenu").OpenMenu(anchor, face, sizePx, items, onClosed)
+// of from's tree.
+func OpenMenu(from Widget, anchor Boundser, face render.Font, sizePx float64, items []MenuItem, opts MenuOptions) {
+	hostOf(from, "OpenMenu").OpenMenu(anchor, face, sizePx, items, opts)
 }
 
 // PopoverOptions shape a widget-opened popover.
@@ -63,8 +70,9 @@ type PopoverOptions struct {
 	Gap int
 }
 
-// popoverGap is the distance a widget's popover keeps from its trigger.
-const popoverGap = 4
+// PopoverGap is the distance a popover or menu keeps from the trigger
+// that opened it.
+const PopoverGap = 4
 
 // OpenPopover opens content in a popover beside anchor through the
 // host of from's tree, and returns what closes it. The popover's own

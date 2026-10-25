@@ -38,7 +38,7 @@ func (c *ContextMenu) OpenContextMenu(at Point) {
 	if len(c.items) == 0 {
 		return
 	}
-	OpenMenu(c, pointAnchor{X: at.X, Y: at.Y, W: 1, H: 1}, c.face, c.sizePx, c.items, nil)
+	OpenMenu(c, pointAnchor{X: at.X, Y: at.Y, W: 1, H: 1}, c.face, c.sizePx, c.items, MenuOptions{})
 }
 
 // Gesture implements GestureHandler: a long press opens the menu where

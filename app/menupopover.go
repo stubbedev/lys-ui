@@ -14,6 +14,8 @@ type MenuPopoverConfig struct {
 	Anchor widget.Boundser
 	// Gravity picks the root menu's side.
 	Gravity Gravity
+	// Gap is the distance between the anchor and the root menu.
+	Gap int
 	// SubmenuSide picks the side of its row a submenu opens on: after
 	// the row in its reading direction by default (right; left in a
 	// right-to-left menu). The compositor flips it when there is no
@@ -89,6 +91,7 @@ func (a *Application) OpenMenuPopover(host Host, cfg MenuPopoverConfig) (*MenuPo
 		if parent == nil {
 			pc.Parent = cfg.Parent
 			pc.Gravity = cfg.Gravity
+			pc.Gap = cfg.Gap
 		} else {
 			dir := widget.DirectionAuto
 			if m, ok := content.(*widget.Menu); ok {

@@ -135,7 +135,7 @@ func TestMenuBarRootsAndKeyboard(t *testing.T) {
 	if len(host.menus) != 1 || host.menus[0][0].Label != "Undo" || !bar.buttons[1].HasState(StateChecked) || bar.buttons[0].HasState(StateChecked) {
 		t.Fatalf("after clicking Edit: menus %v, roots checked %v %v", host.menus, bar.buttons[0].HasState(StateChecked), bar.buttons[1].HasState(StateChecked))
 	}
-	host.menuClosers[0]()
+	host.menuOpts[0].OnClosed()
 	if bar.buttons[1].HasState(StateChecked) {
 		t.Error("the root stayed checked after its menu closed")
 	}

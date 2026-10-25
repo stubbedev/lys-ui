@@ -89,7 +89,8 @@ func ExampleMenu() {
 // hands every popover's keys to the widget the popover focuses.
 type popoverHost struct{ focus widget.KeyActionHandler }
 
-func (h *popoverHost) OpenMenu(widget.Boundser, render.Font, float64, []widget.MenuItem, func()) {}
+func (h *popoverHost) OpenMenu(widget.Boundser, render.Font, float64, []widget.MenuItem, widget.MenuOptions) {
+}
 
 func (h *popoverHost) OpenPopover(_ widget.Boundser, _ widget.Widget, opts widget.PopoverOptions) func() {
 	h.focus = opts.Focus.(widget.KeyActionHandler)

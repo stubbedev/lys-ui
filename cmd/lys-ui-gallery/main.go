@@ -250,7 +250,7 @@ func menubarMenus() []widget.MenuBarMenu {
 
 // dropdownMenu opens the Dropdown Menu demo under its button.
 func (g *gallery) dropdownMenu() {
-	widget.OpenMenu(g.menuButton, g.menuButton, g.env.Face, 14, demoMenu(), nil)
+	widget.OpenMenu(g.menuButton, g.menuButton, g.env.Face, 14, demoMenu(), widget.MenuOptions{Gap: widget.PopoverGap})
 }
 
 // popover opens the Popover demo under its button.
@@ -265,7 +265,7 @@ func (g *gallery) popover() {
 		).Spacing(8),
 		ui.Column(field("Width", "100%"), field("Max. width", "300px"), field("Height", "25px"), field("Max. height", "none")).Spacing(8),
 	).Spacing(16).Padding(render.UniformInsets(16)).Classes("popover-demo"))
-	widget.OpenPopover(g.popoverButton, g.popoverButton, content, widget.PopoverOptions{OnClosed: view.Close})
+	widget.OpenPopover(g.popoverButton, g.popoverButton, content, widget.PopoverOptions{OnClosed: view.Close, Gap: widget.PopoverGap})
 }
 
 // alertDialog opens the Alert Dialog demo.
