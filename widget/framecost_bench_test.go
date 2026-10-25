@@ -85,6 +85,13 @@ func BenchmarkSettingsFrame(b *testing.B) {
 			root.Paint(cv)
 		}
 	})
+	b.Run("sweep", func(b *testing.B) {
+		i := 0
+		for b.Loop() {
+			i++
+			settingsFrame(root, cv, w-(i*7)%600, h)
+		}
+	})
 	b.Run("resize", func(b *testing.B) {
 		i := 0
 		for b.Loop() {
