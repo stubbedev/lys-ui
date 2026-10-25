@@ -189,3 +189,23 @@ func TestMenuSeparatorIsAThinRow(t *testing.T) {
 		t.Errorf("menu height %d, want the rows inside the menu's box, %d", size.H, want)
 	}
 }
+
+// A separator's rule spans the menu's inside, edge to edge as the
+// reference's (-mx-1 under the p-1 contents) does; it stopped 8px short
+// of the row on each side (#281).
+func TestMenuSeparatorSpansTheMenu(t *testing.T) {
+	m := NewMenu(entryFace(t), 13, MenuItem{Label: "one", OnClick: func() {}}, MenuSeparator(), MenuItem{Label: "two", OnClick: func() {}})
+	sz := m.Measure(Constraints{Max: Size{W: 300, H: 300}})
+	m.Arrange(render.Rect{W: sz.W, H: sz.H})
+	data := make([]byte, render.Stride(sz.W)*sz.H)
+	cv := render.New(data, render.Stride(sz.W), sz.W, sz.H)
+	m.Paint(cv)
+	sep := m.RowBounds(1)
+	y := sep.Y + sep.H/2
+	_, inside := boxRects(boxOf(m.style(m), render.Insets{}), m.bounds)
+	for _, x := range []int{inside.X + 1, inside.X + inside.W - 2} {
+		if got := render.ColorFromBytes(data[y*render.Stride(sz.W)+x*4:]); got == m.style(m).Background {
+			t.Errorf("no rule at x=%d on the separator row", x)
+		}
+	}
+}

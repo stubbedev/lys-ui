@@ -362,7 +362,7 @@ func (m *Menu) Measure(con Constraints) Size {
 			row += 18
 		}
 		if acc := m.accelText(it); acc != "" {
-			row += m.face.Shape(acc, m.sizePx).Advance() + 16
+			row += m.accelShape(acc).Advance() + 16
 		}
 		if len(it.Items) > 0 {
 			row += 16
@@ -498,7 +498,7 @@ func (m *Menu) Paint(cv *render.Canvas) {
 		rfx.pop()
 		if it.Kind == ItemSeparator {
 			y := row.Y + row.H/2
-			cv.Line(row.X+8, y, row.X+row.W-8, y, 1, t.Border)
+			cv.Line(inside.X, y, inside.X+inside.W, y, 1, t.Border)
 			continue
 		}
 		x := rowContent.X
@@ -538,7 +538,7 @@ func (m *Menu) Paint(cv *render.Canvas) {
 			// keep clear of the accelerator and submenu arrow.
 			x = rowContent.X + rowContent.W - 4 - int(sh.Advance()+0.5)
 			if acc := m.accelText(it); acc != "" {
-				x -= int(m.face.Shape(acc, m.sizePx).Advance()+0.5) + 16
+				x -= int(m.accelShape(acc).Advance()+0.5) + 16
 			}
 			if len(it.Items) > 0 {
 				x -= 16
@@ -554,7 +554,7 @@ func (m *Menu) Paint(cv *render.Canvas) {
 			cv.FillRect(render.Rect{X: x0, Y: baseline + 2, W: max(x1-x0, 1), H: 2}, col)
 		}
 		if acc := m.accelText(it); acc != "" {
-			sh := m.face.Shape(acc, m.sizePx)
+			sh := m.accelShape(acc)
 			aw := int(sh.Advance() + 0.5)
 			m.face.Draw(cv, sh, rowContent.X+rowContent.W-4-aw, baseline, t.TextMuted)
 		}
@@ -563,6 +563,12 @@ func (m *Menu) Paint(cv *render.Canvas) {
 		}
 	}
 }
+
+// menuAccelPx is a shortcut's text size, a step under the label's.
+const menuAccelPx = 12
+
+// accelShape is a row's shortcut, shaped at its smaller size.
+func (m *Menu) accelShape(acc string) *render.ShapedText { return m.face.Shape(acc, menuAccelPx) }
 
 // Role implements Roleer.
 func (m *Menu) Role() Role { return RoleMenu }
