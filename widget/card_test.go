@@ -106,3 +106,40 @@ func TestCardTitleIsTheThemeTitleSize(t *testing.T) {
 		t.Errorf("title at %v, want the theme's title size %v (18 over 16)", got, want)
 	}
 }
+
+// The header's action keeps its natural width at the header's end and
+// the titles wrap in what is left: a wrapping description's natural
+// width is its whole paragraph, which pushed the action past the
+// card's edge or squeezed it to an ellipsis.
+func TestCardActionKeepsItsWidthBesideWrappingText(t *testing.T) {
+	face := goldenFace(t)
+	for _, ellipsize := range []bool{false, true} {
+		c := NewCard(face, "Screen sharing")
+		c.SetDescription("An application wants to share your screen. Choose what it can see and whether it may keep the selection.")
+		caption := NewLabel(face, 14, "An application", 0)
+		if ellipsize {
+			caption.SetEllipsize(EllipsizeEnd)
+		}
+		action := NewBox(Row, 6, 0)
+		action.Append(NewSpacer(16, 16), false)
+		action.Append(caption, false)
+		c.SetAction(action)
+		c.SetSizeRequest(420, 0)
+		c.SetMaximumSize(420, 0)
+		arrangeTree(t, NewBox(Column, 0, 0).Append(c, false), 800, 600)
+		want := caption.Measure(Constraints{Max: Size{W: 800, H: 100}}).W
+		cb, ab, lb := c.Bounds(), action.Bounds(), caption.Bounds()
+		if lb.W < want {
+			t.Errorf("ellipsize %v: caption %d wide, want its natural %d", ellipsize, lb.W, want)
+		}
+		if ab.X+ab.W > cb.X+cb.W-CascadeBorder(c).Right-3*Current().Padding {
+			t.Errorf("ellipsize %v: action ends at %d, past the card's content edge (card %v)", ellipsize, ab.X+ab.W, cb)
+		}
+		if tb := c.titles.Bounds(); ab.X-(tb.X+tb.W) != 2*Current().Spacing {
+			t.Errorf("ellipsize %v: titles %v and action %v, want the theme's header gap between", ellipsize, tb, ab)
+		}
+		if c.desc.Bounds().H <= c.title.Bounds().H {
+			t.Errorf("ellipsize %v: the description did not wrap beside the action", ellipsize)
+		}
+	}
+}
