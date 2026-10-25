@@ -511,7 +511,11 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			ui.Alert("Unable to process your payment.", "Please verify your billing information and try again.").
 				Icon(ui.Symbol(widget.SymbolClose, 16)).Variant(widget.AlertDestructive)),
 		section("Alert Dialog", ui.Aligned(ui.Button(ui.Label("Show Dialog"), 0, 0).Classes(css.Outline).Ref(&alertButton).OnClick(g.alertDialog), widget.AlignStart)).opens(click, center(&alertButton)).room(560, 260),
-		section("Aspect Ratio", ui.Aligned(ui.AspectFrame(ui.Column().SizeRequest(360, 0).Classes(css.Card), 16.0/9), widget.AlignStart)),
+		section("Aspect Ratio", ui.Aligned(ui.AspectFrame(ui.Column(
+			ui.Expand(ui.Spacer(0, 0)),
+			ui.Aligned(ui.Label("16 : 9").Classes(css.DimLabel), widget.AlignCenter),
+			ui.Expand(ui.Spacer(0, 0)),
+		).SizeRequest(360, 0).Classes(css.Card), 16.0/9), widget.AlignStart)),
 		section("Avatar", ui.Row(ui.Avatar(40, "Ada Lovelace"), ui.Avatar(40, "Grace Hopper"), ui.Avatar(40, "")).Spacing(12)),
 		section("Badge", ui.Row(
 			ui.Badge("Default"),
