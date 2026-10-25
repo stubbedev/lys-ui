@@ -136,13 +136,16 @@ func TestIconRotationStatic(t *testing.T) {
 	at := func(data []byte, x, y int) render.Color {
 		return render.ColorFromBytes(data[y*render.Stride(20)+x*4:])
 	}
-	// The dot at the icon's left edge (4, 7) turns onto the top edge:
-	// nearest sampling lands it at (6, 3).
+	// The dot at the icon's left edge (4, 7) turns about the icon's
+	// center onto its top row: (6, 4).
 	if at(rest, 4, 7) == 0 {
 		t.Fatalf("the unturned icon lost its dot: %v", at(rest, 4, 7))
 	}
-	if at(turned, 6, 3) == 0 {
+	if at(turned, 6, 4) == 0 {
 		t.Errorf("the turned icon has no dot on the top edge")
+	}
+	if at(turned, 6, 3) != 0 {
+		t.Errorf("the turned icon drew above its own box")
 	}
 	if at(turned, 4, 7) != 0 {
 		t.Errorf("the turned icon kept a dot on the left edge")
