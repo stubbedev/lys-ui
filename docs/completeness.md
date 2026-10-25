@@ -32,7 +32,7 @@ live in [architecture.md](architecture.md#non-goals).
 | --- | --- | --- |
 | Label, styled text | `Label` (UAX #14 wrap, start/middle/end ellipsize), `RichLabel` (markup, links) | widget/label.go, widget/richlabel.go |
 | Button, ToggleButton, CheckButton, Switch, radio groups | `Button` (any child), `ToggleButton`, `CheckButton`, `Switch`; toggles and checks join radio groups | widget/button.go, widget/toggle.go, widget/radio.go |
-| Scale, ProgressBar, LevelBar, SpinButton | `Slider`, `ProgressBar`, `LevelBar`, `SpinButton` | widget/slider.go, widget/progressbar.go, widget/levelbar.go, widget/spin.go |
+| Scale, ProgressBar, LevelBar, SpinButton | `Slider`, `ProgressBar`, `ProgressRing` (circular, with a centred child), `LevelBar`, `SpinButton` | widget/slider.go, widget/progressbar.go, widget/progressring.go, widget/levelbar.go, widget/spin.go |
 | Entry, PasswordEntry, SearchEntry, EditableLabel | `Entry` (selection, clipboard, IME, `EchoPassword`/`EchoNone`), `SearchEntry`, `SearchBar`, `ComboEntry` + completion, `EditableLabel` | widget/entry.go, widget/search.go, widget/completion.go, widget/editablelabel.go |
 | undo/redo | bounded coalescing stack shared by `Entry` and `TextArea` | widget/undo.go |
 | TextView, SourceView | `TextArea` (soft wrap, Tab trap), code view (line numbers, highlighters, auto-indent); `highlight`: TOML, Go, JSON, YAML, Markdown, Adwaita schemes | widget/textarea.go, widget/codeview.go, highlight/ |
@@ -51,7 +51,7 @@ live in [architecture.md](architecture.md#non-goals).
 | Popover | `app.Popover`, anchored to any widget, on toplevels and layer surfaces | app/popover.go |
 | Dialog, MessageDialog, AlertDialog | `app.Dialog`, `MessageBox`, `PromptDialog`, `ProgressDialog`; modality through xdg-dialog-v1 | app/dialog.go, app/prompt.go |
 | FileDialog | `Application.OpenFileDialog`, `OpenFilesDialog`, `OpenFolderDialog`, `SaveFileDialog` (pure-Go picker, XDG recents); relm4-components' `OpenButton` is `Application.NewOpenButton` (label, filters, folder mode, recent-files dropdown over the shared store) | app/filedialog.go, app/openbutton.go, widget/filechooser.go |
-| ColorDialogButton, FontDialogButton, Inscription | `ColorButton` and `FontButton` (`Application.AttachColorButton`/`AttachFontButton` open the choosers; `BindColor`/`BindFont`), `Inscription` (sized by character and line counts) | widget/dialogbuttons.go, widget/inscription.go, app/chrome.go |
+| ColorDialogButton, FontDialogButton, Inscription | `ColorButton` (opens a `SwatchPicker` popover of `ColorSwatch` presets, a custom row and the full `ColorChooser` in place) and `FontButton` (`Application.AttachFontButton` opens the chooser); `BindColor`/`BindFont`; `Inscription` (sized by character and line counts) | widget/dialogbuttons.go, widget/colorswatch.go, widget/inscription.go, app/chrome.go |
 | ColorDialog, FontDialog, Calendar, EmojiChooser | `ColorChooserDialog`, `FontChooserDialog`, `CalendarDialog`, `EmojiChooser` | app/dialog.go, app/emojichooser.go |
 | adw AboutDialog | `Application.AboutDialog` | app/about.go |
 | ShortcutsWindow | `ShortcutsView` + `Application.ShortcutsDialog` from the accelerator registry | widget/shortcuts.go, app/accel.go |
@@ -66,6 +66,8 @@ live in [architecture.md](architecture.md#non-goals).
 | adw NavigationView, NavigationSplitView, OverlaySplitView, Carousel, ViewSwitcher, StackSwitcher, Clamp, BreakpointBin | the same names; one breakpoint engine | widget/navigation.go, widget/adaptive.go |
 | adw Banner, BottomSheet, StatusPage, Avatar, SplitButton, ButtonContent, ToggleGroup | the same names | widget/adw.go, widget/bottomsheet.go |
 | drag and drop | `DragSource`/`DragEnterer` per widget, action negotiation, cross-window | widget/input.go, app/dragdrop.go |
+| GestureClick, EventControllerScroll | `SetOnPointer` (any button, click count, modifiers) and `SetOnScroll` (steps, modifiers) on every widget; `List.OnPointer`/`OnScroll` with the row | widget/pointerhook.go, widget/list.go |
+| shell parts (no GTK counterpart) | `Bar` (start, center and end zones along an edge, turning with `SetEdge`), `BarButton`, `BarSeparator`, `SegmentIndicator`, `app.NewBar`; `FloatingPanel` (drag, resize, confinement, input-region pass-through via `InputRegioner`); `Card`; `Chip` and the drag-reorderable `ChipBox` | widget/bar.go, app/bar.go, widget/floatingpanel.go, widget/card.go, widget/chip.go |
 | RTL/bidi | UAX #9 in every text path; `Direction` on text widgets, menus, dropdowns and Box | internal/text, widget/direction.go |
 
 ## Text, rendering and theming
