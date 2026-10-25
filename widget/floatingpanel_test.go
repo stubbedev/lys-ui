@@ -145,3 +145,45 @@ func TestInputRegionOfLooksThroughWrappers(t *testing.T) {
 		t.Error("a region found under a container of two")
 	}
 }
+
+// dropTitle is a header label taking file drops.
+type dropTitle struct {
+	*Label
+	dropped []string
+}
+
+func (d *dropTitle) DragEnter(mimes []string, _ Point) string {
+	if len(mimes) > 0 && mimes[0] == "text/uri-list" {
+		return mimes[0]
+	}
+	return ""
+}
+
+func (d *dropTitle) Drop(_ string, data []byte, _ Point) { d.dropped = append(d.dropped, string(data)) }
+
+func (d *dropTitle) HitTest(p Point) Widget {
+	if d.Label.HitTest(p) != nil {
+		return d
+	}
+	return nil
+}
+
+// A drag over the header reaches the drop target in it: the handle is
+// the hit leaf, and it swallowed every drag.
+func TestFloatingPanelHeaderTakesDrops(t *testing.T) {
+	title := &dropTitle{Label: NewLabel(goldenFace(t), 14, "Open File", 0)}
+	header := NewBox(Row, 0, 8)
+	header.Append(title, true)
+	f := NewFloatingPanel(header, NewSpacer(200, 100))
+	arrangeTree(t, f, 800, 600)
+	r := &Router{Root: f}
+	b := title.Bounds()
+	at := Point{X: b.X + 4, Y: b.Y + b.H/2}
+	if got := r.DragEnter([]string{"text/uri-list"}, at); got != "text/uri-list" {
+		t.Fatalf("drag over the title accepted %q", got)
+	}
+	r.Drop("text/uri-list", []byte("file:///tmp/a"), at)
+	if len(title.dropped) != 1 {
+		t.Errorf("the title got %v", title.dropped)
+	}
+}

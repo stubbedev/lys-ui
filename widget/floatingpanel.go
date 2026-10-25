@@ -248,6 +248,58 @@ type panelHandle struct {
 	child        Widget
 	f            *FloatingPanel
 	anchor, from Point
+	// drop is the drop target a drag over the header went to: the
+	// nearest one under the pointer inside the header, else above the
+	// panel. The handle is the hit leaf, so it routes drags there.
+	drop DragEnterer
+}
+
+// dropTargetAt is the nearest drop target for a drag at p: inside the
+// header under p, else the panel's ancestors.
+func (h *panelHandle) dropTargetAt(p Point) DragEnterer {
+	for w := h.child.HitTest(p); w != nil && w != Widget(h); w = parentOf(w) {
+		if d, ok := w.(DragEnterer); ok {
+			return d
+		}
+	}
+	for w := parentOf(h.f); w != nil; w = parentOf(w) {
+		if d, ok := w.(DragEnterer); ok {
+			return d
+		}
+	}
+	return nil
+}
+
+// DragEnter implements DragEnterer for the target under p.
+func (h *panelHandle) DragEnter(mimes []string, p Point) string {
+	h.DragLeave()
+	if h.drop = h.dropTargetAt(p); h.drop == nil {
+		return ""
+	}
+	return h.drop.DragEnter(mimes, p)
+}
+
+// DragHover implements DragHoverer.
+func (h *panelHandle) DragHover(p Point) {
+	if d, ok := h.drop.(DragHoverer); ok {
+		d.DragHover(p)
+	}
+}
+
+// DragLeave implements DragLeaver.
+func (h *panelHandle) DragLeave() {
+	if d, ok := h.drop.(DragLeaver); ok {
+		d.DragLeave()
+	}
+	h.drop = nil
+}
+
+// Drop implements Dropper for the target under p; the router has
+// already said the drag left.
+func (h *panelHandle) Drop(mime string, data []byte, p Point) {
+	if d, ok := h.dropTargetAt(p).(Dropper); ok {
+		d.Drop(mime, data, p)
+	}
 }
 
 func (h *panelHandle) Measure(con Constraints) Size { return MeasureAsChild(h.child, con) }
