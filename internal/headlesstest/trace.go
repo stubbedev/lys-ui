@@ -111,25 +111,25 @@ func (w *LogWatcher) Wait(category, substr string, timeout time.Duration) (Trace
 // holds once reached (a window's keyboard focus) rather than an event
 // in a sequence.
 func (w *LogWatcher) WaitEver(category, substr string, timeout time.Duration) error {
+	return w.WaitSince(0, category, substr, timeout)
+}
+
+// WaitSince waits until a trace in category containing substr has
+// arrived after mark, consuming nothing: an event the caller marked
+// the start of, whether or not a Wait already read past it.
+func (w *LogWatcher) WaitSince(mark int, category, substr string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	for {
-		w.readNew()
-		w.mu.Lock()
-		for _, tr := range w.seen {
-			if (category == "" || tr.Category == category) && strings.Contains(tr.Message, substr) {
-				w.mu.Unlock()
-				return nil
-			}
-		}
-		w.mu.Unlock()
+	for !w.SeenSince(mark, category, substr) {
 		if time.Now().After(deadline) {
 			return fmt.Errorf("timeout (%s): [%s] %q never arrived; log tail:\n%s", timeout, category, substr, w.Tail(25))
 		}
 		time.Sleep(pollInterval)
 	}
+	return nil
 }
 
-// Mark is a position in the watcher's history, for SeenSince.
+// Mark is a position in the watcher's history, for SeenSince and
+// WaitSince.
 func (w *LogWatcher) Mark() int {
 	w.readNew()
 	w.mu.Lock()

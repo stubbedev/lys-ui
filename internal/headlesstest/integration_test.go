@@ -168,7 +168,7 @@ func clickUntil(w *LogWatcher, in *VirtualInput, category string, x, y int, butt
 		// press, the action is merely slow, and clicking again would
 		// repeat it - toggling a row back out, closing what it opened.
 		if w.SeenSince(mark, "input", "press at") {
-			return w.WaitEver(category, want, traceTimeout)
+			return w.WaitSince(mark, category, want, traceTimeout)
 		}
 	}
 	return fmt.Errorf("no trace [%s] %q after 3 attempts; last tail:\n%s", category, want, w.Tail(25))
