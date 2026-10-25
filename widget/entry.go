@@ -1048,6 +1048,12 @@ func (e *Entry) Measure(con Constraints) Size {
 		w += e.textWidth
 	case text != "":
 		w += int(e.font().Shape(text, px).Advance() + 0.5)
+		if e.displayText() != "" {
+			// Room for the margin the pan keeps past a trailing
+			// caret, so a field at its natural width shows its text
+			// from the first rune.
+			w += caretPad
+		}
 	}
 	lg := e.font().Shape("lg", px)
 	line := max(int(lg.Ascent()+lg.Descent()+0.5), picki(e.text.style(&e.text), style.PropMinHeight, 0))

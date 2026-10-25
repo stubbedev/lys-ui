@@ -297,6 +297,22 @@ func TestEntryMeasureCapsNaturalWidth(t *testing.T) {
 	})
 }
 
+// A field at its natural width shows its whole text with the caret at
+// the end: the natural width left no room for the pan's caret margin,
+// so the pan pushed the first runes out (an input group's "https://"
+// read "xample.com" after it, #281).
+func TestEntryNaturalWidthNeedsNoPan(t *testing.T) {
+	e := NewEntry(entryFace(t), 14, render.RGB(255, 255, 255))
+	e.SetText("example.com")
+	size := e.Measure(Constraints{Max: Size{W: 5000, H: 100}})
+	e.Arrange(render.Rect{W: size.W, H: size.H})
+	e.MoveCursor(-1)
+	e.MoveCursor(1)
+	if e.Cursor() != len([]rune(e.Text())) || e.scrollX != 0 {
+		t.Errorf("caret %d, pan %d at the natural width %d, want the caret at the end and no pan", e.Cursor(), e.scrollX, size.W)
+	}
+}
+
 func TestEntryTextWidthIsFixed(t *testing.T) {
 	face := entryFace(t)
 	con := Constraints{Max: Size{W: 5000, H: 100}}
