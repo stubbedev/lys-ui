@@ -115,8 +115,8 @@ func TestNotebookTabExpand(t *testing.T) {
 		t.Errorf("expanding tabs %v %v %v in row %v, want equal widths ending at the row's end", nb.tabRect(0), nb.tabRect(1), last, row)
 	}
 	plain := build(false, false, false)
-	if last := plain.tabRect(2); last.X+last.W >= plain.strip.row.X+plain.strip.row.W {
-		t.Errorf("non-expanding tabs reach %d, want natural widths leaving the rest", last.X+last.W)
+	if last := plain.tabRect(2); last.X+last.W >= plain.strip.header.X+plain.strip.header.W {
+		t.Errorf("non-expanding tabs reach %d, want natural widths leaving the header's rest", last.X+last.W)
 	}
 	mixed := build(false, true, false)
 	if mixed.tabRect(0).W != plain.tabRect(0).W || mixed.tabRect(2).W != plain.tabRect(2).W || mixed.tabRect(1).W <= plain.tabRect(1).W {

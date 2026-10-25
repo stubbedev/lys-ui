@@ -194,8 +194,10 @@ func TestNotebookTabLabelsAndBoxes(t *testing.T) {
 	if h := n.strip.height; h != 6+2+8+first.H || page.Bounds().Y != h {
 		t.Errorf("bar height %d, page at y=%d, want 16 + the row %d", h, page.Bounds().Y, first.H)
 	}
-	if n.strip.tabs.W != 300 {
-		t.Errorf("tabs box %v, want it across the header", n.strip.tabs)
+	// The tabs box fits its tabs (no tab expands): the two tabs, the
+	// margin between them, the 4px padding and 1px border each side.
+	if want := first.W + 8 + second.W + 2*(4+1); n.strip.tabs.W != want {
+		t.Errorf("tabs box %v, want it fitting its tabs, %d wide", n.strip.tabs, want)
 	}
 	if got := pickc(0, label.style(label), style.PropColor, 0); got != render.RGB(0x44, 0x55, 0x66) {
 		t.Errorf("selected tab's label color %v, want the tab:checked label rule", got)

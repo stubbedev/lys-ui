@@ -53,7 +53,7 @@ type Notebook struct {
 const (
 	tabArrowW    = 20
 	tabCloseW    = 20
-	tabTextPx    = 12
+	tabTextPx    = 14
 	tabWidth     = 96
 	tabBarHeight = 26
 )
@@ -450,9 +450,19 @@ func (n *Notebook) layoutStrip(r render.Rect) notebookStrip {
 	var inHeader render.Rect
 	s.header, inHeader = boxRects(hb, render.Rect{X: r.X, Y: r.Y, W: r.W, H: s.height})
 	s.tabs, s.row = boxRects(tb, inHeader)
+	if !n.anyTabExpands() && s.row.W > s.total {
+		// Without an expanding tab the list fits its tabs, the header
+		// still spanning the notebook.
+		s.tabs.W -= s.row.W - s.total
+		s.row.W = s.total
+	}
 	n.expandTabs(&s)
 	return s
 }
+
+// anyTabExpands reports whether a tab shares the strip's leftover
+// width (tabExpands).
+func (n *Notebook) anyTabExpands() bool { return slices.ContainsFunc(n.tabs, n.tabExpands) }
 
 // expandTabs shares the row's leftover width among the expanding tabs,
 // GTK's tab-expand: a tab set to expand, or one whose label wants

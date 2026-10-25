@@ -333,6 +333,7 @@ func controlRules() [][2]string {
 		{tabTriggers, "background-color: transparent; border-radius: {r}; min-height: 28px; padding: 0px 12px; font-weight: 500; color: @muted_fg_color;"},
 		{activeTabs, "background-color: @window_bg_color; color: @window_fg_color; box-shadow: 0px 1px 3px alpha(black, 0.1);"},
 		{"carousel button.nav", "min-width: 32px; min-height: 32px; padding: 0px; border-radius: 9999px;"},
+		{"notebook", "background-color: transparent;"},
 		{"notebook > header", "margin-bottom: 8px;"},
 		{"tabbar .tab-close-button", "background-color: transparent; border-radius: {r-4};"},
 		{"tabbar .tab-close-button:hover", "background-color: @muted_bg_color;"},
