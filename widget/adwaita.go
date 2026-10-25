@@ -263,7 +263,7 @@ func controlRules() [][2]string {
 		{"inputotp:focus .slot:checked", "box-shadow: inset 0px 0px 0px 1px @ring_color;"},
 		{"command", "background-color: @popover_bg_color; color: @popover_fg_color; border-radius: 8px;"},
 		{"command .input", "min-height: 40px; border-bottom: 1px solid @borders; color: @muted_fg_color;"},
-		{"command .input entry, command .input entry:focus", "box-shadow: none; padding-left: 0px; padding-right: 0px; color: @popover_fg_color;"},
+		{"command .input entry, command .input entry:focus", "box-shadow: none; padding-left: 0px; padding-right: 0px; background-color: transparent; color: @popover_fg_color;"},
 		{"command .heading", "font-weight: 500; color: @muted_fg_color; padding: 6px 8px;"},
 		{"command .item", "border-radius: 4px;"},
 		{"command .item:selected", "background-color: @muted_bg_color;"},

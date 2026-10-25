@@ -102,3 +102,23 @@ func TestGoldenShadcnCommand(t *testing.T) {
 		})
 	}
 }
+
+// The rows sit as far from the command's left edge as from its right,
+// and the search entry draws no field of its own: the list's scroll
+// reserved a bar gutter on the right though nothing overflowed, and
+// the dark theme's input fill boxed the search entry (#281).
+func TestCommandRowsAreCentered(t *testing.T) {
+	prev := Current()
+	t.Cleanup(func() { SetTheme(prev) })
+	SetTheme(DarkTheme())
+	var picked []string
+	c := NewCommand(testFace(t), "Search...", testCommandGroups(&picked)...)
+	arrangeTree(t, c, 320, 400)
+	cb, row := c.Bounds(), c.rows[0].Bounds()
+	if left, right := row.X-cb.X, cb.X+cb.W-(row.X+row.W); left != right {
+		t.Errorf("row inset %d on the left, %d on the right", left, right)
+	}
+	if bg := c.input.style(c.input).Background; bg.A() != 0 {
+		t.Errorf("search entry background %#x, want none", uint32(bg))
+	}
+}

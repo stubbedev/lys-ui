@@ -2,6 +2,8 @@ package widget
 
 import (
 	"testing"
+
+	"github.com/stubbedev/lys-ui/render"
 )
 
 // propagate-natural-height: the scroll stops offering its shortfall —
@@ -91,5 +93,28 @@ func TestWrappingRichLabelMinContent(t *testing.T) {
 	sc.VerticalOnly = true
 	if w := sc.Measure(con).W; w >= full/2 {
 		t.Errorf("never-policy scroll asks %dpx for a %dpx wrapping line, want about its widest token", w, full)
+	}
+}
+
+// A vertical-only scroll reserves its bar's column only while the
+// content overflows: content that fits keeps the viewport's whole
+// width, and content that overflows gives the bar its gutter (#281).
+func TestVerticalScrollGutterOnlyWhenOverflowing(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rows int
+		want int
+	}{{"fits", 2, 200}, {"overflows", 40, 200 - gutter}} {
+		content := NewBox(Column, 0, 0)
+		for range tc.rows {
+			content.Append(NewSpacer(10, 20), false)
+		}
+		s := NewScroll(content)
+		s.VerticalOnly = true
+		s.Measure(Constraints{Max: Size{W: 200, H: 100}})
+		s.Arrange(render.Rect{W: 200, H: 100})
+		if got := content.Bounds().W; got != tc.want {
+			t.Errorf("%s: content %dpx wide, want %d", tc.name, got, tc.want)
+		}
 	}
 }

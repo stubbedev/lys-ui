@@ -721,13 +721,27 @@ func (s *Scroll) Measure(con Constraints) Size {
 // measureContent is Measure inside the CSS box.
 func (s *Scroll) measureContent(con Constraints) Size {
 	s.nat = Size{}
+	overflows := false
 	if s.child != nil {
 		w := math.MaxInt
 		if s.VerticalOnly {
-			w = max(0, con.Max.W-gutter)
-			s.measuredAt = w
+			w = con.Max.W
 		}
 		s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
+		if s.VerticalOnly {
+			// The bar's column is reserved only once the content
+			// overflows the height on offer: a list that fits keeps
+			// its full width, as an overlay-scrolled one does.
+			limit := con.Max.H
+			if s.maxH > 0 {
+				limit = min(limit, s.maxH)
+			}
+			if overflows = s.nat.H > limit; overflows {
+				w = max(0, w-gutter)
+				s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
+			}
+			s.measuredAt = w
+		}
 	}
 	want := s.nat
 	if s.VerticalOnly && !s.PropagateNaturalWidth && s.child != nil {
@@ -746,8 +760,8 @@ func (s *Scroll) measureContent(con Constraints) Size {
 			want.W += gutter
 		}
 	}
-	if s.VerticalOnly && s.child != nil {
-		want.W += gutter // the bar's column is always there
+	if overflows {
+		want.W += gutter
 	}
 	if s.maxH > 0 && want.H > s.maxH {
 		// Capped, the content overflows: the vertical bar's gutter
@@ -795,10 +809,25 @@ func (s *Scroll) Arrange(r render.Rect) {
 		gutterH = gutter
 	}
 	if s.VerticalOnly {
-		gutterV, gutterH = gutter, 0
-		if w := max(0, r.W-gutter); w != s.measuredAt && s.child != nil {
-			s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
-			s.measuredAt = w
+		gutterV, gutterH = 0, 0
+		if stable {
+			gutterV = gutter
+		}
+		if s.child != nil {
+			w := r.W - gutterV
+			if w != s.measuredAt {
+				s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
+				s.measuredAt = w
+			}
+			if gutterV == 0 && s.nat.H > r.H {
+				// Overflowing, the bar takes its column; the content
+				// keeps the narrower width even if it now fits, so the
+				// layout cannot flip back and forth.
+				gutterV = gutter
+				w = max(0, r.W-gutter)
+				s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
+				s.measuredAt = w
+			}
 		}
 	}
 	s.viewW = r.W - gutterV
