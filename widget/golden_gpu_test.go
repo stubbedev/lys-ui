@@ -26,9 +26,9 @@ var goldenDevice = sync.OnceValues(func() (*gpu.Device, error) {
 	return gpu.Open()
 })
 
-// checkGoldenGPU renders the recorded golden on the GPU and fails
-// where a channel differs from want, the CPU's pixels, by more than
-// one: the GPU's float arithmetic may round the odd blend differently.
+// checkGoldenGPU renders the recorded golden on the GPU and fails on
+// any pixel differing from want, the CPU's: the GPU's shaders run the
+// CPU's integer and float32 arithmetic step for step.
 func checkGoldenGPU(t *testing.T, name string, l *render.List, want []byte, w, h int) {
 	t.Helper()
 	d, err := goldenDevice()
@@ -57,7 +57,7 @@ func checkGoldenGPU(t *testing.T, name string, l *render.List, want []byte, w, h
 			cpu := [4]int{int(c.R()), int(c.G()), int(c.B()), int(c.A())}
 			gp := [4]int{int(g.R), int(g.G), int(g.B), int(g.A)}
 			for i := range cpu {
-				if cpu[i]-gp[i] > 1 || gp[i]-cpu[i] > 1 {
+				if cpu[i] != gp[i] {
 					if bad == 0 {
 						first = fmt.Sprintf("(%d, %d): gpu %v cpu %v", x, y, gp, cpu)
 					}
