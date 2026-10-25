@@ -38,3 +38,25 @@ func TestDecoratingAShownWidgetDamages(t *testing.T) {
 		t.Error("a class on an arranged label owed no frame")
 	}
 }
+
+// A dropdown builds its rows' leading icons once per row set, not on
+// every measure: each fresh icon is styled anew.
+func TestDropdownBuildsSlotIconsOnce(t *testing.T) {
+	built := 0
+	dot := func() *Icon { built++; return testDot() }
+	rows := []DropdownRow{{Label: "a", Icon: dot}, {Label: "b", Icon: dot}}
+	d := NewDropdownRows(testFace(t), 13, rows, 0)
+	for range 5 {
+		d.InvalidateLayout()
+		d.Measure(Constraints{Max: Size{W: 300, H: 40}})
+	}
+	slot := built
+	if slot > len(rows)+1 {
+		t.Errorf("five measures built %d icons, want one per row and the face's", slot)
+	}
+	d.SetRows(rows, 0)
+	d.Measure(Constraints{Max: Size{W: 300, H: 40}})
+	if built == slot {
+		t.Error("new rows did not rebuild the slot icons")
+	}
+}

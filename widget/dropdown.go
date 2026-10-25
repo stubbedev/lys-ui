@@ -43,6 +43,10 @@ type Dropdown struct {
 	entries  []DropdownRow
 	faceIcon *Icon
 	faceFor  int
+	// slotIcons are the rows' icons the face's icon slot is measured
+	// over, built once per row set (nil until then): a factory's
+	// widget is fresh, and styling one each measure restyled the app.
+	slotIcons []*Icon
 
 	// list is the open popover's item list and closeList what closes
 	// it; both are nil while the list is closed.
@@ -130,6 +134,7 @@ func (d *Dropdown) SetRows(rows []DropdownRow, selected int) {
 		d.items[i] = e.Label
 	}
 	d.faceIcon, d.faceFor = nil, -1
+	d.slotIcons = nil
 	d.selected = -1
 	if len(rows) > 0 {
 		d.selected = d.selectableFrom(min(max(selected, 0), len(rows)-1))
@@ -501,11 +506,17 @@ func (d *Dropdown) selectedIcon() *Icon {
 // iconSlot is the widest row icon plus the gap, 0 without icons: the
 // face reserves it so a selection change never relayouts.
 func (d *Dropdown) iconSlot() int {
-	w := 0
-	for _, e := range d.entries {
-		if e.Icon != nil {
-			w = max(w, e.Icon().Measure(Constraints{Max: Size{W: 1 << 10, H: 1 << 10}}).W+dropdownIconGap)
+	if d.slotIcons == nil {
+		d.slotIcons = make([]*Icon, 0, len(d.entries))
+		for _, e := range d.entries {
+			if e.Icon != nil {
+				d.slotIcons = append(d.slotIcons, e.Icon())
+			}
 		}
+	}
+	w := 0
+	for _, ic := range d.slotIcons {
+		w = max(w, ic.Measure(Constraints{Max: Size{W: 1 << 10, H: 1 << 10}}).W+dropdownIconGap)
 	}
 	return w
 }
