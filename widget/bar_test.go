@@ -168,3 +168,39 @@ func TestBarSeparatorStylesFromCSS(t *testing.T) {
 		t.Error("the rule is longer than its 10 px")
 	}
 }
+
+// A segment holds content and its button is the app's: classes and the
+// other pointer buttons reach it.
+func TestSegmentContentAndButtons(t *testing.T) {
+	face := goldenFace(t)
+	segs := NewSegmentIndicator(3)
+	segs.SetSegmentContent(1, NewLabel(face, 12, "web", 0))
+	var middle []int
+	for i := range segs.Count() {
+		segs.Segment(i).SetOnPointer(func(e PointerEvent) bool {
+			if e.Button != BTNMiddle {
+				return false
+			}
+			middle = append(middle, i)
+			return true
+		})
+	}
+	segs.Segment(2).AddClass("special")
+	row := NewBox(Row, 0, 0).Append(segs, false)
+	arrangeTree(t, row, 400, 40)
+	seg := segs.Segment(1)
+	if seg.Bounds().W <= segs.Segment(0).Bounds().W {
+		t.Errorf("the labelled segment %v is no wider than an empty one %v", seg.Bounds(), segs.Segment(0).Bounds())
+	}
+	r := &Router{Root: row}
+	b := seg.Bounds()
+	r.Press(BTNMiddle, Point{X: b.X + b.W/2, Y: b.Y + b.H/2}, 0)
+	if len(middle) != 1 || middle[0] != 1 || !segs.Segment(2).HasClass("special") || segs.Segment(3) != nil {
+		t.Errorf("middle presses %v", middle)
+	}
+	segs.SetSegmentContent(1, nil)
+	arrangeTree(t, row, 400, 40)
+	if len(seg.child.(*Box).Children()) != 0 {
+		t.Error("clearing the content left it in the segment")
+	}
+}

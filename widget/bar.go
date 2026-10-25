@@ -347,8 +347,9 @@ var segmentClasses = []string{"occupied", "urgent"}
 
 // SegmentIndicator is a row of segments, one per workspace or page:
 // the active one drawn long and filled, occupied and urgent ones in
-// their theme colours. A click on a segment reports it through
-// OnSelect. In a vertical bar the segments stack. It styles as the
+// their theme colours. A segment can hold content (SetSegmentContent),
+// and Segment reaches its button. A click on a segment reports it
+// through OnSelect. In a vertical bar the segments stack. It styles as the
 // segments element, each segment a button.segment with the active,
 // occupied and urgent classes.
 type SegmentIndicator struct {
@@ -376,7 +377,7 @@ func (s *SegmentIndicator) SetCount(n int) {
 		s.segs = s.segs[:len(s.segs)-1]
 	}
 	for i := len(s.segs); i < n; i++ {
-		seg := NewButton(NewSpacer(0, 0), 0, 0)
+		seg := NewButton(NewBox(Row, 0, 0), 0, 0)
 		seg.AddClass("segment")
 		seg.SetAccessibleName(Tr("Segment") + " " + itoa(i+1))
 		seg.OnClick = func() {
@@ -394,6 +395,33 @@ func (s *SegmentIndicator) SetCount(n int) {
 
 // Count is the number of segments.
 func (s *SegmentIndicator) Count() int { return len(s.segs) }
+
+// Segment is segment i's button, nil out of range: for its classes,
+// inline style, tooltip, and its SetOnPointer and SetOnScroll for the
+// other buttons and the wheel.
+func (s *SegmentIndicator) Segment(i int) *Button {
+	if i < 0 || i >= len(s.segs) {
+		return nil
+	}
+	return s.segs[i]
+}
+
+// SetSegmentContent shows w inside segment i (a label, app icons), nil
+// for none; out of range does nothing.
+func (s *SegmentIndicator) SetSegmentContent(i int, w Widget) {
+	seg := s.Segment(i)
+	if seg == nil {
+		return
+	}
+	slot, ok := seg.child.(*Box)
+	if !ok {
+		panic("widget: a segment's child is not its content slot")
+	}
+	slot.Clear()
+	if w != nil {
+		slot.AppendAligned(w, false, AlignCenter)
+	}
+}
 
 // SetActive makes segment i the active one; out of range, none is.
 func (s *SegmentIndicator) SetActive(i int) {

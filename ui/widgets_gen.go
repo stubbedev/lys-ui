@@ -6723,6 +6723,12 @@ func (b *SegmentIndicatorBuilder) WatchCount(get func() int) *SegmentIndicatorBu
 	return b
 }
 
+// SegmentContent calls (*widget.SegmentIndicator).SetSegmentContent.
+func (b *SegmentIndicatorBuilder) SegmentContent(i int, child Node) *SegmentIndicatorBuilder {
+	b.do(func(s *Scope, w *widget.SegmentIndicator) { w.SetSegmentContent(i, build(s, child)) })
+	return b
+}
+
 // SegmentState calls (*widget.SegmentIndicator).SetSegmentState.
 func (b *SegmentIndicatorBuilder) SegmentState(i int, st widget.SegmentState) *SegmentIndicatorBuilder {
 	b.do(func(s *Scope, w *widget.SegmentIndicator) { w.SetSegmentState(i, st) })
