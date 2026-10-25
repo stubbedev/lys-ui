@@ -513,10 +513,10 @@ Each longhand is listed with its shorthand.
     not-allowed, col-resize, row-resize, all-scroll) maps onto the
     cursor-shape-v1 vocabulary, with the xcursor theme as the
     fallback for compositors without the protocol (the theme path
-    carries the classic core names). `cursor: url("file.cur") x y,
-    <keyword>` loads the named xcursor file and pins the CSS hotspot
-    over the file's own; the first frame shows, and a file that does
-    not load shows the fallback keyword. The property inherits — one
+    carries the classic core names).
+    `cursor: url("file.cur") x y, <keyword>` loads the named xcursor
+    file and pins the CSS hotspot over the file's own; the first frame
+    shows, and a file that does not load shows the fallback keyword. The property inherits — one
     declaration covers a subtree — and outranks a widget's built-in
     shape (text fields' caret, buttons' hand); `auto` defers to it.
   - `pointer-events`: `none` takes the widget out of hit testing and
@@ -1239,4 +1239,4 @@ Style is cached per widget and invalidated, never re-matched per paint:
 The `BenchmarkStyleGallery*` benchmarks (73 widgets, 25 rules)
 measure it: the full-tree restyle and the single-widget class toggle
 allocate nothing, and a styled frame paints in the unstyled frame's
-time ([bench/baseline.md](../bench/baseline.md) has the numbers).
+time ([bench/baseline.md](https://github.com/stubbedev/lys-ui/blob/main/bench/baseline.md) has the numbers).

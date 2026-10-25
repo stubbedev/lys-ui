@@ -1,11 +1,32 @@
-# lys-ui
+<p align="center">
+  <img src="docs/public/lys-ui.svg" width="160" alt="lys-ui">
+</p>
 
-A pure-Go (no cgo) widget toolkit for Wayland, built as a
-feature-complete counterpart of [relm4](https://relm4.org): a component
-framework with typed messages, a retained widget tree with
-GTK4/libadwaita-class widgets, xdg-shell and layer-shell windows, a
-GTK-flavored CSS engine over a typed palette, the desktop's portals and
-protocols, and an event loop that idles at 0% CPU.
+<h1 align="center">lys-ui</h1>
+
+<p align="center">
+  A pure-Go (no cgo) widget toolkit for Wayland, built as a
+  feature-complete counterpart of <a href="https://relm4.org">relm4</a>: a component
+  framework with typed messages, a retained widget tree with
+  GTK4/libadwaita-class widgets and every shadcn/ui component,
+  xdg-shell and layer-shell windows, a GTK-flavored CSS engine over a
+  typed palette, the desktop's portals and protocols, and an event loop
+  that idles at 0% CPU.
+</p>
+
+<p align="center">
+  <a href="https://github.com/stubbedev/lys-ui/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/stubbedev/lys-ui/ci.yml?branch=main&style=for-the-badge&label=CI" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT license"></a>
+  <a href="https://stubbedev.github.io/lys-ui/"><img src="https://img.shields.io/badge/docs-stubbedev.github.io-informational?style=for-the-badge" alt="Documentation"></a>
+</p>
+
+<p align="center">
+  <img src="https://stubbedev.github.io/lys-ui/components/card.png" width="380" alt="A shadcn/ui card in lys-ui">
+</p>
+
+The [documentation site](https://stubbedev.github.io/lys-ui/) shows a
+screenshot of [every widget](https://stubbedev.github.io/lys-ui/widgets),
+taken from the current code on every push.
 
 ## Status
 

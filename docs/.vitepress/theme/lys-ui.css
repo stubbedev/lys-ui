@@ -1,0 +1,41 @@
+:root {
+    --vp-c-brand-1: #c77a14;
+    --vp-c-brand-2: #d98a1f;
+    --vp-c-brand-3: #e89a2e;
+    --vp-c-brand-soft: rgba(255, 180, 84, 0.16);
+    --vp-home-hero-name-color: #1f2136;
+}
+
+.dark {
+    --vp-c-bg: #0a0a0a;
+    --vp-c-bg-alt: #111111;
+    --vp-c-bg-elv: #171717;
+    --vp-c-bg-soft: #171717;
+    --vp-c-divider: rgba(255, 255, 255, 0.1);
+    --vp-c-gutter: #000000;
+    --vp-c-text-1: #fafafa;
+    --vp-c-text-2: #a1a1a1;
+    --vp-c-brand-1: #ffb454;
+    --vp-c-brand-2: #ffc173;
+    --vp-c-brand-3: #ffcd8f;
+    --vp-c-brand-soft: rgba(255, 180, 84, 0.14);
+    --vp-home-hero-name-color: #ffb454;
+}
+
+.widgets .widget {
+    margin: 40px 0;
+}
+
+.widgets .widget h2 {
+    margin: 0 0 16px;
+    padding-top: 0;
+    border-top: none;
+}
+
+.widgets .widget img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--vp-c-divider);
+    border-radius: 12px;
+}
