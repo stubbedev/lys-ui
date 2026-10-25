@@ -211,3 +211,32 @@ func TestDisconnectedEventCarriesUnderlyingError(t *testing.T) {
 		t.Errorf("event error %q does not name the disconnect", msg)
 	}
 }
+
+// A panic in the loop propagates out of Run instead of hanging it: the
+// final wire settle is skipped, since the wire may be what panicked
+// with its send lock held. Here the peer never answers, so a settle
+// would block on the roundtrip forever (#277).
+func TestRunPanicSkipsTheWireSettle(t *testing.T) {
+	ln, _ := headlesstest.LoopbackDisplay(t, "wayland-panic")
+	t.Cleanup(func() { _ = ln.Close() })
+	d, err := wl.Connect("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Context().Close() })
+	a, _, _ := disconnectApp(t, &wlsession.Session{Display: d})
+	a.step = func() error { panic("loop panic") }
+	got := make(chan any, 1)
+	go func() {
+		defer func() { got <- recover() }()
+		_ = a.Run()
+	}()
+	select {
+	case r := <-got:
+		if r != "loop panic" {
+			t.Errorf("Run recovered %v, want the loop's panic", r)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run hung after a panic instead of propagating it")
+	}
+}

@@ -686,12 +686,6 @@ func outputWire(o *wlsession.Output) *wl.Output {
 func (a *Application) Run() error {
 	widget.MarkLoop()
 	defer func() {
-		// Every exit but a dead connection settles the wire first:
-		// requests the loop's last pass made (an unlock, a destroy)
-		// must reach the compositor before the process can exit.
-		if !a.disconnectOnce.Load() {
-			a.settleWire()
-		}
 		widget.UnmarkLoop()
 		// Discard queued invokes and stop the pollers: nothing will run
 		// them, and later Invokes drop instead of accumulating. This runs
@@ -722,6 +716,20 @@ func (a *Application) Run() error {
 	}()
 	a.startAccessibility()
 	a.wireSession()
+	err := a.loop()
+	// Every return but a dead connection settles the wire: requests the
+	// loop's last pass made (an unlock, a destroy) must reach the
+	// compositor before the process can exit. A panic skips it, since
+	// the wire may be what panicked, holding its send lock.
+	if !a.disconnectOnce.Load() {
+		a.settleWire()
+	}
+	return err
+}
+
+// loop is Run's event loop proper: it returns ErrClosed when the
+// application is done, or the error that ended the session.
+func (a *Application) loop() error {
 	for {
 		if a.done() {
 			return ErrClosed
