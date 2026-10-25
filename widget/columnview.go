@@ -5,7 +5,6 @@ import (
 
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/transfer"
-	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // ColumnView is the virtualized table (#90): typed columns over a
@@ -257,8 +256,7 @@ func (v *ColumnView[T]) buildHeader() {
 			continue
 		}
 		title := NewBox(Row, 4, 0)
-		name := NewLabel(v.face, v.sizePx-1, col.Title, 0)
-		name.AddClass(css.DimLabel)
+		name := NewLabel(v.face, v.sizePx, col.Title, 0)
 		title.AppendAligned(name, false, AlignCenter)
 		if i == v.sortBy {
 			arrow := SymbolChevronDown
@@ -356,6 +354,7 @@ func (v *ColumnView[T]) buildRow(i int) Widget {
 		// The inset matches the header button's padding, so a cell's
 		// content starts under its column title.
 		inner := NewBox(Row, 0, 0)
+		inner.SetPadding(render.Insets{Top: cellInsetY, Bottom: cellInsetY})
 		inner.Append(NewSpacer(headerInset, 0), false)
 		inner.AppendAligned(cell, false, AlignCenter)
 		row.AppendAligned(newSizedCell(inner, col.Width), col.Expand, AlignFill)
@@ -366,8 +365,12 @@ func (v *ColumnView[T]) buildRow(i int) Widget {
 	return &dragRow[T]{Box: row, view: v, at: i}
 }
 
-// headerInset is the header buttons' padding and the row cells' inset.
-const headerInset = 6
+// headerInset is the header buttons' padding and the row cells' inset;
+// cellInsetY pads a cell above and below its content.
+const (
+	headerInset = 8
+	cellInsetY  = 8
+)
 
 // rowReorderMime is the internal drag mime for row moves.
 const rowReorderMime = "application/x-lys-ui-row"

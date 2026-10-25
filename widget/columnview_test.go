@@ -8,6 +8,7 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // viewFace builds the test font for the table widgets.
@@ -312,5 +313,31 @@ func TestColumnViewHeaderAlignsWithRows(t *testing.T) {
 		if h.X != c.X || h.W != c.W {
 			t.Errorf("column %d: header %+v, row %+v", i, h, c)
 		}
+	}
+}
+
+// A row's cells pad their content 8px above and below and inset it
+// 8px, under the column title: the reference table's p-2 cells. The
+// cells sat flush on their text, and the titles were 13px and muted
+// where the reference heads its columns in the text color (#281).
+func TestColumnViewCellsAndTitles(t *testing.T) {
+	face := viewFace(t)
+	v := NewColumnView(face, 14, SliceModel[tableRow]{{"alpha", 1}}, tableCols(face))
+	arrangeTree(t, v, 300, 200)
+	row := v.buildRow(0).(*Box)
+	cell := row.Children()[0].(*sizedCell).root.(*Box)
+	if pad := cell.Padding(); pad.Top != 8 || pad.Bottom != 8 {
+		t.Errorf("cell padding %+v, want 8 above and below", pad)
+	}
+	if w := cell.Children()[0].Measure(unbounded).W; w != headerInset || headerInset != 8 {
+		t.Errorf("cell inset %d, want 8", w)
+	}
+	head := v.header.Children()[0].(*sizedCell).root.(*Button)
+	title, ok := head.child.(*Box).Children()[0].(*Label)
+	if !ok {
+		t.Fatal("the column head holds no title label")
+	}
+	if title.SizePx() != 14 || HasClass(title, css.DimLabel) {
+		t.Errorf("column title %vpx, dimmed %v: want 14px in the text color", title.SizePx(), HasClass(title, css.DimLabel))
 	}
 }
