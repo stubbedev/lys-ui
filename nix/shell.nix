@@ -11,7 +11,7 @@
             (lib.functionArgs pkg.override)));
     in
     {
-      devShells.default = pkgs.mkShellNoCC {
+      devShells.default = pkgs.mkShellNoCC ({
         packages = [
           go
           pkgs.git
@@ -33,6 +33,9 @@
           # `just svg-refs` rasterizes the SVG references render.LoadSVG
           # is compared against with rsvg-convert.
           pkgs.librsvg
+          # `just shaders` compiles the GPU renderer's GLSL to the
+          # SPIR-V package gpu embeds.
+          pkgs.glslang
         ]
         # Editor tooling (gopls, delve, and the tools vscode-go and
         # vim-go install), built against the pinned Go: vscode-go
@@ -71,6 +74,14 @@
         # CI runner has none. Only the recipe exports it - a developer's own
         # cursor setup inside the shell is untouched.
         LYS_UI_TEST_XCURSOR_PATH = "${pkgs.vanilla-dmz}/share/icons";
-      };
+      } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+        # The GPU renderer (package gpu) loads libvulkan at runtime;
+        # the loader finds the host's drivers (/run/opengl-driver on
+        # NixOS).
+        LD_LIBRARY_PATH = "${pkgs.vulkan-loader}/lib";
+        # Mesa's lavapipe, a CPU Vulkan driver: the GPU tests force it
+        # (VK_DRIVER_FILES) to run without a GPU, as CI does.
+        LYS_UI_TEST_LAVAPIPE = "${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json";
+      });
     };
 }

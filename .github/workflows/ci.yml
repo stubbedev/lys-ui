@@ -54,6 +54,8 @@ jobs:
         run: nix develop -c just check
       - name: Race detector gate
         run: nix develop -c just race
+      - name: GPU renderer on lavapipe
+        run: nix develop -c just gpu
       - name: Headless compositor input gate
         run: nix develop -c just headless
       - name: AT-SPI bridge (bus-level)
