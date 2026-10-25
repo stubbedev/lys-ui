@@ -82,6 +82,9 @@
         # Mesa's lavapipe, a CPU Vulkan driver: the GPU tests force it
         # (VK_DRIVER_FILES) to run without a GPU, as CI does.
         LYS_UI_TEST_LAVAPIPE = "${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json";
+        # The Khronos validation layer: the GPU tests run under it, and
+        # any error it finds stops the test.
+        LYS_UI_TEST_VULKAN_LAYERS = "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d";
       });
     };
 }

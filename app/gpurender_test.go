@@ -48,12 +48,8 @@ func TestRendererModes(t *testing.T) {
 // pass repaints the window into one; under LYS_UI_RENDERER=gpu the
 // failure is the loop's error instead.
 func TestGPUFrameFailureFallsBackToCPU(t *testing.T) {
-	icd, _, err := gputest.Driver()
-	if err != nil {
+	if _, err := gputest.SetupTest(t); err != nil {
 		t.Fatal(err)
-	}
-	if icd != "" {
-		t.Setenv("VK_DRIVER_FILES", icd)
 	}
 	dev, err := gpu.Open()
 	if err != nil {
@@ -113,12 +109,8 @@ func TestGPUFrameFailureFallsBackToCPU(t *testing.T) {
 // compositor: one without linux-dmabuf sends the app to the CPU, or,
 // under LYS_UI_RENDERER=gpu, fails the reconnect.
 func TestReconnectReagreesRenderer(t *testing.T) {
-	icd, _, err := gputest.Driver()
-	if err != nil {
+	if _, err := gputest.SetupTest(t); err != nil {
 		t.Fatal(err)
-	}
-	if icd != "" {
-		t.Setenv("VK_DRIVER_FILES", icd)
 	}
 	for _, required := range []bool{false, true} {
 		dev, err := gpu.Open()

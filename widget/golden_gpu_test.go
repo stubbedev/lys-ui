@@ -14,14 +14,8 @@ import (
 // goldenDevice is the GPU the goldens also render on when
 // LYS_UI_TEST_GPU asks for it, opened once for the run.
 var goldenDevice = sync.OnceValues(func() (*gpu.Device, error) {
-	icd, _, err := gputest.Driver()
-	if err != nil {
+	if _, err := gputest.Setup(os.Setenv); err != nil {
 		return nil, err
-	}
-	if icd != "" {
-		if err := os.Setenv("VK_DRIVER_FILES", icd); err != nil {
-			return nil, fmt.Errorf("setting VK_DRIVER_FILES: %w", err)
-		}
 	}
 	return gpu.Open()
 })
