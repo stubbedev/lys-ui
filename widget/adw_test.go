@@ -211,8 +211,8 @@ func TestBottomSheet(t *testing.T) {
 
 	b.SetOpen(true)
 	rect := b.sheetRect()
-	if rect.H != 144 || rect.Y != 256 {
-		t.Fatalf("open sheet rect = %+v, want 144 tall at the bottom", rect)
+	if rect.H != 176 || rect.Y != 224 {
+		t.Fatalf("open sheet rect = %+v, want 176 tall at the bottom: the handle, the body and 16px padding", rect)
 	}
 	if hit := b.HitTest(Point{X: 150, Y: 50}); hit != Widget(b) {
 		t.Error("the backdrop is not the sheet's")
@@ -275,4 +275,23 @@ func TestGoldenAdw(t *testing.T) {
 	sheet := NewBottomSheet(NewLabel(face, 14, "content", th.Text), NewLabel(face, 14, "Sheet body", th.Text))
 	sheet.SetOpen(true)
 	NewGolden(t, sheet, "bottomsheet", goldenTheme(th), goldenFrame(240, 200))
+}
+
+// A bottom sheet pads its panel 16px and centers it in a side sheet's
+// width at most: its content ran edge to edge, the title flush with
+// the window's side (#281).
+func TestBottomSheetPadsAndCentersItsPanel(t *testing.T) {
+	t.Cleanup(anim.SetInstant(true))
+	body := NewBox(Column, 0, 0)
+	body.Append(NewSpacer(10, 40), false)
+	b := NewBottomSheet(NewSpacer(0, 0), body)
+	b.Measure(Constraints{Max: Size{W: 1000, H: 600}})
+	b.Arrange(render.Rect{W: 1000, H: 600})
+	b.SetOpen(true)
+	b.Arrange(render.Rect{W: 1000, H: 600})
+	got := body.Bounds()
+	want := sheetWidth
+	if got.W != want || got.X != (1000-want)/2 {
+		t.Errorf("body %v, want %dpx centered in the 1000px edge", got, want)
+	}
 }

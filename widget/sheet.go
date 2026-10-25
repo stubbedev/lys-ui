@@ -29,6 +29,8 @@ const (
 	// sheetWidth caps a side sheet's width; it takes at most three
 	// quarters of the widget below that.
 	sheetWidth = 384
+	// sheetPad is the panel's padding.
+	sheetPad = 16
 	// sheetDuration is the slide.
 	sheetDuration = 300 * time.Millisecond
 )
@@ -70,9 +72,7 @@ func NewSheet(content, body Widget, side SheetSide) *Sheet {
 	s := &Sheet{side: side, body: body, panel: NewBox(Column, 16, 0), width: sheetWidth}
 	s.SetElement("sheet")
 	s.panel.AddClass("sheet-panel")
-	if side != SheetBottom {
-		s.panel.SetPadding(render.UniformInsets(24))
-	}
+	s.panel.SetPadding(render.UniformInsets(sheetPad))
 	s.panel.Append(body, true)
 	s.initComposite(s, content)
 	s.surfaceRadius = 12
@@ -91,13 +91,19 @@ func (s *Sheet) SetHeader(face render.Font, title, description string) {
 		s.panel.Remove(s.head)
 	}
 	s.head = NewBox(Column, 6, 0)
+	align := render.AlignStart
+	if s.side == SheetBottom {
+		align = render.AlignCenter
+	}
 	t := NewLabel(face, 18, title, 0)
 	t.AddClass("title")
+	t.SetAlignment(align)
 	s.head.Append(t, false)
 	if description != "" {
 		d := NewLabel(face, 14, description, 0)
 		d.AddClass("description")
 		d.SetWrap(true)
+		d.SetAlignment(align)
 		s.head.Append(d, false)
 	}
 	row := NewBox(Row, 16, 0)
@@ -174,7 +180,7 @@ func (s *Sheet) sheetRect() render.Rect {
 		}
 		return render.Rect{X: r.X + r.W - shown, Y: r.Y, W: w, H: r.H}
 	}
-	nat := s.panel.Measure(Constraints{Max: Size{W: r.W, H: r.H}})
+	nat := s.panel.Measure(Constraints{Max: Size{W: s.panelRect(r).W, H: r.H}})
 	if s.side == SheetTop {
 		h := min(nat.H, r.H*9/10)
 		return render.Rect{X: r.X, Y: r.Y - h + int(float64(h)*s.progress), W: r.W, H: h}
@@ -190,6 +196,12 @@ func (s *Sheet) panelRect(rect render.Rect) render.Rect {
 	if s.side == SheetBottom {
 		rect.Y += sheetHandle
 		rect.H -= sheetHandle
+		// The content column is a side sheet's width at most,
+		// centered across the bottom edge.
+		if w := sheetWidth + 2*sheetPad; rect.W > w {
+			rect.X += (rect.W - w) / 2
+			rect.W = w
+		}
 	}
 	return rect
 }
@@ -201,9 +213,9 @@ func (s *Sheet) Arrange(r render.Rect) {
 	if !s.showing() {
 		return
 	}
-	rect := s.sheetRect()
-	s.panel.Measure(Constraints{Max: Size{W: rect.W, H: rect.H}})
-	s.panel.Arrange(s.panelRect(rect))
+	pr := s.panelRect(s.sheetRect())
+	s.panel.Measure(Constraints{Max: Size{W: pr.W, H: pr.H}})
+	s.panel.Arrange(pr)
 	setParents(s, s.panel)
 }
 
