@@ -370,16 +370,15 @@ func (w *hostWindow) ApplyVisual(reveal float64, morph bool) {
 // ran on another goroutine (a popup's nested loop).
 func (w *hostWindow) MarkFrame() { w.kick.Store(true) }
 
-// applyInputRegion takes the app's root's input region (a
-// widget.InputRegioner) to the surface when it changed: outside it,
+// applyInputRegion takes the input region of the app's root
+// (widget.InputRegionOf) to the surface when it changed: outside it,
 // pointer input passes through to what is beneath. An empty region
 // is the whole surface.
 func (w *hostWindow) applyInputRegion() {
-	ir, ok := w.styleRoot.(widget.InputRegioner)
+	want, ok := widget.InputRegionOf(w.styleRoot)
 	if !ok || w.sess == nil {
 		return
 	}
-	want := ir.InputRegion()
 	if w.regionSet && slices.Equal(want, w.inputRegion) {
 		return
 	}

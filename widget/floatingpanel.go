@@ -2,12 +2,34 @@ package widget
 
 import "github.com/stubbedev/lys-ui/render"
 
-// InputRegioner is a window root that takes input only inside its
+// InputRegioner is a window's content that takes input only inside its
 // region: outside it, pointer input passes through the surface to
 // whatever is beneath, as on an overlay layer. An empty region takes
-// input everywhere. The window applies it after every layout.
+// input everywhere. The window applies it after every layout, found
+// through InputRegionOf.
 type InputRegioner interface {
 	InputRegion() []render.Rect
+}
+
+// InputRegionOf is the input region of root's content: the first
+// InputRegioner down from root through wrappers of a single child (a
+// Revealer, a Clamp, a one-child Box), and false when there is none.
+func InputRegionOf(root Widget) ([]render.Rect, bool) {
+	for w := root; w != nil; {
+		if ir, ok := w.(InputRegioner); ok {
+			return ir.InputRegion(), true
+		}
+		c, ok := w.(childser)
+		if !ok {
+			break
+		}
+		kids := c.Children()
+		if len(kids) != 1 {
+			break
+		}
+		w = kids[0]
+	}
+	return nil, false
 }
 
 // panelGripPx is the side of a floating panel's corner resize grip.

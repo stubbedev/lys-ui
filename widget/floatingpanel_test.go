@@ -125,3 +125,23 @@ func TestGoldenFloatingPanel(t *testing.T) {
 		})
 	}
 }
+
+// The window finds a panel's input region through the wrappers around
+// it: a Revealer hid it, so the overlay swallowed every click.
+func TestInputRegionOfLooksThroughWrappers(t *testing.T) {
+	f, _, _ := newTestPanel(t)
+	rev := NewRevealer(f)
+	rev.SetRevealed(true)
+	root := NewBox(Column, 0, 0)
+	root.Append(rev, true)
+	arrangeTree(t, root, 800, 600)
+	if reg, ok := InputRegionOf(root); !ok || len(reg) != 1 || reg[0] != f.rect {
+		t.Errorf("region %v %v through a box and a revealer, want the panel's %v", reg, ok, f.rect)
+	}
+	two := NewBox(Column, 0, 0)
+	two.Append(NewSpacer(1, 1), false)
+	two.Append(NewSpacer(1, 1), false)
+	if _, ok := InputRegionOf(two); ok {
+		t.Error("a region found under a container of two")
+	}
+}
