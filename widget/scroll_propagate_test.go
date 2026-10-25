@@ -6,42 +6,60 @@ import (
 	"github.com/stubbedev/lys-ui/render"
 )
 
-// propagate-natural-height: the scroll stops offering its shortfall —
-// the panel-reserve math (measure less Shrinkable, wayle's
-// dropdown panel) then grows the surface to the content's natural
-// height instead of scrolling at the base height. A plain scroll gives
-// the shortfall back and scrolls.
+// propagate-natural-height, as GTK's: without it a scroll asks for no
+// height and scrolls in what its holder gives it; with it, it asks for
+// its content's height and gives way when its holder is short.
 func TestScrollPropagateNaturalHeight(t *testing.T) {
-	build := func() (*Box, *Scroll) {
-		col := NewBox(Column, 0, 0)
-		sc := NewScroll(NewSpacer(100, 400))
-		sc.VerticalOnly = true
-		col.Append(sc, true)
-		return col, sc
-	}
-	con := Constraints{Max: Size{W: 200, H: 350}}
-
-	col, sc := build()
-	arrangeTree(t, col, 200, 350)
-	if sc.Shrinkable() <= 0 {
-		t.Fatal("a plain scroll cannot shrink; the test needs the floor below the content")
-	}
-	if got := sc.Bounds().H; got != 350 {
-		t.Errorf("plain scroll took %d of a 350 column, want the whole room", got)
-	}
-	// The wayle reserve: measured height less what it gives up.
-	if grow := sc.Measure(con).H - sc.Shrinkable(); grow != scrollFloor {
-		t.Errorf("plain reserve %d, want just the scroll floor", grow)
+	con := Constraints{Max: Size{W: 200, H: 4000}}
+	build := func(propagate bool) (*Box, *Scroll) {
+		card := NewBox(Column, 0, 0)
+		card.Append(NewSpacer(100, 50), false)
+		sc := NewScroll(NewSpacer(100, 2000))
+		sc.VerticalOnly, sc.FillY, sc.PropagateNaturalHeight = true, true, propagate
+		card.Append(sc, true)
+		card.SetSizeRequest(-1, 512)
+		return NewBox(Column, 0, 0).Append(card, true), sc
 	}
 
-	col2, sc2 := build()
-	sc2.PropagateNaturalHeight = true
-	arrangeTree(t, col2, 200, 350)
-	if sc2.Shrinkable() != 0 {
-		t.Error("a propagating scroll still offers to shrink")
+	// GTK's scrolled window without propagate-natural-height asks for
+	// no height: a card sized 512 stays 512 and its list scrolls.
+	col, sc := build(false)
+	if got := col.Measure(con).H; got != 512 {
+		t.Errorf("a 512 card holding a plain scroll measures %d tall, want 512", got)
 	}
-	if grow := sc2.Measure(con).H - sc2.Shrinkable(); grow != 350 {
-		t.Errorf("propagating reserve %d, want the whole measured 350 (the panel grows past it via the natural, capped by its own ceiling)", grow)
+	if sc.Shrinkable() != 0 {
+		t.Errorf("a plain scroll offers %d px to give way, asking for none", sc.Shrinkable())
+	}
+	arrangeTree(t, col, 200, 512)
+	if got := sc.Bounds().H; got != 462 {
+		t.Errorf("the plain scroll's viewport is %d tall, want the 462 below the header", got)
+	}
+
+	// Propagating, it asks for its content's height and gives way down
+	// to its floor when its holder is short.
+	col, sc = build(true)
+	if got := col.Measure(con).H; got != 2050 {
+		t.Errorf("a card holding a propagating scroll measures %d tall, want the content's 2050", got)
+	}
+	if got := sc.Shrinkable(); got != 2000-scrollFloor {
+		t.Errorf("a propagating scroll offers %d px to give way, want all above its floor, %d", got, 2000-scrollFloor)
+	}
+	sc.SetMaxContentHeight(300)
+	if got := col.Measure(con).H; got != 512 {
+		t.Errorf("a card holding a scroll capped at 300 measures %d, want its 512 request", got)
+	}
+}
+
+// A content-height cap applies only to a propagated natural height, so
+// setting one turns propagation on.
+func TestScrollMaxContentHeightPropagates(t *testing.T) {
+	sc := NewScroll(NewSpacer(100, 900))
+	sc.SetMaxContentHeight(250)
+	if !sc.PropagateNaturalHeight {
+		t.Fatal("SetMaxContentHeight left PropagateNaturalHeight off")
+	}
+	if got := sc.Measure(Constraints{Max: Size{W: 400, H: 4000}}).H; got != 250 {
+		t.Errorf("a capped scroll measures %d tall, want 250", got)
 	}
 }
 
@@ -117,4 +135,11 @@ func TestVerticalScrollGutterOnlyWhenOverflowing(t *testing.T) {
 			t.Errorf("%s: content %dpx wide, want %d", tc.name, got, tc.want)
 		}
 	}
+}
+
+// propagating is s propagating its natural height: a scroll as tall as
+// its content that gives way when its holder is short.
+func propagating(s *Scroll) *Scroll {
+	s.PropagateNaturalHeight = true
+	return s
 }

@@ -127,10 +127,14 @@ func nEntry(sel, s string) confNode {
 	}}
 }
 
-// nScroll is a Scroll viewport over kid.
+// nScroll is a Scroll viewport over kid, propagating its natural
+// height: a web scroll container of auto height is as tall as its
+// content and, in a flex, may shrink to nothing.
 func nScroll(sel string, kid confNode) confNode {
 	return confNode{sel: sel, kids: []confNode{kid}, make: func(_ *confFixture, ws []Widget) Widget {
-		return NewScroll(ws[0])
+		s := NewScroll(ws[0])
+		s.PropagateNaturalHeight = true
+		return s
 	}}
 }
 

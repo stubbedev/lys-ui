@@ -120,9 +120,11 @@ func NewPreferencesPage() *PreferencesPage {
 	p := &PreferencesPage{}
 	p.column = NewBox(Column, 24, 12)
 	// The page scrolls vertically only, so the groups lay out at the
-	// viewport's width, clamped readable (adw's clamp).
+	// viewport's width, clamped readable (adw's clamp), and asks for
+	// its groups' height, as adw's page does: a dialog sizes to it.
 	p.scroll = NewScroll(NewClamp(600, p.column))
 	p.scroll.VerticalOnly = true
+	p.scroll.PropagateNaturalHeight = true
 	p.initComposite(p, p.scroll)
 	return p
 }

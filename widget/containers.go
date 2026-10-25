@@ -475,8 +475,11 @@ type Scroll struct {
 	// it the scroll asks for the child's minimum, as GTK's does.
 	PropagateNaturalWidth bool
 	// PropagateNaturalHeight (GTK's propagate-natural-height): the
-	// scroll asks for exactly its content's height — giving nothing up
-	// to a short parent — instead of scrolling whatever does not fit.
+	// scroll asks for its content's height, capped by
+	// SetMaxContentHeight, giving nothing up to a short parent. Without
+	// it, as GTK's, the scroll asks for no height of its own: it takes
+	// what its parent gives it (an expanding slot, FillY) and scrolls
+	// the rest.
 	PropagateNaturalHeight bool
 
 	// view is the viewport, the content box inside the stylesheet's
@@ -763,7 +766,10 @@ func (s *Scroll) measureContent(con Constraints) Size {
 	if overflows {
 		want.W += gutter
 	}
-	if s.maxH > 0 && want.H > s.maxH {
+	switch {
+	case !s.PropagateNaturalHeight:
+		want.H = 0
+	case s.maxH > 0 && want.H > s.maxH:
 		// Capped, the content overflows: the vertical bar's gutter
 		// comes on top of the content width, not out of it.
 		if !s.VerticalOnly && !stable {
@@ -775,15 +781,16 @@ func (s *Scroll) measureContent(con Constraints) Size {
 }
 
 // SetMaxContentHeight caps the height the scroll asks for (GTK's
-// max-content-height with propagate-natural-height): up to h it is as
-// tall as its content, past it h tall and scrolling. 0, the default,
-// is no cap; a negative h is 0.
+// max-content-height) and turns PropagateNaturalHeight on, the only
+// height a cap applies to: up to h it is as tall as its content, past
+// it h tall and scrolling. 0 is no cap; a negative h is 0.
 func (s *Scroll) SetMaxContentHeight(h int) {
 	h = max(h, 0)
-	if h == s.maxH {
+	if h == s.maxH && s.PropagateNaturalHeight {
 		return
 	}
 	s.maxH = h
+	s.PropagateNaturalHeight = true
 	s.InvalidateLayout()
 }
 

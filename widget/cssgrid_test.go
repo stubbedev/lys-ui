@@ -567,7 +567,7 @@ func TestCSSGridAutoFillFromMaxSize(t *testing.T) {
 // Scroll 132 tall that can give 100 sets its auto row's floor at 32,
 // above its 20px neighbor, so the grid can give 100 too.
 func TestCSSGridShrinkableHeight(t *testing.T) {
-	sc := NewScroll(newStub(50, 132))
+	sc := propagating(NewScroll(newStub(50, 132)))
 	g := cssBox(Row, "g", sc, item(30, 20))
 	cssTree(t, `.g { display: grid; grid-template-columns: 100px 100px; }`, cssBox(Column, "", g), 300, 300)
 	g.Measure(Constraints{Max: Size{W: 300, H: indefinite}})

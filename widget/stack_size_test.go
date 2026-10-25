@@ -74,7 +74,7 @@ func TestStackInterpolatesItsSizeThroughASwitch(t *testing.T) {
 // is the stack's (sized to it), and PageFloor is the most any page
 // needs.
 func TestStackFloorsFollowWhatPagesGiveUp(t *testing.T) {
-	s := NewStack().Add("list", NewScroll(newStub(60, 400))).Add("form", newStub(60, 150))
+	s := NewStack().Add("list", propagating(NewScroll(newStub(60, 400)))).Add("form", newStub(60, 150))
 	s.SetHomogeneous(false)
 	con := Constraints{Max: Size{W: 500, H: 1000}}
 	if got := s.Measure(con).H; got != 400 {
@@ -91,7 +91,7 @@ func TestStackFloorsFollowWhatPagesGiveUp(t *testing.T) {
 	if got := s.Shrinkable(); got != 0 {
 		t.Errorf("the form gives %d, want 0", got)
 	}
-	homog := NewStack().Add("list", NewScroll(newStub(60, 400))).Add("form", newStub(60, 150))
+	homog := NewStack().Add("list", propagating(NewScroll(newStub(60, 400)))).Add("form", newStub(60, 150))
 	homog.Measure(con)
 	if got := homog.Shrinkable(); got != 400-150 {
 		t.Errorf("homogeneous gives %d, want down to the form's 150", got)

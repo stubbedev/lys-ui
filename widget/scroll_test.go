@@ -85,7 +85,7 @@ func TestHorizontalWheelScrolls(t *testing.T) {
 // it scrolls behind, and no cap is the uncapped natural height.
 func TestScrollMaxContentHeight(t *testing.T) {
 	unbounded := Constraints{Max: Size{W: 500, H: 500}}
-	s := NewScroll(newStub(60, 200))
+	s := propagating(NewScroll(newStub(60, 200)))
 	if got := s.Measure(unbounded); got != (Size{W: 60, H: 200}) {
 		t.Errorf("uncapped = %v, want the natural 60x200", got)
 	}

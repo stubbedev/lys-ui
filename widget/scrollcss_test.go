@@ -158,8 +158,8 @@ func TestOverscrollChaining(t *testing.T) {
 	build := func(css string) (*Scroll, *Scroll) {
 		t.Helper()
 		loadCSS(t, css)
-		inner := NewScroll(newStub(60, 200))
-		outer := NewScroll(inner)
+		inner := propagating(NewScroll(newStub(60, 200)))
+		outer := propagating(NewScroll(inner))
 		arrangeTree(t, outer, 60, 60)
 		return outer, inner
 	}

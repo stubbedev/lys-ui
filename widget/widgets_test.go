@@ -378,7 +378,7 @@ func TestScroll(t *testing.T) {
 	}
 
 	newScroll := func() *Scroll {
-		s := NewScroll(tall)
+		s := propagating(NewScroll(tall))
 		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 		return s

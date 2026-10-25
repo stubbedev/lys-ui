@@ -19,7 +19,7 @@ func layoutColumn(b *Box, w, h int) {
 // popover ran its buttons off the bottom.
 func TestColumnShrinksItsScroll(t *testing.T) {
 	header, footer := newStub(50, 20), newStub(50, 30)
-	scroll := NewScroll(newStub(50, 200))
+	scroll := propagating(NewScroll(newStub(50, 200)))
 	col := NewBox(Column, 0, 0)
 	col.Append(header, false)
 	col.Append(scroll, true)
@@ -49,7 +49,7 @@ func TestColumnShrinksItsScroll(t *testing.T) {
 // of room takes the shortfall from every child that can give it, not
 // only the expanding ones, each never below its floor.
 func TestEveryShrinkerGivesWay(t *testing.T) {
-	fixed := NewScroll(newStub(50, 100))
+	fixed := propagating(NewScroll(newStub(50, 100)))
 	plain := newStub(50, 100)
 	col := NewBox(Column, 0, 0)
 	col.Append(fixed, false)
@@ -67,7 +67,7 @@ func TestEveryShrinkerGivesWay(t *testing.T) {
 // pages and the boxes inside it report what their scrolls can give,
 // so the outer column shrinks the page that holds one.
 func TestShrinkReachesANestedScroll(t *testing.T) {
-	inner := NewScroll(newStub(50, 300))
+	inner := propagating(NewScroll(newStub(50, 300)))
 	page := NewBox(Column, 0, 0)
 	page.Append(newStub(50, 40), false)
 	page.Append(inner, true)
@@ -91,7 +91,7 @@ func TestShrinkReachesANestedScroll(t *testing.T) {
 		t.Errorf("stack shrinkable = %d, want %d", got, want)
 	}
 	row := NewBox(Row, 0, 0)
-	row.Append(NewScroll(newStub(10, 100)), false)
+	row.Append(propagating(NewScroll(newStub(10, 100))), false)
 	row.Append(newStub(10, 60), false)
 	row.Measure(Constraints{Max: Size{W: 100, H: 500}})
 	if got := row.Shrinkable(); got != 40 {
@@ -102,8 +102,8 @@ func TestShrinkReachesANestedScroll(t *testing.T) {
 // TestShrinkSplitsByCapacity pins the split: two scrolls give in
 // proportion to what each can, and the rounding lands somewhere.
 func TestShrinkSplitsByCapacity(t *testing.T) {
-	a := NewScroll(newStub(50, 132)) // can give 100
-	b := NewScroll(newStub(50, 232)) // can give 200
+	a := propagating(NewScroll(newStub(50, 132))) // can give 100
+	b := propagating(NewScroll(newStub(50, 232))) // can give 200
 	col := NewBox(Column, 0, 0)
 	col.Append(a, true)
 	col.Append(b, true)
