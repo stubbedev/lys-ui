@@ -386,6 +386,7 @@ var partRules = [][2]string{
 	{"button.bar-button", "padding: 4px 8px; min-height: 0px; border-radius: {r-2}; background-color: transparent; font-weight: 500;"},
 	{"button.bar-button.vertical", "padding: 6px;"},
 	{"button.bar-button > box", "border-spacing: 6px;"},
+	{"separator.bar-separator", "color: @borders;"},
 	{"button.bar-button:hover, button.bar-button:checked", "background-color: @muted_bg_color;"},
 	{"segments button.segment", "min-width: 8px; min-height: 8px; padding: 0px; border-radius: 9999px; background-color: alpha(@window_fg_color, 0.2);"},
 	{"segments button.segment:hover", "background-color: alpha(@window_fg_color, 0.4);"},

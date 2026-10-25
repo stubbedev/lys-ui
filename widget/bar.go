@@ -1,6 +1,9 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/render"
+import (
+	"github.com/stubbedev/lys-ui/internal/style"
+	"github.com/stubbedev/lys-ui/render"
+)
 
 // BarEdge is the screen edge a Bar runs along.
 type BarEdge uint8
@@ -254,7 +257,10 @@ func (b *BarButton) Arrange(r render.Rect) {
 }
 
 // BarSeparator is a short rule across a bar between its items, inset
-// from both of the bar's edges by the theme's padding.
+// from both of the bar's edges by the theme's padding. The stylesheet
+// styles it: its color is the rule's, min-width the thickness of a
+// rule across a horizontal bar and min-height its length (filling the
+// bar when unset), swapped across a vertical bar.
 type BarSeparator struct {
 	Separator
 }
@@ -262,11 +268,24 @@ type BarSeparator struct {
 // NewBarSeparator returns a bar separator.
 func NewBarSeparator() *BarSeparator {
 	s := &BarSeparator{orientation: Horizontal}
+	s.SetElement("separator")
 	s.AddClass("bar-separator")
 	return s
 }
 
-// Measure turns the rule across the bar, then measures it.
+// rule is the rule's thickness and length (0 to fill) from the
+// stylesheet, for its orientation.
+func (s *BarSeparator) rule() (thick, length int) {
+	v := s.style(s)
+	thickProp, lengthProp := style.PropMinWidth, style.PropMinHeight
+	if s.orientation == Horizontal {
+		thickProp, lengthProp = lengthProp, thickProp
+	}
+	return max(1, picki(v, thickProp, sepThickness)), picki(v, lengthProp, 0)
+}
+
+// Measure turns the rule across the bar, then wants its thickness by
+// its length.
 func (s *BarSeparator) Measure(con Constraints) Size {
 	across := Vertical
 	if barEdgeOf(s).Vertical() {
@@ -281,7 +300,30 @@ func (s *BarSeparator) Measure(con Constraints) Size {
 			s.SetMargin(render.Insets{Left: inset, Right: inset})
 		}
 	}
-	return s.Separator.Measure(con)
+	thick, length := s.rule()
+	if s.orientation == Vertical {
+		return clampSize(Size{W: thick, H: length}, con)
+	}
+	return clampSize(Size{W: length, H: thick}, con)
+}
+
+// Paint draws the rule in its color, centered across its slot and, at
+// a set length, along it.
+func (s *BarSeparator) Paint(cv *render.Canvas) {
+	b := s.bounds
+	thick, length := s.rule()
+	col := pickc(0, s.style(s), style.PropColor, Current().Border)
+	r := render.Rect{X: b.X + (b.W-thick)/2, Y: b.Y, W: thick, H: b.H}
+	if length > 0 {
+		r.Y, r.H = b.Y+(b.H-min(length, b.H))/2, min(length, b.H)
+	}
+	if s.orientation == Horizontal {
+		r = render.Rect{X: b.X, Y: b.Y + (b.H-thick)/2, W: b.W, H: thick}
+		if length > 0 {
+			r.X, r.W = b.X+(b.W-min(length, b.W))/2, min(length, b.W)
+		}
+	}
+	cv.FillRect(r, col)
 }
 
 // SegmentState marks a segment of a SegmentIndicator.

@@ -145,3 +145,26 @@ func TestBarButtonIconPositionAndGap(t *testing.T) {
 		t.Error("the label is not reachable")
 	}
 }
+
+// A bar separator takes its color, thickness and length from CSS.
+func TestBarSeparatorStylesFromCSS(t *testing.T) {
+	b, _, sep, _ := testBar(t, BarTop)
+	loadCSS(t, `separator.bar-separator { color: #ff0000; min-width: 3px; min-height: 10px; }`)
+	arrangeTree(t, b, 800, 60)
+	arrangeTree(t, b, 800, 60)
+	sb := sep.Bounds()
+	if sb.W != 3 {
+		t.Errorf("separator %v, want 3 px thick", sb)
+	}
+	const w, h = 800, 60
+	data := make([]byte, render.Stride(w)*h)
+	sep.Paint(render.New(data, render.Stride(w), w, h))
+	at := func(x, y int) render.Color { return render.ColorFromBytes(data[y*render.Stride(w)+x*4:]) }
+	cx, cy := sb.X+1, sb.Y+sb.H/2
+	if c := at(cx, cy); c.R() != 0xff || c.G() != 0 {
+		t.Errorf("rule painted %v, want the CSS red", c)
+	}
+	if at(cx, cy-8).A() != 0 || at(cx, cy+8).A() != 0 {
+		t.Error("the rule is longer than its 10 px")
+	}
+}
