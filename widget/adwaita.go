@@ -381,6 +381,7 @@ var partRules = [][2]string{
 	{"levelbar block." + LevelBarOffsetHigh, "background-color: @accent_bg_color;"},
 	{"levelbar block." + LevelBarOffsetFull, "background-color: @success_bg_color;"},
 	{"card", cardSurface},
+	{"floatingpanel > panel", cardSurface + " box-shadow: 0px 10px 30px alpha(black, 0.25);"},
 	{"chip", "padding: 2px 10px; border: 1px solid @borders; border-radius: 9999px; font-size: 12px; line-height: 16px; font-weight: 500; background-color: @secondary_bg_color; color: @window_fg_color;"},
 	{"chip.dismissible", "padding-right: 4px;"},
 	{"chip colorswatch", "min-width: 12px; min-height: 12px; border-radius: 9999px;"},

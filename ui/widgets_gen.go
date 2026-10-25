@@ -3788,6 +3788,54 @@ func (b *FixedBuilder) Put(child Node, x int, y int) *FixedBuilder {
 	return b
 }
 
+// FloatingPanelBuilder builds a widget.FloatingPanel.
+type FloatingPanelBuilder struct {
+	base[*widget.FloatingPanel, *FloatingPanelBuilder]
+}
+
+// FloatingPanel builds a widget.FloatingPanel with widget.NewFloatingPanel.
+func FloatingPanel(header Node, body Node) *FloatingPanelBuilder {
+	b := &FloatingPanelBuilder{}
+	b.init(b, func(s *Scope) *widget.FloatingPanel { return widget.NewFloatingPanel(build(s, header), build(s, body)) })
+	return b
+}
+
+// PanelSize calls (*widget.FloatingPanel).SetPanelSize.
+func (b *FloatingPanelBuilder) PanelSize(arg int, h int) *FloatingPanelBuilder {
+	b.do(func(s *Scope, w *widget.FloatingPanel) { w.SetPanelSize(arg, h) })
+	return b
+}
+
+// Position calls (*widget.FloatingPanel).SetPosition.
+func (b *FloatingPanelBuilder) Position(p widget.Point) *FloatingPanelBuilder {
+	b.do(func(s *Scope, w *widget.FloatingPanel) { w.SetPosition(p) })
+	return b
+}
+
+// WatchPosition re-applies SetPosition with get's value after every update.
+func (b *FloatingPanelBuilder) WatchPosition(get func() widget.Point) *FloatingPanelBuilder {
+	b.watch(func(w *widget.FloatingPanel) { w.SetPosition(get()) })
+	return b
+}
+
+// SizeLimits calls (*widget.FloatingPanel).SetSizeLimits.
+func (b *FloatingPanelBuilder) SizeLimits(min widget.Size, max widget.Size) *FloatingPanelBuilder {
+	b.do(func(s *Scope, w *widget.FloatingPanel) { w.SetSizeLimits(min, max) })
+	return b
+}
+
+// OnOutside sets the widget's OnOutside field.
+func (b *FloatingPanelBuilder) OnOutside(fn func()) *FloatingPanelBuilder {
+	b.do(func(_ *Scope, w *widget.FloatingPanel) { w.OnOutside = fn })
+	return b
+}
+
+// OnGeometryChanged sets the widget's OnGeometryChanged field.
+func (b *FloatingPanelBuilder) OnGeometryChanged(fn func(r render.Rect)) *FloatingPanelBuilder {
+	b.do(func(_ *Scope, w *widget.FloatingPanel) { w.OnGeometryChanged = fn })
+	return b
+}
+
 // FlowBoxBuilder builds a widget.FlowBox.
 type FlowBoxBuilder struct {
 	base[*widget.FlowBox, *FlowBoxBuilder]

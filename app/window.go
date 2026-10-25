@@ -21,6 +21,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -50,6 +51,10 @@ type hostWindow struct {
 	cfg  windowHooks
 
 	win *Window
+	// inputRegion is the last region applied from styleRoot
+	// (InputRegioner), regionSet whether one was.
+	inputRegion []render.Rect
+	regionSet   bool
 	// layer is the handle of a NewLayer surface (nil otherwise).
 	layer *LayerWindow
 	// styleRoot is the tree the window styles — the widget marked as
@@ -364,6 +369,42 @@ func (w *hostWindow) ApplyVisual(reveal float64, morph bool) {
 // window dirty when a callback runs there; the kick covers ticks that
 // ran on another goroutine (a popup's nested loop).
 func (w *hostWindow) MarkFrame() { w.kick.Store(true) }
+
+// applyInputRegion takes the app's root's input region (a
+// widget.InputRegioner) to the surface when it changed: outside it,
+// pointer input passes through to what is beneath. An empty region
+// is the whole surface.
+func (w *hostWindow) applyInputRegion() {
+	ir, ok := w.styleRoot.(widget.InputRegioner)
+	if !ok || w.sess == nil {
+		return
+	}
+	want := ir.InputRegion()
+	if w.regionSet && slices.Equal(want, w.inputRegion) {
+		return
+	}
+	region, err := w.sess.Compositor().CreateRegion()
+	if err != nil {
+		debug.Log("input", "input region: %v", err)
+		return
+	}
+	defer func() { _ = region.Destroy() }()
+	rects := want
+	if len(rects) == 0 {
+		rects = []render.Rect{{W: math.MaxInt32 / 2, H: math.MaxInt32 / 2}}
+	}
+	for _, r := range rects {
+		if err := region.Add(int32(r.X), int32(r.Y), int32(r.W), int32(r.H)); err != nil {
+			debug.Log("input", "input region: %v", err)
+			return
+		}
+	}
+	if err := w.host.HostSurface().SetInputRegion(region); err != nil {
+		debug.Log("input", "input region: %v", err)
+		return
+	}
+	w.inputRegion, w.regionSet = slices.Clone(want), true
+}
 
 // SealInput implements surfx.Driver: an empty input region, committed,
 // so clicks during the exit pass through the dying window to whatever
@@ -766,6 +807,7 @@ func (w *hostWindow) draw() bool {
 		w.router.Root.Arrange(render.Rect{X: 0, Y: 0, W: bw, H: bh})
 	}
 	w.input.rehover()
+	w.applyInputRegion()
 	// Same surface-state shape as the scale: the opaque region tracks
 	// the size and the GPUArea holes this layout placed, and goes out
 	// when either changed, before the commit that applies it.
