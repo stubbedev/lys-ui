@@ -467,20 +467,6 @@ type RuneHandler interface {
 	InsertRune(r rune)
 }
 
-// PressAwayHandler is a widget holding an open popup that wants presses
-// landing outside its own subtree — the click-away dismissal an inline
-// popup cannot get from hit testing, since a press elsewhere never
-// routes to it. The router notifies it on every press that does not
-// land at or below it, on another widget, on empty space, or in a
-// disabled subtree alike.
-type PressAwayHandler interface {
-	Widget
-	// WantsPressAway reports an active popup: the router notifies only
-	// while it holds.
-	WantsPressAway() bool
-	PressedOutside(p Point)
-}
-
 // Router turns pointer and keyboard input into widget state changes: hover
 // tracking, press/release with click detection, drags, scroll bubbling,
 // and focus for keyboard text.
@@ -565,11 +551,8 @@ func (r *Router) Rehover() bool {
 // press on a disabled widget is swallowed whole: no pressed shade, no
 // drag, and no focus move — focus stays where it was, exactly like a
 // press on empty space outside any control leaves a text field alone.
-// An open press-away popup hears the press regardless: outside its
-// subtree it dismisses, whatever the press landed on.
 func (r *Router) Press(button uint32, p Point) {
 	hit := r.Root.HitTest(p)
-	r.pressAway(hit, p)
 	if button != BTNLeft {
 		if hit == nil || !IsEnabled(hit) {
 			return
@@ -598,22 +581,6 @@ func (r *Router) Press(button uint32, p Point) {
 	if pa, ok := hit.(PressAter); ok {
 		pa.PressAt(p)
 	}
-}
-
-// pressAway notifies every open press-away popup the press landed
-// outside: a hit at or below the popup belongs to it (its own widgets
-// handle the press); anything else is a dismissal.
-func (r *Router) pressAway(hit Widget, p Point) {
-	walkTree(r.Root, 0, func(w Widget, _ int) {
-		pa, ok := w.(PressAwayHandler)
-		if !ok || !pa.WantsPressAway() {
-			return
-		}
-		if hit != nil && inTree(pa, hit) {
-			return
-		}
-		pa.PressedOutside(p)
-	})
 }
 
 // setFocusStyle flips the :focus style bits between the old and new

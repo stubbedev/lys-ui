@@ -43,13 +43,10 @@ import (
 type Kind uint8
 
 // Surface kinds. KindMenu is the zero value — the popover default.
-// Menu and Dropdown share the popover profile; the distinctions exist
-// so overrides can split them later.
 const (
 	KindMenu Kind = iota
 	KindTooltip
 	KindToast
-	KindDropdown
 	KindDialog
 	KindOverlay
 )
@@ -99,7 +96,7 @@ type Style struct {
 	Morph       bool
 }
 
-// Defaults are the per-kind profiles. Menus and dropdowns morph out of
+// Defaults are the per-kind profiles. Menus and popovers morph out of
 // their anchor on a snappy spring, toasts on a bouncy one, dialogs and
 // overlays (launchers, panel reveals) on a smooth one; tooltips stay a
 // quick, quiet fade. Every exit is a short emphasized-accelerate tween
@@ -117,11 +114,6 @@ var Defaults = map[Kind]Style{
 	KindToast: {
 		Enter: Spec{Spring: &anim.SpringBouncy},
 		Exit:  Spec{Duration: anim.DurationMedium, Easing: anim.EmphasizedAccelerate},
-		Morph: true,
-	},
-	KindDropdown: {
-		Enter: Spec{Spring: &anim.SpringSnappy},
-		Exit:  Spec{Duration: anim.DurationShort, Easing: anim.EmphasizedAccelerate},
 		Morph: true,
 	},
 	KindDialog: {

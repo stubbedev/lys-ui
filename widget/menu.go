@@ -836,14 +836,6 @@ func (m *Menu) DragMove(p Point) {
 	m.moveHover(m.itemAt(p))
 }
 
-// dropMnemonics clears every row's Alt-letter and its underline.
-func (m *Menu) dropMnemonics() {
-	m.mnemonics = nil
-	for i := range m.mnemRunes {
-		m.mnemRunes[i] = -1
-	}
-}
-
 // appendStyleKids is the contents, its row nodes, and the rows' icons
 // (styleKids); the icons hang off the menu for theme-swap
 // invalidation.

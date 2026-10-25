@@ -53,16 +53,12 @@ func TestChildWalkMatchesChildren(t *testing.T) {
 
 		chooser := NewColorChooser(face, 12, render.RGB(1, 2, 3))
 
-		dropdown := NewDropdown(face, 12, []string{"d1", "d2"}, 0)
-		dropdown.Open()
-		dropdownClosed := NewDropdown(face, 12, []string{"d3"}, 0)
-
 		elevation := NewElevation(label("e"))
 
 		return []Widget{
 			box, stack, overlay, grid, notebook, paned,
 			expanded, closed, scrolled, empty,
-			cal, chooser, dropdown, dropdownClosed, elevation,
+			cal, chooser, elevation,
 		}
 	}
 
@@ -86,13 +82,11 @@ func TestChildWalkMatchesChildren(t *testing.T) {
 	ws := build()
 	check("initial", ws)
 	// State flips change both views together: stack page, notebook tab,
-	// expander fold, dropdown open/close, overlay additions.
+	// expander fold, overlay additions.
 	ws[1].(*Stack).Show("two")
 	ws[4].(*Notebook).SelectTab("tab1")
 	ws[6].(*Expander).SetOpen(false)
 	ws[7].(*Expander).SetOpen(true)
-	ws[12].(*Dropdown).Close()
-	ws[13].(*Dropdown).Open()
 	ws[2].(*Overlay).Append(label("o3"))
 	check("after flips", ws)
 }

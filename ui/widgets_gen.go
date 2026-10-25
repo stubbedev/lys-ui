@@ -2203,6 +2203,13 @@ func Command(placeholder string, groups ...widget.CommandGroup) *CommandBuilder 
 	return b
 }
 
+// CommandList builds a widget.Command with widget.NewCommandList.
+func CommandList(groups ...widget.CommandGroup) *CommandBuilder {
+	b := &CommandBuilder{}
+	b.init(b, func(s *Scope) *widget.Command { return widget.NewCommandList(s.face(b.face), groups...) })
+	return b
+}
+
 // Font overrides the environment's typeface and size for this widget; zero values keep the environment's.
 func (b *CommandBuilder) Font(face render.Font, sizePx float64) *CommandBuilder {
 	b.face, b.size = face, sizePx

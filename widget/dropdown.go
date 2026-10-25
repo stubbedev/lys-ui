@@ -2,57 +2,29 @@ package widget
 
 import (
 	"math"
-	"strings"
-	"time"
 
-	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/text"
 	"github.com/stubbedev/lys-ui/render"
 )
 
-const (
-	// dropdownMaxListH caps the open item list's height; taller lists clip
-	// (the app caps popovers at the same 600px).
-	dropdownMaxListH = 600
-	// dropdownSlide is how far the list rises into place over the open
-	// tween (and falls back on close), masked to the list's own bounds.
-	dropdownSlide = 10
-	// dropdownTypeTimeout is how long a typed prefix survives after the
-	// last key before the type-ahead chain resets.
-	dropdownTypeTimeout = time.Second
-)
-
 // Dropdown is a combobox: a closed face showing the current selection
-// that expands into a themed list of items beneath it.
+// that opens its items in a popover beneath it, through the surface
+// host of its tree (OpenPopover), as a Command list with no search
+// row: header rows head its groups, row icons lead their items, and a
+// check trails the selected one. The popover closes on a pick, on Esc
+// or a click away, or on a second click on the face.
 //
-// The list is an inline expansion, not an app.Popover: the widget
-// package cannot import app (the dependency points the other way), and
-// a self-contained popup keeps the dropdown usable in plain widget
-// trees, in tests, and under hosts with no popover plumbing. While
-// open the list is a real child (Children) arranged just below the
-// face, so hit testing, damage, and focus traversal all see it; hosts
-// that want true popup semantics can embed the dropdown in a popover
-// of their own. While open the dropdown holds a press-away with the
-// router: a click anywhere outside its subtree — another widget, empty
-// space, a disabled control — closes the list through the same
-// animated exit a selection uses, and it also closes on Esc or a
-// second click on the face.
+// Keyboard: Enter, Space, or Down opens while focused; in the open list
+// arrows move the highlight (Home/End jump), Enter or Space picks, and
+// printable keys jump the highlight by type-ahead.
 //
-// Keyboard: Enter, Space, or Down opens while focused, arrows move the
-// highlighted row (Home/End jump), Enter picks, Esc cancels without
-// changing the selection.
-//
-// Type-ahead (GTK combobox parity): while the list is open, printable
-// keys jump the highlight to the first row whose label starts with the
-// typed prefix (case-insensitive); while closed, they cycle the
-// selection through the rows sharing the pressed first letter. Space
-// never joins a prefix — it keeps its open/activate role while open
-// and opens while closed. Repeated keys cycle among the equal-prefix
-// rows; the chain resets after a short idle timeout. Keys that match
-// nothing are ignored outright — Enter, Space, arrows, Esc, and Tab
-// routing never fight the type-ahead.
+// Type-ahead on the closed face (GTK combobox parity): printable keys
+// cycle the selection through the rows whose label starts with the
+// typed prefix (case-insensitive). Space never joins a prefix: it
+// opens. Repeated keys cycle among the equal-prefix rows; the chain
+// resets after a short idle timeout. Keys that match nothing are
+// ignored outright.
 //
 // The constructor takes the face like every other text widget: face,
 // then sizePx, then the items. Face may be a render.Chain for
@@ -72,23 +44,14 @@ type Dropdown struct {
 	faceIcon *Icon
 	faceFor  int
 
-	menu    *Menu
-	open    bool
-	hovered bool
+	// list is the open popover's item list and closeList what closes
+	// it; both are nil while the list is closed.
+	list      *Command
+	closeList func()
+	hovered   bool
 
-	// reveal is the open/close tween's progress: the list fades and
-	// rises into place on open, and on close stays painted (closing)
-	// until the exit tween lands, then detaches. listRect is the rest
-	// rect the tween's slide is masked to.
-	reveal       float64
-	closing      bool
-	listRect     render.Rect
-	cancelReveal anim.Cancel
-
-	// type-ahead state: the accumulated case-folded prefix, and the
-	// idle timer that clears it.
-	typed      string
-	typeCancel anim.Cancel
+	// typeAhead is the closed face's type-ahead chain.
+	typeAhead typeAhead
 	// faceBtn and faceArrow are the closed face's style nodes
 	// (`dropdown > button > arrow`): the button's box paints the face,
 	// the arrow's color the chevron.
@@ -96,7 +59,7 @@ type Dropdown struct {
 	faceArrow stylePart
 
 	// OnSelect fires exactly once per selection change, whatever
-	// produced it: a click, Enter, or SetSelected. Re-picking the
+	// produced it: a pick in the list or SetSelected. Re-picking the
 	// selected row is not a change and fires nothing.
 	OnSelect func(i int)
 }
@@ -160,18 +123,13 @@ func (d *Dropdown) SetItems(items []string, selected int) {
 
 // SetRows is SetItems over rich rows.
 func (d *Dropdown) SetRows(rows []DropdownRow, selected int) {
-	if d.open {
-		if d.cancelReveal != nil {
-			d.cancelReveal()
-		}
-		d.finishClose()
-	}
+	d.Close()
 	d.entries = rows
 	d.items = make([]string, len(rows))
 	for i, e := range rows {
 		d.items[i] = e.Label
 	}
-	d.menu, d.faceIcon, d.faceFor = nil, nil, -1
+	d.faceIcon, d.faceFor = nil, -1
 	d.selected = -1
 	if len(rows) > 0 {
 		d.selected = d.selectableFrom(min(max(selected, 0), len(rows)-1))
@@ -206,17 +164,14 @@ func (d *Dropdown) Items() []string {
 }
 
 // SetDirection selects the base paragraph direction the selection
-// label and the open list's rows resolve and lay out with; the menu
-// inherits it. DirectionAuto (the default) reads it off the label's
-// first strong character. Changing the direction invalidates.
+// label resolves and lays out with. DirectionAuto (the default) reads
+// it off the label's first strong character. Changing the direction
+// invalidates.
 func (d *Dropdown) SetDirection(dir Direction) {
 	if d.dir == dir {
 		return
 	}
 	d.dir = dir
-	if d.menu != nil {
-		d.menu.SetDirection(dir)
-	}
 	d.Invalidate()
 }
 
@@ -256,13 +211,12 @@ func (d *Dropdown) selectIndex(i int) {
 }
 
 // Opened reports whether the item list is showing.
-func (d *Dropdown) Opened() bool { return d.open }
+func (d *Dropdown) Opened() bool { return d.list != nil }
 
 // SetEnabled turns the dropdown on or off, following the toolkit-wide
 // node.SetEnabled convention (the flag lives on the embedded node;
 // Enabled reads it). Disabling closes the list; a disabled dropdown
-// ignores clicks and keys and paints muted, the way Menu paints rows
-// without an action.
+// ignores clicks and keys and paints muted.
 func (d *Dropdown) SetEnabled(enabled bool) {
 	was := d.Enabled()
 	d.node.SetEnabled(enabled)
@@ -271,127 +225,77 @@ func (d *Dropdown) SetEnabled(enabled bool) {
 	}
 }
 
-// list lazily builds the item menu from the items. The face arrived
-// at construction, so the first open is the only build.
-func (d *Dropdown) list() *Menu {
-	if d.menu != nil {
-		return d.menu
-	}
-	items := make([]MenuItem, len(d.entries))
+// newList builds the item list: a Command without a search row whose
+// groups the header rows head, its items in row order with their icons
+// and the selected one's trailing check, highlighted on the selection.
+func (d *Dropdown) newList() *Command {
+	var groups []CommandGroup
+	highlight, row := -1, 0
 	for i, e := range d.entries {
-		items[i] = MenuItem{Label: e.Label, OnClick: func() { d.selectIndex(i) }}
 		if e.Header {
-			items[i] = MenuItem{Label: e.Label, Kind: ItemHeader}
+			groups = append(groups, CommandGroup{Heading: e.Label})
+			continue
 		}
+		if len(groups) == 0 {
+			groups = append(groups, CommandGroup{})
+		}
+		it := CommandItem{Label: e.Label, Trailing: newCommandCheck(i == d.selected), OnSelect: func() { d.pick(i) }}
 		if e.Icon != nil {
-			items[i].Icon = e.Icon()
+			it.Icon = e.Icon()
 		}
+		g := &groups[len(groups)-1]
+		g.Items = append(g.Items, it)
+		if i == d.selected {
+			highlight = row
+		}
+		row++
 	}
-	d.menu = NewMenu(d.face, d.sizePx, items...)
-	// A combobox list has no Alt-letters: type-ahead is its keyboard
-	// model, so no row claims (or underlines) a mnemonic.
-	d.menu.dropMnemonics()
-	d.menu.SetDirection(d.dir)
-	// Menu activation dismisses before the row fires, so the list is
-	// closed (and its pixels invalidated) by the time OnSelect runs.
-	d.menu.OnDismiss = d.Close
-	return d.menu
+	list := NewCommandList(d.face, groups...)
+	list.highlightRow(highlight)
+	return list
 }
 
-// Open shows the item list beneath the face, highlighted on the
-// current selection, with the kind's reveal tween: the first frame is
-// hidden and offset toward the face — never a flash of the open list —
-// and the tween raises it to rest. A disabled dropdown, an empty one,
-// and one with no face stay closed.
+// Open shows the item list in a popover beneath the face, at least as
+// wide as the face and highlighted on the selection, with the keyboard
+// focus in the list. A disabled dropdown and one with nothing to
+// select stay closed.
 func (d *Dropdown) Open() {
-	if d.open || !d.Enabled() || len(d.items) == 0 {
+	if d.list != nil || !d.Enabled() || d.selected < 0 {
 		return
 	}
-	m := d.list()
-	d.open = true
-	m.hovered = d.selected
-	d.playReveal(true)
-	d.arrangeList()
-	m.Invalidate()
+	list := d.newList()
+	list.SetSizeRequest(d.bounds.W, 0)
+	d.list = list
+	d.closeList = OpenPopover(d, d, list, PopoverOptions{Focus: list, OnClosed: func() { d.listClosed(list) }})
 	d.Invalidate()
 }
 
-// Close starts hiding the item list. The list keeps painting (fading,
-// sliding back toward the face) until the exit tween lands, then
-// detaches; its pixels are invalidated as an extra rect, both now and
-// per tween frame, because the damage walk no longer descends into the
-// unexposed child.
+// Close closes the item list's popover; a closed dropdown ignores it.
 func (d *Dropdown) Close() {
-	if !d.open || d.closing {
+	if d.closeList == nil {
 		return
 	}
-	d.closing = true
-	d.InvalidateRect(d.listRect)
+	closeList := d.closeList
+	d.list, d.closeList = nil, nil
 	d.Invalidate()
-	d.playReveal(false)
+	closeList()
 }
 
-// finishClose detaches the list after the exit tween landed.
-func (d *Dropdown) finishClose() {
-	d.closing = false
-	d.open = false
-	d.reveal = 0
-	d.cancelReveal = nil
-	if d.menu != nil {
-		d.InvalidateRect(d.listRect)
+// listClosed is list's popover going away, however it closed: the face
+// stops showing it open unless a newer list replaced it.
+func (d *Dropdown) listClosed(list *Command) {
+	if d.list != list {
+		return
 	}
+	d.list, d.closeList = nil, nil
 	d.Invalidate()
 }
 
-// playReveal runs one reveal tween: rising on open (from the current
-// reveal, so re-opening mid-close does not blink), falling on close,
-// landing in finishClose. Reduced motion collapses both to their end
-// state inside Play — close detaches synchronously, exactly like the
-// pre-tween code path.
-func (d *Dropdown) playReveal(rising bool) {
-	st := surfx.Plan(surfx.KindDropdown, Current().Animations)
-	spec := st.Enter
-	if !rising {
-		spec = st.Exit
-	}
-	start := d.reveal
-	if d.cancelReveal != nil {
-		d.cancelReveal()
-	}
-	d.cancelReveal = anim.Play(anim.Animate(spec.Duration, func(p float64) {
-		if rising {
-			d.reveal = start + (1-start)*p
-		} else {
-			d.reveal = start * (1 - p)
-		}
-		// The slide lives in the arrangement (the menu's rect shifts
-		// toward the face); re-place it per frame so the tween lands at
-		// rest — the exact rest rect — when the reveal hits 1.
-		d.arrangeList()
-		d.InvalidateRect(d.listRect)
-		d.Invalidate()
-		if !rising && p >= 1 {
-			d.finishClose()
-		}
-	}).Easing(spec.Easing))
-}
-
-// arrangeList places the item menu directly below the face, at least
-// as wide as the face and capped in height, shifted toward the face by
-// the unrevealed fraction of the slide (the tween's motion, masked to
-// the rest rect at paint time).
-func (d *Dropdown) arrangeList() {
-	m := d.menu
-	nat := m.Measure(Constraints{Max: Size{W: 1 << 24, H: dropdownMaxListH}})
-	d.listRect = render.Rect{
-		X: d.bounds.X,
-		Y: d.bounds.Y + d.bounds.H,
-		W: max(d.bounds.W, nat.W),
-		H: nat.H,
-	}
-	dy := int((1 - d.reveal) * dropdownSlide)
-	m.Arrange(render.Rect{X: d.listRect.X, Y: d.listRect.Y - dy, W: d.listRect.W, H: d.listRect.H})
-	setParents(d, m)
+// pick is the user's choice of row i in the list: the list closes,
+// then the selection moves, so OnSelect runs with the list gone.
+func (d *Dropdown) pick(i int) {
+	d.Close()
+	d.selectIndex(i)
 }
 
 // Measure wants the widest item plus arrow and padding, and one row
@@ -415,23 +319,14 @@ func (d *Dropdown) Measure(con Constraints) Size {
 	return d.measureStore(con, clampSize(Size{W: w, H: h}, con))
 }
 
-// Arrange records the face's rect and, while the list shows (including
-// a close tween in flight), keeps it pinned beneath the face.
-func (d *Dropdown) Arrange(r render.Rect) {
-	d.node.Arrange(r)
-	if d.open {
-		d.arrangeList()
-	}
-}
-
-// Paint draws the closed face — surface, selection, chevron — and, on
-// top of the frame beneath it, the open item list. A disabled dropdown
-// fills with the derived disabled surface and paints muted.
+// Paint draws the face — surface, selection, chevron — in its pressed
+// shade while the list is open. A disabled dropdown fills with the
+// derived disabled surface and paints muted.
 func (d *Dropdown) Paint(cv *render.Canvas) {
 	t := Current()
 	bg := t.Surface
 	switch {
-	case d.open:
+	case d.list != nil:
 		bg = t.SurfacePressed
 	case d.hovered && d.Enabled():
 		bg = t.SurfaceHover
@@ -474,92 +369,26 @@ func (d *Dropdown) Paint(cv *render.Canvas) {
 	chev := pickc(0, av, style.PropColor, col)
 	cx, cy := d.bounds.X+d.bounds.W-16, d.bounds.Y+d.bounds.H/2
 	strokeChevron(cv, cx, cy, 4, math.Pi/2, chev)
-
-	if d.open {
-		// The list hangs below the face, over whatever follows it: it
-		// paints on the frame's top layer, after every later sibling.
-		// The tween's slide is masked to the list's rest rect: the
-		// shifted rows that would paint above it are clipped away, and
-		// the fade rides the menu's own colors through PushAlpha.
-		reveal := min(max(d.reveal, 0), 1)
-		switch reveal {
-		case 0:
-			// Hidden: paint nothing (the skip proof's zero fast path).
-		case 1:
-			cv.Overlay(d.menu.Paint)
-		default:
-			cv.Overlay(func(cv *render.Canvas) {
-				prev := cv.PushClip(d.listRect)
-				alpha := cv.PushAlpha(reveal)
-				d.menu.Paint(cv)
-				cv.PopAlpha(alpha)
-				cv.PopClip(prev)
-			})
-		}
-	}
 }
 
 // Role implements Roleer.
 func (d *Dropdown) Role() Role { return RoleComboBox }
 
-// HitTest returns the item list while a point is inside it — the list
-// hangs outside the face's bounds — else the dropdown inside its own.
-func (d *Dropdown) HitTest(p Point) Widget {
-	if d.open {
-		if hit := d.menu.HitTest(p); hit != nil {
-			return hit
-		}
-	}
-	return d.HitLeaf(d, p)
-}
-
-// Children exposes the open item list for focus traversal (and the
-// damage walk, which shares the interface); closed, there is nothing
-// to traverse into.
-func (d *Dropdown) Children() []Widget {
-	if d.open {
-		return []Widget{d.menu}
-	}
-	return nil
-}
-
-// appendChildren appends the open item list, matching Children.
-func (d *Dropdown) appendChildren(buf []Widget) []Widget {
-	if d.open {
-		return append(buf, d.menu)
-	}
-	return buf
-}
+// HitTest returns the dropdown inside its face.
+func (d *Dropdown) HitTest(p Point) Widget { return d.HitLeaf(d, p) }
 
 // ClickAt toggles the list; the Router invokes it when a press and
-// release land on the face. Presses on the list go to the list; a
-// press anywhere outside closes it through PressedOutside. A face
-// click mid-close-tween reverses the close: the reveal rises from its
-// current fraction, no blink to zero.
+// release land on the face.
 func (d *Dropdown) ClickAt(Point) {
 	if !d.Enabled() {
 		return
 	}
-	if d.closing {
-		d.closing = false
-		d.playReveal(true)
-		return
-	}
-	if d.open {
+	if d.list != nil {
 		d.Close()
 		return
 	}
 	d.Open()
 }
-
-// WantsPressAway holds while the list shows — open, or mid exit tween
-// (a press then still dismisses, restarting nothing).
-func (d *Dropdown) WantsPressAway() bool { return d.open }
-
-// PressedOutside is the router's click-away notice: the list closes
-// through the same animated exit a selection uses; if the exit is
-// already running it keeps falling.
-func (d *Dropdown) PressedOutside(Point) { d.Close() }
 
 // SetHovered implements HoverSetter; the face's hover shade repaints.
 func (d *Dropdown) SetHovered(on bool) {
@@ -570,19 +399,10 @@ func (d *Dropdown) SetHovered(on bool) {
 	d.invalidateState(style.Hover)
 }
 
-// KeyAction implements KeyActionHandler: closed, Enter or Down opens;
-// open, everything but Esc goes to the item list, so arrows move the
-// highlight and Enter picks. Esc closes without changing anything.
+// KeyAction implements KeyActionHandler: Enter or Down opens. The open
+// list holds the focus, so its keys reach it, not the face.
 func (d *Dropdown) KeyAction(a KeyAction, _ Mods) {
 	if !d.Enabled() {
-		return
-	}
-	if d.open {
-		if a == KeyDismiss {
-			d.Close()
-			return
-		}
-		d.menu.KeyAction(a, 0)
 		return
 	}
 	switch a {
@@ -592,91 +412,22 @@ func (d *Dropdown) KeyAction(a KeyAction, _ Mods) {
 }
 
 // InsertRune implements RuneHandler: Space opens, the other half of
-// the activation pair (Enter is the first). Open, Space behaves like
-// Enter and activates the highlighted row. Every other printable rune
-// feeds the type-ahead chain.
+// the activation pair (Enter is the first). Every other printable rune
+// feeds the type-ahead chain, which moves the selection.
 func (d *Dropdown) InsertRune(r rune) {
 	if !d.Enabled() {
 		return
 	}
 	if r == ' ' {
-		d.KeyAction(KeyEnter, 0)
+		d.Open()
 		return
 	}
-	d.typeAhead(r)
-}
-
-// typeAhead applies one printable key to the type-ahead chain:
-// extending the prefix jumps to its first match, a repeated key cycles
-// among the equal-prefix rows, and a key that matches nothing leaves
-// every bit of state alone. Open, the jump moves the highlight; closed,
-// it moves the selection (first-letter cycling). Each accepted key
-// restarts the idle timer that clears the chain.
-func (d *Dropdown) typeAhead(r rune) {
-	key := strings.ToLower(string(r))
-	prefix := d.typed + key
-	rows := d.prefixRows(prefix)
-	cycling := false
-	if len(rows) == 0 {
-		// The extension matched nothing: a fresh single-letter chain
-		// (the repeated-key case, or a stale multi-letter buffer) is the
-		// retry; a letter with no rows at all is a pass-through.
-		prefix = key
-		rows = d.prefixRows(key)
-		cycling = d.typed != ""
-		if len(rows) == 0 {
-			return
-		}
+	next, ok := d.typeAhead.next(r, d.selected, len(d.entries), func(i int) (string, bool) {
+		return d.entries[i].Label, !d.entries[i].Header
+	})
+	if ok {
+		d.selectIndex(next)
 	}
-	current := d.selected
-	if d.open && d.menu != nil {
-		current = d.menu.hovered
-	}
-	target := rows[0]
-	if cycling {
-		for _, i := range rows {
-			if i > current {
-				target = i
-				break
-			}
-		}
-	}
-	d.typed = prefix
-	d.armTypeTimeout()
-	if d.open {
-		d.menu.hovered = target
-		d.menu.Invalidate()
-		return
-	}
-	d.selectIndex(target)
-}
-
-// prefixRows returns the indices of items whose label starts with the
-// case-folded prefix, ascending.
-func (d *Dropdown) prefixRows(prefix string) []int {
-	var rows []int
-	for i, label := range d.items {
-		if !d.entries[i].Header && strings.HasPrefix(strings.ToLower(label), prefix) {
-			rows = append(rows, i)
-		}
-	}
-	return rows
-}
-
-// armTypeTimeout (re)starts the idle timer that clears the typed
-// chain; the delay keeps its duration under reduced motion, like every
-// timing skeleton.
-func (d *Dropdown) armTypeTimeout() {
-	if d.typeCancel != nil {
-		d.typeCancel()
-	}
-	d.typeCancel = anim.Play(anim.Sequence(
-		anim.Delay(dropdownTypeTimeout),
-		anim.Animate(0, func(float64) {
-			d.typed = ""
-			d.typeCancel = nil
-		}),
-	))
 }
 
 // DropdownItem pairs a display label with the typed value picking it
@@ -759,11 +510,10 @@ func (d *Dropdown) iconSlot() int {
 	return w
 }
 
-// appendStyleKids is the button (its arrow below), the open item list,
-// and the face's icon (styleKids).
+// appendStyleKids is the button (its arrow below) and the face's icon
+// (styleKids).
 func (d *Dropdown) appendStyleKids(buf []Widget) []Widget {
 	buf = append(buf, &d.faceBtn)
-	buf = append(buf, d.Children()...)
 	if d.faceIcon != nil {
 		buf = append(buf, d.faceIcon)
 	}

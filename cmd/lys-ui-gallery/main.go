@@ -106,7 +106,7 @@ func openCommandDialog(a *app.Application, parent *app.Window, face render.Font)
 	var d *app.Dialog
 	cmd := widget.NewCommand(face, "Type a command or search...", commandGroups(func() { d.Close() })...)
 	var err error
-	d, err = a.NewDialog(parent, app.DialogConfig{Title: "Command", Width: 460, Height: 340, Content: cmd, Focus: cmd.Entry(), Bare: true})
+	d, err = a.NewDialog(parent, app.DialogConfig{Title: "Command", Width: 460, Height: 340, Content: cmd, Focus: cmd.FocusTarget(), Bare: true})
 	return err
 }
 

@@ -29,7 +29,6 @@ func TestStyleWalkReachesEveryParentedWidget(t *testing.T) {
 	stack.Add("p", leaf("stack page"))
 	stack.Show("p")
 	drop := NewDropdown(face, 12, []string{"a", "b"}, 0)
-	drop.Open()
 	sw := NewSwitch(true)
 	leaves["switch knob"] = &sw.knob
 	root := NewBox(Column, 0, 0)

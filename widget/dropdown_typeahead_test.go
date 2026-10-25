@@ -11,7 +11,7 @@ import (
 // the rest of the schedule.
 func typeClock(c *animClock, t *testing.T) {
 	t.Helper()
-	c.set(c.now().Add(dropdownTypeTimeout + time.Millisecond))
+	c.set(c.now().Add(typeAheadTimeout + time.Millisecond))
 	animclock.Tick(c.now())
 }
 
@@ -21,21 +21,21 @@ func typeClock(c *animClock, t *testing.T) {
 // Enter picks the highlight, and the idle timeout resets the chain.
 func TestDropdownTypeAheadOpen(t *testing.T) {
 	c := pinAnimClock(t)
-	dd := newDropdown(t, "apple", "apricot", "banana", "cherry", "Apple juice")
+	dd, host := newDropdown(t, "apple", "apricot", "banana", "cherry", "Apple juice")
 	var picked []int
 	dd.OnSelect = func(i int) { picked = append(picked, i) }
 
 	dd.Open()
-	c.drive() // land the reveal
-	if got := dd.menu.hovered; got != 0 {
+	list := openedList(t, dd, host)
+	if got := list.highlight; got != 0 {
 		t.Fatalf("open highlight = %d, want the selected row 0", got)
 	}
 
 	// A prefix jumps to its first match: "ap" lands on apple (the
 	// first ap- row), never touching the selection.
-	dd.InsertRune('a')
-	dd.InsertRune('p')
-	if got := dd.menu.hovered; got != 0 {
+	list.InsertRune('a')
+	list.InsertRune('p')
+	if got := list.highlight; got != 0 {
 		t.Fatalf("highlight after \"ap\" = %d, want 0 (apple)", got)
 	}
 	if dd.Selected() != 0 || len(picked) != 0 {
@@ -45,45 +45,34 @@ func TestDropdownTypeAheadOpen(t *testing.T) {
 	// Repeated 'a' cycles the equal-prefix rows: apple, apricot, Apple
 	// juice, wrap to apple — each extra key resets onto the single
 	// letter and advances past the current row.
-	dd.InsertRune('a')
-	if got := dd.menu.hovered; got != 1 {
-		t.Fatalf("second a highlighted %d, want 1 (apricot)", got)
-	}
-	dd.InsertRune('a')
-	if got := dd.menu.hovered; got != 4 {
-		t.Errorf("third a highlighted %d, want 4 (Apple juice)", got)
-	}
-	dd.InsertRune('a')
-	if got := dd.menu.hovered; got != 0 {
-		t.Errorf("fourth a highlighted %d, want the wrap to 0", got)
-	}
-	dd.InsertRune('a')
-	if got := dd.menu.hovered; got != 1 {
-		t.Errorf("fifth a highlighted %d, want 1", got)
+	for i, want := range []int{1, 4, 0, 1} {
+		list.InsertRune('a')
+		if got := list.highlight; got != want {
+			t.Fatalf("a #%d highlighted %d, want %d", i+2, got, want)
+		}
 	}
 
 	// Enter picks the highlighted row.
-	dd.KeyAction(KeyEnter, 0)
-	if dd.Selected() != 1 {
-		t.Fatalf("selected = %d after Enter, want 1", dd.Selected())
+	list.KeyAction(KeyEnter, 0)
+	if dd.Selected() != 1 || dd.Opened() {
+		t.Fatalf("selected = %d (open %v) after Enter, want 1, closed", dd.Selected(), dd.Opened())
 	}
-	c.drive()
 
 	// Case-insensitive: "B" jumps to banana.
 	dd.Open()
-	c.drive()
-	dd.InsertRune('B')
-	if got := dd.menu.hovered; got != 2 {
+	list = openedList(t, dd, host)
+	list.InsertRune('B')
+	if got := list.highlight; got != 2 {
 		t.Errorf("highlight after \"B\" = %d, want 2 (banana)", got)
 	}
 
 	// The idle timeout clears the chain: a later key starts fresh.
 	typeClock(c, t)
-	if dd.typed != "" {
-		t.Errorf("chain %q survived the idle timeout", dd.typed)
+	if list.typeAhead.typed != "" {
+		t.Errorf("chain %q survived the idle timeout", list.typeAhead.typed)
 	}
-	dd.InsertRune('a')
-	if got := dd.menu.hovered; got != 0 {
+	list.InsertRune('a')
+	if got := list.highlight; got != 0 {
 		t.Errorf("post-timeout a highlighted %d, want a fresh 0", got)
 	}
 }
@@ -93,11 +82,10 @@ func TestDropdownTypeAheadOpen(t *testing.T) {
 // still only opens.
 func TestDropdownTypeAheadClosed(t *testing.T) {
 	c := pinAnimClock(t)
-	dd := newDropdown(t, "apple", "apricot", "banana")
+	dd, _ := newDropdown(t, "apple", "apricot", "banana")
 	var picked []int
 	dd.OnSelect = func(i int) { picked = append(picked, i) }
 
-	// First-letter cycling moves the selection on the closed face.
 	dd.InsertRune('b')
 	if dd.Selected() != 2 {
 		t.Fatalf("closed b selected %d, want 2", dd.Selected())
@@ -128,36 +116,35 @@ func TestDropdownTypeAheadClosed(t *testing.T) {
 	if !dd.Opened() {
 		t.Fatal("Space stopped opening the closed dropdown")
 	}
-	if dd.typed != "" {
-		t.Errorf("Space joined the type-ahead chain: %q", dd.typed)
+	if dd.typeAhead.typed != "" {
+		t.Errorf("Space joined the type-ahead chain: %q", dd.typeAhead.typed)
 	}
-	c.drive()
 }
 
 // TestDropdownTypeAheadUnmatchedKeysPassThrough pins that a key with
 // no matching rows interferes with nothing: the chain, the highlight,
 // and the selection stay put, and the navigation keys keep working.
 func TestDropdownTypeAheadUnmatchedKeysPassThrough(t *testing.T) {
-	c := pinAnimClock(t)
-	dd := newDropdown(t, "apple", "banana")
-	dd.Open()
-	c.drive()
-
+	pinAnimClock(t)
+	dd, host := newDropdown(t, "apple", "banana")
 	dd.InsertRune('q')
-	if dd.typed != "" || dd.Selected() != 0 {
-		t.Error("an unmatched key left state behind")
+	if dd.typeAhead.typed != "" || dd.Selected() != 0 {
+		t.Error("an unmatched key on the face left state behind")
 	}
-	if dd.menu.hovered != 0 {
-		t.Errorf("unmatched key moved the highlight to %d", dd.menu.hovered)
+
+	dd.Open()
+	list := openedList(t, dd, host)
+	list.InsertRune('q')
+	if list.typeAhead.typed != "" || list.highlight != 0 {
+		t.Errorf("an unmatched key left %q, highlight %d", list.typeAhead.typed, list.highlight)
 	}
-	dd.KeyAction(KeyDown, 0)
-	if dd.menu.hovered != 1 {
-		t.Fatalf("arrows stopped navigating after an unmatched key: highlight %d", dd.menu.hovered)
+	list.KeyAction(KeyDown, 0)
+	if list.highlight != 1 {
+		t.Fatalf("arrows stopped navigating after an unmatched key: highlight %d", list.highlight)
 	}
-	dd.KeyAction(KeyDismiss, 0)
-	c.drive()
+	host.opts[0].OnClosed()
 	if dd.Opened() {
-		t.Error("Esc stopped closing the list")
+		t.Error("the closed popover left the dropdown open")
 	}
 
 	// Space while closed still opens (the router's text path lives).
@@ -165,5 +152,4 @@ func TestDropdownTypeAheadUnmatchedKeysPassThrough(t *testing.T) {
 	if !dd.Opened() {
 		t.Error("Space-opens broke after unmatched type-ahead")
 	}
-	c.drive()
 }

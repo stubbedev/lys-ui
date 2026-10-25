@@ -69,15 +69,19 @@ const commandTextSize = 14
 // best matches first within each group and the groups by their best,
 // with an empty state when nothing matches. Up, Down, Home and End move
 // the highlight while the entry keeps the focus; Enter or a click picks
-// the highlighted item. It works inline or as a popover's or dialog's
-// content. It styles as the `command` element: the .input row, .heading
-// labels, .item rows (:selected while highlighted), .shortcut labels,
-// .separator lines and the .empty label.
+// the highlighted item. A list built with NewCommandList has no search
+// row: it takes the focus itself, moves the highlight on the same keys,
+// picks on Enter or Space, and jumps by type-ahead on printable keys.
+// It works inline or as a popover's or dialog's content. It styles as
+// the `command` element: the .input row, .heading labels, .item rows
+// (:selected while highlighted), .shortcut labels, .separator lines and
+// the .empty label.
 type Command struct {
 	composite
-	face      render.Font
-	column    *Box
+	face render.Font
+	// input is the search entry, nil for a list without a search row.
 	input     *Entry
+	column    *Box
 	list      *Box
 	scroll    *Scroll
 	empty     *Label
@@ -85,15 +89,14 @@ type Command struct {
 	rows      []*commandRow
 	shown     []*commandRow
 	highlight int
+	typeAhead typeAhead
 }
 
 // NewCommand returns a command over groups whose search entry shows
 // placeholder.
 func NewCommand(face render.Font, placeholder string, groups ...CommandGroup) *Command {
-	face = requireFace("widget.NewCommand", face)
-	c := &Command{face: face, column: NewBox(Column, 0, 0), list: NewBox(Column, 0, 4)}
-	c.SetElement("command")
-	c.input = NewEntry(face, commandTextSize, 0)
+	c := &Command{face: requireFace("widget.NewCommand", face)}
+	c.input = NewEntry(c.face, commandTextSize, 0)
 	c.input.SetPlaceholder(placeholder)
 	c.input.OnChanged = func(string) { c.filter() }
 	search := NewBox(Row, 8, 0)
@@ -101,17 +104,35 @@ func NewCommand(face render.Font, placeholder string, groups ...CommandGroup) *C
 	search.SetPadding(render.Insets{Left: 12, Right: 12})
 	search.AppendAligned(NewSymbol(SymbolSearch, 16), false, AlignCenter)
 	search.Append(c.input, true)
-	c.empty = NewLabel(face, commandTextSize, "No results found.", 0)
+	c.build(search, groups)
+	return c
+}
+
+// NewCommandList returns a command over groups with no search row: a
+// pick list, such as a dropdown's, that is its own focus target.
+func NewCommandList(face render.Font, groups ...CommandGroup) *Command {
+	c := &Command{face: requireFace("widget.NewCommandList", face)}
+	c.build(nil, groups)
+	return c
+}
+
+// build assembles the command under search, nil for none, over groups.
+func (c *Command) build(search *Box, groups []CommandGroup) {
+	c.column, c.list = NewBox(Column, 0, 0), NewBox(Column, 0, 4)
+	c.SetElement("command")
+	c.empty = NewLabel(c.face, commandTextSize, "No results found.", 0)
 	c.empty.AddClass("empty")
 	c.empty.SetAlignment(render.AlignCenter)
 	c.scroll = NewScroll(c.list)
 	c.scroll.VerticalOnly = true
 	c.scroll.SetMaxContentHeight(commandListHeight)
-	c.column.Append(search, false).Append(c.scroll, true)
+	if search != nil {
+		c.column.Append(search, false)
+	}
+	c.column.Append(c.scroll, true)
 	c.initComposite(c, c.column)
 	c.boxed = true
 	c.SetGroups(groups...)
-	return c
 }
 
 // SetGroups replaces the groups and clears the query.
@@ -125,7 +146,9 @@ func (c *Command) SetGroups(groups ...CommandGroup) {
 			c.rows = append(c.rows, c.newRow(g, it))
 		}
 	}
-	c.input.SetText("")
+	if c.input != nil {
+		c.input.SetText("")
+	}
 	c.filter()
 }
 
@@ -154,14 +177,31 @@ func (c *Command) newRow(g int, it CommandItem) *commandRow {
 // SetEmptyText replaces the text shown when nothing matches.
 func (c *Command) SetEmptyText(s string) { c.empty.SetText(s) }
 
-// Entry returns the search entry, the widget to focus.
-func (c *Command) Entry() *Entry { return c.input }
+// FocusTarget returns the widget the keyboard focus belongs on: the
+// search entry, or the command itself when it has no search row.
+func (c *Command) FocusTarget() Widget {
+	if c.input == nil {
+		return c
+	}
+	return c.input
+}
 
-// Query returns the search text.
-func (c *Command) Query() string { return c.input.Text() }
+// Query returns the search text, empty without a search row.
+func (c *Command) Query() string {
+	if c.input == nil {
+		return ""
+	}
+	return c.input.Text()
+}
 
-// SetQuery replaces the search text and filters by it.
-func (c *Command) SetQuery(q string) { c.input.SetText(q) }
+// SetQuery replaces the search text and filters by it. A command
+// without a search row has no query to set, and panics.
+func (c *Command) SetQuery(q string) {
+	if c.input == nil {
+		panic("widget: Command.SetQuery on a NewCommandList, which has no search row")
+	}
+	c.input.SetText(q)
+}
 
 // score is how well the query matches it: its label's or best
 // keyword's fuzzy score.
@@ -178,7 +218,7 @@ func score(query string, it CommandItem) (int, bool) {
 // filter shows the rows matching the query, best first within each
 // group and the groups by their best match, and highlights the first.
 func (c *Command) filter() {
-	q := c.input.Text()
+	q := c.Query()
 	c.shown = c.shown[:0]
 	for _, r := range c.rows {
 		if s, ok := score(q, r.item); ok {
@@ -259,12 +299,19 @@ func (c *Command) pick() {
 	}
 }
 
-// InterceptKey implements KeyInterceptor: while the entry has the
-// focus, the navigation keys move the highlight and Enter picks.
-func (c *Command) InterceptKey(target Widget, a KeyAction, _ Mods) bool {
-	if target != Widget(c.input) {
-		return false
+// highlightRow highlights row n in the order the groups listed it,
+// -1 for none.
+func (c *Command) highlightRow(n int) {
+	if n < 0 {
+		c.moveHighlight(-1)
+		return
 	}
+	c.moveHighlight(slices.Index(c.shown, c.rows[n]))
+}
+
+// navigate moves the highlight on Up, Down, Home and End and picks on
+// Enter, reporting whether a was one of them.
+func (c *Command) navigate(a KeyAction) bool {
 	var next int
 	switch a {
 	case KeyDown:
@@ -285,4 +332,52 @@ func (c *Command) InterceptKey(target Widget, a KeyAction, _ Mods) bool {
 		c.moveHighlight(next)
 	}
 	return true
+}
+
+// InterceptKey implements KeyInterceptor: while the search entry has
+// the focus, the navigation keys move the highlight and Enter picks.
+func (c *Command) InterceptKey(target Widget, a KeyAction, _ Mods) bool {
+	return c.input != nil && target == Widget(c.input) && c.navigate(a)
+}
+
+// KeyAction implements KeyActionHandler: a command without a search
+// row holds the focus itself and navigates on its own keys.
+func (c *Command) KeyAction(a KeyAction, _ Mods) { c.navigate(a) }
+
+// InsertRune implements RuneHandler for a command without a search
+// row: Space picks the highlighted item, the other half of the
+// activation pair, and every other printable rune jumps the highlight
+// by type-ahead over the pickable items.
+func (c *Command) InsertRune(r rune) {
+	if r == ' ' {
+		c.pick()
+		return
+	}
+	next, ok := c.typeAhead.next(r, c.highlight, len(c.shown), func(i int) (string, bool) {
+		return c.shown[i].item.Label, !c.shown[i].item.Disabled
+	})
+	if ok {
+		c.moveHighlight(next)
+	}
+}
+
+// focusable implements focusOptOut: only a command without a search
+// row takes the focus; with one, the entry holds it.
+func (c *Command) focusable() bool { return c.input == nil }
+
+// newCommandCheck returns an item's trailing check slot, 16px square,
+// holding a check when on.
+func newCommandCheck(on bool) *Box {
+	slot := NewBox(Column, 0, 0)
+	slot.SetSizeRequest(16, 16)
+	setCommandCheck(slot, on)
+	return slot
+}
+
+// setCommandCheck shows or clears the check in slot.
+func setCommandCheck(slot *Box, on bool) {
+	slot.Clear()
+	if on {
+		slot.Append(NewSymbol(SymbolCheck, 16), true)
+	}
 }

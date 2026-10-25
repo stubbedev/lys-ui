@@ -63,7 +63,7 @@ func TestCommandKeyboardAndClick(t *testing.T) {
 	c := NewCommand(goldenFace(t), "", testCommandGroups(&picked)...)
 	arrangeTree(t, c, 400, 400)
 	r := &Router{Root: c}
-	r.SetFocus(c.Entry())
+	r.SetFocus(c.FocusTarget())
 	r.KeyAction(KeyDown, 0)
 	r.KeyAction(KeyDown, 0)
 	if it, _ := c.Highlighted(); it.Label != "Profile" {
@@ -79,7 +79,7 @@ func TestCommandKeyboardAndClick(t *testing.T) {
 	if !slices.Equal(picked, []string{"Settings", "Billing"}) {
 		t.Errorf("picked %v, want Settings then Billing", picked)
 	}
-	if r.Focused() != Widget(c.Entry()) {
+	if r.Focused() != c.FocusTarget() {
 		t.Errorf("focus on %T after the click, want the search entry", r.Focused())
 	}
 }
@@ -120,5 +120,66 @@ func TestCommandRowsAreCentered(t *testing.T) {
 	}
 	if bg := c.input.style(c.input).Background; bg.A() != 0 {
 		t.Errorf("search entry background %#x, want none", uint32(bg))
+	}
+}
+
+// A command list has no search row and is its own focus target: it
+// navigates past disabled items on its own keys, picks on Enter, Space
+// or a click, and jumps by type-ahead.
+func TestCommandList(t *testing.T) {
+	pinAnimClock(t)
+	var picked []string
+	c := NewCommandList(goldenFace(t), testCommandGroups(&picked)...)
+	arrangeTree(t, c, 400, 400)
+	if c.input != nil || len(c.column.Children()) != 1 {
+		t.Fatal("the list has a search row")
+	}
+	r := &Router{Root: c}
+	r.SetFocus(c.FocusTarget())
+	if r.Focused() != Widget(c) {
+		t.Fatalf("focus on %T, want the list itself", r.Focused())
+	}
+	r.KeyAction(KeyDown, 0)
+	r.KeyAction(KeyDown, 0)
+	if it, _ := c.Highlighted(); it.Label != "Profile" {
+		t.Fatalf("highlight on %q, want Profile past the disabled Calculator", it.Label)
+	}
+	r.KeyAction(KeyHome, 0)
+	r.KeyAction(KeyEnter, 0)
+	r.KeyAction(KeyEnd, 0)
+	r.Type(' ')
+	r.Type('b')
+	r.KeyAction(KeyEnter, 0)
+	clickAt(r, c.shown[0])
+	if want := []string{"Calendar", "Settings", "Billing", "Calendar"}; !slices.Equal(picked, want) {
+		t.Errorf("picked %v, want %v", picked, want)
+	}
+	if r.Focused() != Widget(c) {
+		t.Errorf("focus on %T after the click, want the list", r.Focused())
+	}
+	if c.Query() != "" {
+		t.Errorf("the list has query %q", c.Query())
+	}
+	defer func() {
+		if recover() == nil {
+			t.Error("SetQuery on a list without a search row did not panic")
+		}
+	}()
+	c.SetQuery("x")
+}
+
+// A searching command is no focus stop of its own: traversal lands in
+// its entry.
+func TestCommandSearchKeepsTheFocusInTheEntry(t *testing.T) {
+	var picked []string
+	c := NewCommand(goldenFace(t), "", testCommandGroups(&picked)...)
+	arrangeTree(t, c, 400, 400)
+	if isFocusable(c) {
+		t.Error("a searching command takes the focus itself")
+	}
+	r := &Router{Root: c}
+	r.FocusNext()
+	if r.Focused() != c.FocusTarget() {
+		t.Errorf("traversal focused %T, want the search entry", r.Focused())
 	}
 }

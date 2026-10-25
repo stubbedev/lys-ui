@@ -1,26 +1,47 @@
 package widget
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/render"
 )
 
-// newDropdown builds a face-equipped dropdown arranged at (10, 20), so
-// the open list hangs below at a known offset.
-func newDropdown(t *testing.T, items ...string) *Dropdown {
+// newDropdown builds a face-equipped dropdown arranged at (10, 20)
+// whose tree a fake surface host serves.
+func newDropdown(t *testing.T, items ...string) (*Dropdown, *fakeSurfaceHost) {
 	t.Helper()
-	dd := NewDropdown(entryFace(t), 14, items, 0)
-	sz := dd.Measure(Constraints{Max: Size{W: 400, H: 100}})
-	dd.Arrange(render.Rect{X: 10, Y: 20, W: sz.W, H: sz.H})
-	return dd
+	return hostDropdown(t, NewDropdown(entryFace(t), 14, items, 0))
 }
 
-// rowPoint maps item i of the open list to a clickable point.
-func rowPoint(dd *Dropdown, i int) Point {
-	return Point{X: dd.menu.Bounds().X + 10, Y: rowCenter(dd.menu, i).Y}
+// hostDropdown attaches a fake surface host to dd and arranges it at
+// (10, 20).
+func hostDropdown(t *testing.T, dd *Dropdown) (*Dropdown, *fakeSurfaceHost) {
+	t.Helper()
+	host := &fakeSurfaceHost{}
+	SetSurfaceHost(dd, host)
+	sz := dd.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	dd.Arrange(render.Rect{X: 10, Y: 20, W: sz.W, H: sz.H})
+	return dd, host
+}
+
+// openedList is the item list of the popover dd opened last, laid out
+// in it.
+func openedList(t *testing.T, dd *Dropdown, host *fakeSurfaceHost) *Command {
+	t.Helper()
+	if len(host.popovers) == 0 {
+		t.Fatal("the dropdown opened no popover")
+	}
+	content := host.popovers[len(host.popovers)-1]
+	SetStyleAnchor(content, dd)
+	arrangeTree(t, content, 400, 400)
+	return content.(*Box).Children()[0].(*Command)
+}
+
+// highlightedLabel is the label of the list's highlighted item.
+func highlightedLabel(c *Command) string {
+	it, _ := c.Highlighted()
+	return it.Label
 }
 
 func facePoint(dd *Dropdown) Point {
@@ -28,66 +49,94 @@ func facePoint(dd *Dropdown) Point {
 	return Point{X: b.X + b.W/2, Y: b.Y + b.H/2}
 }
 
-func TestDropdownClick(t *testing.T) {
-	c := pinAnimClock(t)
-	dd := newDropdown(t, "Light", "Dark", "System")
-
-	t.Run("clicking the face opens the list below it", func(t *testing.T) {
-		dd.ClickAt(facePoint(dd))
-		c.drive() // land the reveal: the list rests exactly below the face
-		if !dd.Opened() {
-			t.Fatal("face click did not open the list")
-		}
-		if b := dd.menu.Bounds(); b.Y != dd.Bounds().Y+dd.Bounds().H {
-			t.Errorf("list top = %d, want directly below the face at %d", b.Y, dd.Bounds().Y+dd.Bounds().H)
-		}
-	})
-
-	t.Run("clicking a row selects it exactly once and closes", func(t *testing.T) {
-		fired := 0
-		dd.OnSelect = func(int) { fired++ }
-		// Row clicks reach the list through its own ClickAt, exactly
-		// what the Router does when the hit lands on the open list.
-		dd.menu.ClickAt(rowPoint(dd, 2))
-		c.drive() // the close tween lands before the assertions
-		if dd.Selected() != 2 {
-			t.Errorf("selected = %d, want 2", dd.Selected())
-		}
-		if fired != 1 {
-			t.Errorf("OnSelect fired %d times, want exactly 1", fired)
-		}
-		if dd.Opened() {
-			t.Error("picking a row left the list open")
-		}
-	})
-
-	t.Run("hit test resolves the list outside the face while open", func(t *testing.T) {
-		dd.ClickAt(facePoint(dd))
-		if got := dd.HitTest(rowPoint(dd, 1)); got != Widget(dd.menu) {
-			t.Errorf("hit = %v, want the item list", got)
-		}
-		dd.ClickAt(facePoint(dd)) // second face click toggles closed
-		c.drive()
-		if dd.Opened() {
-			t.Error("second face click did not close the list")
-		}
-	})
+// The list opens in a popover through the surface host, never inside
+// the dropdown's own window, where the window clipped it (#280): the
+// popover holds a Command without a search row, focused, at least as
+// wide as the face, and the dropdown keeps no in-window list.
+func TestDropdownOpensThroughSurfaceHost(t *testing.T) {
+	dd, host := newDropdown(t, "Light", "Dark", "System")
+	dd.ClickAt(facePoint(dd))
+	if !dd.Opened() || len(host.popovers) != 1 {
+		t.Fatalf("a face click: opened %v with %d popovers, want one", dd.Opened(), len(host.popovers))
+	}
+	list := openedList(t, dd, host)
+	if list.input != nil {
+		t.Error("the list shows a search row")
+	}
+	if host.opts[0].Focus != Widget(list) || list.FocusTarget() != Widget(list) {
+		t.Errorf("the popover focuses %T, want the list", host.opts[0].Focus)
+	}
+	if !isFocusable(list) {
+		t.Error("the list cannot take the focus it is given")
+	}
+	if w := list.Bounds().W; w < dd.Bounds().W {
+		t.Errorf("the list is %dpx wide, narrower than the %dpx face", w, dd.Bounds().W)
+	}
+	if got := shownLabels(list); len(got) != 3 || got[0] != "Light" || got[2] != "System" {
+		t.Errorf("the list shows %v, want the items in order", got)
+	}
+	if parentOf(list) == Widget(dd) || dd.HitTest(Point{X: dd.Bounds().X + 2, Y: dd.Bounds().Y + dd.Bounds().H + 10}) != nil {
+		t.Error("the dropdown still holds an in-window list")
+	}
 }
 
-func TestDropdownRouterClick(t *testing.T) {
-	dd := newDropdown(t, "Light", "Dark", "System")
-	root := NewBox(Row, 0, 0)
-	root.Append(dd, false)
-	sz := root.Measure(Constraints{Max: Size{W: 400, H: 400}})
-	root.Arrange(render.Rect{X: 0, Y: 0, W: sz.W, H: sz.H})
-	router := &Router{Root: root}
+// The selected row is highlighted on open and alone carries the
+// trailing check, the way a combobox marks its pick.
+func TestDropdownListMarksTheSelection(t *testing.T) {
+	dd, host := newDropdown(t, "Light", "Dark", "System")
+	dd.SetSelected(1)
+	dd.Open()
+	list := openedList(t, dd, host)
+	if got := highlightedLabel(list); got != "Dark" {
+		t.Errorf("the list opened highlighting %q, want the selection", got)
+	}
+	for i, r := range list.rows {
+		check, ok := r.item.Trailing.(*Box)
+		if !ok {
+			t.Fatalf("row %d trails %T, want its check slot", i, r.item.Trailing)
+		}
+		if got, want := len(check.Children()), map[bool]int{true: 1, false: 0}[i == 1]; got != want {
+			t.Errorf("row %d's check slot holds %d widgets, want %d", i, got, want)
+		}
+		if row := r.Children(); row[len(row)-1] != Widget(check) {
+			t.Errorf("row %d ends with %T, want its check", i, row[len(row)-1])
+		}
+	}
+}
 
+func TestDropdownClick(t *testing.T) {
+	dd, host := newDropdown(t, "Light", "Dark", "System")
 	fired := 0
 	dd.OnSelect = func(int) { fired++ }
 
-	// A pointer click on the face opens; the press also focuses, so
-	// the later keyboard test runs against a realistically focused
-	// dropdown.
+	dd.ClickAt(facePoint(dd))
+	list := openedList(t, dd, host)
+	list.rows[2].ClickAt(Point{})
+	if dd.Selected() != 2 || fired != 1 {
+		t.Errorf("clicking a row: selected %d, OnSelect fired %d times; want 2 once", dd.Selected(), fired)
+	}
+	if dd.Opened() || host.closed != 1 {
+		t.Errorf("picking a row left the list open (%d closes)", host.closed)
+	}
+
+	dd.ClickAt(facePoint(dd))
+	dd.ClickAt(facePoint(dd))
+	if dd.Opened() || host.closed != 2 {
+		t.Errorf("a second face click left the list open (%d closes)", host.closed)
+	}
+}
+
+// A router click on the face opens and focuses it; a click on a row of
+// the popover's own tree picks it.
+func TestDropdownRouterClick(t *testing.T) {
+	dd, host := newDropdown(t, "Light", "Dark", "System")
+	root := NewBox(Row, 0, 0)
+	root.Append(dd, false)
+	arrangeTree(t, root, 400, 400)
+	router := &Router{Root: root}
+	fired := 0
+	dd.OnSelect = func(int) { fired++ }
+
 	router.Press(BTNLeft, facePoint(dd))
 	router.Release(BTNLeft, facePoint(dd))
 	if !dd.Opened() {
@@ -97,85 +146,95 @@ func TestDropdownRouterClick(t *testing.T) {
 		t.Fatal("face click did not focus the dropdown")
 	}
 
-	router.Press(BTNLeft, rowPoint(dd, 1))
-	router.Release(BTNLeft, rowPoint(dd, 1))
+	list := openedList(t, dd, host)
+	pop := &Router{Root: host.popovers[0]}
+	pop.SetFocus(host.opts[0].Focus)
+	clickAt(pop, list.rows[1])
 	if dd.Selected() != 1 || fired != 1 {
 		t.Errorf("router click: selected = %d fired = %d, want 1/1", dd.Selected(), fired)
+	}
+	if pop.Focused() != Widget(list) {
+		t.Errorf("a row click moved the popover's focus to %T, want the list", pop.Focused())
 	}
 }
 
 func TestDropdownKeyboard(t *testing.T) {
-	c := pinAnimClock(t)
 	t.Run("Enter, Space, and Down open while focused", func(t *testing.T) {
 		for _, key := range []struct {
-			name   string
-			points func(*Dropdown)
+			name  string
+			press func(*Dropdown)
 		}{
 			{"Enter", func(dd *Dropdown) { dd.KeyAction(KeyEnter, 0) }},
 			{"Space", func(dd *Dropdown) { dd.InsertRune(' ') }},
 			{"Down", func(dd *Dropdown) { dd.KeyAction(KeyDown, 0) }},
 		} {
-			dd := newDropdown(t, "Light", "Dark", "System")
-			key.points(dd)
-			if !dd.Opened() {
+			dd, host := newDropdown(t, "Light", "Dark", "System")
+			key.press(dd)
+			if !dd.Opened() || len(host.popovers) != 1 {
 				t.Errorf("%s did not open the list", key.name)
 			}
 		}
 	})
 
-	t.Run("arrows navigate from the selection, Enter picks once", func(t *testing.T) {
-		dd := newDropdown(t, "Light", "Dark", "System")
+	t.Run("the focused list navigates from the selection, Enter picks once", func(t *testing.T) {
+		dd, host := newDropdown(t, "Light", "Dark", "System")
 		fired := 0
 		dd.OnSelect = func(int) { fired++ }
-
-		dd.KeyAction(KeyEnter, 0) // open
-		if got := dd.menu.hovered; got != 0 {
-			t.Fatalf("list opened with highlight %d, want the selection 0", got)
-		}
-		dd.KeyAction(KeyDown, 0)
-		if got := dd.menu.hovered; got != 1 {
-			t.Fatalf("Down moved highlight to %d, want 1", got)
-		}
-		dd.KeyAction(KeyUp, 0)
-		dd.KeyAction(KeyDown, 0) // back to 1
 		dd.KeyAction(KeyEnter, 0)
-		c.drive()
-
-		if dd.Selected() != 1 {
-			t.Errorf("selected = %d, want 1", dd.Selected())
+		openedList(t, dd, host)
+		r := &Router{Root: host.popovers[0]}
+		r.SetFocus(host.opts[0].Focus)
+		list := r.Focused().(*Command)
+		r.KeyAction(KeyDown, 0)
+		if got := highlightedLabel(list); got != "Dark" {
+			t.Fatalf("Down highlighted %q, want Dark", got)
 		}
-		if fired != 1 {
-			t.Errorf("OnSelect fired %d times, want exactly 1", fired)
+		r.KeyAction(KeyEnd, 0)
+		r.KeyAction(KeyHome, 0)
+		r.KeyAction(KeyDown, 0)
+		r.KeyAction(KeyEnter, 0)
+		if dd.Selected() != 1 || fired != 1 {
+			t.Errorf("selected %d, fired %d; want 1 once", dd.Selected(), fired)
 		}
 		if dd.Opened() {
 			t.Error("Enter left the list open")
 		}
 	})
 
-	t.Run("Esc cancels without changing the selection", func(t *testing.T) {
-		dd := newDropdown(t, "Light", "Dark", "System")
+	t.Run("Space picks in the list", func(t *testing.T) {
+		dd, host := newDropdown(t, "Light", "Dark", "System")
+		dd.Open()
+		list := openedList(t, dd, host)
+		list.KeyAction(KeyUp, 0)
+		list.KeyAction(KeyEnd, 0)
+		list.InsertRune(' ')
+		if dd.Selected() != 2 || dd.Opened() {
+			t.Errorf("Space: selected %d, open %v; want System, closed", dd.Selected(), dd.Opened())
+		}
+	})
+
+	t.Run("a popover closed by the host changes nothing", func(t *testing.T) {
+		dd, host := newDropdown(t, "Light", "Dark", "System")
 		fired := 0
 		dd.OnSelect = func(int) { fired++ }
-
 		dd.KeyAction(KeyEnter, 0)
-		dd.KeyAction(KeyDown, 0)
-		dd.KeyAction(KeyDown, 0)
-		dd.KeyAction(KeyDismiss, 0)
-		c.drive()
-
+		list := openedList(t, dd, host)
+		list.KeyAction(KeyDown, 0)
+		host.opts[0].OnClosed()
 		if dd.Opened() {
-			t.Fatal("Esc did not close the list")
+			t.Fatal("the closed popover left the dropdown open")
 		}
-		if dd.Selected() != 0 {
-			t.Errorf("cancel changed the selection to %d, want 0", dd.Selected())
+		if dd.Selected() != 0 || fired != 0 {
+			t.Errorf("the dismissal selected %d and fired %d times", dd.Selected(), fired)
 		}
-		if fired != 0 {
-			t.Errorf("cancel fired OnSelect %d times, want 0", fired)
+		dd.Close()
+		if host.closed != 0 {
+			t.Error("Close closed the popover the host had already closed")
 		}
 	})
 
 	t.Run("arrows do nothing while closed", func(t *testing.T) {
-		dd := newDropdown(t, "Light", "Dark", "System")
+		dd, _ := newDropdown(t, "Light", "Dark", "System")
 		dd.KeyAction(KeyUp, 0)
 		if dd.Opened() || dd.Selected() != 0 {
 			t.Errorf("closed arrows: open = %v selected = %d", dd.Opened(), dd.Selected())
@@ -183,27 +242,41 @@ func TestDropdownKeyboard(t *testing.T) {
 	})
 }
 
+// A popover still closing after the list reopened does not close the
+// new one.
+func TestDropdownStaleCloseKeepsTheNewList(t *testing.T) {
+	dd, host := newDropdown(t, "Light", "Dark")
+	dd.Open()
+	dd.Close()
+	dd.Open()
+	host.opts[0].OnClosed()
+	if !dd.Opened() {
+		t.Error("the first popover's late close closed the reopened list")
+	}
+	host.opts[1].OnClosed()
+	if dd.Opened() {
+		t.Error("the open popover's close left the dropdown open")
+	}
+}
+
 func TestDropdownOnSelectExactlyOnce(t *testing.T) {
-	c := pinAnimClock(t)
-	dd := newDropdown(t, "Light", "Dark", "System")
+	dd, host := newDropdown(t, "Light", "Dark", "System")
 	fired := 0
 	dd.OnSelect = func(int) { fired++ }
 
 	t.Run("re-opening and re-picking the selected row fires nothing", func(t *testing.T) {
-		dd.ClickAt(facePoint(dd))        // open
-		dd.menu.ClickAt(rowPoint(dd, 0)) // pick the already-selected row
-		c.drive()                        // land the close tween
+		dd.ClickAt(facePoint(dd))
+		openedList(t, dd, host).rows[0].ClickAt(Point{})
 		if fired != 0 {
 			t.Errorf("no-change pick fired %d times, want 0", fired)
 		}
 	})
 
 	t.Run("open plus Enter on the seeded highlight fires nothing", func(t *testing.T) {
-		dd.KeyAction(KeyEnter, 0) // open, highlight on the selection
-		dd.KeyAction(KeyEnter, 0) // re-pick it
-		c.drive()
-		if fired != 0 {
-			t.Errorf("re-pick fired %d times, want 0", fired)
+		dd.KeyAction(KeyEnter, 0)
+		openedList(t, dd, host).KeyAction(KeyEnter, 0)
+		if fired != 0 || dd.Opened() {
+			t.Errorf("re-pick fired %d times, open %v", fired, dd.Opened())
 		}
 	})
 
@@ -214,14 +287,11 @@ func TestDropdownOnSelectExactlyOnce(t *testing.T) {
 			t.Errorf("SetSelected fired %d times, want 1", fired)
 		}
 		dd.KeyAction(KeyEnter, 0)
-		dd.KeyAction(KeyUp, 0) // 2 -> 1
-		dd.KeyAction(KeyEnter, 0)
-		c.drive()
-		if fired != 2 {
-			t.Errorf("keyboard change fired %d times total, want 2", fired)
-		}
-		if dd.Selected() != 1 {
-			t.Errorf("selected = %d, want 1", dd.Selected())
+		list := openedList(t, dd, host)
+		list.KeyAction(KeyUp, 0)
+		list.KeyAction(KeyEnter, 0)
+		if fired != 2 || dd.Selected() != 1 {
+			t.Errorf("keyboard change: fired %d times total, selected %d; want 2 and 1", fired, dd.Selected())
 		}
 	})
 }
@@ -233,136 +303,82 @@ func TestDropdownOf(t *testing.T) {
 		{Label: "Dark", Value: "dark"},
 		{Label: "System", Value: "system"},
 	}
-	dd := NewDropdownOf(entryFace(t), 14, items, 0)
-	sz := dd.Measure(Constraints{Max: Size{W: 400, H: 100}})
-	dd.Arrange(render.Rect{X: 10, Y: 20, W: sz.W, H: sz.H})
+	typed := NewDropdownOf(entryFace(t), 14, items, 0)
+	dd, host := hostDropdown(t, typed.Dropdown)
 
-	if got := dd.Value(); got != "light" {
+	if got := typed.Value(); got != "light" {
 		t.Fatalf("initial value = %q, want light", got)
 	}
-
 	calls := 0
 	var got mode
-	dd.OnSelect = func(i int, v mode) {
+	typed.OnSelect = func(_ int, v mode) {
 		calls++
 		got = v
 	}
 
 	dd.KeyAction(KeyEnter, 0)
-	dd.KeyAction(KeyDown, 0)
-	dd.KeyAction(KeyEnter, 0)
+	list := openedList(t, dd, host)
+	list.KeyAction(KeyDown, 0)
+	list.KeyAction(KeyEnter, 0)
 	if calls != 1 || got != "dark" {
 		t.Fatalf("keyboard pick: calls = %d value = %q, want 1/dark", calls, got)
 	}
-	if v := dd.Value(); v != "dark" {
+	if v := typed.Value(); v != "dark" {
 		t.Errorf("Value = %q, want dark", v)
 	}
 
-	dd.SetSelected(2)
-	if v := dd.Value(); v != "system" {
+	typed.SetSelected(2)
+	if v := typed.Value(); v != "system" {
 		t.Errorf("Value after SetSelected = %q, want system", v)
 	}
-	if got := dd.Selected(); got != 2 {
+	if got := typed.Selected(); got != 2 {
 		t.Errorf("Selected = %d, want 2", got)
 	}
 }
 
-func TestDropdownChildren(t *testing.T) {
-	dd := newDropdown(t, "Light", "Dark", "System")
-	root := NewBox(Row, 0, 0)
-	root.Append(dd, false)
-	sz := root.Measure(Constraints{Max: Size{W: 400, H: 400}})
-	root.Arrange(render.Rect{X: 0, Y: 0, W: sz.W, H: sz.H})
-	router := &Router{Root: root}
-
-	t.Run("closed hides the list from traversal", func(t *testing.T) {
-		if kids := dd.Children(); kids != nil {
-			t.Errorf("closed children = %v, want none", kids)
-		}
-		// Focus the face without clicking it open: a press focuses,
-		// and CancelPress drops the gesture before it becomes one.
-		router.Press(BTNLeft, facePoint(dd))
-		router.CancelPress()
-		if router.Focused() != Widget(dd) {
-			t.Fatal("press did not focus the dropdown")
-		}
-		router.FocusNext()
-		if got := router.Focused(); got != Widget(dd) {
-			t.Errorf("closed traversal focused %v, want the dropdown to stay put", got)
-		}
-	})
-
-	t.Run("open exposes exactly the list for traversal", func(t *testing.T) {
-		dd.ClickAt(facePoint(dd))
-		kids := dd.Children()
-		if len(kids) != 1 || kids[0] != Widget(dd.menu) {
-			t.Fatalf("open children = %v, want exactly the item list", kids)
-		}
-		router.FocusNext()
-		if got := router.Focused(); got != Widget(dd.menu) {
-			t.Errorf("open traversal focused %v, want the item list", got)
-		}
-	})
-}
-
 func TestDropdownDisabled(t *testing.T) {
-	c := pinAnimClock(t)
 	t.Run("disabled ignores clicks and keys", func(t *testing.T) {
-		dd := newDropdown(t, "Light", "Dark", "System")
+		dd, host := newDropdown(t, "Light", "Dark", "System")
 		dd.SetEnabled(false)
 		if dd.Enabled() {
 			t.Fatal("SetEnabled(false) left the dropdown enabled")
 		}
-
 		dd.ClickAt(facePoint(dd))
 		dd.KeyAction(KeyEnter, 0)
 		dd.KeyAction(KeyDown, 0)
 		dd.InsertRune(' ')
-		if dd.Opened() {
+		dd.Open()
+		if dd.Opened() || len(host.popovers) != 0 {
 			t.Error("a disabled dropdown opened")
 		}
-		dd.SetSelected(1) // programmatic changes still apply
+		dd.SetSelected(1)
 		if dd.Selected() != 1 {
 			t.Errorf("SetSelected on disabled = %d, want 1", dd.Selected())
 		}
 	})
 
 	t.Run("disabling closes an open list", func(t *testing.T) {
-		dd := newDropdown(t, "Light", "Dark", "System")
+		dd, host := newDropdown(t, "Light", "Dark", "System")
 		dd.KeyAction(KeyEnter, 0)
 		dd.SetEnabled(false)
-		c.drive()
-		if dd.Opened() || dd.Children() != nil {
-			t.Error("disabling left the list open or traversable")
+		if dd.Opened() || host.closed != 1 {
+			t.Errorf("disabling left the list open (%d closes)", host.closed)
 		}
 	})
 }
 
+// Opening and closing repaint the face, which shows the pressed shade
+// while the list is open.
 func TestDropdownDamage(t *testing.T) {
-	c := pinAnimClock(t)
-	dd := newDropdown(t, "Light", "Dark", "System")
-
-	// Opening must owe the list's pixels; closing must owe them back,
-	// even though the closed list is no longer exposed as a child.
+	dd, _ := newDropdown(t, "Light", "Dark", "System")
+	CollectDamage(dd)
 	dd.ClickAt(facePoint(dd))
-	c.drive() // land the reveal
-	rects, any := CollectDamage(dd)
-	if !any {
+	if _, any := CollectDamage(dd); !any {
 		t.Fatal("opening owed no damage")
 	}
-	list := dd.menu.Bounds()
-	if !slices.Contains(rects, list) {
-		t.Errorf("open damage %v missed the list rect %v", rects, list)
-	}
-	CollectDamage(dd) // drain
-
-	dd.ClickAt(facePoint(dd)) // close
-	rects, any = CollectDamage(dd)
-	if !any {
+	dd.ClickAt(facePoint(dd))
+	if _, any := CollectDamage(dd); !any {
 		t.Fatal("closing owed no damage")
-	}
-	if !slices.Contains(rects, list) {
-		t.Errorf("close damage %v missed the old list rect %v", rects, list)
 	}
 	if _, any := CollectDamage(dd); any {
 		t.Error("idle dropdown still owes damage")
@@ -370,47 +386,22 @@ func TestDropdownDamage(t *testing.T) {
 }
 
 func TestDropdownPaintAndRole(t *testing.T) {
-	c := pinAnimClock(t)
-	t.Run("open list paints ink on every row", func(t *testing.T) {
-		dd := newDropdown(t, "Light", "Dark", "System")
-		dd.ClickAt(facePoint(dd))
-		c.drive() // land the reveal: the list paints at rest
-		b := dd.Bounds().Union(dd.menu.Bounds())
-		data := make([]byte, render.Stride(b.W)*(b.H+2))
-		cv := render.New(data, render.Stride(b.W), b.W, b.H+2)
-		dd.Arrange(render.Rect{X: 0, Y: 0, W: dd.Bounds().W, H: dd.Bounds().H})
-		dd.Paint(cv)
-		for row := range 3 {
-			y := rowCenter(dd.menu, row).Y
-			ink := 0
-			for x := range dd.menu.Bounds().W {
-				if render.ColorFromBytes(data[y*render.Stride(b.W)+x*4:]).A() > 0 {
-					ink++
-				}
-			}
-			if ink == 0 {
-				t.Errorf("row %d painted nothing", row)
-			}
-		}
-	})
-
 	t.Run("dropdown with an empty item list paints and stays closed", func(t *testing.T) {
-		dd := NewDropdown(entryFace(t), 14, nil, 0)
-		sz := dd.Measure(Constraints{Max: Size{W: 400, H: 100}})
+		dd, host := hostDropdown(t, NewDropdown(entryFace(t), 14, nil, 0))
+		sz := dd.Bounds()
 		if sz.W <= 0 || sz.H <= 0 {
 			t.Fatalf("empty measure = %v", sz)
 		}
-		dd.Arrange(render.Rect{X: 0, Y: 0, W: sz.W, H: sz.H})
 		dd.ClickAt(facePoint(dd))
-		if dd.Opened() {
+		if dd.Opened() || len(host.popovers) != 0 {
 			t.Error("a dropdown without items opened a list")
 		}
-		cv := render.New(make([]byte, render.Stride(sz.W)*sz.H), render.Stride(sz.W), sz.W, sz.H)
-		dd.Paint(cv)
+		dd.Arrange(render.Rect{W: sz.W, H: sz.H})
+		dd.Paint(render.New(make([]byte, render.Stride(sz.W)*sz.H), render.Stride(sz.W), sz.W, sz.H))
 	})
 
 	t.Run("role is combo-box and the name is the selection", func(t *testing.T) {
-		dd := newDropdown(t, "Light", "Dark")
+		dd, _ := newDropdown(t, "Light", "Dark")
 		dd.SetSelected(1)
 		st := Describe(dd)
 		if st.Role != RoleComboBox || st.Role.String() != "combo-box" {
@@ -430,49 +421,6 @@ type fillSpy struct {
 }
 
 func (f *fillSpy) Paint(cv *render.Canvas) { cv.FillRect(f.rect, f.color) }
-
-// TestDropdownListPaintsAboveLaterSiblings pins the open list on the
-// frame's top layer: in a column, the rows after the dropdown paint
-// first and the list over them, the way a popover covers them. Painted
-// inline, the next row covered the list.
-func TestDropdownListPaintsAboveLaterSiblings(t *testing.T) {
-	c := pinAnimClock(t)
-	dd := newDropdown(t, "Light", "Dark", "System")
-	red := render.RGB(255, 0, 0)
-	next := &fillSpy{nat: Size{W: 200, H: 200}, color: red}
-	col := NewBox(Column, 0, 0)
-	col.Append(dd, false)
-	col.Append(next, false)
-	col.Measure(Constraints{Max: Size{W: 200, H: 400}})
-	col.Arrange(render.Rect{W: 200, H: 400})
-	dd.ClickAt(facePoint(dd))
-	c.drive()
-	col.Arrange(render.Rect{W: 200, H: 400})
-	list := dd.menu.Bounds()
-	if list.Intersect(next.rect).Empty() {
-		t.Fatalf("the list %v does not hang over the next row %v", list, next.rect)
-	}
-	paint := func(armed bool) render.Color {
-		data := make([]byte, render.Stride(200)*400)
-		cv := render.New(data, render.Stride(200), 200, 400)
-		if armed {
-			cv.BeginOverlays()
-		}
-		col.Paint(cv)
-		if armed {
-			cv.FlushOverlays()
-		}
-		x, y := list.X+list.W/2, max(list.Y, next.rect.Y)+list.H/3
-		return render.ColorFromBytes(data[y*render.Stride(200)+x*4:])
-	}
-	if got := paint(true); got == red {
-		t.Error("in a frame the next row painted over the open list")
-	}
-	// A subtree painted on its own keeps the in-place paint order.
-	if got := paint(false); got != red {
-		t.Errorf("unarmed, the list escaped the paint order (%v)", got)
-	}
-}
 
 // TestFocusRingIsCoveredByLaterSiblings pins the ring in paint order: a
 // card overlaid after the focused widget covers the ring where they
@@ -506,30 +454,10 @@ func TestFocusRingIsCoveredByLaterSiblings(t *testing.T) {
 	}
 }
 
-// The open list claims no mnemonics: no underlines, and Alt-letters
-// activate nothing (type-ahead is the dropdown's keyboard model).
-func TestDropdownListHasNoMnemonics(t *testing.T) {
-	d := NewDropdown(testFace(t), 13, []string{"None", "Fade", "Zoom"}, 0)
-	m := d.list()
-	for i, r := range m.mnemRunes {
-		if r >= 0 {
-			t.Errorf("row %d claims mnemonic rune %d", i, r)
-		}
-	}
-	if m.ActivateMnemonic('f') {
-		t.Error("an Alt-letter activated a dropdown row")
-	}
-	if NewMenu(testFace(t), 13, MenuItem{Label: "Fade"}).mnemRunes[0] < 0 {
-		t.Error("test premise: a plain menu auto-assigns its mnemonic")
-	}
-}
-
-// Rich rows: headers are captions (never selected, typed to, or
-// stepped onto) and icons ride the list rows and the face.
+// Rich rows: headers head the list's groups (never selected, typed to,
+// or stepped onto) and icons ride the list rows and the face.
 func TestDropdownRows(t *testing.T) {
-	built := 0
 	dot := func() *Icon {
-		built++
 		return NewSVGIcon([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4"/></svg>`), 8)
 	}
 	rows := []DropdownRow{
@@ -539,7 +467,7 @@ func TestDropdownRows(t *testing.T) {
 		{Label: "Greys", Header: true},
 		{Label: "Black"},
 	}
-	d := NewDropdownRows(testFace(t), 13, rows, 0)
+	d, host := hostDropdown(t, NewDropdownRows(testFace(t), 13, rows, 0))
 	if d.Selected() != 1 {
 		t.Fatalf("selected %d, want the first row after the header", d.Selected())
 	}
@@ -557,23 +485,31 @@ func TestDropdownRows(t *testing.T) {
 	if d.Selected() != 2 {
 		t.Errorf("type-ahead b = %d, want Blue", d.Selected())
 	}
+
 	d.Open()
-	d.InsertRune('g')
-	if d.menu.hovered == 3 {
-		t.Error("open type-ahead highlighted the Greys header")
+	list := openedList(t, d, host)
+	if got := shownLabels(list); len(got) != 3 || got[0] != "Red" || got[2] != "Black" {
+		t.Errorf("the list rows are %v, want the three choices", got)
 	}
-	d.Close()
-	m := d.list()
-	if m.selectable(0) || m.selectable(3) || !m.selectable(4) || m.items[0].Kind != ItemHeader {
-		t.Error("the list's headers are selectable")
+	if len(list.headings) != 2 || list.headings[0].Text() != "Colors" || list.headings[1].Text() != "Greys" {
+		t.Error("the headers do not head the list's groups")
 	}
-	if m.items[1].Icon == nil || m.items[4].Icon != nil {
+	if list.rows[0].item.Icon == nil || list.rows[2].item.Icon != nil {
 		t.Error("the list rows did not take their icons")
 	}
-	m.activate(0)
-	if d.Selected() != 2 {
-		t.Error("activating a header selected it")
+	if got := highlightedLabel(list); got != "Blue" {
+		t.Errorf("the list opened on %q, want the selection", got)
 	}
+	list.InsertRune('g')
+	if got := highlightedLabel(list); got != "Blue" {
+		t.Errorf("open type-ahead g moved to %q, want no match", got)
+	}
+	list.rows[2].ClickAt(Point{})
+	if d.Selected() != 4 || len(fired) != 2 || fired[1] != 4 {
+		t.Errorf("picking Black selected %d (fired %v), want its row 4", d.Selected(), fired)
+	}
+
+	d.SetSelected(1)
 	if ic := d.selectedIcon(); ic == nil || d.selectedIcon() != ic {
 		t.Error("the face has no stable icon for an icon row")
 	}
@@ -584,41 +520,42 @@ func TestDropdownRows(t *testing.T) {
 	if d.iconSlot() <= dropdownIconGap {
 		t.Errorf("icon slot %d, want the icon width plus the gap", d.iconSlot())
 	}
-	if only := NewDropdownRows(testFace(t), 13, []DropdownRow{{Label: "h", Header: true}}, 0); only.Selected() != -1 {
+	only, onlyHost := hostDropdown(t, NewDropdownRows(testFace(t), 13, []DropdownRow{{Label: "h", Header: true}}, 0))
+	if only.Selected() != -1 {
 		t.Errorf("all-header dropdown selected %d", only.Selected())
+	}
+	if only.Open(); only.Opened() || len(onlyHost.popovers) != 0 {
+		t.Error("an all-header dropdown opened a list with nothing to pick")
 	}
 }
 
 func TestDropdownSetItemsReplacesTheList(t *testing.T) {
-	c := pinAnimClock(t)
-	dd := newDropdown(t, "Default")
+	dd, host := newDropdown(t, "Default")
 	fired := 0
 	dd.OnSelect = func(int) { fired++ }
 	dd.ClickAt(facePoint(dd))
-	c.drive()
-	dd.Measure(Constraints{Max: Size{W: 400, H: 100}}) // settle the layout cache
+	dd.Measure(Constraints{Max: Size{W: 400, H: 100}})
 	dd.SetItems([]string{"Default", "Headset", "Built-in microphone, wide"}, 2)
-	if dd.Opened() {
+	if dd.Opened() || host.closed != 1 {
 		t.Error("replacing the items left the old list open")
 	}
 	if dd.Selected() != 2 || dd.Selection() != "Built-in microphone, wide" || fired != 0 {
 		t.Errorf("selected %d %q, OnSelect fired %d; want the new row, silently", dd.Selected(), dd.Selection(), fired)
 	}
-	if !LayoutPending(dd) || dd.Measure(Constraints{Max: Size{W: 400, H: 100}}).W <= newDropdown(t, "Default").Bounds().W {
+	narrow, _ := newDropdown(t, "Default")
+	if !LayoutPending(dd) || dd.Measure(Constraints{Max: Size{W: 400, H: 100}}).W <= narrow.Bounds().W {
 		t.Error("a wider item did not relayout and widen the face")
 	}
 	dd.Arrange(render.Rect{X: 10, Y: 20, W: 300, H: dd.Bounds().H})
 	dd.ClickAt(facePoint(dd))
-	c.drive()
-	if len(dd.menu.items) != 3 {
-		t.Errorf("the reopened list shows %d rows, want the 3 new ones", len(dd.menu.items))
+	list := openedList(t, dd, host)
+	if len(list.rows) != 3 {
+		t.Errorf("the reopened list shows %d rows, want the 3 new ones", len(list.rows))
 	}
-	dd.menu.ClickAt(rowPoint(dd, 1))
-	c.drive()
+	list.rows[1].ClickAt(Point{})
 	if dd.Selected() != 1 || fired != 1 {
 		t.Errorf("picking a new row: selected %d, fired %d", dd.Selected(), fired)
 	}
-	// Clamped like the constructor; empty is -1.
 	dd.SetItems([]string{"only"}, 5)
 	if dd.Selected() != 0 {
 		t.Errorf("out of range selected %d, want clamped to 0", dd.Selected())
@@ -650,5 +587,26 @@ func TestDropdownButtonAndArrowNodes(t *testing.T) {
 	}
 	if got := pickc(0, d.faceArrow.style(&d.faceArrow), style.PropColor, 0); got != render.RGB(0x0a, 0x0b, 0x0c) {
 		t.Errorf("arrow color %v, want the arrow rule", got)
+	}
+}
+
+// TestGoldenDropdown pins the face and its open list, the selection's
+// row checked and highlighted, in both palettes: the list is the
+// combobox's without the search row.
+func TestGoldenDropdown(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		th   *Theme
+	}{{"dark", DarkTheme()}, {"light", LightTheme()}} {
+		t.Run(tc.name, func(t *testing.T) {
+			SetTheme(tc.th)
+			defer SetTheme(nil)
+			dd := NewDropdown(goldenFace(t), 14, []string{"Apple", "Banana", "Blueberry", "Grapes"}, 1)
+			_, host := hostDropdown(t, dd)
+			dd.Open()
+			col := NewBox(Column, 12, 0)
+			col.Append(dd, false).Append(host.popovers[0], false)
+			NewGolden(t, col, "dropdown-"+tc.name, goldenTheme(tc.th), goldenFrame(220, 240))
+		})
 	}
 }

@@ -85,19 +85,35 @@ func ExampleMenu() {
 	// wrap: true
 }
 
+// popoverHost is a stand-in for the application's surface host: it
+// hands every popover's keys to the widget the popover focuses.
+type popoverHost struct{ focus widget.KeyActionHandler }
+
+func (h *popoverHost) OpenMenu(widget.Boundser, render.Font, float64, []widget.MenuItem, func()) {}
+
+func (h *popoverHost) OpenPopover(_ widget.Boundser, _ widget.Widget, opts widget.PopoverOptions) func() {
+	h.focus = opts.Focus.(widget.KeyActionHandler)
+	return func() {}
+}
+
+func (h *popoverHost) Focus(widget.Widget) {}
+
 func ExampleDropdown() {
 	// A dropdown is a closed face showing the selection; Enter, Space,
-	// or Down opens the themed item list beneath it while focused,
-	// arrows move the highlight, Enter picks, Esc cancels without
-	// changing anything. Here the list opens from the keyboard, Down
-	// walks to the second row, and Enter commits it exactly once.
+	// or Down opens the item list in a popover beneath it while
+	// focused, through the surface host of its tree. The list holds the
+	// focus: arrows move the highlight and Enter picks. Here the list
+	// opens from the keyboard, Down walks to the second row, and Enter
+	// commits it exactly once.
 	dd := widget.NewDropdown(face(), 13, []string{"Light", "Dark", "System"}, 0)
+	host := &popoverHost{}
+	widget.SetSurfaceHost(dd, host)
 
 	var picked string
 	dd.OnSelect = func(int) { picked = dd.Selection() }
 	dd.KeyAction(widget.KeyEnter, 0)
-	dd.KeyAction(widget.KeyDown, 0)
-	dd.KeyAction(widget.KeyEnter, 0)
+	host.focus.KeyAction(widget.KeyDown, 0)
+	host.focus.KeyAction(widget.KeyEnter, 0)
 	fmt.Println("picked:", picked)
 
 	// DropdownOf carries typed values behind the labels, so handlers

@@ -104,10 +104,7 @@ func (c *Combobox[T]) sync() {
 		c.text.RemoveClass("placeholder")
 	}
 	for i, check := range c.checks {
-		check.Clear()
-		if slices.Contains(c.selected, c.options[i].Value) {
-			check.Append(NewSymbol(SymbolCheck, 16), true)
-		}
+		setCommandCheck(check, slices.Contains(c.selected, c.options[i].Value))
 	}
 }
 
@@ -116,15 +113,14 @@ func (c *Combobox[T]) open() {
 	c.checks = c.checks[:0]
 	items := make([]CommandItem, len(c.options))
 	for i, o := range c.options {
-		check := NewBox(Column, 0, 0)
-		check.SetSizeRequest(16, 16)
+		check := newCommandCheck(false)
 		c.checks = append(c.checks, check)
 		items[i] = CommandItem{Label: o.Label, Trailing: check, OnSelect: func() { c.pick(o.Value) }}
 	}
 	list := NewCommand(c.face, "Search...", CommandGroup{Items: items})
 	list.SetSizeRequest(max(comboboxWidth, c.trigger.Bounds().W), 0)
 	c.sync()
-	c.close = OpenPopover(c, c.trigger, list, PopoverOptions{Focus: list.Entry()})
+	c.close = OpenPopover(c, c.trigger, list, PopoverOptions{Focus: list.FocusTarget()})
 }
 
 // pick applies the user's choice of v.

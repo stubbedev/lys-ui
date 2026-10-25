@@ -1419,6 +1419,7 @@ func TestHeadlessSixthPassTypedListSurfaceAndOpenButton(t *testing.T) {
 
 	// The recents dropdown half of the open button takes the press.
 	rx, ry := at("openrecents")
+	beforeRecents := w.Mark()
 	var dropdownErr error
 	for range 3 {
 		if err := in.ClickAt(rx, ry, BTNLeft); err != nil {
@@ -1431,6 +1432,18 @@ func TestHeadlessSixthPassTypedListSurfaceAndOpenButton(t *testing.T) {
 	}
 	if dropdownErr != nil {
 		t.Errorf("the recents dropdown never took its press: %v", dropdownErr)
+	}
+	// With recent files to list, the press opens them in a popover
+	// (#280), which a click elsewhere would only dismiss: Escape closes
+	// it before the button half is clicked. Without any, the dropdown
+	// stays shut.
+	if w.WaitSince(beforeRecents, "input", "popup grab", attemptTimeout) == nil {
+		if err := in.Tap(KeyEscape); err != nil {
+			t.Fatalf("escape the recents list: %v", err)
+		}
+		if err := w.WaitSince(beforeRecents, "input", "destroyed", traceTimeout); err != nil {
+			t.Errorf("Escape never closed the recents list: %v", err)
+		}
 	}
 
 	// The button half opens the file picker: a second toplevel maps, so
