@@ -98,6 +98,12 @@ func (a *Application) reconnectAfter(err error) bool {
 		return false
 	}
 	a.adoptSession(sess)
+	if gerr := a.reagreeRenderer(); gerr != nil {
+		debug.Log("wire", "app: reconnect failed: %v", gerr)
+		a.dropCarriedToasts()
+		sess.Close()
+		return false
+	}
 	if rerr := a.rebuildWindows(plan); rerr != nil {
 		debug.Log("wire", "app: rebuild failed: %v", rerr)
 		a.dropCarriedToasts()

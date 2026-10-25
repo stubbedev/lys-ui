@@ -94,18 +94,52 @@ func (a *Application) openRenderer() (*gpuRenderer, error) {
 	if err != nil {
 		return nil, err
 	}
-	mods, err := dev.Modifiers(dmabuf.FormatARGB8888)
+	mods, err := a.agreeModifiers(dev)
 	if err != nil {
 		dev.Close()
+		return nil, err
+	}
+	return &gpuRenderer{dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render}, nil
+}
+
+// agreeModifiers is the ARGB8888 layouts dev renders and the session's
+// compositor imports.
+func (a *Application) agreeModifiers(dev *gpu.Device) ([]uint64, error) {
+	if a.sess == nil || a.sess.Dmabuf() == nil {
+		return nil, errors.New("the compositor has no linux-dmabuf")
+	}
+	mods, err := dev.Modifiers(dmabuf.FormatARGB8888)
+	if err != nil {
 		return nil, err
 	}
 	imports := a.sess.DmabufModifiers(dmabuf.FormatARGB8888)
 	mods = slices.DeleteFunc(mods, func(m uint64) bool { return !slices.Contains(imports, m) })
 	if len(mods) == 0 {
-		dev.Close()
 		return nil, fmt.Errorf("%s renders ARGB8888 in no modifier the compositor imports", dev.Name())
 	}
-	return &gpuRenderer{dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render}, nil
+	return mods, nil
+}
+
+// reagreeRenderer agrees the renderer's layouts again with a new
+// session's compositor, after a reconnect: a compositor that imports
+// none the device renders sends the app to the CPU, logged, or, under
+// LYS_UI_RENDERER=gpu, fails the reconnect.
+func (a *Application) reagreeRenderer() error {
+	r := a.gpu
+	if r == nil {
+		return nil
+	}
+	mods, err := a.agreeModifiers(r.dev)
+	if err == nil {
+		r.modifiers = mods
+		return nil
+	}
+	if r.required {
+		return fmt.Errorf("app: %s=gpu after reconnecting: %w", rendererEnv, err)
+	}
+	logutil.L().Warn("app: the new compositor takes no GPU frames; drawing on the CPU", "device", r.name, "err", err)
+	a.closeRenderer()
+	return nil
 }
 
 // newBuffer is a dmabuf buffer of r for a bufW x bufH window.

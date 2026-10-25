@@ -108,3 +108,39 @@ func TestGPUFrameFailureFallsBackToCPU(t *testing.T) {
 		}
 	}
 }
+
+// After a reconnect the renderer agrees its layouts with the new
+// compositor: one without linux-dmabuf sends the app to the CPU, or,
+// under LYS_UI_RENDERER=gpu, fails the reconnect.
+func TestReconnectReagreesRenderer(t *testing.T) {
+	icd, _, err := gputest.Driver()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if icd != "" {
+		t.Setenv("VK_DRIVER_FILES", icd)
+	}
+	for _, required := range []bool{false, true} {
+		dev, err := gpu.Open()
+		if err != nil {
+			if gputest.Enabled() {
+				t.Fatal(err)
+			}
+			t.Skipf("no GPU: %v", err)
+		}
+		a := &Application{sess: &wlsession.Session{}, gpu: &gpuRenderer{dev: dev, name: dev.Name(), required: required}, gpuTried: true}
+		err = a.reagreeRenderer()
+		switch {
+		case required && (err == nil || a.gpu == nil):
+			t.Errorf("required: reagree = %v, renderer %v; want an error and the renderer kept", err, a.gpu)
+		case !required && (err != nil || a.gpu != nil):
+			t.Errorf("auto: reagree = %v, renderer %v; want the CPU", err, a.gpu)
+		}
+		if r, rerr := a.renderer(); !required && (r != nil || rerr != nil) {
+			t.Errorf("auto: renderer after reagree = %v, %v; want the CPU", r, rerr)
+		}
+		if a.gpu != nil {
+			a.gpu.dev.Close()
+		}
+	}
+}
