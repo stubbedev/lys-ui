@@ -114,6 +114,10 @@ func namedColors(t *Theme) [][2]string {
 	return out
 }
 
+// cardSurface is the card's box, on the .card class and the Card
+// widget's card element alike.
+const cardSurface = "background-color: @card_bg_color; color: @card_fg_color; border: 1px solid @borders; border-radius: {r+6}; box-shadow: 0px 1px 2px alpha(black, 0.05);"
+
 // classRules styles the css package's classes in terms of the named
 // colors; Activatable and Numeric are behavior and face hints with no
 // paint of their own.
@@ -140,7 +144,9 @@ var classRules = [][2]string{
 	{css.LiquidGlass, "background-color: alpha(@card_bg_color, 0.18); backdrop-filter: -lys-refract(18px 10px) blur(2px) saturate(1.8); border: 1px solid alpha(white, 0.3); border-radius: {r+16}; box-shadow: inset 0px 1px 0px alpha(white, 0.5), inset 0px -1px 0px alpha(black, 0.12), 0px 10px 30px alpha(black, 0.22);"},
 	{css.Frosted, "background-color: alpha(mix(@card_bg_color, white, 0.08), 0.62); background-image: -lys-grain(0.05); backdrop-filter: blur(24px) saturate(1.4); border: 1px solid alpha(@window_fg_color, 0.12); border-radius: {r+4}; box-shadow: 0px 8px 24px alpha(black, 0.18);"},
 	{css.Glass + "." + css.BlurUnavailable + ", ." + css.Frosted + "." + css.BlurUnavailable, "background-color: @card_bg_color;"},
-	{css.Card, "background-color: @card_bg_color; color: @card_fg_color; border: 1px solid @borders; border-radius: {r+6}; box-shadow: 0px 1px 2px alpha(black, 0.05);"},
+	{css.Card, cardSurface},
+	{"card-title", "font-weight: 600;"},
+	{"card-description", "color: @muted_fg_color;"},
 	{css.BoxedList, "background-color: @card_bg_color; border-radius: {r+4};"},
 	{css.OSD, "background-color: #000000b3; color: #ffffff;"},
 	{css.View, "background-color: @view_bg_color; color: @view_fg_color;"},
@@ -366,13 +372,14 @@ var darkRules = [][2]string{
 }
 
 // partRules style widget parts: the level bar's trough and offset
-// classes, the progress ring's status fills, and the media controls'
-// volume slider length.
+// classes, the Card's surface, the progress ring's status fills, and
+// the media controls' volume slider length.
 var partRules = [][2]string{
 	{"levelbar trough", "background-color: @view_bg_color;"},
 	{"levelbar block." + LevelBarOffsetLow, "background-color: @warning_bg_color;"},
 	{"levelbar block." + LevelBarOffsetHigh, "background-color: @accent_bg_color;"},
 	{"levelbar block." + LevelBarOffsetFull, "background-color: @success_bg_color;"},
+	{"card", cardSurface},
 	{"progressring." + css.Success + " progress", "background-color: @success_bg_color;"},
 	{"progressring." + css.Warning + " progress", "background-color: @warning_bg_color;"},
 	{"progressring." + css.Error + " progress", "background-color: @error_bg_color;"},

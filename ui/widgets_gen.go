@@ -1392,6 +1392,80 @@ func (b *CalendarBuilder) OnRangeSelect(fn func(from widget.Date, to widget.Date
 	return b
 }
 
+// CardBuilder builds a widget.Card.
+type CardBuilder struct {
+	base[*widget.Card, *CardBuilder]
+	face render.Font
+	size float64
+}
+
+// Card builds a widget.Card with widget.NewCard.
+func Card(title string) *CardBuilder {
+	b := &CardBuilder{}
+	b.init(b, func(s *Scope) *widget.Card { return widget.NewCard(s.face(b.face), title) })
+	return b
+}
+
+// Font overrides the environment's typeface and size for this widget; zero values keep the environment's.
+func (b *CardBuilder) Font(face render.Font, sizePx float64) *CardBuilder {
+	b.face, b.size = face, sizePx
+	return b
+}
+
+// AppendFooter calls (*widget.Card).AppendFooter.
+func (b *CardBuilder) AppendFooter(child Node) *CardBuilder {
+	b.do(func(s *Scope, w *widget.Card) { w.AppendFooter(build(s, child)) })
+	return b
+}
+
+// Action calls (*widget.Card).SetAction.
+func (b *CardBuilder) Action(child Node) *CardBuilder {
+	b.do(func(s *Scope, w *widget.Card) { w.SetAction(build(s, child)) })
+	return b
+}
+
+// Content calls (*widget.Card).SetContent.
+func (b *CardBuilder) Content(child Node) *CardBuilder {
+	b.do(func(s *Scope, w *widget.Card) { w.SetContent(build(s, child)) })
+	return b
+}
+
+// Description calls (*widget.Card).SetDescription.
+func (b *CardBuilder) Description(text string) *CardBuilder {
+	b.do(func(s *Scope, w *widget.Card) { w.SetDescription(text) })
+	return b
+}
+
+// WatchDescription re-applies SetDescription with get's value after every update.
+func (b *CardBuilder) WatchDescription(get func() string) *CardBuilder {
+	b.watch(func(w *widget.Card) { w.SetDescription(get()) })
+	return b
+}
+
+// FooterAlign calls (*widget.Card).SetFooterAlign.
+func (b *CardBuilder) FooterAlign(a widget.Align) *CardBuilder {
+	b.do(func(s *Scope, w *widget.Card) { w.SetFooterAlign(a) })
+	return b
+}
+
+// WatchFooterAlign re-applies SetFooterAlign with get's value after every update.
+func (b *CardBuilder) WatchFooterAlign(get func() widget.Align) *CardBuilder {
+	b.watch(func(w *widget.Card) { w.SetFooterAlign(get()) })
+	return b
+}
+
+// Title calls (*widget.Card).SetTitle.
+func (b *CardBuilder) Title(text string) *CardBuilder {
+	b.do(func(s *Scope, w *widget.Card) { w.SetTitle(text) })
+	return b
+}
+
+// WatchTitle re-applies SetTitle with get's value after every update.
+func (b *CardBuilder) WatchTitle(get func() string) *CardBuilder {
+	b.watch(func(w *widget.Card) { w.SetTitle(get()) })
+	return b
+}
+
 // CarouselBuilder builds a widget.Carousel.
 type CarouselBuilder struct {
 	base[*widget.Carousel, *CarouselBuilder]

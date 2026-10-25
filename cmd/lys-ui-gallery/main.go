@@ -472,14 +472,11 @@ func (g *gallery) form(send func(galleryMsg)) ui.Node {
 // tabPage is a Tabs demo page: a card 16px under the tab strip with
 // a heading, its fields and the action that saves them.
 func tabPage(title, description, action string, fields ...ui.Node) ui.Node {
-	return ui.Column(ui.Column(
-		ui.Column(
-			ui.Label(title).Classes(css.Heading),
-			ui.Label(description).Classes(css.Muted).Wrap(true),
-		).Spacing(6),
-		ui.Column(fields...).Spacing(12),
-		ui.Aligned(ui.Button(ui.Label(action), 0, 0).Classes(css.SuggestedAction), widget.AlignStart),
-	).Spacing(24).Padding(render.UniformInsets(24)).Classes(css.Card)).Padding(render.Insets{Top: 16})
+	return ui.Column(ui.Card(title).
+		Description(description).
+		Content(ui.Column(fields...).Spacing(12)).
+		AppendFooter(ui.Button(ui.Label(action), 0, 0).Classes(css.SuggestedAction)).
+		FooterAlign(widget.AlignStart)).Padding(render.Insets{Top: 16})
 }
 
 // pane is a Resizable demo pane: its name centered in it.
@@ -567,14 +564,12 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			ui.Breadcrumb("Home", "Components", "Breadcrumb"),
 			ui.Breadcrumb("Home", "Docs", "Components", "Data", "Breadcrumb").MaxItems(3)),
 		section("Calendar", ui.Aligned(ui.Column(ui.Calendar(widget.Today())).Padding(render.UniformInsets(8)).Classes(css.Card), widget.AlignStart)),
-		section("Card", ui.Aligned(ui.Column(
-			ui.Column(
-				ui.Label("Create project").Classes(css.Heading),
-				ui.Label("Deploy your new project in one click.").Classes(css.Muted),
-			).Spacing(6),
-			ui.Field("Name", ui.Entry().Placeholder("Name of your project")),
-			ui.Row(ui.Expand(ui.Spacer(0, 0)), ui.Button(ui.Label("Cancel"), 0, 0).Classes(css.Outline), ui.Button(ui.Label("Deploy"), 0, 0).Classes(css.SuggestedAction)).Spacing(8),
-		).Spacing(24).Padding(render.UniformInsets(24)).Classes(css.Card, demoSmall), widget.AlignStart)),
+		section("Card", ui.Aligned(ui.Card("Create project").
+			Description("Deploy your new project in one click.").
+			Content(ui.Field("Name", ui.Entry().Placeholder("Name of your project"))).
+			AppendFooter(ui.Button(ui.Label("Cancel"), 0, 0).Classes(css.Outline)).
+			AppendFooter(ui.Button(ui.Label("Deploy"), 0, 0).Classes(css.SuggestedAction)).
+			Classes(demoSmall), widget.AlignStart)),
 		section("Carousel", g.carousel()),
 		section("Chart", ui.Row(
 			ui.Expand(ui.Chart(widget.ChartBar, []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun"},
