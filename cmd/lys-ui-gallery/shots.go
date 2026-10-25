@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/png"
 	"io"
 	"os"
@@ -56,10 +58,15 @@ const (
 )
 
 // shotPad is the margin around a demo in its shot window, and
-// shotMaxWidth the widest a shot window measures its demo at.
+// shotMaxWidth the widest a shot window measures its demo at. A shot
+// frames its content shotMargin from each edge of a stage at least
+// shotStageW by shotStageH, all logical pixels.
 const (
 	shotPad      = 24
 	shotMaxWidth = 720
+	shotMargin   = 32
+	shotStageW   = 560
+	shotStageH   = 200
 )
 
 // palettes are the shots' themes, their file suffixes, and where the
@@ -257,8 +264,13 @@ func (s *shooter) one(i int, theme func() *widget.Theme, suffix string) (size sh
 	if err := s.park(); err != nil {
 		return shotSize{}, err
 	}
-	shot := trim(img)
+	var stage color.RGBA
+	s.on(func() {
+		bg := widget.Current().Bg.Straight()
+		stage = color.RGBA{R: bg[0], G: bg[1], B: bg[2], A: 255}
+	})
 	sc := int(s.out.Scale)
+	shot := frame(img, stage, sc)
 	size = shotSize{Width: shot.Bounds().Dx() / sc, Height: shot.Bounds().Dy() / sc}
 	return size, writeAtomic(filepath.Join(s.dir, slug(d.title)+suffix+".png"), func(w io.Writer) error { return png.Encode(w, shot) })
 }
@@ -386,6 +398,39 @@ func trim(img *image.RGBA) *image.RGBA {
 		panic("shots: an RGBA image cropped to another type")
 	}
 	return cropped
+}
+
+// frame stages a capture: the content - what is neither the output's
+// background nor the stage's, the window's own fill - centered on a
+// stage of the theme's background, shotMargin from its edges and at
+// least shotStageW by shotStageH, the output's bare pixels between a
+// window and its popups filled with the stage too. scale is the
+// output's, logical to device pixels.
+func frame(img *image.RGBA, stage color.RGBA, scale int) *image.RGBA {
+	b := img.Bounds()
+	bare := img.RGBAAt(b.Max.X-1, b.Max.Y-1)
+	content := image.Rectangle{}
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if c := img.RGBAAt(x, y); c != bare && c != stage {
+				content = content.Union(image.Rect(x, y, x+1, y+1))
+			}
+		}
+	}
+	m := shotMargin * scale
+	w := max(content.Dx()+2*m, shotStageW*scale)
+	h := max(content.Dy()+2*m, shotStageH*scale)
+	out := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.Draw(out, out.Bounds(), &image.Uniform{C: stage}, image.Point{}, draw.Src)
+	at := image.Pt((w-content.Dx())/2, (h-content.Dy())/2)
+	for y := content.Min.Y; y < content.Max.Y; y++ {
+		for x := content.Min.X; x < content.Max.X; x++ {
+			if c := img.RGBAAt(x, y); c != bare {
+				out.SetRGBA(at.X+x-content.Min.X, at.Y+y-content.Min.Y, c)
+			}
+		}
+	}
+	return out
 }
 
 // writeAtomic writes path through write, atomically: a temporary file
