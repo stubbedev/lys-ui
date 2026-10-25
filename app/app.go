@@ -855,6 +855,10 @@ func (r *keyRepeater) release(code uint32) {
 	}
 }
 
+// stop ends the repeat of whatever key is held: keyboard focus moved,
+// and the key's release goes wherever it went.
+func (r *keyRepeater) stop() { r.held = nil }
+
 // tick fires the next repeat when one is due and reports whether a key
 // press should be delivered.
 func (r *keyRepeater) tick() (code uint32, mods wlsession.Mods, ok bool) {

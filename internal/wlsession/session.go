@@ -264,6 +264,12 @@ type Session struct {
 	OnKey func(keycode uint32, mods Mods)
 	// OnKeyUp fires on key releases with the evdev keycode.
 	OnKeyUp func(keycode uint32)
+	// OnKeyboardFocus fires when keyboard focus moves: an enter, a
+	// leave, the keyboard going away, or the focused surface being
+	// unregistered (a client-side destroy, which the compositor never
+	// answers with a leave). A key held across the move releases
+	// wherever focus went, so no release follows here.
+	OnKeyboardFocus func()
 	// OnIME fires when the input method applies a batch of changes (a
 	// done event) — commit, preedit, and surrounding-text deletion in
 	// protocol order. Nil without the text-input protocol, or when no
@@ -841,8 +847,22 @@ func (s *Session) keyboardLost() {
 		}
 	}
 	s.mods = 0
+	s.loseKeyboardFocus()
+}
+
+// loseKeyboardFocus forgets the focused surface: a half-typed compose
+// sequence must not commit into the next surface's widgets, and the
+// keyboard hook hears the move.
+func (s *Session) loseKeyboardFocus() {
 	s.keyboardFocus = nil
 	s.comp.Cancel()
+	s.keyboardFocusMoved()
+}
+
+func (s *Session) keyboardFocusMoved() {
+	if s.OnKeyboardFocus != nil {
+		s.OnKeyboardFocus()
+	}
 }
 
 // SetSurfaceInput registers h as the receiver of pointer events
@@ -854,6 +874,9 @@ func (s *Session) SetSurfaceInput(surf *wl.Surface, h SurfacePointerHandler) {
 		s.releaseConstraint(surf)
 		s.releaseSurfaceHints(surf)
 		delete(s.surfaceHandlers, surf)
+		if surf == s.keyboardFocus {
+			s.loseKeyboardFocus()
+		}
 		return
 	}
 	s.surfaceHandlers[surf] = h
@@ -1148,15 +1171,11 @@ func (s *Session) HandleKeyboardKeymap(ev wl.KeyboardKeymapEvent) {
 func (s *Session) HandleKeyboardEnter(ev wl.KeyboardEnterEvent) {
 	debug.Log("input", "keyboard enter")
 	s.keyboardFocus = ev.Surface
+	s.keyboardFocusMoved()
 }
 
 // HandleKeyboardLeave implements wl.KeyboardLeaveHandler.
-func (s *Session) HandleKeyboardLeave(wl.KeyboardLeaveEvent) {
-	s.keyboardFocus = nil
-	// A sequence half-typed when focus moves must not commit into the
-	// next surface's widgets.
-	s.comp.Cancel()
-}
+func (s *Session) HandleKeyboardLeave(wl.KeyboardLeaveEvent) { s.loseKeyboardFocus() }
 
 // KeyboardFocus returns the surface currently holding keyboard input,
 // or nil when the compositor gives the seat no keyboard focus.

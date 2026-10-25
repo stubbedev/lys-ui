@@ -769,6 +769,7 @@ func (a *Application) settleWire() {
 func (a *Application) wireSession() {
 	a.sess.OnKey = a.routeKey
 	a.sess.OnKeyUp = a.rep.release
+	a.sess.OnKeyboardFocus = a.rep.stop
 	a.sess.OnIME = a.imeEvent
 	a.sess.OnIMEFocus = a.ime.reset
 }
