@@ -387,16 +387,34 @@ func (m *fontRowModel) Row(i int) widget.Widget {
 	return widget.NewLabel(m.face, 13, sysfont.FamilyDisplay(m.fams[i]), 0)
 }
 
+// FontChooserConfig declares a font chooser dialog.
+type FontChooserConfig struct {
+	// Family and Size preselect the family and size; a zero Size is
+	// 13px.
+	Family string
+	Size   float64
+	// FamilyOnly drops the size row, for a setting that names a family
+	// alone; OnFont then reports Size unchanged.
+	FamilyOnly bool
+	// MonospaceOnly lists only fixed-width families, the filter locked
+	// on.
+	MonospaceOnly bool
+	// OnFont runs on confirmation with the family as the font lists it
+	// ("JetBrains Mono", the name config files and fontconfig show,
+	// which sysfont.Best accepts) and the size in pixels.
+	OnFont func(family string, size float64)
+}
+
 // FontChooserDialog opens a modal font picker (#74): a searchable,
 // virtualized family list (each row lazily rendered in its own
 // family's face), a size entry with a synced slider, a monospace
 // filter toggle, and a live preview line shaped through the same
-// fallback chain production text uses. Confirming responds "ok" and
-// fires onFont with the family name sysfont.Best accepts and the
-// chosen pixel size; Esc responds "cancel". The monospace toggle
-// classifies families by their fixed-width flag on first use (cached;
-// face parses ride the shared face cache).
-func (a *Application) FontChooserDialog(parent *Window, initialFamily string, initialSize float64, onFont func(family string, size float64)) (*Dialog, error) {
+// fallback chain production text uses; cfg drops the size row or locks
+// the list to monospace families. Confirming responds "ok" and fires
+// OnFont; Esc responds "cancel". The monospace filter classifies
+// families by their fixed-width flag on first use (cached; face parses
+// ride the shared face cache).
+func (a *Application) FontChooserDialog(parent *Window, cfg FontChooserConfig) (*Dialog, error) {
 	face := a.resolveFace(nil)
 	if face == nil {
 		return nil, ErrNoDialogFace
@@ -405,6 +423,7 @@ func (a *Application) FontChooserDialog(parent *Window, initialFamily string, in
 	if err != nil {
 		return nil, fmt.Errorf("app: font chooser: %w", err)
 	}
+	initialSize := cfg.Size
 	if initialSize <= 0 {
 		initialSize = 13
 	}
@@ -423,15 +442,16 @@ func (a *Application) FontChooserDialog(parent *Window, initialFamily string, in
 		return v
 	}
 
-	model := &fontRowModel{face: face, fams: slices.Clone(families)}
+	model := &fontRowModel{face: face, fams: fontFilter(families, "", cfg.MonospaceOnly, isMono)}
 	list := widget.NewList(model, 26)
-	if idx := slices.Index(model.fams, strings.ToLower(strings.TrimSpace(initialFamily))); idx >= 0 {
+	if idx := slices.Index(model.fams, strings.ToLower(strings.TrimSpace(cfg.Family))); idx >= 0 {
 		list.Select(idx)
 	}
 
 	search := widget.NewEntry(face, 13, th.Text)
-	search.SetPlaceholder("search families")
-	mono := widget.NewCheckButton(false)
+	search.SetPlaceholder(widget.Tr("Search families"))
+	mono := widget.NewCheckButton(cfg.MonospaceOnly)
+	mono.SetEnabled(!cfg.MonospaceOnly)
 	sizeEntry := widget.NewEntry(face, 13, th.Text)
 	sizeEntry.SetText(strconv.FormatFloat(initialSize, 'f', -1, 64))
 	size := widget.NewSlider(6, 72, 1, initialSize)
@@ -474,7 +494,7 @@ func (a *Application) FontChooserDialog(parent *Window, initialFamily string, in
 	controls.Append(search, true)
 	controls.Append(mono, false)
 	sizeRow := widget.NewBox(widget.Row, 8, 0)
-	sizeLabel := widget.NewLabel(face, 12, "size", 0)
+	sizeLabel := widget.NewLabel(face, 12, widget.Tr("Size"), 0)
 	sizeLabel.AddClass(css.DimLabel)
 	sizeRow.Append(sizeLabel, false)
 	sizeRow.Append(size, true)
@@ -482,7 +502,9 @@ func (a *Application) FontChooserDialog(parent *Window, initialFamily string, in
 	root := widget.NewBox(widget.Column, 8, 8)
 	root.Append(controls, false)
 	root.Append(list, true)
-	root.Append(sizeRow, false)
+	if !cfg.FamilyOnly {
+		root.Append(sizeRow, false)
+	}
 	root.Append(preview, false)
 	refreshPreview()
 
@@ -499,14 +521,14 @@ func (a *Application) FontChooserDialog(parent *Window, initialFamily string, in
 		DefaultResponse: "ok",
 		CancelResponse:  "cancel",
 		OnResponse: func(resp string) {
-			if resp != "ok" || onFont == nil {
+			if resp != "ok" || cfg.OnFont == nil {
 				return
 			}
 			fam := ""
 			if i := list.Selected(); i >= 0 && i < len(model.fams) {
-				fam = model.fams[i]
+				fam = sysfont.FamilyDisplay(model.fams[i])
 			}
-			onFont(fam, chosenSize())
+			cfg.OnFont(fam, chosenSize())
 		},
 	})
 }

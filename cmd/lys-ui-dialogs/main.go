@@ -77,9 +77,9 @@ func run() error {
 		return err
 	}))
 	dialogs.Append(button("font", func() error {
-		_, err := application.FontChooserDialog(w, "sans-serif", 14, func(family string, size float64) {
+		_, err := application.FontChooserDialog(w, app.FontChooserConfig{Family: "sans-serif", Size: 14, OnFont: func(family string, size float64) {
 			say("font chosen %s %gpx", family, size)
-		})
+		}})
 		return err
 	}))
 	dialogs.Append(button("calendar", func() error {

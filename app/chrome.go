@@ -131,9 +131,9 @@ func (a *Application) AttachColorButton(parent *Window, b *widget.ColorButton) {
 // click and apply the pick.
 func (a *Application) AttachFontButton(parent *Window, b *widget.FontButton) {
 	b.OnOpen = func(current widget.FontChoice) {
-		_, _ = a.FontChooserDialog(parent, current.Family, current.Size, func(family string, size float64) {
+		_, _ = a.FontChooserDialog(parent, FontChooserConfig{Family: current.Family, Size: current.Size, OnFont: func(family string, size float64) {
 			b.Choose(widget.FontChoice{Family: family, Size: size})
-		})
+		}})
 	}
 }
 
