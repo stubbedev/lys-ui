@@ -17,6 +17,9 @@ require (
 	golang.org/x/text v0.42.0
 )
 
-require github.com/yalue/native_endian v1.0.2 // indirect
+require (
+	github.com/go-webgpu/goffi v0.6.3 // indirect
+	github.com/yalue/native_endian v1.0.2 // indirect
+)
 
 tool github.com/neurlang/wayland/cmd/wayland-scanner
