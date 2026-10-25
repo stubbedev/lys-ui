@@ -155,7 +155,11 @@ type Image struct {
 	// failure, loaded/loading where the load stands, and gen bumps on
 	// every source change so a result landing after SetImage is
 	// dropped instead of overwriting the new source.
-	img     image.Image
+	img image.Image
+	// still marks an img the widget decoded itself (a load, bytes, a
+	// paste): its pixels never change, so a GPU keeps its texture. An
+	// app's raster may change; it draws from its pixels each time.
+	still   bool
 	loadErr error
 	loaded  bool
 	loading bool
@@ -226,7 +230,7 @@ func (im *Image) setSource(src imageSource) {
 	}
 	im.src = src
 	im.gen++
-	im.img, im.loadErr = nil, nil
+	im.img, im.loadErr, im.still = nil, nil, false
 	im.loaded, im.loading = false, false
 	switch src.kind {
 	case imageRaster:
@@ -235,7 +239,7 @@ func (im *Image) setSource(src imageSource) {
 		img, err := imgcache.Default().Source(src.key, func() (image.Image, error) {
 			return decodeImageData(src.data, src.name)
 		})
-		im.img, im.loadErr, im.loaded = img, err, true
+		im.img, im.loadErr, im.loaded, im.still = img, err, true, true
 	}
 	im.restartPlayback()
 	im.InvalidateLayout()
@@ -306,6 +310,9 @@ func (im *Image) Paint(cv *render.Canvas) {
 	}
 	box := cv.MapRect(im.bounds)
 	pic, frame := im.currentFrame()
+	if rgba, ok := pic.(*image.RGBA); ok && im.still {
+		pic = render.StillImage{RGBA: rgba}
+	}
 	b := pic.Bounds()
 	fit, pos := im.placement(cv, box)
 	srcRect, dst := render.PlaceImage(b.Dx(), b.Dy(), box.W, box.H, fit, pos)
@@ -336,7 +343,7 @@ func (im *Image) Paint(cv *render.Canvas) {
 	}, func() *image.RGBA {
 		return render.Resample(pic, srcRect, dw, dh)
 	})
-	cv.DrawImageDevice(raster, dx, dy)
+	cv.DrawImageDevice(render.StillImage{RGBA: raster}, dx, dy)
 }
 
 // placement is the scale policy and position the image draws by in
@@ -399,7 +406,7 @@ func (im *Image) applyPaste(gen uint64, img image.Image, err error) {
 	if gen != im.gen {
 		return
 	}
-	im.img, im.loadErr, im.loaded, im.loading = img, err, true, false
+	im.img, im.loadErr, im.loaded, im.loading, im.still = img, err, true, false, true
 	im.restartPlayback()
 	if err == nil && im.OnPasteImage != nil {
 		im.OnPasteImage(img)
@@ -447,7 +454,7 @@ func (im *Image) applyLoad(gen uint64, key string, img image.Image, err error) {
 	im.loading = false
 	im.loaded = true
 	im.src.key = key
-	im.img, im.loadErr = img, err
+	im.img, im.loadErr, im.still = img, err, true
 	im.restartPlayback()
 	// The natural size may have appeared or changed: drop the measure
 	// caches up the tree and owe the frame a repaint.
