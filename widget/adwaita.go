@@ -366,12 +366,16 @@ var darkRules = [][2]string{
 }
 
 // partRules style widget parts: the level bar's trough and offset
-// classes, and the media controls' volume slider length.
+// classes, the progress ring's status fills, and the media controls'
+// volume slider length.
 var partRules = [][2]string{
 	{"levelbar trough", "background-color: @view_bg_color;"},
 	{"levelbar block." + LevelBarOffsetLow, "background-color: @warning_bg_color;"},
 	{"levelbar block." + LevelBarOffsetHigh, "background-color: @accent_bg_color;"},
 	{"levelbar block." + LevelBarOffsetFull, "background-color: @success_bg_color;"},
+	{"progressring." + css.Success + " progress", "background-color: @success_bg_color;"},
+	{"progressring." + css.Warning + " progress", "background-color: @warning_bg_color;"},
+	{"progressring." + css.Error + " progress", "background-color: @error_bg_color;"},
 	{"controls .volume trough", "min-width: 80px;"},
 }
 

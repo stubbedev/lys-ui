@@ -215,6 +215,8 @@ func Describe(w Widget) A11yState {
 		st.Min, st.Max, st.Value = 0, 1, v.Value()
 	case *LevelBar:
 		st.Min, st.Max, st.Value = 0, 1, v.Value()
+	case *ProgressRing:
+		st.Min, st.Max, st.Value = 0, 1, v.Value()
 	case *Scroll:
 		st.Role = RoleScrollArea
 	case *List:

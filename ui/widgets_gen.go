@@ -5678,6 +5678,36 @@ func (b *ProgressBarBuilder) PulseStep(value float64) *ProgressBarBuilder {
 	return b
 }
 
+// ProgressRingBuilder builds a widget.ProgressRing.
+type ProgressRingBuilder struct {
+	base[*widget.ProgressRing, *ProgressRingBuilder]
+}
+
+// ProgressRing builds a widget.ProgressRing with widget.NewProgressRing.
+func ProgressRing(arg float64) *ProgressRingBuilder {
+	b := &ProgressRingBuilder{}
+	b.init(b, func(s *Scope) *widget.ProgressRing { return widget.NewProgressRing(arg) })
+	return b
+}
+
+// Child calls (*widget.ProgressRing).SetChild.
+func (b *ProgressRingBuilder) Child(child Node) *ProgressRingBuilder {
+	b.do(func(s *Scope, w *widget.ProgressRing) { w.SetChild(build(s, child)) })
+	return b
+}
+
+// Value calls (*widget.ProgressRing).SetValue.
+func (b *ProgressRingBuilder) Value(v float64) *ProgressRingBuilder {
+	b.do(func(s *Scope, w *widget.ProgressRing) { w.SetValue(v) })
+	return b
+}
+
+// WatchValue re-applies SetValue with get's value after every update.
+func (b *ProgressRingBuilder) WatchValue(get func() float64) *ProgressRingBuilder {
+	b.watch(func(w *widget.ProgressRing) { w.SetValue(get()) })
+	return b
+}
+
 // RevealerBuilder builds a widget.Revealer.
 type RevealerBuilder struct {
 	base[*widget.Revealer, *RevealerBuilder]

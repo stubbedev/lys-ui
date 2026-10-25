@@ -370,7 +370,7 @@ const (
 
 // galleryCSS styles the gallery's own pieces: the context menu's
 // dashed drop zone, the bordered demo frames, the hover card's and the
-// popover's widths, and the demo widths.
+// popover's widths, the demo widths, and the progress rings' size.
 const galleryCSS = `
 .demo-sm { width: 384px; }
 .demo-md { width: 448px; }
@@ -380,6 +380,7 @@ const galleryCSS = `
 .popover-demo { width: 320px; }
 .sidebar-demo { min-height: 360px; border: 1px solid @borders; border-radius: 8px; }
 .datatable-demo { min-height: 520px; }
+.ring-demo progressring { min-width: 48px; }
 `
 
 // payment is one row of the data table section.
@@ -665,6 +666,11 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 		section("Pagination", ui.Pagination(10, 5)),
 		section("Popover", ui.Aligned(ui.Button(ui.Label("Open popover"), 0, 0).Classes(css.Outline).Ref(&g.popoverButton).OnClick(g.popover), widget.AlignStart)).opens(click, center(&g.popoverButton)).room(400, 360),
 		section("Progress", ui.Aligned(ui.ProgressBar(0.66).SizeRequest(360, 0), widget.AlignStart)),
+		section("Progress Ring", ui.Row(
+			ui.ProgressRing(0.66).Child(ui.Label("66%").Classes(css.Caption)),
+			ui.ProgressRing(0.25).Classes(css.Warning),
+			ui.ProgressRing(1).Classes(css.Success),
+		).Spacing(16).Classes("ring-demo")),
 		section("Radio Group", g.radioGroup()),
 		section("Resizable", ui.Aligned(ui.Column(ui.Expand(ui.Paned(widget.Row,
 			pane("One"),
