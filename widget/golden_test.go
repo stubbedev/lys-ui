@@ -122,15 +122,24 @@ func NewGolden(t *testing.T, w Widget, name string, opts ...goldenOption) {
 			t.Fatalf("golden focus target %T does not report Bounds", cfg.focus)
 		}
 	}
-	paint := func() []byte {
-		buf := make([]byte, stride*bh)
-		cv := render.New(buf, stride, bw, bh)
+	draw := func(cv *render.Canvas) {
 		cv.Clear(cv.Rect(), bg)
 		if cfg.focus != nil {
 			cv.MarkFocus(FocusRingOwner(cfg.focus), func(cv *render.Canvas) { PaintFocusRing(cv, cfg.focus) })
 		}
 		w.Paint(cv)
 		cv.FinishFocus()
+	}
+	paint := func() []byte {
+		buf := make([]byte, stride*bh)
+		draw(render.New(buf, stride, bw, bh))
+		return buf
+	}
+	replay := func() []byte {
+		rec := render.NewRecorder(bw, bh, 1, 1)
+		draw(rec)
+		buf := make([]byte, stride*bh)
+		rec.Recording().Paint(render.New(buf, stride, bw, bh))
 		return buf
 	}
 
@@ -150,6 +159,12 @@ func NewGolden(t *testing.T, w Widget, name string, opts ...goldenOption) {
 	}
 	if !bytes.Equal(first, second) {
 		t.Fatalf("%s: Paint is not idempotent: the second (warm-cache) paint differs from the first", name)
+	}
+	if replayed := replay(); !bytes.Equal(first, replayed) {
+		t.Fatalf("%s: the recorded paint, replayed, differs from painting directly at %d pixels", name, diffPixels(first, replayed))
+	}
+	if warmHash != goldenStateHash(w) {
+		t.Fatalf("%s: Paint mutated widget state (state hash changed after the recorded paint):\n%s", name, DumpTree(w, nil))
 	}
 	golden.Check(t, filepath.Join("testdata", "golden"), name, render.NRGBA(first, stride, bw, bh), golden.Tolerance{})
 }
@@ -521,4 +536,15 @@ func caretsForShot(w Widget) (restore func()) {
 			n.invalidateState(style.Focus)
 		}
 	}
+}
+
+// diffPixels counts the ARGB8888 pixels where a and b differ.
+func diffPixels(a, b []byte) int {
+	n := 0
+	for i := 0; i+4 <= len(a); i += 4 {
+		if !bytes.Equal(a[i:i+4], b[i:i+4]) {
+			n++
+		}
+	}
+	return n
 }
