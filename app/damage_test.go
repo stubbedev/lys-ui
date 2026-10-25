@@ -113,6 +113,7 @@ func newPaintHarness(root widget.Widget, w, hgt int) *paintHarness {
 		},
 	}
 	ph.wnd.surf = ph.surf
+	ph.wnd.input = &surfaceInput{router: ph.wnd.router}
 	// The fake allocator hangs off newBuffer, not the pool, so a live
 	// rescale's pool rebuild keeps allocating fakes at the new size -
 	// and a configure-driven resize too: the size is read at

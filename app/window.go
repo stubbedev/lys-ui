@@ -765,6 +765,7 @@ func (w *hostWindow) draw() bool {
 		w.router.Root.Measure(widget.Constraints{Max: widget.Size{W: bw, H: bh}})
 		w.router.Root.Arrange(render.Rect{X: 0, Y: 0, W: bw, H: bh})
 	}
+	w.input.rehover()
 	// Same surface-state shape as the scale: the opaque region tracks
 	// the size and the GPUArea holes this layout placed, and goes out
 	// when either changed, before the commit that applies it.

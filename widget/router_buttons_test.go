@@ -103,3 +103,47 @@ func TestRouterScrollInputTakesPrecedence(t *testing.T) {
 		t.Errorf("declined step still consumed: %v", mb.scrolls)
 	}
 }
+
+// A wheel scroll moved the tree under a resting pointer, but hover
+// stayed on the widget the pointer last moved over until the pointer
+// moved again: its tooltip opened for a control no longer under the
+// pointer, at that control's new place. Rehover re-picks after a
+// layout; it leaves a press in progress and an absent pointer alone.
+func TestRehoverFollowsTheTreeUnderARestingPointer(t *testing.T) {
+	face := testFace(t)
+	a := NewButton(NewLabel(face, 12, "a", 0), 0, 0)
+	b := NewButton(NewLabel(face, 12, "b", 0), 0, 0)
+	col := NewBox(Column, 0, 0)
+	col.Append(a, false)
+	col.Append(b, false)
+	layout := func(y int) {
+		col.Measure(Constraints{Max: Size{W: 100, H: 400}})
+		col.Arrange(render.Rect{Y: y, W: 100, H: 400})
+	}
+	layout(0)
+	r := &Router{Root: col}
+	p := Point{X: 10, Y: a.Bounds().H + 2}
+	r.Move(p)
+	if r.Hovered() != b {
+		t.Fatalf("sanity: hovering %v, want b", r.Hovered())
+	}
+	layout(a.Bounds().H)
+	if !r.Rehover() || r.Hovered() != a || !a.Hovered || b.Hovered {
+		t.Errorf("after the tree moved: hovering %v, want a", r.Hovered())
+	}
+	if r.Rehover() {
+		t.Error("a Rehover with nothing moved changed the hover")
+	}
+
+	r.Press(BTNLeft, p)
+	layout(0)
+	if r.Rehover() || r.Hovered() != a {
+		t.Error("a Rehover moved the hover off a press in progress")
+	}
+	r.Release(BTNLeft, p)
+
+	r.Leave()
+	if r.Rehover() || r.Hovered() != nil {
+		t.Error("a Rehover hovered with the pointer gone")
+	}
+}

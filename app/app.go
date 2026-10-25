@@ -232,6 +232,16 @@ func (in *surfaceInput) TouchCancel() {
 	in.request()
 }
 
+// rehover re-picks the hovered widget after a frame's layout moved
+// the tree under a resting pointer, and the cursor shape with it.
+func (in *surfaceInput) rehover() {
+	if in.dropInput() || !in.router.Rehover() {
+		return
+	}
+	debug.Log("input", "rehover (%.1f,%.1f) hit %T", in.x, in.y, in.router.Hovered())
+	in.applyCursorShape()
+}
+
 // move feeds one pointer position to the router and updates the
 // cursor shape, hover bookkeeping, and the drag gesture. The position
 // is logical surface coordinates; the tree is laid out in the same

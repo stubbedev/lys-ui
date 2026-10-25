@@ -28,10 +28,12 @@ func idleBudgetApp(tb testing.TB) *Application {
 	a := NewApplication(&wlsession.Session{})
 	a.step = func() error { return nil }
 	a.wake = func(time.Duration) {}
+	router := &widget.Router{Root: widget.NewBox(widget.Column, 8, 0)}
 	a.windows = append(a.windows, &hostWindow{
 		host:    &fakeHost{w: 640, h: 470},
 		sess:    a.sess,
-		router:  &widget.Router{Root: widget.NewBox(widget.Column, 8, 0)},
+		router:  router,
+		input:   &surfaceInput{router: router},
 		tip:     &tooltipCtl{since: time.Now()},
 		frac120: 120, scale: 1,
 		lastW: 640, lastH: 470,

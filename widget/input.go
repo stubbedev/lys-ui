@@ -493,6 +493,9 @@ type Router struct {
 
 	hover, pressed, focus Widget
 	dragging              bool
+	// pointer is where the pointer rests while pointerIn, for Rehover.
+	pointer   Point
+	pointerIn bool
 	// pxRemainder holds pixel scrolling not yet a whole step for a
 	// step-only scroller (AxisPixels).
 	pxRemainder [2]float64
@@ -515,10 +518,8 @@ type Router struct {
 // tracking. p is in root coordinates. A hit inside a disabled subtree
 // hovers nothing: an inert control shows no hover shade.
 func (r *Router) Move(p Point) {
-	hit := r.Root.HitTest(p)
-	if !IsEnabled(hit) {
-		hit = nil
-	}
+	r.pointer, r.pointerIn = p, true
+	hit := r.hitAt(p)
 	if r.hover != hit {
 		if h, ok := r.hover.(HoverSetter); ok {
 			h.SetHovered(false)
@@ -537,6 +538,27 @@ func (r *Router) Move(p Point) {
 			d.DragMove(p)
 		}
 	}
+}
+
+// hitAt is the enabled widget at p, or nil.
+func (r *Router) hitAt(p Point) Widget {
+	if hit := r.Root.HitTest(p); IsEnabled(hit) {
+		return hit
+	}
+	return nil
+}
+
+// Rehover re-picks the hovered widget under the resting pointer after
+// a layout moved the tree beneath it (a scroll, a reflow, a removal):
+// hover follows what is under the pointer now, not what was there when
+// it last moved. A press in progress keeps its target. Reports whether
+// the hover changed.
+func (r *Router) Rehover() bool {
+	if !r.pointerIn || r.pressed != nil || r.hitAt(r.pointer) == r.hover {
+		return false
+	}
+	r.Move(r.pointer)
+	return true
 }
 
 // Press records a pointer button press. p is in root coordinates. A
@@ -704,6 +726,7 @@ func (r *Router) Release(button uint32, p Point) {
 
 // Leave clears hover state when the pointer leaves the surface.
 func (r *Router) Leave() {
+	r.pointerIn = false
 	if h, ok := r.hover.(HoverSetter); ok {
 		h.SetHovered(false)
 	}
