@@ -33,6 +33,9 @@ type composite struct {
 	// surfaceRing is the default border width the surface draws (in
 	// the theme's border color) until the cascade declares one.
 	surfaceRing int
+	// measuredW and floorW are the last measured width and the least
+	// it works at, for ShrinkableWidth.
+	measuredW, floorW int
 	// boxed makes the composite its own CSS element: it paints its
 	// cascade box over its bounds less the margin, and lays the root
 	// out inside its margin, border and padding, as a Box does. The
@@ -83,15 +86,25 @@ func (c *composite) Measure(con Constraints) Size {
 	o := in.outer()
 	sz.W += o.Left + o.Right
 	sz.H += o.Top + o.Bottom
+	floor := sz.W - shrinkableWidthOf(c.root)
 	switch {
 	case c.fixedWidth > 0:
 		sz.W = c.fixedWidth
+		floor = sz.W
 	case c.fillWidth:
 		sz.W = con.Max.W
 	}
 	sz.H = max(sz.H, c.minHeight)
-	return c.measureStore(con, clampSize(sz, con))
+	sz = clampSize(sz, con)
+	c.measuredW, c.floorW = sz.W, min(floor, sz.W)
+	return c.measureStore(con, sz)
 }
+
+// ShrinkableWidth implements WidthShrinker: a composite gives what its
+// root can, and one that fills its offer gives the fill back too, down
+// to its content's natural width, as a GTK row allocated less than it
+// would take still lays its content out.
+func (c *composite) ShrinkableWidth() int { return max(0, c.measuredW-c.floorW) }
 
 // Arrange lays the root over the content box, as its parent: inside
 // its margins and held to its CSS sizes, matching Measure.

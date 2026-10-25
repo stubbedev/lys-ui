@@ -148,3 +148,43 @@ func TestNestedShortRowsKeepTheirTakes(t *testing.T) {
 		t.Errorf("inner rows = %d and %d wide, want 50 and 50: the 220px deficit split by equal capacity", wa, wb)
 	}
 }
+
+// A composite that fills its offer (an Item) took the whole offer as
+// its natural width, so beside a fixed sibling in a row it was laid out
+// at the row's full width and overflowed it: a 256px dock and an
+// ItemGroup page in a 900px window got 900 for the page. Such a
+// composite gives the fill back down to its content's natural width,
+// through a scrolled page in a stack in an overlay too.
+func TestAFillingCompositeGivesWayInARow(t *testing.T) {
+	face := goldenFace(t)
+	layout := func(content Widget) {
+		dock := NewBox(Column, 0, 0)
+		dock.SetSizeRequest(256, 0)
+		row := NewBox(Row, 0, 0)
+		row.Append(dock, false).Append(content, true)
+		row.Measure(Constraints{Min: Size{W: 900, H: 100}, Max: Size{W: 900, H: 100}})
+		row.Arrange(render.Rect{W: 900, H: 100})
+	}
+	item := NewItem(face, "x", "")
+	layout(item)
+	if got, want := item.Bounds(), (render.Rect{X: 256, W: 644, H: 100}); got != want {
+		t.Errorf("the item beside the dock = %v, want the row's remaining %v", got, want)
+	}
+
+	group := NewItemGroup()
+	group.Append(NewItem(face, "x", "y"))
+	page := NewBox(Column, 0, 0)
+	page.Append(group, false)
+	scroll := NewScroll(page)
+	scroll.VerticalOnly = true
+	stack := NewStack()
+	stack.Add("page", scroll)
+	overlay := NewOverlay().Append(stack)
+	layout(overlay)
+	if got := overlay.Bounds(); got.X != 256 || got.W != 644 {
+		t.Errorf("the page beside the dock = %v, want x 256 and the 644 left", got)
+	}
+	if got := group.Bounds(); got.X+got.W > 900 {
+		t.Errorf("the item group ends at %d, past the 900px row", got.X+got.W)
+	}
+}
