@@ -562,6 +562,7 @@ func (p *Popup) AttachInput(sess *wlsession.Session, router *widget.Router) (det
 		dismissed: p.Dismissed,
 		router:    router,
 		pointer:   &pointer,
+		mods:      func() widget.Mods { return widget.Mods(sess.Mods()) },
 		markDirty: func() { p.dirty.Store(true) },
 	}
 	input.Input = touchinput.Input{
@@ -585,6 +586,8 @@ type popupInput struct {
 	dismissed func() bool
 	router    *widget.Router
 	pointer   *struct{ x, y float64 }
+	// mods reads the keyboard modifiers held.
+	mods      func() widget.Mods
 	markDirty func()
 }
 
@@ -611,7 +614,7 @@ func (in *popupInput) HandlePointerButton(button, state, _ uint32) {
 	pt := widget.Point{X: int(in.pointer.x), Y: int(in.pointer.y)}
 	debug.Log("input", "popup route button %d state=%d at (%d,%d)", button, state, pt.X, pt.Y)
 	if state == 1 {
-		in.router.Press(button, pt)
+		in.router.Press(button, pt, in.mods())
 	} else {
 		in.router.Release(button, pt)
 	}
@@ -624,7 +627,7 @@ func (in *popupInput) HandlePointerAxis(dx, dy float64) {
 	if in.dismissed() {
 		return
 	}
-	in.router.Axis(float64(wlsession.AxisSteps(dx)), float64(wlsession.AxisSteps(dy)))
+	in.router.Axis(float64(wlsession.AxisSteps(dx)), float64(wlsession.AxisSteps(dy)), in.mods())
 	in.markDirty()
 }
 
@@ -649,7 +652,7 @@ func (in *popupInput) HandlePointerScrollPixels(dx, dy float64) {
 	if in.dismissed() {
 		return
 	}
-	in.router.AxisPixels(dx, dy)
+	in.router.AxisPixels(dx, dy, in.mods())
 	in.markDirty()
 }
 

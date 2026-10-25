@@ -34,7 +34,7 @@ func imeRouter(t *testing.T) (*widget.Router, *widget.Entry) {
 	r := &widget.Router{Root: e}
 	// Click past the end of the text but inside the field: focuses
 	// the entry with the caret at the end.
-	r.Press(widget.BTNLeft, widget.Point{X: 190, Y: 5})
+	r.Press(widget.BTNLeft, widget.Point{X: 190, Y: 5}, 0)
 	r.Release(widget.BTNLeft, widget.Point{X: 190, Y: 5})
 	return r, e
 }
@@ -102,7 +102,7 @@ func TestIMESync(t *testing.T) {
 		r := &widget.Router{Root: box}
 		ep := e.Bounds()
 		p := widget.Point{X: ep.X + 5, Y: ep.Y + 5}
-		r.Press(widget.BTNLeft, p)
+		r.Press(widget.BTNLeft, p, 0)
 		r.Release(widget.BTNLeft, p)
 
 		wire := &fakeIMEWire{available: true}
@@ -112,7 +112,7 @@ func TestIMESync(t *testing.T) {
 			t.Fatalf("first sync must enable, got %+v", wire.updates)
 		}
 		bp := box.Bounds()
-		r.Press(widget.BTNLeft, widget.Point{X: bp.X + bp.W - 5, Y: 15})
+		r.Press(widget.BTNLeft, widget.Point{X: bp.X + bp.W - 5, Y: 15}, 0)
 		r.Release(widget.BTNLeft, widget.Point{X: bp.X + bp.W - 5, Y: 15})
 		c.sync(r, true)
 		if len(wire.updates) != 2 {

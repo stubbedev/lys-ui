@@ -469,7 +469,7 @@ func forget(t *testing.T, r *Router, b *Box, w Widget) {
 func TestRemoveClearsRouterState(t *testing.T) {
 	t.Run("removing the focused widget moves focus per focusAfter", func(t *testing.T) {
 		b, ts, r := removeRouterFixture(t)
-		r.Press(BTNLeft, Point{X: 12, Y: 4}) // focus (and press) t2
+		r.Press(BTNLeft, Point{X: 12, Y: 4}, 0) // focus (and press) t2
 		if r.Focused() != ts[1] {
 			t.Fatal("fixture: press did not focus t2")
 		}
@@ -503,7 +503,7 @@ func TestRemoveClearsRouterState(t *testing.T) {
 	t.Run("a cancelled press cannot click", func(t *testing.T) {
 		b, ts, r := removeRouterFixture(t)
 		r.Move(Point{X: 12, Y: 4})
-		r.Press(BTNLeft, Point{X: 12, Y: 4})
+		r.Press(BTNLeft, Point{X: 12, Y: 4}, 0)
 		forget(t, r, b, ts[1])
 		r.Release(BTNLeft, Point{X: 12, Y: 4})
 		if ts[1].clicks != 0 {
@@ -526,7 +526,7 @@ func TestRemoveClearsRouterState(t *testing.T) {
 		root.Arrange(render.Rect{X: 0, Y: 0, W: 16, H: 8})
 		r := &Router{Root: root}
 
-		r.Press(BTNLeft, Point{X: 4, Y: 4}) // focus t2 inside inner
+		r.Press(BTNLeft, Point{X: 4, Y: 4}, 0) // focus t2 inside inner
 		if r.Focused() != t2 {
 			t.Fatal("fixture: press did not focus t2")
 		}
@@ -538,7 +538,7 @@ func TestRemoveClearsRouterState(t *testing.T) {
 
 	t.Run("focus with nowhere to go clears", func(t *testing.T) {
 		b, ts, r := removeRouterFixture(t)
-		r.Press(BTNLeft, Point{X: 12, Y: 4})
+		r.Press(BTNLeft, Point{X: 12, Y: 4}, 0)
 		for _, w := range b.Children() {
 			if w != ts[1] {
 				b.Remove(w)
@@ -552,9 +552,9 @@ func TestRemoveClearsRouterState(t *testing.T) {
 
 	t.Run("unrelated state survives", func(t *testing.T) {
 		b, ts, r := removeRouterFixture(t)
-		r.Move(Point{X: 4, Y: 4})           // hover t1
-		r.Press(BTNLeft, Point{X: 4, Y: 4}) // focus t1
-		forget(t, r, b, ts[1])              // removing t2 touches neither
+		r.Move(Point{X: 4, Y: 4})              // hover t1
+		r.Press(BTNLeft, Point{X: 4, Y: 4}, 0) // focus t1
+		forget(t, r, b, ts[1])                 // removing t2 touches neither
 		if r.Hovered() != ts[0] || r.Focused() != ts[0] {
 			t.Errorf("hover=%v focus=%v, want both still t1", r.Hovered(), r.Focused())
 		}

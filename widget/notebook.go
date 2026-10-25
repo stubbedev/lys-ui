@@ -760,14 +760,19 @@ func (n *Notebook) CursorName() string {
 	return CursorNameOf(n)
 }
 
-// ScrollInput scrolls an overflowing strip under the pointer, a third
-// of a tab per wheel step; anywhere else the step passes on to the
-// scrollers outside.
-func (n *Notebook) ScrollInput(dy int) bool {
+func (n *Notebook) listensScroll() bool { return true }
+
+// claimScroll scrolls an overflowing strip under the pointer, a third
+// of a tab per wheel step, after the notebook's own scroll hook;
+// anywhere else the step passes on to the scrollers outside.
+func (n *Notebook) claimScroll(e ScrollEvent) bool {
+	if n.node.claimScroll(e) {
+		return true
+	}
 	if !n.overHeader || !n.stripRange().Overflows() {
 		return false
 	}
-	n.scrollStrip(n.scroll + dy*tabWidth/3)
+	n.scrollStrip(n.scroll + e.DY*tabWidth/3)
 	return true
 }
 

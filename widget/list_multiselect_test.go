@@ -154,7 +154,7 @@ func TestListMultiplePointer(t *testing.T) {
 	pt := func(row int) Point { return Point{X: 50, Y: row*20 + 10} }
 
 	t.Run("rubber band selects the swept range once", func(t *testing.T) {
-		r.Press(BTNLeft, pt(2))
+		r.Press(BTNLeft, pt(2), 0)
 		r.Move(pt(3))
 		r.Move(pt(4))
 		selEquals(t, l, 2, 3, 4)
@@ -173,13 +173,13 @@ func TestListMultiplePointer(t *testing.T) {
 
 	t.Run("clicks toggle", func(t *testing.T) {
 		*notifications = nil
-		r.Press(BTNLeft, pt(0))
+		r.Press(BTNLeft, pt(0), 0)
 		r.Release(BTNLeft, pt(0))
 		selEquals(t, l, 0, 2, 3, 4)
-		r.Press(BTNLeft, pt(1))
+		r.Press(BTNLeft, pt(1), 0)
 		r.Release(BTNLeft, pt(1))
 		selEquals(t, l, 0, 1, 2, 3, 4)
-		r.Press(BTNLeft, pt(0))
+		r.Press(BTNLeft, pt(0), 0)
 		r.Release(BTNLeft, pt(0))
 		selEquals(t, l, 1, 2, 3, 4)
 		if len(*notifications) != 3 {
@@ -191,9 +191,9 @@ func TestListMultiplePointer(t *testing.T) {
 		var activated []int
 		l.OnActivate = func(i int) { activated = append(activated, i) }
 		*notifications = nil
-		r.Press(BTNLeft, pt(2))
+		r.Press(BTNLeft, pt(2), 0)
 		r.Release(BTNLeft, pt(2))
-		r.Press(BTNLeft, pt(2))
+		r.Press(BTNLeft, pt(2), 0)
 		r.Release(BTNLeft, pt(2))
 		selEquals(t, l, 1, 3, 4)
 		if !reflect.DeepEqual(activated, []int{2}) {
@@ -206,7 +206,7 @@ func TestListMultiplePointer(t *testing.T) {
 
 	t.Run("click after a drag ends the gesture, not a toggle", func(t *testing.T) {
 		*notifications = nil
-		r.Press(BTNLeft, pt(1))
+		r.Press(BTNLeft, pt(1), 0)
 		r.Move(pt(3))
 		r.Move(pt(1))
 		r.Release(BTNLeft, pt(1))
@@ -218,7 +218,7 @@ func TestListMultiplePointer(t *testing.T) {
 
 	t.Run("a cancelled press still concludes the gesture", func(t *testing.T) {
 		*notifications = nil
-		r.Press(BTNLeft, pt(1))
+		r.Press(BTNLeft, pt(1), 0)
 		r.Move(pt(2))
 		r.CancelPress()
 		if len(*notifications) != 1 {
@@ -254,7 +254,7 @@ func TestListMultipleChecks(t *testing.T) {
 	}
 
 	r := &Router{Root: l}
-	r.Press(BTNLeft, Point{X: 50, Y: 10})
+	r.Press(BTNLeft, Point{X: 50, Y: 10}, 0)
 	r.Release(BTNLeft, Point{X: 50, Y: 10})
 	if !checks[0].Checked() {
 		t.Error("clicking row 0 did not reflect its new membership in the check")
@@ -395,8 +395,8 @@ func TestListRubberBandAutoScroll(t *testing.T) {
 	l.Paint(cv)
 
 	r := &Router{Root: l}
-	r.Press(BTNLeft, Point{X: 50, Y: 10}) // row 0
-	r.Move(Point{X: 50, Y: 50})           // bottom edge band (60-24=36)
+	r.Press(BTNLeft, Point{X: 50, Y: 10}, 0) // row 0
+	r.Move(Point{X: 50, Y: 50})              // bottom edge band (60-24=36)
 	selEquals(t, l, 0, 1, 2)
 
 	c.drive()
@@ -434,7 +434,7 @@ func TestListAutoScrollPinsAtEnds(t *testing.T) {
 	l.Paint(cv)
 
 	r := &Router{Root: l}
-	r.Press(BTNLeft, Point{X: 50, Y: 10})
+	r.Press(BTNLeft, Point{X: 50, Y: 10}, 0)
 	r.Move(Point{X: 50, Y: 50})
 	c.drive()
 	if l.offY != 4*20-60 {
@@ -457,7 +457,7 @@ func TestListAutoScrollReducedMotion(t *testing.T) {
 	l.Paint(cv)
 
 	r := &Router{Root: l}
-	r.Press(BTNLeft, Point{X: 50, Y: 10})
+	r.Press(BTNLeft, Point{X: 50, Y: 10}, 0)
 	r.Move(Point{X: 50, Y: 50})
 	if l.offY != 20 {
 		t.Errorf("offY = %d after one instant step, want 20", l.offY)

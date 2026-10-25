@@ -158,8 +158,8 @@ func TestAxisPixels(t *testing.T) {
 	s.Arrange(render.Rect{W: 60, H: 60})
 	r := &Router{Root: s}
 	r.Move(Point{X: 10, Y: 10})
-	r.AxisPixels(0, 2.6)
-	r.AxisPixels(0, 2.6)
+	r.AxisPixels(0, 2.6, 0)
+	r.AxisPixels(0, 2.6, 0)
 	if _, y := s.Offset(); y != 5 {
 		t.Errorf("scroll offset %d after 5.2px, want 5", y)
 	}
@@ -179,7 +179,7 @@ func TestAxisPixels(t *testing.T) {
 	r2 := &Router{Root: stub}
 	r2.hover = stub
 	for range 5 {
-		r2.AxisPixels(0, 10)
+		r2.AxisPixels(0, 10, 0)
 	}
 	if stub.steps != 1 {
 		t.Errorf("a step-only scroller got %d steps for 50px, want 1", stub.steps)

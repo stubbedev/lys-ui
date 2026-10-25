@@ -32,7 +32,7 @@ func TestDisabledButtonSwallowsInput(t *testing.T) {
 		b, r, p, clicks := newButton()
 		b.SetEnabled(false)
 		r.Move(p)
-		r.Press(BTNLeft, p)
+		r.Press(BTNLeft, p, 0)
 		r.Release(BTNLeft, p)
 		if *clicks != 0 {
 			t.Fatalf("clicks = %d, want 0", *clicks)
@@ -55,12 +55,12 @@ func TestDisabledButtonSwallowsInput(t *testing.T) {
 		box.Measure(Constraints{Max: Size{W: 400, H: 200}})
 		box.Arrange(render.Rect{X: 0, Y: 0, W: 400, H: 200})
 		ep := Point{X: e.Bounds().X + 5, Y: e.Bounds().Y + 5}
-		r.Press(BTNLeft, ep)
+		r.Press(BTNLeft, ep, 0)
 		r.Release(BTNLeft, ep)
 		if r.Focused() != Widget(e) {
 			t.Fatalf("focus = %v, want the entry", r.Focused())
 		}
-		r.Press(BTNLeft, p)
+		r.Press(BTNLeft, p, 0)
 		r.Release(BTNLeft, p)
 		if r.Focused() != Widget(e) {
 			t.Error("pressing a disabled button stole focus")
@@ -70,7 +70,7 @@ func TestDisabledButtonSwallowsInput(t *testing.T) {
 	t.Run("a disable between press and release kills the click", func(t *testing.T) {
 		b, r, p, clicks := newButton()
 		r.Move(p)
-		r.Press(BTNLeft, p)
+		r.Press(BTNLeft, p, 0)
 		b.SetEnabled(false)
 		r.Release(BTNLeft, p)
 		if *clicks != 0 {
@@ -102,7 +102,7 @@ func TestDisabledButtonSwallowsInput(t *testing.T) {
 		b.SetEnabled(false)
 		b.SetEnabled(true)
 		r.Move(p)
-		r.Press(BTNLeft, p)
+		r.Press(BTNLeft, p, 0)
 		r.Release(BTNLeft, p)
 		if *clicks != 1 {
 			t.Errorf("clicks = %d, want 1 after re-enable", *clicks)
@@ -200,7 +200,7 @@ func TestBoxDisablePropagatesToSubtree(t *testing.T) {
 	t.Run("input and traversal honor the inherited state", func(t *testing.T) {
 		p := Point{X: btn.Bounds().X + 4, Y: btn.Bounds().Y + 4}
 		r.Move(p)
-		r.Press(BTNLeft, p)
+		r.Press(BTNLeft, p, 0)
 		r.Release(BTNLeft, p)
 		if r.Hovered() != nil {
 			t.Errorf("hover = %v, want nil over a disabled subtree", r.Hovered())
@@ -279,7 +279,7 @@ func TestDisabledTogglesSliderAndScroll(t *testing.T) {
 		r := &Router{Root: root}
 		b := sc.Bounds()
 		r.Move(Point{X: b.X + 5, Y: b.Y + 5})
-		r.Axis(0, 2)
+		r.Axis(0, 2, 0)
 		if _, offY := sc.Offset(); offY != 0 {
 			t.Errorf("axis scrolled a disabled scroll: offset = %d", offY)
 		}

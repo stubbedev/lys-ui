@@ -221,7 +221,7 @@ func TestRouterCancelPressSuppressesClick(t *testing.T) {
 	r := &Router{Root: root}
 	p := Point{X: 5, Y: 5}
 	r.Move(p)
-	r.Press(BTNLeft, p)
+	r.Press(BTNLeft, p, 0)
 
 	if r.Pressed() != src {
 		t.Fatalf("Pressed = %v, want the pressed stub", r.Pressed())

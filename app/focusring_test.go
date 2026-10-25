@@ -17,7 +17,7 @@ func TestFocusRingFollowsFocusVisible(t *testing.T) {
 	root.Arrange(render.Rect{W: 100, H: 100})
 	w := &hostWindow{router: &widget.Router{Root: root}}
 
-	w.router.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5})
+	w.router.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5}, 0)
 	w.router.Release(widget.BTNLeft, widget.Point{X: 5, Y: 5})
 	if w.router.Focused() != widget.Widget(a) {
 		t.Fatalf("a click focused %v, want the first switch", w.router.Focused())

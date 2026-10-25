@@ -331,7 +331,7 @@ func (in *surfaceInput) HandlePointerButton(button, state, serial uint32) {
 			_, err := in.primary.pasteAt(in.router)
 			in.reportTransfer(err)
 		}
-		in.router.Press(button, p)
+		in.router.Press(button, p, in.mods())
 		// Remember the press for the drag gesture: the threshold is
 		// measured from here and start_drag wants this serial.
 		in.pressX, in.pressY = in.x, in.y
@@ -360,7 +360,7 @@ func (in *surfaceInput) HandlePointerAxis(dx, dy float64) {
 	}
 	dxSteps, dySteps := wlsession.AxisSteps(dx), wlsession.AxisSteps(dy)
 	debug.Log("input", "route axis dx=%.1f dy=%.1f steps=%d,%d hover %T", dx, dy, dxSteps, dySteps, in.router.Hovered())
-	in.router.Axis(float64(dxSteps), float64(dySteps))
+	in.router.Axis(float64(dxSteps), float64(dySteps), in.mods())
 	in.request()
 }
 
@@ -391,6 +391,14 @@ func (in *surfaceInput) cursorShape() string {
 		return in.cursorPin
 	}
 	return in.cursorAt(in.x, in.y)
+}
+
+// mods are the keyboard modifiers held; none without a session.
+func (in *surfaceInput) mods() widget.Mods {
+	if in.sess == nil {
+		return 0
+	}
+	return widget.Mods(in.sess.Mods())
 }
 
 // applyCursorShape pushes the shape to the session when it changed.
@@ -873,7 +881,7 @@ func (in *surfaceInput) HandlePointerScrollPixels(dx, dy float64) {
 		return
 	}
 	debug.Log("input", "route precise scroll (%.1f,%.1f)", dx, dy)
-	in.router.AxisPixels(dx, dy)
+	in.router.AxisPixels(dx, dy, in.mods())
 	in.request()
 }
 

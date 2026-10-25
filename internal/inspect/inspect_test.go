@@ -39,7 +39,7 @@ func inspectTree(t *testing.T) (widget.Widget, *widget.Router, *widget.Button) {
 	bs := button.Bounds()
 	p := widget.Point{X: bs.X + bs.W/2, Y: bs.Y + bs.H/2}
 	r.Move(p)
-	r.Press(widget.BTNLeft, p)
+	r.Press(widget.BTNLeft, p, 0)
 	r.Release(widget.BTNLeft, p)
 	r.FocusNext() // first focusable: the button
 	return column, r, button

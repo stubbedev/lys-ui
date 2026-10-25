@@ -722,7 +722,7 @@ func TestFocusBitFollowsTheRouter(t *testing.T) {
 	r.Root = root
 	arrangeTree(t, root, 300, 120)
 
-	r.Press(BTNLeft, Point{X: 20, Y: 20})
+	r.Press(BTNLeft, Point{X: 20, Y: 20}, 0)
 	if !entry.focused {
 		t.Fatal("press did not focus the entry")
 	}

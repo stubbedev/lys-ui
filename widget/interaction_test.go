@@ -184,21 +184,21 @@ func TestTouchActionGatesAxisPixels(t *testing.T) {
 	r := &Router{Root: s}
 	loadCSS(t, `.gated { touch-action: pan-x; }`)
 	r.Move(Point{X: 10, Y: 10})
-	r.AxisPixels(0, 40)
+	r.AxisPixels(0, 40, 0)
 	if _, y := s.Offset(); y != 0 {
 		t.Errorf("pan-x scrolled vertically to %d", y)
 	}
 	loadCSS(t, `.gated { touch-action: none; }`)
 	r.Move(Point{X: 10, Y: 10})
-	r.AxisPixels(0, 40)
-	r.Axis(0, 2)
+	r.AxisPixels(0, 40, 0)
+	r.Axis(0, 2, 0)
 	if _, y := s.Offset(); y == 0 {
 		t.Error("none blocked the wheel path too")
 	}
 	loadCSS(t, "")
 	s2, r2 := newScroll()
 	r2.Move(Point{X: 10, Y: 10})
-	r2.AxisPixels(0, 40)
+	r2.AxisPixels(0, 40, 0)
 	if _, y := s2.Offset(); y == 0 {
 		t.Error("the ungated scroll did not move")
 	}

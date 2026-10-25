@@ -2,21 +2,6 @@ package widget
 
 import "testing"
 
-// rightButton records the buttons it took itself.
-type rightButton struct {
-	*Button
-	got []uint32
-}
-
-func (b *rightButton) PointerButton(button uint32) { b.got = append(b.got, button) }
-
-func (b *rightButton) HitTest(p Point) Widget {
-	if b.Button.HitTest(p) != nil {
-		return b
-	}
-	return nil
-}
-
 func newTestContextMenu(t *testing.T) (*ContextMenu, *Button, *fakeSurfaceHost) {
 	t.Helper()
 	face := goldenFace(t)
@@ -37,12 +22,12 @@ func TestContextMenuOpens(t *testing.T) {
 	r := &Router{Root: c}
 	b := inner.Bounds()
 	at := Point{X: b.X + 4, Y: b.Y + 4}
-	r.Press(BTNLeft, at)
+	r.Press(BTNLeft, at, 0)
 	r.Release(BTNLeft, at)
 	if len(host.menus) != 0 {
 		t.Fatal("a left click opened the menu")
 	}
-	r.Press(BTNRight, at)
+	r.Press(BTNRight, at, 0)
 	if len(host.menus) != 1 || host.menus[0][0].Label != "Back" {
 		t.Fatalf("a right click opened %v", host.menus)
 	}
@@ -54,19 +39,24 @@ func TestContextMenuOpens(t *testing.T) {
 	}
 }
 
-// A widget that takes the right button itself keeps it.
-func TestContextMenuYieldsToButtonHandlers(t *testing.T) {
+// A widget whose pointer hook takes the right button keeps it.
+func TestContextMenuYieldsToPointerHooks(t *testing.T) {
 	face := goldenFace(t)
-	own := &rightButton{Button: NewButton(NewLabel(face, 14, "mine", 0), 8, 8)}
+	own := NewButton(NewLabel(face, 14, "mine", 0), 8, 8)
+	var got []uint32
+	own.SetOnPointer(func(e PointerEvent) bool {
+		got = append(got, e.Button)
+		return e.Button == BTNRight
+	})
 	c := NewContextMenu(face, own, MenuItem{Label: "x", OnClick: func() {}})
 	host := &fakeSurfaceHost{}
 	SetSurfaceHost(c, host)
 	arrangeTree(t, c, 200, 60)
 	r := &Router{Root: c}
 	b := own.Bounds()
-	r.Press(BTNRight, Point{X: b.X + 2, Y: b.Y + 2})
-	if len(own.got) != 1 || len(host.menus) != 0 {
-		t.Errorf("button handler saw %v, menus %d", own.got, len(host.menus))
+	r.Press(BTNRight, Point{X: b.X + 2, Y: b.Y + 2}, 0)
+	if len(got) != 1 || len(host.menus) != 0 {
+		t.Errorf("pointer hook saw %v, menus %d", got, len(host.menus))
 	}
 }
 

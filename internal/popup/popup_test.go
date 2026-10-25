@@ -179,6 +179,7 @@ func TestInputDeadDuringExit(t *testing.T) {
 		dismissed: p.Dismissed,
 		router:    router,
 		pointer:   &struct{ x, y float64 }{},
+		mods:      func() widget.Mods { return 0 },
 		markDirty: func() { dirties++ },
 	}
 	input.HandlePointerEnter(5, 5)
@@ -279,6 +280,7 @@ func TestPopupWheelScrolls(t *testing.T) {
 		dismissed: p.Dismissed,
 		router:    &widget.Router{Root: probe},
 		pointer:   &struct{ x, y float64 }{},
+		mods:      func() widget.Mods { return 0 },
 		markDirty: func() { dirties++ },
 	}
 	input.HandlePointerEnter(5, 5)

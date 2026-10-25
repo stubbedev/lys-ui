@@ -72,7 +72,7 @@ func TestRouterClick(t *testing.T) {
 	r := &Router{Root: box}
 
 	t.Run("press and release on the same widget clicks it", func(t *testing.T) {
-		r.Press(BTNLeft, Point{X: 5, Y: 5})
+		r.Press(BTNLeft, Point{X: 5, Y: 5}, 0)
 		if !a.pressed {
 			t.Fatal("press did not set pressed state")
 		}
@@ -86,7 +86,7 @@ func TestRouterClick(t *testing.T) {
 	})
 
 	t.Run("release off the pressed widget does not click", func(t *testing.T) {
-		r.Press(BTNLeft, Point{X: 5, Y: 5})
+		r.Press(BTNLeft, Point{X: 5, Y: 5}, 0)
 		r.Release(BTNLeft, Point{X: 500, Y: 500})
 		if a.clicks != 1 {
 			t.Errorf("clicks = %d, want still 1", a.clicks)
@@ -94,7 +94,7 @@ func TestRouterClick(t *testing.T) {
 	})
 
 	t.Run("non-primary buttons are ignored", func(t *testing.T) {
-		r.Press(BTNLeft+1, Point{X: 5, Y: 5})
+		r.Press(BTNLeft+1, Point{X: 5, Y: 5}, 0)
 		r.Release(BTNLeft+1, Point{X: 5, Y: 5})
 		if a.clicks != 1 || a.pressed {
 			t.Errorf("clicks = %d pressed = %v", a.clicks, a.pressed)
@@ -111,7 +111,7 @@ func TestRouterDrag(t *testing.T) {
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 204, H: 18})
 
 	r := &Router{Root: root}
-	r.Press(BTNLeft, Point{X: 100, Y: 9})
+	r.Press(BTNLeft, Point{X: 100, Y: 9}, 0)
 	t.Run("motion while pressed drags the slider", func(t *testing.T) {
 		r.Move(Point{X: 150, Y: 9})
 		if s.Value() <= 0 || s.Value() >= 100 {
@@ -136,7 +136,7 @@ func TestRouterPointerLost(t *testing.T) {
 	r := &Router{Root: box}
 
 	r.Move(Point{X: 5, Y: 5})
-	r.Press(BTNLeft, Point{X: 5, Y: 5})
+	r.Press(BTNLeft, Point{X: 5, Y: 5}, 0)
 	r.Move(Point{X: 15, Y: 5}) // in-widget drag while pressed
 	if !a.hovered || !a.pressed || len(a.dragTo) == 0 {
 		t.Fatalf("setup: hovered=%v pressed=%v dragTo=%d", a.hovered, a.pressed, len(a.dragTo))
@@ -169,7 +169,7 @@ func TestRouterPointerLost(t *testing.T) {
 		if !a.hovered {
 			t.Fatal("hover did not come back")
 		}
-		r.Press(BTNLeft, Point{X: 5, Y: 5})
+		r.Press(BTNLeft, Point{X: 5, Y: 5}, 0)
 		r.Release(BTNLeft, Point{X: 5, Y: 5})
 		if a.clicks != 1 {
 			t.Errorf("clicks = %d, want 1 after replug", a.clicks)
@@ -201,7 +201,7 @@ func TestRouterScrollBubbles(t *testing.T) {
 	t.Run("axis reaches the scroll through the parent chain", func(t *testing.T) {
 		r := &Router{Root: root}
 		r.Move(Point{X: 5, Y: 5})
-		r.Axis(0, 2)
+		r.Axis(0, 2, 0)
 		if _, offY := scroll.Offset(); offY != 2*wheelStep(scroll.viewH) {
 			t.Errorf("scroll offset = %d, want two steps of %d", offY, wheelStep(scroll.viewH))
 		}
@@ -225,7 +225,7 @@ func TestRouterFocusKeys(t *testing.T) {
 	})
 
 	t.Run("focus by press routes runes and actions", func(t *testing.T) {
-		r.Press(BTNLeft, Point{X: 10, Y: 14})
+		r.Press(BTNLeft, Point{X: 10, Y: 14}, 0)
 		r.Type('!')
 		if e.Text() != "hi!" {
 			t.Fatalf("text = %q, want hi!", e.Text())

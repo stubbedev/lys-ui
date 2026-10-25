@@ -90,7 +90,7 @@ func TestPastePrimaryTargetsHoveredOverFocused(t *testing.T) {
 
 	// Focus the right entry, then hover the left one: X11 pastes
 	// where the mouse is, not where the keyboard is.
-	r.Press(widget.BTNLeft, widget.Point{X: 150, Y: 15})
+	r.Press(widget.BTNLeft, widget.Point{X: 150, Y: 15}, 0)
 	r.Release(widget.BTNLeft, widget.Point{X: 150, Y: 15})
 	if r.Focused() != right {
 		t.Fatalf("focus = %v, want the right entry", r.Focused())

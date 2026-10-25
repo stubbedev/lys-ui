@@ -108,7 +108,7 @@ func (p RouterPointer) TouchMove(at Point) { p.R.Move(at) }
 // TouchPress implements TouchPointer.
 func (p RouterPointer) TouchPress(at Point) {
 	p.R.Move(at)
-	p.R.Press(BTNLeft, at)
+	p.R.Press(BTNLeft, at, 0)
 }
 
 // TouchRelease implements TouchPointer.
@@ -236,7 +236,7 @@ func (t *TouchTracker) Motion(id int32, p Point) {
 		}
 		// Content follows the fingers: dragging down scrolls up.
 		t.Router.Move(mid)
-		t.Router.AxisPixels(-dx, -dy)
+		t.Router.AxisPixels(-dx, -dy, 0)
 	}
 }
 

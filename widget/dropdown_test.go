@@ -137,7 +137,7 @@ func TestDropdownRouterClick(t *testing.T) {
 	fired := 0
 	dd.OnSelect = func(int) { fired++ }
 
-	router.Press(BTNLeft, facePoint(dd))
+	router.Press(BTNLeft, facePoint(dd), 0)
 	router.Release(BTNLeft, facePoint(dd))
 	if !dd.Opened() {
 		t.Fatal("router click did not open the list")

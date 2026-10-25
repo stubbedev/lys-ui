@@ -220,6 +220,10 @@ type node struct {
 	// onClickWithin hears clicks on non-clicking descendants
 	// (SetOnClickWithin).
 	onClickWithin func()
+	// onPointer and onScroll see presses and wheel steps first
+	// (SetOnPointer, SetOnScroll).
+	onPointer func(e PointerEvent) bool
+	onScroll  func(e ScrollEvent) bool
 	// flags are the application-driven states (SetState).
 	flags StateFlags
 	// inline is the widget-scoped declaration block (SetInlineStyle),

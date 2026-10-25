@@ -32,7 +32,7 @@ func TestRouteKey(t *testing.T) {
 		e := widget.NewEntry(face, 13, render.RGB(255, 255, 255))
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 		r := &widget.Router{Root: e}
-		r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5})
+		r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5}, 0)
 		r.Release(widget.BTNLeft, widget.Point{X: 5, Y: 5})
 		return r, e
 	}
@@ -125,7 +125,7 @@ func TestSuperTabSkipsTheTabTrap(t *testing.T) {
 	root.Append(first, false)
 	root.Append(second, false)
 	r := &widget.Router{Root: root}
-	r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5})
+	r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5}, 0)
 	r.Release(widget.BTNLeft, widget.Point{X: 5, Y: 5})
 
 	tr := &fakeTranslator{syms: map[uint32]xkb.Keysym{24: xkb.KeyTab}}

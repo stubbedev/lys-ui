@@ -6,10 +6,9 @@ import (
 	"github.com/stubbedev/lys-ui/render"
 )
 
-// moduleButton is the wayle-shaped test widget: a Button wrapped by a
-// type that claims the input hooks. It embeds Base and returns itself
-// from HitTest, the pattern outside-the-kit widgets need for the
-// router to see the hooks at all.
+// moduleButton is a widget from outside the kit: it embeds Base and
+// returns itself from HitTest, and records what its pointer and scroll
+// hooks see.
 type moduleButton struct {
 	Base
 	btn     *Button
@@ -20,7 +19,26 @@ type moduleButton struct {
 
 func newModuleButton(t *testing.T) *moduleButton {
 	t.Helper()
-	return &moduleButton{btn: NewButton(NewLabel(testFace(t), 12, "m", 0xFF000000), 0, 0)}
+	m := &moduleButton{btn: NewButton(NewLabel(testFace(t), 12, "m", 0xFF000000), 0, 0)}
+	m.SetOnPointer(func(e PointerEvent) bool {
+		switch e.Button {
+		case BTNMiddle:
+			m.middle++
+		case BTNRight:
+			m.right++
+		default:
+			return false
+		}
+		return true
+	})
+	m.SetOnScroll(func(e ScrollEvent) bool {
+		if e.DY == 0 {
+			return false
+		}
+		m.scrolls = append(m.scrolls, e.DY)
+		return true
+	})
+	return m
 }
 
 func (m *moduleButton) Measure(con Constraints) Size { return m.btn.Measure(con) }
@@ -35,24 +53,10 @@ func (m *moduleButton) Paint(cv *render.Canvas) { m.btn.Paint(cv) }
 
 func (m *moduleButton) HitTest(p Point) Widget { return m.HitLeaf(m, p) }
 
-func (m *moduleButton) PointerButton(button uint32) {
-	switch button {
-	case BTNMiddle:
-		m.middle++
-	case BTNRight:
-		m.right++
-	}
-}
-
-func (m *moduleButton) ScrollInput(dy int) bool {
-	if dy == 0 {
-		return false
-	}
-	m.scrolls = append(m.scrolls, dy)
-	return true
-}
-
-func TestRouterPointerButtonHooks(t *testing.T) {
+// An outside widget's pointer hook sees the buttons it claims, while
+// the primary button it leaves keeps its own protocol, and a disabled
+// widget hears nothing.
+func TestRouterPointerHooksOnAnOutsideWidget(t *testing.T) {
 	mb := newModuleButton(t)
 	root := NewBox(Row, 0, 0)
 	root.Append(mb, false)
@@ -60,26 +64,25 @@ func TestRouterPointerButtonHooks(t *testing.T) {
 	root.Measure(Constraints{Max: Size{W: 100, H: 40}})
 	root.Arrange(render.Rect{W: 100, H: 40})
 
-	r.Press(BTNRight, Point{X: 2, Y: 2})
-	r.Press(BTNMiddle, Point{X: 2, Y: 2})
+	r.Press(BTNRight, Point{X: 2, Y: 2}, 0)
+	r.Press(BTNMiddle, Point{X: 2, Y: 2}, 0)
 	if mb.right != 1 || mb.middle != 1 {
 		t.Errorf("right=%d middle=%d, want one hook each", mb.right, mb.middle)
 	}
-	// The primary button keeps its own protocol: no PointerButton call.
-	r.Press(BTNLeft, Point{X: 2, Y: 2})
+	r.Press(BTNLeft, Point{X: 2, Y: 2}, 0)
 	r.Release(BTNLeft, Point{X: 2, Y: 2})
 	if mb.right != 1 || mb.middle != 1 {
-		t.Error("left press leaked into PointerButton")
+		t.Error("left press counted as another button")
 	}
-	// A disabled widget swallows the press.
 	mb.SetEnabled(false)
-	r.Press(BTNRight, Point{X: 2, Y: 2})
+	r.Press(BTNRight, Point{X: 2, Y: 2}, 0)
 	if mb.right != 1 {
-		t.Error("disabled widget received a PointerButton")
+		t.Error("disabled widget's hook saw a press")
 	}
 }
 
-func TestRouterScrollInputTakesPrecedence(t *testing.T) {
+// A scroll hook takes the steps it claims and lets the rest through.
+func TestRouterScrollHookTakesPrecedence(t *testing.T) {
 	mb := newModuleButton(t)
 	root := NewBox(Row, 0, 0)
 	root.Append(mb, false)
@@ -91,14 +94,13 @@ func TestRouterScrollInputTakesPrecedence(t *testing.T) {
 		t.Fatalf("hovered = %T, want the module button", got)
 	}
 
-	r.Axis(0, 120)
+	r.Axis(0, 120, 0)
 	if len(mb.scrolls) != 1 || mb.scrolls[0] != 120 {
 		t.Errorf("scrolls = %v, want one 120 step", mb.scrolls)
 	}
 
-	// Declining (dy == 0 here) falls through instead of consuming.
 	mb.scrolls = nil
-	r.Axis(0, 0)
+	r.Axis(0, 0, 0)
 	if len(mb.scrolls) != 0 {
 		t.Errorf("declined step still consumed: %v", mb.scrolls)
 	}
@@ -135,7 +137,7 @@ func TestRehoverFollowsTheTreeUnderARestingPointer(t *testing.T) {
 		t.Error("a Rehover with nothing moved changed the hover")
 	}
 
-	r.Press(BTNLeft, p)
+	r.Press(BTNLeft, p, 0)
 	layout(0)
 	if r.Rehover() || r.Hovered() != a {
 		t.Error("a Rehover moved the hover off a press in progress")

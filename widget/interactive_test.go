@@ -71,12 +71,12 @@ func TestTogglesReceiveRouterClicks(t *testing.T) {
 	r := &Router{Root: root}
 	p := Point{X: sw.Bounds().X + 5, Y: sw.Bounds().Y + 5}
 	r.Move(p)
-	r.Press(BTNLeft, p)
+	r.Press(BTNLeft, p, 0)
 	r.Release(BTNLeft, p)
 	if sw.On() {
 		t.Error("click did not toggle the switch off")
 	}
-	r.Press(BTNLeft, p)
+	r.Press(BTNLeft, p, 0)
 	r.Release(BTNLeft, p)
 	if !sw.On() {
 		t.Error("second click did not toggle the switch back on")
@@ -89,7 +89,7 @@ func TestTogglesReceiveRouterClicks(t *testing.T) {
 	r2 := &Router{Root: root2}
 	p2 := Point{X: check.Bounds().X + 5, Y: check.Bounds().Y + 5}
 	r2.Move(p2)
-	r2.Press(BTNLeft, p2)
+	r2.Press(BTNLeft, p2, 0)
 	r2.Release(BTNLeft, p2)
 	if !check.Checked() {
 		t.Error("click did not check the checkbox")

@@ -252,7 +252,7 @@ var confInteraction = []confCase{
 		act: func(f *confFixture) {
 			r := &Router{Root: f.root}
 			r.Move(Point{X: 50, Y: 50})
-			r.AxisPixels(0, 40)
+			r.AxisPixels(0, 40, 0)
 		},
 		want: []confCheck{uiOffset(0, 0)},
 	},
@@ -264,7 +264,7 @@ var confInteraction = []confCase{
 		act: func(f *confFixture) {
 			r := &Router{Root: f.root}
 			r.Move(Point{X: 50, Y: 50})
-			r.AxisPixels(0, 40)
+			r.AxisPixels(0, 40, 0)
 		},
 		want: []confCheck{uiOffset(0, 40)},
 	},
@@ -276,7 +276,7 @@ var confInteraction = []confCase{
 		act: func(f *confFixture) {
 			r := &Router{Root: f.root}
 			r.Move(Point{X: 50, Y: 50})
-			r.AxisPixels(0, 40)
+			r.AxisPixels(0, 40, 0)
 		},
 		want: []confCheck{uiOffset(0, 0)},
 	},
@@ -836,7 +836,7 @@ var confExceptionsInteraction = []confException{
 		act: func(f *confFixture) {
 			r := &Router{Root: f.root}
 			r.Move(Point{X: 50, Y: 50})
-			r.AxisPixels(0, 40)
+			r.AxisPixels(0, 40, 0)
 		},
 		want:   []confCheck{uiOffset(0, 40)},
 		reason: "the gesture layer exposes pinch only as a claimed GesturePinch a widget opts into, not an axis the scroll gates can mask",

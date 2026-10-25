@@ -74,7 +74,7 @@ func TestCommandKeyboardAndClick(t *testing.T) {
 	billing := c.shown[4]
 	b := billing.Bounds()
 	at := Point{X: b.X + 4, Y: b.Y + b.H/2}
-	r.Press(BTNLeft, at)
+	r.Press(BTNLeft, at, 0)
 	r.Release(BTNLeft, at)
 	if !slices.Equal(picked, []string{"Settings", "Billing"}) {
 		t.Errorf("picked %v, want Settings then Billing", picked)

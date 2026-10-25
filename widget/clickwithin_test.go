@@ -11,7 +11,7 @@ func clickAt(r *Router, w interface{ Bounds() render.Rect }) {
 	b := w.Bounds()
 	p := Point{X: b.X + b.W/2, Y: b.Y + b.H/2}
 	r.Move(p)
-	r.Press(BTNLeft, p)
+	r.Press(BTNLeft, p, 0)
 	r.Release(BTNLeft, p)
 }
 
@@ -54,7 +54,7 @@ func TestClickWithin(t *testing.T) {
 
 	// Pressed on the title, released on the inner label: no click.
 	tb, ib := title.Bounds(), inner.Bounds()
-	r.Press(BTNLeft, Point{X: tb.X + 1, Y: tb.Y + 1})
+	r.Press(BTNLeft, Point{X: tb.X + 1, Y: tb.Y + 1}, 0)
 	r.Release(BTNLeft, Point{X: ib.X + 1, Y: ib.Y + 1})
 	if cards != 1 || nested != 1 {
 		t.Error("a press dragged to another widget clicked")

@@ -36,7 +36,7 @@ func newAccelFixture(t *testing.T) *accelFixture {
 	e := widget.NewEntry(face, 13, render.RGB(255, 255, 255))
 	e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 	r := &widget.Router{Root: e}
-	r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5})
+	r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5}, 0)
 	r.Release(widget.BTNLeft, widget.Point{X: 5, Y: 5})
 	return &accelFixture{
 		app:    accelApp(),
@@ -329,7 +329,7 @@ func TestScopedAccelCoversItsSubtreeAndInnerScopesWin(t *testing.T) {
 	window.Measure(widget.Constraints{Max: widget.Size{W: 200, H: 60}})
 	window.Arrange(render.Rect{W: 200, H: 60})
 	r := &widget.Router{Root: window}
-	r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5})
+	r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5}, 0)
 	r.Release(widget.BTNLeft, widget.Point{X: 5, Y: 5})
 	if r.Focused() != widget.Widget(entry) {
 		t.Fatalf("focus is on %v, want the entry", r.Focused())

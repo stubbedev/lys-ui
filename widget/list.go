@@ -116,6 +116,14 @@ type List struct {
 	OnSelect           func(i int)
 	OnActivate         func(i int)
 	OnSelectionChanged func(rows []int)
+	// OnPointer sees every button press on the list first, with the
+	// row under it (-1 below the last row); a true return consumes the
+	// press, so no selection, activation or drag follows.
+	OnPointer func(row int, e PointerEvent) bool
+	// OnScroll sees every wheel step over the list first, with the row
+	// under the pointer (-1 below the last row); a true return
+	// consumes the step instead of scrolling.
+	OnScroll func(row int, e ScrollEvent) bool
 
 	// DragContent, when set, lets the selection be dragged out to other
 	// applications, the way a file manager's is: a press on a selected
@@ -525,6 +533,30 @@ func (l *List) HitTest(p Point) Widget {
 		return w
 	}
 	return l
+}
+
+func (l *List) claimPointer(e PointerEvent) bool {
+	if l.OnPointer != nil && l.OnPointer(l.rowUnder(e.At), e) {
+		return true
+	}
+	return l.node.claimPointer(e)
+}
+
+func (l *List) listensScroll() bool { return l.OnScroll != nil || l.node.listensScroll() }
+
+func (l *List) claimScroll(e ScrollEvent) bool {
+	if l.OnScroll != nil && l.OnScroll(l.rowUnder(e.At), e) {
+		return true
+	}
+	return l.node.claimScroll(e)
+}
+
+// rowUnder is the row under p, -1 when none is.
+func (l *List) rowUnder(p Point) int {
+	if i, ok := l.rowAtExact(p); ok {
+		return i
+	}
+	return -1
 }
 
 // rowAt maps a point to a row index, clamped into the model.

@@ -70,7 +70,7 @@ func TestShowcaseControlsReceivePresses(t *testing.T) {
 		show.button.OnClick = func() { before++ }
 		p := center(show.button)
 		router.Move(p)
-		router.Press(widget.BTNLeft, p)
+		router.Press(widget.BTNLeft, p, 0)
 		router.Release(widget.BTNLeft, p)
 		if before != 1 {
 			t.Errorf("button clicks = %d, want 1", before)
@@ -81,7 +81,7 @@ func TestShowcaseControlsReceivePresses(t *testing.T) {
 		want := !show.sw.On()
 		p := center(show.sw)
 		router.Move(p)
-		router.Press(widget.BTNLeft, p)
+		router.Press(widget.BTNLeft, p, 0)
 		router.Release(widget.BTNLeft, p)
 		if show.sw.On() != want {
 			t.Errorf("switch = %v, want toggled to %v", show.sw.On(), want)
@@ -95,7 +95,7 @@ func TestShowcaseControlsReceivePresses(t *testing.T) {
 			t.Fatalf("list content hit %T is not interactive", over)
 		}
 		router.Move(p)
-		router.Axis(0, 3)
+		router.Axis(0, 3, 0)
 		afterX, afterY := show.scrolled.Offset()
 		t.Logf("raw after Axis: x=%d y=%d (before=%d,%d)", afterX, afterY, before, 0)
 		if afterY <= before {

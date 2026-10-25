@@ -136,7 +136,7 @@ func TestPopoverKeysReachAFocusedEntry(t *testing.T) {
 		t.Fatalf("unfocused entry got %q", entry.Text())
 	}
 	// Click to focus, then type and edit.
-	op.router.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5})
+	op.router.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5}, 0)
 	op.router.Release(widget.BTNLeft, widget.Point{X: 5, Y: 5})
 	a.deliverPopoverKey(tr, op, 30, 0)
 	a.deliverPopoverKey(tr, op, 48, 0)
@@ -235,13 +235,13 @@ func TestPopoverClickReachesTheWidgetUnderThePointer(t *testing.T) {
 		t.Fatalf("hit %T, want the button", hit)
 	}
 	op.router.Move(at)
-	op.router.Press(widget.BTNLeft, at)
+	op.router.Press(widget.BTNLeft, at, 0)
 	op.router.Release(widget.BTNLeft, at)
 	if clicks != 1 {
 		t.Errorf("clicks = %d, want the button clicked once", clicks)
 	}
 	// Off the button: nothing clicks; off the content, the root answers.
-	op.router.Press(widget.BTNLeft, widget.Point{X: 2, Y: 2})
+	op.router.Press(widget.BTNLeft, widget.Point{X: 2, Y: 2}, 0)
 	op.router.Release(widget.BTNLeft, widget.Point{X: 2, Y: 2})
 	if clicks != 1 {
 		t.Error("a press off the button clicked it")

@@ -74,7 +74,7 @@ func TestLiveRescaleRebuildsBuffersInPlace(t *testing.T) {
 	fh.frame() // arrange the tree so widget bounds are live
 	eb := entry.Bounds()
 	p := widget.Point{X: eb.X + 5, Y: eb.Y + 5}
-	wnd.router.Press(widget.BTNLeft, p)
+	wnd.router.Press(widget.BTNLeft, p, 0)
 	wnd.router.Release(widget.BTNLeft, p)
 	if wnd.router.Focused() != widget.Widget(entry) {
 		t.Fatalf("entry did not take focus; focused %T", wnd.router.Focused())

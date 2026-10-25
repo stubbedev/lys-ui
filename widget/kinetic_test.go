@@ -99,7 +99,7 @@ func TestRouterAxisEnd(t *testing.T) {
 	r.Move(Point{X: 50, Y: 50})
 	for range 5 {
 		c.set(c.now().Add(10 * time.Millisecond))
-		r.AxisPixels(0, 10)
+		r.AxisPixels(0, 10, 0)
 	}
 	r.Leave()
 	_, before := s.Offset()

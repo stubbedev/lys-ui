@@ -113,16 +113,19 @@ func IsInteractive(w Widget) bool { return interactiveWithin(w, nil) }
 // selectable container's item asks it to leave controls inside the
 // item their clicks.
 func interactiveWithin(w, stop Widget) bool {
-	for w != nil && w != stop {
-		switch w.(type) {
-		case *Button, *Slider, *Switch, *CheckButton, *Entry, *TextArea, *Scroll, *Dropdown, *List:
+	for ; w != nil && w != stop; w = parentOf(w) {
+		if isControl(w) {
 			return true
 		}
-		p, ok := w.(interface{ Parent() Widget })
-		if !ok {
-			return false
-		}
-		w = p.Parent()
+	}
+	return false
+}
+
+// isControl reports whether w itself consumes presses.
+func isControl(w Widget) bool {
+	switch w.(type) {
+	case *Button, *Slider, *Switch, *CheckButton, *Entry, *TextArea, *Scroll, *Dropdown, *List:
+		return true
 	}
 	return false
 }
@@ -158,22 +161,6 @@ type HoverMover interface {
 // horizontal axis (tilt wheels, trackpads), dy from the vertical.
 type ScrollHandler interface {
 	ScrollBy(dx, dy int)
-}
-
-// PointerButtonHandler receives non-primary button presses (middle,
-// right, and anything beyond) on the hovered widget. The primary button
-// stays reserved for the Clicker protocol; everything else is free for
-// widgets that mean something by it.
-type PointerButtonHandler interface {
-	PointerButton(button uint32)
-}
-
-// ScrollInputHandler receives vertical scroll steps before the
-// ScrollHandler walk, and stops the walk when it consumes the step
-// (true). Modules put tool-wheel actions on it; containers keep
-// ScrollHandler and never implement this one.
-type ScrollInputHandler interface {
-	ScrollInput(dy int) bool
 }
 
 // DragContent is the payload a drag carries - mime types best first
@@ -235,17 +222,14 @@ type DragOverSetter interface {
 }
 
 // Axis routes vertical and horizontal scrolling to the hovered widget
-// or the nearest ancestor that handles scrolling. ScrollInputHandler
-// takes precedence and consumes the step only when it says so; a
-// disabled ScrollHandler stops the walk: the wheel never scrolls
-// through an inert viewport to an outer one.
-func (r *Router) Axis(dx, dy float64) {
+// or the nearest ancestor that handles scrolling, mods held. A scroll
+// hook (SetOnScroll) on the way sees the step first and consumes it
+// only when it says so; a disabled ScrollHandler stops the walk: the
+// wheel never scrolls through an inert viewport to an outer one.
+func (r *Router) Axis(dx, dy float64, mods Mods) {
 	for target := r.hover; target != nil; target = parentOf(target) {
-		if si, ok := target.(ScrollInputHandler); ok {
-			if IsEnabled(target) && si.ScrollInput(int(dy)) {
-				return
-			}
-			continue
+		if r.claimScroll(target, int(dx), int(dy), mods) {
+			return
 		}
 		if sc, ok := target.(ScrollHandler); ok {
 			if IsEnabled(target) {
@@ -274,21 +258,26 @@ const scrollStepPx = 40
 
 // AxisPixels routes exact scroll deltas like Axis routes steps: to the
 // nearest scrolling widget under the pointer, which takes the pixels
-// when it is a PixelScroller; any other gets whole steps as the pixels
-// add up to them.
-func (r *Router) AxisPixels(dx, dy float64) {
+// when it is a PixelScroller; any other, and a scroll hook on the way,
+// gets whole steps as the pixels add up to them.
+func (r *Router) AxisPixels(dx, dy float64, mods Mods) {
 	gateTouchAxis(r.hover, &dx, &dy)
 	if dx == 0 && dy == 0 && r.pixelTarget == nil {
 		return
 	}
+	var steps [2]int
+	stepped := false
+	step := func() [2]int {
+		if !stepped {
+			steps, stepped = r.pixelSteps(dx, dy), true
+		}
+		return steps
+	}
 	for target := r.hover; target != nil; target = parentOf(target) {
-		if si, ok := target.(ScrollInputHandler); ok {
-			if IsEnabled(target) {
-				if steps := r.pixelSteps(0, dy); steps[1] != 0 && si.ScrollInput(steps[1]) {
-					return
-				}
+		if c, ok := target.(scrollClaimer); ok && c.listensScroll() {
+			if s := step(); s != [2]int{} && r.claimScroll(target, s[0], s[1], mods) {
+				return
 			}
-			continue
 		}
 		if sc, ok := target.(ScrollHandler); ok {
 			if !IsEnabled(target) {
@@ -299,12 +288,22 @@ func (r *Router) AxisPixels(dx, dy float64) {
 				r.pixelTarget = target
 				return
 			}
-			if steps := r.pixelSteps(dx, dy); steps != [2]int{} {
-				sc.ScrollBy(steps[0], steps[1])
+			if s := step(); s != [2]int{} {
+				sc.ScrollBy(s[0], s[1])
 			}
 			return
 		}
 	}
+}
+
+// claimScroll offers a step to target's scroll hook, an enabled one
+// that listens, and reports whether it consumed the step.
+func (r *Router) claimScroll(target Widget, dx, dy int, mods Mods) bool {
+	c, ok := target.(scrollClaimer)
+	if !ok || !c.listensScroll() || !IsEnabled(target) {
+		return false
+	}
+	return c.claimScroll(ScrollEvent{DX: dx, DY: dy, Mods: mods, At: r.pointer})
 }
 
 // AxisEnd ends a finger scroll: the PixelScroller that took the
@@ -492,6 +491,13 @@ type Router struct {
 	gestureTarget   Widget
 	lastClick       time.Time
 	lastClickWidget Widget
+	// lastPress is the last press, for PointerEvent.Clicks.
+	lastPress struct {
+		w      Widget
+		button uint32
+		at     time.Time
+		count  int
+	}
 
 	// drop-target state during a wl_data_device drag: the widget the
 	// drag is over, the offered mimes, and the mime it accepted.
@@ -547,26 +553,24 @@ func (r *Router) Rehover() bool {
 	return true
 }
 
-// Press records a pointer button press. p is in root coordinates. A
-// press on a disabled widget is swallowed whole: no pressed shade, no
-// drag, and no focus move — focus stays where it was, exactly like a
-// press on empty space outside any control leaves a text field alone.
-func (r *Router) Press(button uint32, p Point) {
+// Press records a pointer button press, mods held. p is in root
+// coordinates. A pointer hook (SetOnPointer) sees it first and may
+// consume it. A press on a disabled widget is swallowed whole: no
+// pressed shade, no drag, and no focus move — focus stays where it
+// was, exactly like a press on empty space outside any control leaves
+// a text field alone.
+func (r *Router) Press(button uint32, p Point, mods Mods) {
 	hit := r.Root.HitTest(p)
+	if hit != nil && !IsEnabled(hit) {
+		return
+	}
+	if claimPointer(hit, PointerEvent{Button: button, Clicks: r.pressCount(hit, button), Mods: mods, At: p}) {
+		return
+	}
 	if button != BTNLeft {
-		if hit == nil || !IsEnabled(hit) {
-			return
-		}
-		if h, ok := hit.(PointerButtonHandler); ok {
-			h.PointerButton(button)
-			return
-		}
 		if o := contextMenuOpener(hit); button == BTNRight && o != nil {
 			o.OpenContextMenu(p)
 		}
-		return
-	}
-	if hit != nil && !IsEnabled(hit) {
 		return
 	}
 	if n := nodeOf(hit); n == nil || !n.noFocusOnClick {

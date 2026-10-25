@@ -205,7 +205,7 @@ func TestFocusVisibleAndWithin(t *testing.T) {
 	arrangeTree(t, root, 400, 100)
 	r := &Router{Root: root}
 
-	r.Press(BTNLeft, Point{X: 5, Y: 5})
+	r.Press(BTNLeft, Point{X: 5, Y: 5}, 0)
 	CollectDamage(root)
 	if !entry.focused || entry.focusVisible {
 		t.Fatal("a pointer focus must not be focus-visible")

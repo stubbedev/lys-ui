@@ -20,7 +20,7 @@ func TestRouteKeyUndoRedo(t *testing.T) {
 		e := widget.NewEntry(face, 13, render.RGB(255, 255, 255))
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 		r := &widget.Router{Root: e}
-		r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5})
+		r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5}, 0)
 		r.Release(widget.BTNLeft, widget.Point{X: 5, Y: 5})
 		return r, e
 	}
@@ -66,7 +66,7 @@ func TestPasteLandsAsOneUndoEntry(t *testing.T) {
 	e := widget.NewEntry(face, 13, render.RGB(255, 255, 255))
 	e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 	r := &widget.Router{Root: e}
-	r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5})
+	r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5}, 0)
 	r.Release(widget.BTNLeft, widget.Point{X: 5, Y: 5})
 	// pasteSelection inserts the whole clipboard in one TextInserter
 	// call; exercise that path's shape.

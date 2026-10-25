@@ -71,11 +71,11 @@ func TestNotebookOverflow(t *testing.T) {
 	}
 	nb.scrollStrip(0)
 	nb.HoverMove(Point{X: 100, Y: 5})
-	if !nb.ScrollInput(1) || nb.scroll != tabWidth/3 {
+	if !nb.claimScroll(ScrollEvent{DY: 1}) || nb.scroll != tabWidth/3 {
 		t.Errorf("wheel over the strip: consumed? scroll=%d", nb.scroll)
 	}
 	nb.SetHovered(false)
-	if nb.ScrollInput(1) {
+	if nb.claimScroll(ScrollEvent{DY: 1}) {
 		t.Error("the wheel off the strip was consumed")
 	}
 }

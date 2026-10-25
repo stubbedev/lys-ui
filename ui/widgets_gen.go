@@ -34,6 +34,8 @@ type nodeProps interface {
 	SetOnClickWithin(fn func())
 	SetOnFocusChanged(fn func(focused bool))
 	SetOnHoverWithin(fn func(on bool))
+	SetOnPointer(fn func(e widget.PointerEvent) bool)
+	SetOnScroll(fn func(e widget.ScrollEvent) bool)
 	SetSharedElement(tag string)
 	SetSizeRequest(w int, h int)
 	SetState(flags widget.StateFlags, on bool)
@@ -239,6 +241,18 @@ func (b *base[W, B]) OnFocusChanged(arg func(focused bool)) B {
 // OnHoverWithin calls SetOnHoverWithin on the widget.
 func (b *base[W, B]) OnHoverWithin(arg func(on bool)) B {
 	b.do(func(s *Scope, w W) { w.SetOnHoverWithin(arg) })
+	return b.self
+}
+
+// OnPointer calls SetOnPointer on the widget.
+func (b *base[W, B]) OnPointer(arg func(e widget.PointerEvent) bool) B {
+	b.do(func(s *Scope, w W) { w.SetOnPointer(arg) })
+	return b.self
+}
+
+// OnScroll calls SetOnScroll on the widget.
+func (b *base[W, B]) OnScroll(arg func(e widget.ScrollEvent) bool) B {
+	b.do(func(s *Scope, w W) { w.SetOnScroll(arg) })
 	return b.self
 }
 

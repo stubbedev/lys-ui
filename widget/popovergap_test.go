@@ -39,7 +39,7 @@ func TestMenusKeepTheirGapFromATrigger(t *testing.T) {
 
 	c, inner, ctxHost := newTestContextMenu(t)
 	b := inner.Bounds()
-	(&Router{Root: c}).Press(BTNRight, Point{X: b.X + 4, Y: b.Y + 4})
+	(&Router{Root: c}).Press(BTNRight, Point{X: b.X + 4, Y: b.Y + 4}, 0)
 	if len(ctxHost.menuOpts) != 1 || ctxHost.menuOpts[0].Gap != 0 {
 		t.Errorf("the context menu's options %+v, want one menu at the pointer", ctxHost.menuOpts)
 	}

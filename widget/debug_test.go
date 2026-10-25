@@ -49,7 +49,7 @@ func newDumpFixture(t *testing.T) *dumpFixture {
 	if r.Hovered() == nil {
 		t.Fatal("fixture: hover missed the button")
 	}
-	r.Press(BTNLeft, p)
+	r.Press(BTNLeft, p, 0)
 	// Keyboard focus sits on the slider while the pointer gesture is
 	// still held - focus and press targets are independent.
 	r.focus = slider

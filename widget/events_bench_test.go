@@ -43,7 +43,7 @@ func BenchmarkWheelOverScroll(b *testing.B) {
 	r.Move(Point{X: 450, Y: 350})
 	b.ReportAllocs()
 	for b.Loop() {
-		r.Axis(0, 40)
+		r.Axis(0, 40, 0)
 	}
 }
 
