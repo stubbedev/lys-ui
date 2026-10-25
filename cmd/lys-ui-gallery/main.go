@@ -281,8 +281,8 @@ func (g *gallery) alertDialog() {
 // dialog opens the Dialog demo.
 func (g *gallery) dialog() {
 	content, view := ui.Build(g.env, ui.Column(
-		ui.Field("Name", ui.Entry().Text("Pedro Duarte")),
-		ui.Field("Username", ui.Entry().Text("@peduarte")),
+		ui.Field("Name", ui.Entry().Text("Ada Lovelace")),
+		ui.Field("Username", ui.Entry().Text("@ada")),
 	).Spacing(16))
 	var err error
 	if g.shown, err = g.app.NewDialog(g.win, app.DialogConfig{
@@ -555,15 +555,15 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			).Donut(true)),
 		).Spacing(16)),
 		section("Checkbox", ui.Aligned(ui.CheckButton(true).Child(ui.Label("Accept terms and conditions")), widget.AlignStart)),
-		section("Collapsible", ui.Expander("@peduarte starred 3 repositories", ui.Column(
-			ui.Label("@radix-ui/primitives"), ui.Label("@radix-ui/colors"), ui.Label("@stitches/react"),
+		section("Collapsible", ui.Expander("@stubbedev starred 3 repositories", ui.Column(
+			ui.Label("stubbedev/lys-ui"), ui.Label("stubbedev/lys-shell"), ui.Label("stubbedev/lys-wm"),
 		).Spacing(8))),
-		section("Combobox", ui.Aligned(ui.Combobox[string]("Select framework...",
-			widget.ComboboxOption[string]{Value: "next", Label: "Next.js"},
-			widget.ComboboxOption[string]{Value: "svelte", Label: "SvelteKit"},
-			widget.ComboboxOption[string]{Value: "nuxt", Label: "Nuxt.js"},
-			widget.ComboboxOption[string]{Value: "remix", Label: "Remix"},
-			widget.ComboboxOption[string]{Value: "astro", Label: "Astro"},
+		section("Combobox", ui.Aligned(ui.Combobox[string]("Select compositor...",
+			widget.ComboboxOption[string]{Value: "lys-wm", Label: "lys-wm"},
+			widget.ComboboxOption[string]{Value: "sway", Label: "sway"},
+			widget.ComboboxOption[string]{Value: "hyprland", Label: "Hyprland"},
+			widget.ComboboxOption[string]{Value: "niri", Label: "niri"},
+			widget.ComboboxOption[string]{Value: "river", Label: "river"},
 		).Ref(&combobox), widget.AlignStart)).opens(click, center(&combobox)).room(300, 300),
 		section("Command", ui.Command("Type a command or search...", commandGroups(func() {})...).Classes(css.Card)),
 		section("Context Menu", ui.ContextMenu(
@@ -591,11 +591,11 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			Child(ui.Button(ui.Label("Create project"), 0, 0).Classes(css.SuggestedAction))),
 		section("Field and Form", g.form(send)),
 		section("Hover Card", ui.Aligned(ui.HoverCard(
-			ui.Button(ui.Label("@nextjs"), 0, 0).Classes(css.Link).Ref(&hoverTrigger),
+			ui.Button(ui.Label("@lys-ui"), 0, 0).Classes(css.Link).Ref(&hoverTrigger),
 			ui.Column(
-				ui.Label("@nextjs").Classes(css.Heading),
-				ui.Label("The React Framework - created and maintained by @vercel.").Wrap(true),
-				ui.Label("Joined December 2021").Classes(css.Caption, css.DimLabel),
+				ui.Label("lys-ui").Classes(css.Heading),
+				ui.Label("A pure-Go widget toolkit for Wayland desktops, no cgo.").Wrap(true),
+				ui.Label("Part of the lys desktop since 2026").Classes(css.Caption, css.DimLabel),
 			).Spacing(4),
 		), widget.AlignStart)).opens(hover, center(&hoverTrigger)).room(360, 240),
 		section("Input", ui.Aligned(ui.Entry().Placeholder("Email").SizeRequest(320, 0), widget.AlignStart)),
@@ -612,8 +612,8 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			ui.Item("Your profile has been verified.", "").Variant(widget.ItemMuted).Small(true),
 			ui.ItemGroup(
 				ui.Item("ada", "ada@example.com"),
-				ui.Item("maxleiter", "maxleiter@example.com"),
-				ui.Item("evilrabbit", "evilrabbit@example.com"),
+				ui.Item("grace", "grace@example.com"),
+				ui.Item("linus", "linus@example.com"),
 			).Classes(css.Card),
 		),
 		section("Kbd", ui.Row(ui.KbdGroup("Ctrl", "Shift", "P"), ui.Label("opens the command palette")).Spacing(12)),
@@ -643,15 +643,15 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 		section("Scroll Area", ui.Aligned(g.scrollArea(), widget.AlignStart)),
 		section("Select", ui.Aligned(ui.Dropdown([]string{"Apple", "Banana", "Blueberry", "Grapes", "Pineapple"}, 0).Ref(&selectMenu), widget.AlignStart)).opens(click, center(&selectMenu)).room(320, 320),
 		section("Separator", ui.Column(
-			ui.Label("Radix Primitives").Classes(css.Heading),
-			ui.Label("An open-source UI component library.").Classes(css.Muted),
+			ui.Label("lys-ui").Classes(css.Heading),
+			ui.Label("A pure-Go widget toolkit for Wayland.").Classes(css.Muted),
 			ui.Separator(widget.Horizontal),
 			ui.Row(ui.Label("Blog"), ui.Label("Docs"), ui.Label("Source")).Spacing(16),
 		).Spacing(8)),
 		section("Sheet", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).Ref(&sheetButton).OnClick(func() { sheet.SetOpen(true) }), widget.AlignStart)).
 			opens(click, center(&sheetButton)).room(720, 480).
 			hosts(func(page ui.Node) ui.Node {
-				return ui.Sheet(page, ui.Field("Name", ui.Entry().Text("Pedro Duarte")), widget.SheetRight).
+				return ui.Sheet(page, ui.Field("Name", ui.Entry().Text("Ada Lovelace")), widget.SheetRight).
 					Header(g.env.Face, "Edit profile", "Make changes to your profile here. Click save when you're done.").
 					Footer(ui.Button(ui.Label("Save changes"), 0, 0).Classes(css.SuggestedAction).OnClick(func() { sheet.SetOpen(false) })).
 					Ref(&sheet)
@@ -670,7 +670,11 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			AppendTab("Account", text("Make changes to your account here.")).
 			AppendTab("Password", text("Change your password here.")), widget.AlignStart)),
 		section("Textarea", ui.Aligned(ui.TextArea().Placeholder("Type your message here.").SizeRequest(400, 80), widget.AlignStart)),
-		section("Toggle", ui.Aligned(ui.ToggleButton(ui.Label("Bold"), 0, 0).Classes(css.Ghost), widget.AlignStart)),
+		section("Toggle", ui.Row(
+			ui.ToggleButton(ui.Label("Bold"), 0, 0).Classes(css.Outline),
+			ui.ToggleButton(ui.Label("Italic"), 0, 0).Classes(css.Outline).Active(true),
+			ui.ToggleButton(ui.Label("Underline"), 0, 0).Classes(css.Ghost),
+		).Spacing(8)),
 		section("Toggle Group", ui.Aligned(ui.ButtonGroup(
 			ui.ToggleButton(ui.Label("Bold"), 0, 0).Classes(css.Outline).Active(true),
 			ui.ToggleButton(ui.Label("Italic"), 0, 0).Classes(css.Outline),
