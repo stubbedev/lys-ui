@@ -263,20 +263,27 @@ func Variant(base *render.Typeface, bold, italic bool) (*render.Typeface, error)
 // store matches a variable family as one face at its default instance,
 // so a weight it does not describe is set on the wght axis (and italic
 // on ital) - the family's real weight, as GTK renders it, instead of
-// the default instance. Static faces return unchanged.
+// the default instance. An italic the family has no face or axis for
+// is a synthetic oblique; static faces otherwise return unchanged.
 func instantiate(tf *render.Typeface, aspect font.Aspect) *render.Typeface {
 	var vs []render.Variation
 	desc := tf.Describe().Aspect
 	if desc.Weight != aspect.Weight && tf.HasAxis("wght") {
 		vs = append(vs, render.Variation{Tag: "wght", Value: float32(aspect.Weight)})
 	}
-	if aspect.Style == font.StyleItalic && desc.Style != font.StyleItalic && tf.HasAxis("ital") {
+	wantsItalic := aspect.Style == font.StyleItalic && desc.Style != font.StyleItalic
+	if wantsItalic && tf.HasAxis("ital") {
 		vs = append(vs, render.Variation{Tag: "ital", Value: 1})
 	}
-	if len(vs) == 0 {
-		return tf
+	if len(vs) > 0 {
+		tf = tf.WithVariations(vs...)
 	}
-	return tf.WithVariations(vs...)
+	if wantsItalic && !tf.HasAxis("ital") {
+		// No italic face and no ital axis: a synthetic oblique, as CSS
+		// synthesizes one by default (font-synthesis: style).
+		tf = tf.Oblique()
+	}
+	return tf
 }
 
 // Weighted resolves family at a CSS numeric weight (100-900) and

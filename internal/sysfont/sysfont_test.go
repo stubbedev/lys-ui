@@ -315,3 +315,31 @@ func TestWeightedRejectsBadInput(t *testing.T) {
 		}
 	}
 }
+
+// An italic of a family with no italic face and no ital axis is a
+// synthetic oblique, the face CSS synthesizes by default: Geist, the
+// UI font, resolved upright for an italic request, so italic text
+// stood straight (#282). The upright request stays upright.
+func TestItalicWithoutAnItalicFaceIsOblique(t *testing.T) {
+	ui, err := UI()
+	if err != nil {
+		t.Fatal(err)
+	}
+	italic, err := Weighted(ui.Family(), 14, 400, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !italic.Slanted() {
+		t.Errorf("italic %s is upright, want a synthetic oblique", ui.Family())
+	}
+	upright, err := Weighted(ui.Family(), 14, 400, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upright.Slanted() {
+		t.Error("the upright request came back slanted")
+	}
+	if v, err := Variant(ui, false, true); err != nil || !v.Slanted() {
+		t.Errorf("Variant italic %v (err %v), want a synthetic oblique", v, err)
+	}
+}
