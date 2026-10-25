@@ -148,3 +148,15 @@ func TestInscriptionSizesByCountsNotContent(t *testing.T) {
 	in.Arrange(render.Rect{W: a.W, H: a.H})
 	in.Paint(render.New(make([]uint8, a.W*a.H*4+4096), a.W*4, a.W, a.H))
 }
+
+// A ColorButton is a button to the stylesheet: an outline icon button
+// as tall as its 36 px peers, not a bare swatch.
+func TestColorButtonStylesAsAButton(t *testing.T) {
+	b := NewColorButton(goldenFace(t), 14, render.RGB(1, 2, 3))
+	row := NewBox(Row, 8, 0)
+	row.AppendAligned(b, false, AlignStart)
+	arrangeTree(t, row, 200, 80)
+	if b.Element() != "button" || b.Bounds().W != 36 || b.Bounds().H != 36 {
+		t.Errorf("element %q at %v, want a 36 px button", b.Element(), b.Bounds())
+	}
+}

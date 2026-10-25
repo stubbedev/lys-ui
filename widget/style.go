@@ -2680,7 +2680,7 @@ func typeElementName(w Widget) string {
 	switch w.(type) {
 	case *Box:
 		return "box"
-	case *Button, *ToggleButton:
+	case *Button, *ToggleButton, *ColorButton:
 		return "button"
 	case *Calendar:
 		return "calendar"

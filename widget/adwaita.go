@@ -386,6 +386,7 @@ var partRules = [][2]string{
 	{"chip.dismissible", "padding-right: 4px;"},
 	{"chip colorswatch", "min-width: 12px; min-height: 12px; border-radius: 9999px;"},
 	{"chip.dragging", "opacity: 0.5;"},
+	{"chip chip", "background-color: @window_bg_color;"},
 	{"chip button.dismiss", "min-width: 16px; min-height: 16px; padding: 0px; border-radius: 9999px; background-color: transparent; color: @muted_fg_color;"},
 	{"chip button.dismiss:hover", "background-color: @muted_bg_color; color: @window_fg_color;"},
 	{"colorswatch", "border: 1px solid alpha(@window_fg_color, 0.1); border-radius: {r-4};"},

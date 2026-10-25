@@ -153,3 +153,24 @@ func TestGoldenChips(t *testing.T) {
 		})
 	}
 }
+
+// A ChipBox is a CSS box: its padding insets the chips and is part of
+// the drop area; a chip nested in a chip stands out from it.
+func TestChipBoxIsAStyledBox(t *testing.T) {
+	loadCSS(t, `chipbox { padding: 10px; border: 1px dashed @borders; }`)
+	b := newChipBox(t, "one", "two")
+	group := NewChip(goldenFace(t), "group")
+	inner := NewChip(goldenFace(t), "inner")
+	group.SetContent(inner)
+	b.Append(group)
+	arrangeTree(t, b, 400, 100)
+	if got := b.ChipAt(0).Bounds(); got.X != 11 || got.Y != 11 {
+		t.Errorf("first chip at %v, want inset by the border and padding", got)
+	}
+	if b.HitTest(Point{X: 3, Y: 3}) != Widget(b) {
+		t.Error("the padding is not the box's own, so no drop lands there")
+	}
+	if inner.style(inner).Background == group.style(group).Background {
+		t.Error("a nested chip has its group's background")
+	}
+}

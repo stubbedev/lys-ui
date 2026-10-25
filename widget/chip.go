@@ -154,7 +154,8 @@ var chipDrag struct {
 }
 
 // ChipBox wraps its chips into lines, as a FlowBox does, and reorders
-// them by drag: a chip dragged within the box or from another ChipBox
+// them by drag. It is the chipbox element, a CSS box whose padding is
+// part of its drop area: a chip dragged within the box or from another ChipBox
 // lands where the drop indicator shows, and OnMoved reports the move
 // after the box made it.
 type ChipBox struct {
@@ -174,6 +175,7 @@ func NewChipBox() *ChipBox {
 	b.flow.SetSelectionMode(SelectionNone)
 	b.SetElement("chipbox")
 	b.initComposite(b, b.flow)
+	b.boxed = true
 	b.fillWidth = true
 	return b
 }
