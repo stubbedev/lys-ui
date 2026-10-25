@@ -2,10 +2,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,11 +62,16 @@ const (
 	shotMaxWidth = 720
 )
 
-// palettes are the shots' themes and their file suffixes.
+// palettes are the shots' themes, their file suffixes, and where the
+// index records each shot's size.
 var palettes = []struct {
 	suffix string
 	theme  func() *widget.Theme
-}{{"", widget.DarkTheme}, {"-light", widget.LightTheme}}
+	size   func(*shotEntry) *shotSize
+}{
+	{"", widget.DarkTheme, func(e *shotEntry) *shotSize { return &e.Dark }},
+	{"-light", widget.LightTheme, func(e *shotEntry) *shotSize { return &e.Light }},
+}
 
 // slug is the file name stem of the demo titled title.
 func slug(title string) string { return strings.ReplaceAll(strings.ToLower(title), " ", "-") }
@@ -150,26 +157,55 @@ func (s *shooter) on(fn func()) {
 	<-done
 }
 
+// shotEntry is one demo in the shots' index: its title, the stem of
+// its files, and each palette's shot size.
+type shotEntry struct {
+	Title string   `json:"title"`
+	Slug  string   `json:"slug"`
+	Dark  shotSize `json:"dark"`
+	Light shotSize `json:"light"`
+}
+
+// shotSize is a shot's size in logical pixels: the PNG's pixels over
+// the output scale, the size the docs site shows it at.
+type shotSize struct {
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
 // all shoots every demo in every palette, starting with the pointer
-// parked: the compositor puts it mid-output, over the first window.
+// parked (the compositor puts it mid-output, over the first window),
+// then writes index.json, the demos in gallery order, which the docs
+// site lists them by.
 func (s *shooter) all() error {
 	if err := s.park(); err != nil {
 		return err
 	}
-	var count int
-	s.on(func() { count = len((&gallery{env: s.env}).demos(func(galleryMsg) {})) })
+	var index []shotEntry
+	s.on(func() {
+		for _, d := range (&gallery{env: s.env}).demos(func(galleryMsg) {}) {
+			index = append(index, shotEntry{Title: d.title, Slug: slug(d.title)})
+		}
+	})
 	for _, p := range palettes {
-		for i := range count {
-			if err := s.one(i, p.theme, p.suffix); err != nil {
+		for i := range index {
+			size, err := s.one(i, p.theme, p.suffix)
+			if err != nil {
 				return err
 			}
+			*p.size(&index[i]) = size
 		}
 	}
-	return nil
+	return writeAtomic(filepath.Join(s.dir, "index.json"), func(w io.Writer) error {
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(index)
+	})
 }
 
-// one shoots demo i under theme into its file.
-func (s *shooter) one(i int, theme func() *widget.Theme, suffix string) (err error) {
+// one shoots demo i under theme into its file and reports the shot's
+// logical size.
+func (s *shooter) one(i int, theme func() *widget.Theme, suffix string) (size shotSize, err error) {
 	var (
 		d    demo
 		g    *gallery
@@ -182,16 +218,16 @@ func (s *shooter) one(i int, theme func() *widget.Theme, suffix string) (err err
 		d = g.demos(func(galleryMsg) {})[i]
 		var root widget.Widget
 		root, view = ui.Build(s.env, d.host(ui.Column(d.body...).Padding(render.UniformInsets(shotPad)).Classes(css.Background)))
-		size := d.windowSize(root)
+		frame := d.windowSize(root)
 		win, err = s.app.NewWindow(app.WindowConfig{
 			Title: d.title, AppID: shotsAppID,
-			Width: uint32(size.W), Height: uint32(size.H),
+			Width: uint32(frame.W), Height: uint32(frame.H),
 			Root: root, Background: widget.Current().Bg, Opaque: true,
 		})
 		g.win = win
 	})
 	if err != nil {
-		return fmt.Errorf("shots: %s window: %w", d.title, err)
+		return shotSize{}, fmt.Errorf("shots: %s window: %w", d.title, err)
 	}
 	defer func() {
 		s.on(func() {
@@ -207,21 +243,24 @@ func (s *shooter) one(i int, theme func() *widget.Theme, suffix string) (err err
 	}()
 	img, err := s.settle(nil)
 	if err != nil {
-		return fmt.Errorf("shots: %s: %w", d.title, err)
+		return shotSize{}, fmt.Errorf("shots: %s: %w", d.title, err)
 	}
 	if d.gesture != noGesture {
 		if err := s.open(d); err != nil {
-			return fmt.Errorf("shots: %s: %w", d.title, err)
+			return shotSize{}, fmt.Errorf("shots: %s: %w", d.title, err)
 		}
 		img, err = s.settle(img)
 	}
 	if err != nil {
-		return fmt.Errorf("shots: %s: %w", d.title, err)
+		return shotSize{}, fmt.Errorf("shots: %s: %w", d.title, err)
 	}
 	if err := s.park(); err != nil {
-		return err
+		return shotSize{}, err
 	}
-	return writePNG(filepath.Join(s.dir, slug(d.title)+suffix+".png"), trim(img))
+	shot := trim(img)
+	sc := int(s.out.Scale)
+	size = shotSize{Width: shot.Bounds().Dx() / sc, Height: shot.Bounds().Dy() / sc}
+	return size, writeAtomic(filepath.Join(s.dir, slug(d.title)+suffix+".png"), func(w io.Writer) error { return png.Encode(w, shot) })
 }
 
 // open gives the demo's trigger the gesture that opens its overlay.
@@ -349,14 +388,15 @@ func trim(img *image.RGBA) *image.RGBA {
 	return cropped
 }
 
-// writePNG writes img to path atomically.
-func writePNG(path string, img image.Image) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".shot-*.png")
+// writeAtomic writes path through write, atomically: a temporary file
+// renamed into place.
+func writeAtomic(path string, write func(io.Writer) error) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".shot-*")
 	if err != nil {
 		return fmt.Errorf("shots: %w", err)
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
-	if err := png.Encode(tmp, img); err != nil {
+	if err := write(tmp); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("shots: encode %s: %w", path, err)
 	}
