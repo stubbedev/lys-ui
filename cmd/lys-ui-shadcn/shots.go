@@ -150,8 +150,12 @@ func (s *shooter) on(fn func()) {
 	<-done
 }
 
-// all shoots every demo in every palette.
+// all shoots every demo in every palette, starting with the pointer
+// parked: the compositor puts it mid-output, over the first window.
 func (s *shooter) all() error {
+	if err := s.park(); err != nil {
+		return err
+	}
 	var count int
 	s.on(func() { count = len((&gallery{env: s.env}).demos(func(galleryMsg) {})) })
 	for _, p := range palettes {
