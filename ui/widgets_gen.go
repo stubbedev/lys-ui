@@ -808,6 +808,146 @@ func (b *BannerBuilder) OnButton(fn func()) *BannerBuilder {
 	return b
 }
 
+// BarBuilder builds a widget.Bar.
+type BarBuilder struct {
+	base[*widget.Bar, *BarBuilder]
+}
+
+// Bar builds a widget.Bar with widget.NewBar.
+func Bar(edge widget.BarEdge) *BarBuilder {
+	b := &BarBuilder{}
+	b.init(b, func(s *Scope) *widget.Bar { return widget.NewBar(edge) })
+	return b
+}
+
+// Edge calls (*widget.Bar).SetEdge.
+func (b *BarBuilder) Edge(edge widget.BarEdge) *BarBuilder {
+	b.do(func(s *Scope, w *widget.Bar) { w.SetEdge(edge) })
+	return b
+}
+
+// WatchEdge re-applies SetEdge with get's value after every update.
+func (b *BarBuilder) WatchEdge(get func() widget.BarEdge) *BarBuilder {
+	b.watch(func(w *widget.Bar) { w.SetEdge(get()) })
+	return b
+}
+
+// BarButtonBuilder builds a widget.BarButton.
+type BarButtonBuilder struct {
+	base[*widget.BarButton, *BarButtonBuilder]
+	face render.Font
+	size float64
+}
+
+// BarButton builds a widget.BarButton with widget.NewBarButton.
+func BarButton(icon Node, label string) *BarButtonBuilder {
+	b := &BarButtonBuilder{}
+	b.init(b, func(s *Scope) *widget.BarButton { return widget.NewBarButton(s.face(b.face), build(s, icon), label) })
+	return b
+}
+
+// Font overrides the environment's typeface and size for this widget; zero values keep the environment's.
+func (b *BarButtonBuilder) Font(face render.Font, sizePx float64) *BarButtonBuilder {
+	b.face, b.size = face, sizePx
+	return b
+}
+
+// Badge calls (*widget.BarButton).SetBadge.
+func (b *BarButtonBuilder) Badge(text string) *BarButtonBuilder {
+	b.do(func(s *Scope, w *widget.BarButton) { w.SetBadge(text) })
+	return b
+}
+
+// WatchBadge re-applies SetBadge with get's value after every update.
+func (b *BarButtonBuilder) WatchBadge(get func() string) *BarButtonBuilder {
+	b.watch(func(w *widget.BarButton) { w.SetBadge(get()) })
+	return b
+}
+
+// Icon calls (*widget.BarButton).SetIcon.
+func (b *BarButtonBuilder) Icon(child Node) *BarButtonBuilder {
+	b.do(func(s *Scope, w *widget.BarButton) { w.SetIcon(build(s, child)) })
+	return b
+}
+
+// Label calls (*widget.BarButton).SetLabel.
+func (b *BarButtonBuilder) Label(text string) *BarButtonBuilder {
+	b.do(func(s *Scope, w *widget.BarButton) { w.SetLabel(text) })
+	return b
+}
+
+// WatchLabel re-applies SetLabel with get's value after every update.
+func (b *BarButtonBuilder) WatchLabel(get func() string) *BarButtonBuilder {
+	b.watch(func(w *widget.BarButton) { w.SetLabel(get()) })
+	return b
+}
+
+// Popover calls (*widget.BarButton).SetPopover.
+func (b *BarButtonBuilder) Popover(build func() widget.Widget) *BarButtonBuilder {
+	b.do(func(s *Scope, w *widget.BarButton) { w.SetPopover(build) })
+	return b
+}
+
+// BindAction calls (*widget.BarButton).BindAction.
+func (b *BarButtonBuilder) BindAction(a widget.Activatable) *BarButtonBuilder {
+	b.do(func(s *Scope, w *widget.BarButton) { s.onShutdown(w.BindAction(a)) })
+	return b
+}
+
+// Bg sets the widget's Bg field.
+func (b *BarButtonBuilder) Bg(value render.Color) *BarButtonBuilder {
+	b.do(func(_ *Scope, w *widget.BarButton) { w.Bg = value })
+	return b
+}
+
+// BgHover sets the widget's BgHover field.
+func (b *BarButtonBuilder) BgHover(value render.Color) *BarButtonBuilder {
+	b.do(func(_ *Scope, w *widget.BarButton) { w.BgHover = value })
+	return b
+}
+
+// BgPressed sets the widget's BgPressed field.
+func (b *BarButtonBuilder) BgPressed(value render.Color) *BarButtonBuilder {
+	b.do(func(_ *Scope, w *widget.BarButton) { w.BgPressed = value })
+	return b
+}
+
+// BgExplicit sets the widget's BgExplicit field.
+func (b *BarButtonBuilder) BgExplicit(value bool) *BarButtonBuilder {
+	b.do(func(_ *Scope, w *widget.BarButton) { w.BgExplicit = value })
+	return b
+}
+
+// Hovered sets the widget's Hovered field.
+func (b *BarButtonBuilder) Hovered(value bool) *BarButtonBuilder {
+	b.do(func(_ *Scope, w *widget.BarButton) { w.Hovered = value })
+	return b
+}
+
+// Pressed sets the widget's Pressed field.
+func (b *BarButtonBuilder) Pressed(value bool) *BarButtonBuilder {
+	b.do(func(_ *Scope, w *widget.BarButton) { w.Pressed = value })
+	return b
+}
+
+// OnClick sets the widget's OnClick field.
+func (b *BarButtonBuilder) OnClick(fn func()) *BarButtonBuilder {
+	b.do(func(_ *Scope, w *widget.BarButton) { w.OnClick = fn })
+	return b
+}
+
+// BarSeparatorBuilder builds a widget.BarSeparator.
+type BarSeparatorBuilder struct {
+	base[*widget.BarSeparator, *BarSeparatorBuilder]
+}
+
+// BarSeparator builds a widget.BarSeparator with widget.NewBarSeparator.
+func BarSeparator() *BarSeparatorBuilder {
+	b := &BarSeparatorBuilder{}
+	b.init(b, func(s *Scope) *widget.BarSeparator { return widget.NewBarSeparator() })
+	return b
+}
+
 // BoxBuilder builds a widget.Box.
 type BoxBuilder struct {
 	base[*widget.Box, *BoxBuilder]
@@ -6532,6 +6672,54 @@ func (b *SearchEntryBuilder) OnEscape(fn func() bool) *SearchEntryBuilder {
 // MaxWidth sets the widget's MaxWidth field.
 func (b *SearchEntryBuilder) MaxWidth(value int) *SearchEntryBuilder {
 	b.do(func(_ *Scope, w *widget.SearchEntry) { w.MaxWidth = value })
+	return b
+}
+
+// SegmentIndicatorBuilder builds a widget.SegmentIndicator.
+type SegmentIndicatorBuilder struct {
+	base[*widget.SegmentIndicator, *SegmentIndicatorBuilder]
+}
+
+// SegmentIndicator builds a widget.SegmentIndicator with widget.NewSegmentIndicator.
+func SegmentIndicator(n int) *SegmentIndicatorBuilder {
+	b := &SegmentIndicatorBuilder{}
+	b.init(b, func(s *Scope) *widget.SegmentIndicator { return widget.NewSegmentIndicator(n) })
+	return b
+}
+
+// Active calls (*widget.SegmentIndicator).SetActive.
+func (b *SegmentIndicatorBuilder) Active(i int) *SegmentIndicatorBuilder {
+	b.do(func(s *Scope, w *widget.SegmentIndicator) { w.SetActive(i) })
+	return b
+}
+
+// WatchActive re-applies SetActive with get's value after every update.
+func (b *SegmentIndicatorBuilder) WatchActive(get func() int) *SegmentIndicatorBuilder {
+	b.watch(func(w *widget.SegmentIndicator) { w.SetActive(get()) })
+	return b
+}
+
+// Count calls (*widget.SegmentIndicator).SetCount.
+func (b *SegmentIndicatorBuilder) Count(n int) *SegmentIndicatorBuilder {
+	b.do(func(s *Scope, w *widget.SegmentIndicator) { w.SetCount(n) })
+	return b
+}
+
+// WatchCount re-applies SetCount with get's value after every update.
+func (b *SegmentIndicatorBuilder) WatchCount(get func() int) *SegmentIndicatorBuilder {
+	b.watch(func(w *widget.SegmentIndicator) { w.SetCount(get()) })
+	return b
+}
+
+// SegmentState calls (*widget.SegmentIndicator).SetSegmentState.
+func (b *SegmentIndicatorBuilder) SegmentState(i int, st widget.SegmentState) *SegmentIndicatorBuilder {
+	b.do(func(s *Scope, w *widget.SegmentIndicator) { w.SetSegmentState(i, st) })
+	return b
+}
+
+// OnSelect sets the widget's OnSelect field.
+func (b *SegmentIndicatorBuilder) OnSelect(fn func(i int)) *SegmentIndicatorBuilder {
+	b.do(func(_ *Scope, w *widget.SegmentIndicator) { w.OnSelect = fn })
 	return b
 }
 

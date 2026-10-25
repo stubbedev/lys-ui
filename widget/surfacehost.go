@@ -68,7 +68,22 @@ type PopoverOptions struct {
 	OnClosed func()
 	// Gap is the distance between the anchor and the popover.
 	Gap int
+	// Side is the side of the anchor the popover opens on, below
+	// unless set.
+	Side PopoverSide
 }
+
+// PopoverSide is the side of its anchor a popover opens on; the
+// compositor flips it to the other side where there is no room.
+type PopoverSide uint8
+
+// The popover sides.
+const (
+	PopoverBelow PopoverSide = iota
+	PopoverAbove
+	PopoverRight
+	PopoverLeft
+)
 
 // PopoverGap is the distance a popover or menu keeps from the trigger
 // that opened it.
