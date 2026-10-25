@@ -870,6 +870,18 @@ func (b *BarButtonBuilder) Icon(child Node) *BarButtonBuilder {
 	return b
 }
 
+// IconPosition calls (*widget.BarButton).SetIconPosition.
+func (b *BarButtonBuilder) IconPosition(p widget.IconPosition) *BarButtonBuilder {
+	b.do(func(s *Scope, w *widget.BarButton) { w.SetIconPosition(p) })
+	return b
+}
+
+// WatchIconPosition re-applies SetIconPosition with get's value after every update.
+func (b *BarButtonBuilder) WatchIconPosition(get func() widget.IconPosition) *BarButtonBuilder {
+	b.watch(func(w *widget.BarButton) { w.SetIconPosition(get()) })
+	return b
+}
+
 // Label calls (*widget.BarButton).SetLabel.
 func (b *BarButtonBuilder) Label(text string) *BarButtonBuilder {
 	b.do(func(s *Scope, w *widget.BarButton) { w.SetLabel(text) })

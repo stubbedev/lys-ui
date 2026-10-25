@@ -124,3 +124,24 @@ func TestGoldenBar(t *testing.T) {
 		})
 	}
 }
+
+// A bar button's icon goes either side of its label, the gap between
+// them is the stylesheet's to set either way, and its label is reachable.
+func TestBarButtonIconPositionAndGap(t *testing.T) {
+	face := goldenFace(t)
+	icon := NewSymbol(SymbolCheck, 16)
+	b := NewBarButton(face, icon, "42%")
+	arrangeTree(t, NewBox(Row, 0, 0).Append(b, false), 300, 40)
+	if gap := b.label.Bounds().X - (icon.Bounds().X + icon.Bounds().W); gap != 6 {
+		t.Errorf("theme gap %d, want 6", gap)
+	}
+	b.SetIconPosition(IconEnd)
+	loadCSS(t, `button.bar-button > box { border-spacing: 2px; }`)
+	arrangeTree(t, NewBox(Row, 0, 0).Append(b, false), 300, 40)
+	if gap := icon.Bounds().X - (b.label.Bounds().X + b.label.Bounds().W); gap != 2 {
+		t.Errorf("icon at end %v after label %v, gap %d; want the stylesheet's 2", icon.Bounds(), b.label.Bounds(), gap)
+	}
+	if b.Label() != b.label || b.Label().Text() != "42%" {
+		t.Error("the label is not reachable")
+	}
+}

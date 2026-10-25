@@ -122,6 +122,7 @@ type BarButton struct {
 	face     render.Font
 	row      *Box
 	icon     Widget
+	iconAt   IconPosition
 	label    *Label
 	badge    *Badge
 	vertical bool
@@ -129,54 +130,87 @@ type BarButton struct {
 	close    func()
 }
 
+// IconPosition is which side of a BarButton's label its icon sits on.
+type IconPosition uint8
+
+// The icon positions.
+const (
+	IconStart IconPosition = iota
+	IconEnd
+)
+
 // NewBarButton returns a bar button of icon (nil for none) and label
-// (empty for none) in face.
+// (empty for none) in face. Its parts sit border-spacing apart, a
+// theme rule a stylesheet sets either way.
 func NewBarButton(face render.Font, icon Widget, label string) *BarButton {
 	face = requireFace("widget.NewBarButton", face)
-	row := NewBox(Row, Current().Spacing*3/4, 0)
-	b := &BarButton{Button: *NewButton(row, 0, 0), face: face, row: row}
+	row := NewBox(Row, 0, 0)
+	b := &BarButton{Button: *NewButton(row, 0, 0), face: face, row: row, icon: icon}
 	b.label = NewLabel(face, Current().TextSize, label, 0)
 	b.AddClass("bar-button")
-	b.SetIcon(icon)
-	b.row.AppendAligned(b.label, false, AlignCenter)
-	b.syncLabel()
+	b.restack()
 	b.OnClick = b.toggle
 	return b
 }
 
 // SetIcon replaces the icon; nil removes it.
 func (b *BarButton) SetIcon(w Widget) {
-	if b.icon != nil {
-		b.row.Remove(b.icon)
-	}
 	b.icon = w
-	if w != nil {
-		b.row.InsertAligned(0, w, false, AlignCenter)
-	}
-	b.syncLabel()
+	b.restack()
 }
 
-// SetLabel replaces the label; empty hides it.
+// SetIconPosition puts the icon before the label (IconStart, the
+// default) or after it.
+func (b *BarButton) SetIconPosition(p IconPosition) {
+	b.iconAt = p
+	b.restack()
+}
+
+// SetLabel replaces the label text; empty hides it.
 func (b *BarButton) SetLabel(s string) {
 	b.label.SetText(s)
 	b.syncLabel()
 }
 
-// Label returns the label text.
-func (b *BarButton) Label() string { return b.label.Text() }
+// Label is the button's label, for its text, classes and limits.
+func (b *BarButton) Label() *Label { return b.label }
 
 // SetBadge shows text in a badge after the label; empty removes it.
 func (b *BarButton) SetBadge(text string) {
 	switch {
-	case text == "" && b.badge != nil:
-		b.row.Remove(b.badge)
+	case text == "":
 		b.badge = nil
-	case text != "" && b.badge == nil:
+	case b.badge == nil:
 		b.badge = NewBadge(b.face, text)
-		b.row.AppendAligned(b.badge, false, AlignCenter)
-	case text != "":
+	default:
 		b.badge.SetText(text)
+		return
 	}
+	b.restack()
+}
+
+// restack lays the parts out in order: the icon on its side of the
+// label, then the badge.
+func (b *BarButton) restack() {
+	b.row.Clear()
+	parts := []Widget{b.icon, b.label}
+	if b.iconAt == IconEnd {
+		parts[0], parts[1] = b.label, b.icon
+	}
+	for _, w := range append(parts, b.badgeWidget()) {
+		if w != nil {
+			b.row.AppendAligned(w, false, AlignCenter)
+		}
+	}
+	b.syncLabel()
+}
+
+// badgeWidget is the badge as a Widget, nil without one.
+func (b *BarButton) badgeWidget() Widget {
+	if b.badge == nil {
+		return nil
+	}
+	return b.badge
 }
 
 // SetPopover makes a click open build's widget in a popover away from
