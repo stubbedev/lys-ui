@@ -443,11 +443,11 @@ var confSelectors = []confCase{
 			entry:read-write { color: #008000; }
 			#ro:read-only { color: #008000; }
 			entry:placeholder-shown { background-color: #008000; }`,
-		tree: nCol("#c", nEntry("#rw", "typed"), nEntry("#ro", "fixed"), selPlaceholder("#ph", "hint")),
+		tree: nCol("#c", nEntry("#rw", "typed"), nEntry("#ro", "fixed"), selPlaceholder("#ph", "hint"), nEntry("#bare", "theme")),
 		act:  func(f *confFixture) { f.get("ro").(*Entry).SetReadOnly(true) },
 		want: selBoth(selGreenFor("rw", "ro", "ph"), []confCheck{
 			wantComputed("ph", cpBackground, selGreen),
-			wantComputed("rw", cpBackground, render.Color(0)),
+			wantComputedLike("rw", "bare", cpBackground),
 		}),
 	},
 	{
@@ -460,7 +460,7 @@ var confSelectors = []confCase{
 		tree: nCol("#w.w", nEntry("#e", "x"), nEntry("#other", "y")),
 		act:  func(f *confFixture) { (&Router{Root: f.root}).SetFocus(f.get("e")) },
 		want: selBoth(selGreenFor("e", "w"), selRedFor("other"),
-			[]confCheck{wantComputed("e", cpBackground, render.Color(0))}),
+			[]confCheck{wantComputedLike("e", "other", cpBackground)}),
 	},
 	{
 		name: "keyboard focus matches focus-visible",

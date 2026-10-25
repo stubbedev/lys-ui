@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // The check styles as `checkbutton > check`: its box layers paint the
@@ -56,6 +57,27 @@ func TestCheckButtonCheckMarkColor(t *testing.T) {
 	arrangeTree(t, c, 100, 40)
 	if got := pickc(0, c.check.style(&c.check), style.PropColor, 0); got != render.RGB(0x11, 0x22, 0x33) {
 		t.Errorf("mark color %v, want the check's color rule", got)
+	}
+}
+
+// A checked box marks in the accent's foreground over the accent fill,
+// in both palettes, though its label's color is the window's: the mark
+// inherited the label's white on the dark palette's light fill and
+// vanished (#281).
+func TestCheckButtonMarkContrastsTheFill(t *testing.T) {
+	prev := Current()
+	t.Cleanup(func() { SetTheme(prev) })
+	for _, th := range []*Theme{DarkTheme(), LightTheme()} {
+		SetTheme(th)
+		c := NewCheckButton(true)
+		c.SetChild(NewLabel(testFace(t), 14, "Accept terms and conditions", 0))
+		page := NewBox(Column, 0, 0)
+		page.AddClass(css.Background)
+		page.Append(c, false)
+		arrangeTree(t, page, 300, 40)
+		if got := pickc(0, c.check.style(&c.check), style.PropColor, 0); got != th.OnAccent {
+			t.Errorf("dark=%v: mark color %#x, want the accent's foreground %#x", th.IsDark(), uint32(got), uint32(th.OnAccent))
+		}
 	}
 }
 

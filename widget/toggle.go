@@ -352,8 +352,8 @@ func (c *CheckButton) Paint(cv *render.Canvas) {
 		}
 		c.drawThemedMark(cv, src, box, tint)
 	} else if c.group != nil && c.checked {
-		// The radio's mark: a dot a third of the indicator.
-		d := max(box.W/3, 2)
+		// The radio's mark: a dot half the indicator.
+		d := max(box.W/2, 2)
 		cv.RoundedRect(render.Rect{X: box.X + (box.W-d)/2, Y: box.Y + (box.H-d)/2, W: d, H: d}, d/2, tick)
 	} else if c.checked || c.Inconsistent() {
 		drawCheckMark(cv, box, c.Inconsistent(), tick)

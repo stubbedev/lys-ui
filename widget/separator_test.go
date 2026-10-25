@@ -33,7 +33,7 @@ func TestSeparatorMeasure(t *testing.T) {
 }
 
 func TestSeparatorPaint(t *testing.T) {
-	bg := render.RGB(255, 255, 255)
+	bg := Current().Bg
 
 	t.Run("horizontal paints its center row", func(t *testing.T) {
 		w, h := 60, 11

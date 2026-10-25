@@ -277,6 +277,28 @@ func (c confComputed) probe(f *confFixture) (string, string, bool) {
 	return confFormat(got), confFormat(c.want), confEqual(got, c.want)
 }
 
+// confComputedLike expects id's computed prop to equal like's: the
+// value a bare widget of the same kind takes from the theme layer, for
+// a rule that must not have applied.
+type confComputedLike struct {
+	id, like string
+	prop     confProp
+}
+
+// wantComputedLike expects id's computed prop to be like's.
+func wantComputedLike(id, like string, prop confProp) confCheck {
+	return confComputedLike{id, like, prop}
+}
+
+func (c confComputedLike) what() string {
+	return "computed " + c.prop.name + " of #" + c.id + " against #" + c.like
+}
+
+func (c confComputedLike) probe(f *confFixture) (string, string, bool) {
+	got, want := c.prop.read(f.values(c.id)), c.prop.read(f.values(c.like))
+	return confFormat(got), confFormat(want), confEqual(got, want)
+}
+
 // confEqual compares a probed value with its expectation.
 func confEqual(got, want any) bool {
 	g, gok := got.(float64)

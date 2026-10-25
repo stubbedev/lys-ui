@@ -139,12 +139,12 @@ var classRules = [][2]string{
 	{css.LiquidGlass, "background-color: alpha(@card_bg_color, 0.18); backdrop-filter: -lys-refract(18px 10px) blur(2px) saturate(1.8); border: 1px solid alpha(white, 0.3); border-radius: 24px; box-shadow: inset 0px 1px 0px alpha(white, 0.5), inset 0px -1px 0px alpha(black, 0.12), 0px 10px 30px alpha(black, 0.22);"},
 	{css.Frosted, "background-color: alpha(mix(@card_bg_color, white, 0.08), 0.62); background-image: -lys-grain(0.05); backdrop-filter: blur(24px) saturate(1.4); border: 1px solid alpha(@window_fg_color, 0.12); border-radius: 12px; box-shadow: 0px 8px 24px alpha(black, 0.18);"},
 	{css.Glass + "." + css.BlurUnavailable + ", ." + css.Frosted + "." + css.BlurUnavailable, "background-color: @card_bg_color;"},
-	{css.Card, "background-color: @card_bg_color; color: @card_fg_color; border: 1px solid @borders; border-radius: 12px; box-shadow: 0px 1px 2px alpha(black, 0.05);"},
+	{css.Card, "background-color: @card_bg_color; color: @card_fg_color; border: 1px solid @borders; border-radius: 14px; box-shadow: 0px 1px 2px alpha(black, 0.05);"},
 	{css.BoxedList, "background-color: @card_bg_color; border-radius: 12px;"},
 	{css.OSD, "background-color: #000000b3; color: #ffffff;"},
 	{css.View, "background-color: @view_bg_color; color: @view_fg_color;"},
 	{css.Toolbar, "padding: 6px;"},
-	{css.Keycap, "font-size: 12px; font-weight: 500; padding: 0px 4px; min-height: 20px; min-width: 20px; border-radius: 4px; background-color: @muted_bg_color; color: @muted_fg_color;"},
+	{css.Keycap, "font-size: 12px; font-weight: 500; padding: 0px 4px; min-height: 20px; min-width: 20px; border-radius: 6px; background-color: @muted_bg_color; color: @muted_fg_color;"},
 	{css.H1, "font-size: 36px; font-weight: 800;"},
 	{css.H2, "font-size: 30px; font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid @borders;"},
 	{css.H3, "font-size: 24px; font-weight: 600;"},
@@ -201,7 +201,7 @@ func controlRules() [][2]string {
 		{"button." + css.DestructiveAction + ":disabled", "background-color: alpha(@destructive_bg_color, 0.5);"},
 		{"button." + css.Secondary, "background-color: @secondary_bg_color; color: @window_fg_color;"},
 		{"button." + css.Secondary + ":hover", "background-color: alpha(@secondary_bg_color, 0.8);"},
-		{"button." + css.Outline, "background-color: @window_bg_color; border: 1px solid @input_border_color; box-shadow: 0px 1px 2px alpha(black, 0.05);"},
+		{"button." + css.Outline, "background-color: @window_bg_color; border: 1px solid @borders; box-shadow: 0px 1px 2px alpha(black, 0.05);"},
 		{"button." + css.Outline + ":hover, button." + css.Ghost + ":hover", "background-color: @muted_bg_color;"},
 		{"button." + css.Ghost + ", button." + css.Link, "background-color: transparent;"},
 		{"button." + css.Ghost + ":checked, button." + css.Outline + ":checked", "background-color: @muted_bg_color;"},
@@ -210,16 +210,18 @@ func controlRules() [][2]string {
 		{"button." + css.Link + ":hover label", "text-decoration-line: underline;"},
 		{"dropdown > button", "background-color: transparent; box-shadow: inset 0px 0px 0px 1px @input_border_color; border-radius: 8px;"},
 		{"dropdown > button:hover", "background-color: @muted_bg_color;"},
-		{"checkbutton:checked check", "border-color: @accent_bg_color;"},
+		{"checkbutton check, checkbutton radio", "border: 1px solid @input_border_color; background-color: transparent;"},
+		{"checkbutton:checked check, checkbutton:indeterminate check", "border-color: @accent_bg_color; background-color: @accent_bg_color; color: @accent_fg_color;"},
+		{"checkbutton:checked radio", "color: @accent_bg_color;"},
 		{"checkbutton > :not(check)", "margin-left: 8px;"},
 		{"scale slider", "background-color: @window_bg_color; box-shadow: inset 0px 0px 0px 1px @accent_bg_color;"},
 		{"entry, spinbutton, textview", "box-shadow: inset 0px 0px 0px 1px @input_border_color; border-radius: 8px; background-color: transparent;"},
 		{"entry:focus, spinbutton:focus, textview:focus", "box-shadow: inset 0px 0px 0px 1px @ring_color;"},
-		{"badge", "padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 500; background-color: @accent_bg_color; color: @accent_fg_color;"},
+		{"badge", "padding: 2px 8px; border-radius: 9999px; font-size: 12px; font-weight: 500; background-color: @accent_bg_color; color: @accent_fg_color;"},
 		{"badge." + css.Secondary, "background-color: @secondary_bg_color; color: @window_fg_color;"},
 		{"badge." + css.Destructive, "background-color: @destructive_bg_color; color: @destructive_fg_color;"},
 		{"badge." + css.Outline, "background-color: transparent; color: @window_fg_color; box-shadow: inset 0px 0px 0px 1px @borders;"},
-		{"alert", "padding: 12px 16px; border: 1px solid @borders; border-radius: 8px; background-color: @card_bg_color; color: @card_fg_color;"},
+		{"alert", "padding: 12px 16px; border: 1px solid @borders; border-radius: 10px; background-color: @card_bg_color; color: @card_fg_color;"},
 		{"alert." + css.Destructive, "color: @destructive_color;"},
 		{"alert .title", "font-weight: 500;"},
 		{"alert .description", "color: @muted_fg_color;"},
@@ -269,7 +271,7 @@ func controlRules() [][2]string {
 		{"command .shortcut", "color: @muted_fg_color; letter-spacing: 1px;"},
 		{"command .separator", "margin: 4px 0px;"},
 		{"command .empty", "padding: 24px 0px; color: @muted_fg_color;"},
-		{"combobox button, datepicker button", "font-weight: 400; padding: 0px 12px;"},
+		{"combobox > button." + css.Outline + ", datepicker > button." + css.Outline, "font-weight: 400; padding: 0px 12px;"},
 		{"combobox .placeholder, datepicker .placeholder", "color: @muted_fg_color;"},
 		{"calendar button.nav", "background-color: transparent; border-radius: 6px; color: @muted_fg_color;"},
 		{"calendar button.nav:hover", "background-color: @muted_bg_color; color: @window_fg_color;"},
@@ -305,7 +307,7 @@ func controlRules() [][2]string {
 		{"columnview row", "border-bottom: 1px solid @borders;"},
 		{"columnview row:hover", "background-color: alpha(@muted_bg_color, 0.5);"},
 		{"columnview row:selected", "background-color: @muted_bg_color;"},
-		{"item", "padding: 16px; border: 1px solid transparent; border-radius: 6px;"},
+		{"item", "padding: 16px; border: 1px solid transparent; border-radius: 8px;"},
 		{"item." + css.Small, "padding: 12px 16px;"},
 		{"item." + css.Outline, "border-color: @borders;"},
 		{"item." + css.Muted, "background-color: alpha(@muted_bg_color, 0.5); font-size: inherit; color: inherit;"},
@@ -321,14 +323,14 @@ func controlRules() [][2]string {
 		{"buttongroup.vertical > box > *:last-child", "border-radius: 0px 0px 8px 8px;"},
 		{"buttongroup.vertical > box > *:not(:first-child)", "border-left-width: 1px; border-top-width: 0px;"},
 		{"buttongroup > box > *:only-child", "border-radius: 8px;"},
-		{tabLists, "background-color: @muted_bg_color; border-radius: 8px; padding: 3px;"},
-		{tabTriggers, "background-color: transparent; border-radius: 6px; min-height: 28px; padding: 0px 12px; font-weight: 500; color: @muted_fg_color;"},
+		{tabLists, "background-color: @muted_bg_color; border-radius: 10px; padding: 3px;"},
+		{tabTriggers, "background-color: transparent; border-radius: 8px; min-height: 28px; padding: 0px 12px; font-weight: 500; color: @muted_fg_color;"},
 		{activeTabs, "background-color: @window_bg_color; color: @window_fg_color; box-shadow: 0px 1px 3px alpha(black, 0.1);"},
 		{"carousel button.nav", "min-width: 32px; min-height: 32px; padding: 0px; border-radius: 9999px;"},
 		{"notebook > header", "margin-bottom: 8px;"},
 		{"tabbar .tab-close-button", "background-color: transparent; border-radius: 4px;"},
 		{"tabbar .tab-close-button:hover", "background-color: @muted_bg_color;"},
-		{"skeleton", "background-color: @muted_bg_color; border-radius: 6px;"},
+		{"skeleton", "background-color: @muted_bg_color; border-radius: 8px;"},
 		{"bullets", "margin-left: 8px;"},
 		{"rows", "border: 1px solid @borders;"},
 		{"dialog", "border: 1px solid @borders; border-radius: 10px;"},
@@ -338,9 +340,22 @@ func controlRules() [][2]string {
 		{"menubar", "background-color: @window_bg_color; border: 1px solid @borders; border-radius: 8px; padding: 4px; box-shadow: 0px 1px 2px alpha(black, 0.05);"},
 		{"menubar > box > button", "background-color: transparent; border-radius: 4px; padding: 4px 8px; min-height: 0px; font-weight: 500;"},
 		{"menubar > box > button:hover, menubar > box > button:checked", "background-color: @muted_bg_color;"},
-		{"tooltip", "background-color: @accent_bg_color; color: @accent_fg_color; border-radius: 6px; padding: 6px 12px;"},
+		{"tooltip", "background-color: @window_fg_color; color: @window_bg_color; border-radius: 8px; padding: 6px 12px; font-size: 12px;"},
 		{"popover, menu", "background-color: @popover_bg_color; color: @popover_fg_color; border: 1px solid @borders; border-radius: 8px;"},
 	}
+}
+
+// darkRules are shadcn/ui v4's dark: variants, added on a dark
+// palette: the inputs and outline controls take a translucent input
+// fill, and the destructive fills soften to 60%.
+var darkRules = [][2]string{
+	{"entry, spinbutton, textview, inputgroup, inputotp .slot, dropdown > button, combobox > button, datepicker > button, checkbutton check, checkbutton radio", "background-color: alpha(@input_border_color, 0.3);"},
+	{"inputgroup entry", "background-color: transparent;"},
+	{"button." + css.Outline, "background-color: alpha(@input_border_color, 0.3); border-color: @input_border_color;"},
+	{"button." + css.Outline + ":hover, dropdown > button:hover", "background-color: alpha(@input_border_color, 0.5);"},
+	{"button." + css.DestructiveAction + ", badge." + css.Destructive, "background-color: alpha(@destructive_bg_color, 0.6);"},
+	{"button." + css.DestructiveAction + ":hover, button." + css.DestructiveAction + ":active", "background-color: alpha(@destructive_bg_color, 0.5);"},
+	{activeTabs, "background-color: alpha(@input_border_color, 0.3); box-shadow: inset 0px 0px 0px 1px @input_border_color;"},
 }
 
 // partRules style widget parts: the level bar's trough and offset
@@ -395,6 +410,11 @@ func themeCSS(t *Theme) string {
 	}
 	for _, r := range controlRules() {
 		fmt.Fprintf(&b, "%s { %s }\n", r[0], r[1])
+	}
+	if t.IsDark() {
+		for _, r := range darkRules {
+			fmt.Fprintf(&b, "%s { %s }\n", r[0], r[1])
+		}
 	}
 	if t.Animations {
 		// The skeleton's pulse; reduced motion regenerates the layer

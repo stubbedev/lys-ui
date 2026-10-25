@@ -3,6 +3,8 @@ package widget
 import (
 	"testing"
 	"time"
+
+	"github.com/stubbedev/lys-ui/render"
 )
 
 // calendarIn is the Calendar in the popover a picker opened.
@@ -155,5 +157,24 @@ func TestGoldenShadcnDatePicker(t *testing.T) {
 			col.Append(empty, false).Append(picked, false).Append(rng, false).Append(host.popovers[0], false)
 			NewGolden(t, col, "shadcn-datepicker-"+tc.name, goldenTheme(tc.th))
 		})
+	}
+}
+
+// The trigger's padding rule reaches only the trigger: the popover is
+// style-anchored under the picker, and `datepicker button` padded the
+// calendar's month buttons too, squeezing their chevrons to specks
+// (#281).
+func TestDatePickerTriggerRuleSparesThePopover(t *testing.T) {
+	p, host := newTestPicker(t)
+	p.trigger.OnClick()
+	content := host.popovers[len(host.popovers)-1]
+	SetStyleAnchor(content, p)
+	arrangeTree(t, content, 320, 400)
+	if pad := boxOf(p.trigger.style(p.trigger), render.Insets{}).padding; pad.Left != 12 || pad.Right != 12 {
+		t.Errorf("trigger padding %+v, want 12 each side", pad)
+	}
+	nav := calendarIn(t, host).nav[0]
+	if pad := boxOf(nav.style(nav), render.Insets{}).padding; pad.Left != 0 || pad.Right != 0 {
+		t.Errorf("month button padding %+v, want none", pad)
 	}
 }
