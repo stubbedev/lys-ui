@@ -6,7 +6,6 @@ package window
 
 import (
 	"encoding/binary"
-	"io"
 	"testing"
 	"time"
 
@@ -28,48 +27,6 @@ const (
 	opUnsetFullscreen = 12
 	opSetMinimized    = 13
 )
-
-// wireFrame is one request as it hit the wire: object id, opcode, and
-// the payload words.
-type wireFrame struct {
-	obj    uint32
-	opcode uint32
-	body   []byte
-}
-
-// startWireServer listens on a private unix socket and drains every
-// request into the returned channel. The wayland connection is
-// endianness-native, so the decoder is too.
-func startWireServer(t *testing.T) <-chan wireFrame {
-	t.Helper()
-	ln, _ := headlesstest.LoopbackDisplay(t, "wayland-test")
-	t.Cleanup(func() { ln.Close() })
-
-	frames := make(chan wireFrame, 64)
-	go func() {
-		conn, err := ln.AcceptUnix()
-		if err != nil {
-			return
-		}
-		for {
-			var head [8]byte
-			if _, err := io.ReadFull(conn, head[:]); err != nil {
-				return
-			}
-			size := int(binary.NativeEndian.Uint32(head[4:8]) >> 16)
-			body := make([]byte, size-8)
-			if _, err := io.ReadFull(conn, body); err != nil {
-				return
-			}
-			frames <- wireFrame{
-				obj:    binary.NativeEndian.Uint32(head[0:4]),
-				opcode: binary.NativeEndian.Uint32(head[4:8]) & 0xffff,
-				body:   body,
-			}
-		}
-	}()
-	return frames
-}
 
 // newWireWindow builds a real window over the loopback connection.
 func newWireWindow(t *testing.T, cfg Config) *Window {
@@ -95,27 +52,8 @@ func newWireWindow(t *testing.T, cfg Config) *Window {
 	return w
 }
 
-// waitForFrame consumes frames until one matches; the buffered noise
-// (title, app_id, ...) passes through.
-func waitForFrame(t *testing.T, frames <-chan wireFrame, name string, match func(wireFrame) bool) wireFrame {
-	t.Helper()
-	for {
-		select {
-		case f := <-frames:
-			if match(f) {
-				return f
-			}
-		case <-time.After(2 * time.Second):
-			t.Fatalf("no %s request reached the wire", name)
-		}
-	}
-}
-
-// word reads payload word i as int32.
-func word(b []byte, i int) int32 { return int32(binary.NativeEndian.Uint32(b[4*i : 4*i+4])) }
-
 func TestSizeLimitRequests(t *testing.T) {
-	frames := startWireServer(t)
+	frames := headlesstest.WireServer(t, "wayland-test")
 	w := newWireWindow(t, Config{
 		Title: "t", AppID: "t",
 		MinWidth: 320, MinHeight: 200,
@@ -123,20 +61,20 @@ func TestSizeLimitRequests(t *testing.T) {
 	})
 
 	t.Run("set_min_size carries the configured minimum", func(t *testing.T) {
-		f := waitForFrame(t, frames, "set_min_size", func(f wireFrame) bool {
-			return f.opcode == opSetMinSize
+		f := headlesstest.WaitForFrame(t, frames, "set_min_size", func(f headlesstest.WireFrame) bool {
+			return f.Opcode == opSetMinSize
 		})
-		if len(f.body) != 8 || word(f.body, 0) != 320 || word(f.body, 1) != 200 {
-			t.Errorf("set_min_size payload %v, want (320, 200)", f.body)
+		if len(f.Body) != 8 || f.Word(0) != 320 || f.Word(1) != 200 {
+			t.Errorf("set_min_size payload %v, want (320, 200)", f.Body)
 		}
 	})
 
 	t.Run("set_max_size carries the configured maximum", func(t *testing.T) {
-		f := waitForFrame(t, frames, "set_max_size", func(f wireFrame) bool {
-			return f.opcode == opSetMaxSize
+		f := headlesstest.WaitForFrame(t, frames, "set_max_size", func(f headlesstest.WireFrame) bool {
+			return f.Opcode == opSetMaxSize
 		})
-		if len(f.body) != 8 || word(f.body, 0) != 800 || word(f.body, 1) != 600 {
-			t.Errorf("set_max_size payload %v, want (800, 600)", f.body)
+		if len(f.Body) != 8 || f.Word(0) != 800 || f.Word(1) != 600 {
+			t.Errorf("set_max_size payload %v, want (800, 600)", f.Body)
 		}
 	})
 
@@ -149,7 +87,7 @@ func TestSizeLimitRequests(t *testing.T) {
 }
 
 func TestNoLimitRequestsWhenUnconstrained(t *testing.T) {
-	frames := startWireServer(t)
+	frames := headlesstest.WireServer(t, "wayland-test")
 	w := newWireWindow(t, Config{Title: "t", AppID: "t"})
 	drain := func() {
 		for {
@@ -168,20 +106,20 @@ func TestNoLimitRequestsWhenUnconstrained(t *testing.T) {
 	if err := w.SetMinSize(120, 80); err != nil {
 		t.Fatal(err)
 	}
-	f := waitForFrame(t, frames, "set_min_size", func(f wireFrame) bool {
-		return f.opcode == opSetMinSize
+	f := headlesstest.WaitForFrame(t, frames, "set_min_size", func(f headlesstest.WireFrame) bool {
+		return f.Opcode == opSetMinSize
 	})
-	if len(f.body) != 8 || word(f.body, 0) != 120 || word(f.body, 1) != 80 {
-		t.Errorf("set_min_size payload %v, want (120, 80)", f.body)
+	if len(f.Body) != 8 || f.Word(0) != 120 || f.Word(1) != 80 {
+		t.Errorf("set_min_size payload %v, want (120, 80)", f.Body)
 	}
 	if err := w.SetMaxSize(0, 0); err != nil {
 		t.Fatal(err)
 	}
-	f = waitForFrame(t, frames, "set_max_size", func(f wireFrame) bool {
-		return f.opcode == opSetMaxSize
+	f = headlesstest.WaitForFrame(t, frames, "set_max_size", func(f headlesstest.WireFrame) bool {
+		return f.Opcode == opSetMaxSize
 	})
-	if len(f.body) != 8 || word(f.body, 0) != 0 || word(f.body, 1) != 0 {
-		t.Errorf("set_max_size payload %v, want (0, 0)", f.body)
+	if len(f.Body) != 8 || f.Word(0) != 0 || f.Word(1) != 0 {
+		t.Errorf("set_max_size payload %v, want (0, 0)", f.Body)
 	}
 	if minW, minH, _, _ := w.SizeLimits(); minW != 120 || minH != 80 {
 		t.Errorf("min limits = %dx%d, want 120x80", minW, minH)
@@ -189,7 +127,7 @@ func TestNoLimitRequestsWhenUnconstrained(t *testing.T) {
 }
 
 func TestResizeRequest(t *testing.T) {
-	frames := startWireServer(t)
+	frames := headlesstest.WireServer(t, "wayland-test")
 	w := newWireWindow(t, Config{Title: "t", AppID: "t"})
 
 	t.Run("the grab carries the seat, serial, and edges", func(t *testing.T) {
@@ -197,20 +135,20 @@ func TestResizeRequest(t *testing.T) {
 		if err := w.Resize(seat, 4242, xdg.ToplevelResizeEdgeBottomRight); err != nil {
 			t.Fatal(err)
 		}
-		f := waitForFrame(t, frames, "resize", func(f wireFrame) bool {
-			return f.opcode == opResize
+		f := headlesstest.WaitForFrame(t, frames, "resize", func(f headlesstest.WireFrame) bool {
+			return f.Opcode == opResize
 		})
-		if len(f.body) != 12 {
-			t.Fatalf("resize payload %v, want 3 words", f.body)
+		if len(f.Body) != 12 {
+			t.Fatalf("resize payload %v, want 3 words", f.Body)
 		}
-		if word(f.body, 0) != int32(seat.Id()) {
-			t.Errorf("seat = %d, want the seat proxy id %d", word(f.body, 0), seat.Id())
+		if f.Word(0) != int32(seat.Id()) {
+			t.Errorf("seat = %d, want the seat proxy id %d", f.Word(0), seat.Id())
 		}
-		if word(f.body, 1) != 4242 {
-			t.Errorf("serial = %d, want 4242", word(f.body, 1))
+		if f.Word(1) != 4242 {
+			t.Errorf("serial = %d, want 4242", f.Word(1))
 		}
-		if word(f.body, 2) != int32(xdg.ToplevelResizeEdgeBottomRight) {
-			t.Errorf("edges = %d, want %d", word(f.body, 2), xdg.ToplevelResizeEdgeBottomRight)
+		if f.Word(2) != int32(xdg.ToplevelResizeEdgeBottomRight) {
+			t.Errorf("edges = %d, want %d", f.Word(2), xdg.ToplevelResizeEdgeBottomRight)
 		}
 	})
 
@@ -223,7 +161,7 @@ func TestResizeRequest(t *testing.T) {
 		}
 		select {
 		case f := <-frames:
-			if f.opcode == opResize {
+			if f.Opcode == opResize {
 				t.Error("a guarded resize reached the wire")
 			}
 		default:
@@ -235,7 +173,7 @@ func TestResizeRequest(t *testing.T) {
 // real proxy dispatch path - the same events a compositor delivers -
 // and pins that a non-zero configure resizes the window.
 func TestConfigureDispatchUpdatesSize(t *testing.T) {
-	startWireServer(t)
+	headlesstest.WireServer(t, "wayland-test")
 	w := newWireWindow(t, Config{Title: "t", AppID: "t"})
 
 	data := make([]byte, 12)
@@ -267,7 +205,7 @@ func TestConfigureDispatchUpdatesSize(t *testing.T) {
 // compositor sends - and pins that the array decodes into the
 // confirmed state set alongside the size.
 func TestConfigureDispatchParsesStates(t *testing.T) {
-	startWireServer(t)
+	headlesstest.WireServer(t, "wayland-test")
 	w := newWireWindow(t, Config{Title: "t", AppID: "t"})
 
 	data := make([]byte, 20)
@@ -292,7 +230,7 @@ func TestConfigureDispatchParsesStates(t *testing.T) {
 // set/unset pairs go out as the protocol numbers them, and
 // set_fullscreen carries a nil output (compositor's choice).
 func TestWindowStateRequests(t *testing.T) {
-	frames := startWireServer(t)
+	frames := headlesstest.WireServer(t, "wayland-test")
 	w := newWireWindow(t, Config{Title: "t", AppID: "t"})
 	drain := func() {
 		for {
@@ -324,14 +262,14 @@ func TestWindowStateRequests(t *testing.T) {
 			if err := req.send(); err != nil {
 				t.Fatal(err)
 			}
-			f := waitForFrame(t, frames, req.name, func(f wireFrame) bool {
-				return f.opcode == req.opcode
+			f := headlesstest.WaitForFrame(t, frames, req.name, func(f headlesstest.WireFrame) bool {
+				return f.Opcode == req.opcode
 			})
-			if len(f.body) != 4*req.words {
-				t.Fatalf("%s payload %v, want %d word(s)", req.name, f.body, req.words)
+			if len(f.Body) != 4*req.words {
+				t.Fatalf("%s payload %v, want %d word(s)", req.name, f.Body, req.words)
 			}
-			if req.words == 1 && word(f.body, 0) != req.payload {
-				t.Errorf("%s output = %d, want %d (nil: compositor picks)", req.name, word(f.body, 0), req.payload)
+			if req.words == 1 && f.Word(0) != req.payload {
+				t.Errorf("%s output = %d, want %d (nil: compositor picks)", req.name, f.Word(0), req.payload)
 			}
 		})
 	}
@@ -348,7 +286,7 @@ func TestWindowStateRequests(t *testing.T) {
 // honors the installed veto.
 func TestProtocolCloseRoutesThroughVeto(t *testing.T) {
 	t.Run("a vetoing window survives the close event", func(t *testing.T) {
-		startWireServer(t)
+		headlesstest.WireServer(t, "wayland-test")
 		w := newWireWindow(t, Config{Title: "t", AppID: "t"})
 		vetoed := false
 		w.SetCloseRequest(func() bool {
@@ -365,7 +303,7 @@ func TestProtocolCloseRoutesThroughVeto(t *testing.T) {
 	})
 
 	t.Run("an unvetted window closes", func(t *testing.T) {
-		startWireServer(t)
+		headlesstest.WireServer(t, "wayland-test")
 		w := newWireWindow(t, Config{Title: "t", AppID: "t"})
 		w.Toplevel.Dispatch(&wl.Event{Opcode: 1})
 		if !w.Closed() {
@@ -381,7 +319,7 @@ func TestProtocolCloseRoutesThroughVeto(t *testing.T) {
 // (the compositor without the global) stays silent - the
 // application-level block is the floor.
 func TestDialogModalityRequests(t *testing.T) {
-	frames := startWireServer(t)
+	frames := headlesstest.WireServer(t, "wayland-test")
 	disp, err := wl.Connect("")
 	if err != nil {
 		t.Fatal(err)
@@ -416,14 +354,14 @@ func TestDialogModalityRequests(t *testing.T) {
 		if !dialog.ModalHinted() {
 			t.Fatal("SetModal(true) left no live hint")
 		}
-		f := waitForFrame(t, frames, "get_xdg_dialog", func(f wireFrame) bool {
-			return f.obj == uint32(mgr.Id()) && f.opcode == 1
+		f := headlesstest.WaitForFrame(t, frames, "get_xdg_dialog", func(f headlesstest.WireFrame) bool {
+			return f.Obj == uint32(mgr.Id()) && f.Opcode == 1
 		})
-		if len(f.body) != 8 {
-			t.Fatalf("get_xdg_dialog payload %v, want 2 words", f.body)
+		if len(f.Body) != 8 {
+			t.Fatalf("get_xdg_dialog payload %v, want 2 words", f.Body)
 		}
-		waitForFrame(t, frames, "set_modal", func(f wireFrame) bool {
-			return f.obj == uint32(dialog.dialog.Id()) && f.opcode == 1
+		headlesstest.WaitForFrame(t, frames, "set_modal", func(f headlesstest.WireFrame) bool {
+			return f.Obj == uint32(dialog.dialog.Id()) && f.Opcode == 1
 		})
 
 		if err := dialog.SetModal(mgr, false); err != nil {
@@ -432,8 +370,8 @@ func TestDialogModalityRequests(t *testing.T) {
 		if dialog.ModalHinted() {
 			t.Error("SetModal(false) left the hint live")
 		}
-		waitForFrame(t, frames, "unset_modal", func(f wireFrame) bool {
-			return f.obj == uint32(dialog.dialog.Id()) && f.opcode == 2
+		headlesstest.WaitForFrame(t, frames, "unset_modal", func(f headlesstest.WireFrame) bool {
+			return f.Obj == uint32(dialog.dialog.Id()) && f.Opcode == 2
 		})
 
 		// Close drops the hint and the object: unset_modal, destroy.
@@ -441,8 +379,8 @@ func TestDialogModalityRequests(t *testing.T) {
 		dialog.Close()
 		waitFrame := func(name string, opcode uint32) {
 			t.Helper()
-			waitForFrame(t, frames, name, func(f wireFrame) bool {
-				return f.obj == uint32(dlgObj.Id()) && f.opcode == opcode
+			headlesstest.WaitForFrame(t, frames, name, func(f headlesstest.WireFrame) bool {
+				return f.Obj == uint32(dlgObj.Id()) && f.Opcode == opcode
 			})
 		}
 		waitFrame("unset on close", 2)
@@ -457,8 +395,8 @@ func TestDialogModalityRequests(t *testing.T) {
 		// Drain the window-creation noise through set_app_id (always
 		// sent, even empty), so the silence below is about the modality
 		// request, not leftovers.
-		waitForFrame(t, frames, "setup", func(f wireFrame) bool {
-			return f.obj == uint32(other.Toplevel.Id()) && f.opcode == 3
+		headlesstest.WaitForFrame(t, frames, "setup", func(f headlesstest.WireFrame) bool {
+			return f.Obj == uint32(other.Toplevel.Id()) && f.Opcode == 3
 		})
 		if err := other.SetModal(nil, true); err != nil {
 			t.Fatal(err)
@@ -483,18 +421,18 @@ func wireString(s string) []byte {
 }
 
 func TestExportRequestsAHandleAndDropsItOnClose(t *testing.T) {
-	frames := startWireServer(t)
+	frames := headlesstest.WireServer(t, "wayland-test")
 	w := newWireWindow(t, Config{Title: "t"})
 	exp := wlr.NewZxdgExporterV2(w.WLSurface.Context())
 	exp.Unregister()
 	if err := w.Export(exp); err != nil {
 		t.Fatal(err)
 	}
-	f := waitForFrame(t, frames, "export_toplevel", func(f wireFrame) bool {
-		return f.obj == uint32(exp.Id()) && f.opcode == 1
+	f := headlesstest.WaitForFrame(t, frames, "export_toplevel", func(f headlesstest.WireFrame) bool {
+		return f.Obj == uint32(exp.Id()) && f.Opcode == 1
 	})
-	if len(f.body) != 8 || word(f.body, 1) != int32(w.WLSurface.Id()) {
-		t.Fatalf("export_toplevel payload %v, want the new id and the window's wl_surface", f.body)
+	if len(f.Body) != 8 || f.Word(1) != int32(w.WLSurface.Id()) {
+		t.Fatalf("export_toplevel payload %v, want the new id and the window's wl_surface", f.Body)
 	}
 	if w.ExportHandle() != "" {
 		t.Error("a handle before the compositor sent one")
@@ -508,8 +446,8 @@ func TestExportRequestsAHandleAndDropsItOnClose(t *testing.T) {
 		t.Error("a second Export replaced the first")
 	}
 	w.Toplevel.Dispatch(&wl.Event{Opcode: 1})
-	waitForFrame(t, frames, "destroy on close", func(f wireFrame) bool {
-		return f.obj == uint32(first.Id()) && f.opcode == 0
+	headlesstest.WaitForFrame(t, frames, "destroy on close", func(f headlesstest.WireFrame) bool {
+		return f.Obj == uint32(first.Id()) && f.Opcode == 0
 	})
 	if w.ExportHandle() != "" {
 		t.Error("a closed window kept its handle")
