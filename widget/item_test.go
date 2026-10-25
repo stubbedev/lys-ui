@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/lys-ui/widget/css"
@@ -208,5 +209,42 @@ func TestItemEllipsize(t *testing.T) {
 	it.SetEllipsize(true)
 	if got := MinWidth(it); got >= wrapped {
 		t.Errorf("ellipsizing item's minimum %d, not below the wrapping one's %d", got, wrapped)
+	}
+}
+
+// A separator shows only between two shown items: hiding an item
+// takes its separator with it, at the end, the start or the middle,
+// as a GTK boxed list does. The separator stayed, a hairline at the
+// card's edge under the last shown item (lys-shell's report).
+func TestItemGroupSeparatorsFollowShownItems(t *testing.T) {
+	face := testFace(t)
+	a, b, c := NewItem(face, "a", ""), NewItem(face, "b", ""), NewItem(face, "c", "")
+	g := NewItemGroup(a, b, c)
+	shown := func() []bool {
+		arrangeTree(t, g, 300, 300)
+		var seps []bool
+		for _, k := range g.box.Children() {
+			if s, ok := k.(*Separator); ok {
+				seps = append(seps, s.Visible())
+			}
+		}
+		return seps
+	}
+	for _, tc := range []struct {
+		hide []*Item
+		want []bool
+	}{
+		{nil, []bool{true, true}},
+		{[]*Item{c}, []bool{true, false}},
+		{[]*Item{a}, []bool{false, true}},
+		{[]*Item{b}, []bool{false, true}},
+		{[]*Item{a, b}, []bool{false, false}},
+	} {
+		for _, it := range []*Item{a, b, c} {
+			it.SetVisible(!slices.Contains(tc.hide, it))
+		}
+		if got := shown(); !slices.Equal(got, tc.want) {
+			t.Errorf("hiding %d items: separators shown %v, want %v", len(tc.hide), got, tc.want)
+		}
 	}
 }

@@ -268,6 +268,31 @@ func (g *ItemGroup) Remove(w Widget) bool {
 	return true
 }
 
+// Measure shows a separator only between two shown items, as a GTK
+// boxed list does, then measures the stack: a hidden item takes the
+// separators beside it with it.
+func (g *ItemGroup) Measure(con Constraints) Size {
+	g.syncSeparators()
+	return g.composite.Measure(con)
+}
+
+// syncSeparators shows the separator before an item when the item and
+// an item above it are shown. The stack alternates item, separator,
+// item: the separator before item k sits just before it.
+func (g *ItemGroup) syncSeparators() {
+	kids := g.box.Children()
+	above := false
+	for i := 0; i < len(kids); i += 2 {
+		shown := ownVisible(kids[i])
+		if i > 0 {
+			if sep, ok := kids[i-1].(*Separator); ok {
+				sep.SetVisible(shown && above)
+			}
+		}
+		above = above || shown
+	}
+}
+
 // Clear drops every item.
 func (g *ItemGroup) Clear() {
 	g.box.Clear()
