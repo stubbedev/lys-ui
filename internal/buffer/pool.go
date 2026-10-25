@@ -9,6 +9,7 @@ import (
 
 	"github.com/neurlang/wayland/wl"
 
+	"github.com/stubbedev/lys-ui/gpu"
 	"github.com/stubbedev/lys-ui/render"
 )
 
@@ -39,8 +40,13 @@ type Buffer struct {
 	WL *wl.Buffer
 
 	// Data is the mmap view of the buffer: Height rows of Stride bytes,
-	// ARGB8888 premultiplied, byte order B, G, R, A.
+	// ARGB8888 premultiplied, byte order B, G, R, A. Nil for a dmabuf
+	// buffer.
 	Data []byte
+
+	// Target is a dmabuf buffer's GPU target (NewDmabuf), which a frame
+	// renders into; nil for a shm buffer.
+	Target *gpu.Target
 
 	// Width and Height are in buffer pixels (output scale already
 	// applied).
@@ -85,6 +91,7 @@ func (b *Buffer) Release() {
 	if !b.freed && b.pool != nil {
 		return // still in its pool's rotation
 	}
+	b.closeTarget()
 	if b.arena != nil {
 		b.arena.retire(b)
 	}
@@ -269,6 +276,7 @@ func (p *Pool) capRetired() {
 			oldest.arena.abandon(oldest)
 		}
 		oldest.freed = true
+		oldest.closeTarget()
 		if oldest.WL != nil {
 			_ = oldest.WL.Destroy()
 			oldest.WL = nil
@@ -293,6 +301,7 @@ func dispose(b *Buffer) {
 	}
 	b.freed = true
 	if !b.busy {
+		b.closeTarget()
 		if b.WL != nil {
 			_ = b.WL.Destroy()
 			b.WL = nil

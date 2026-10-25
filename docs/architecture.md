@@ -28,8 +28,22 @@ cites the code and the tests that pin it.
       |                         Paint / HitTest, damage flags
       v
     render                      Canvas (premultiplied ARGB), shaped
-                                text, icons; the only device-scale
-                                boundary in the stack
+      |                         text, icons; the only device-scale
+      |                         boundary in the stack; a recording
+      v                         Canvas captures a frame as a List
+    gpu                         plays a List with Vulkan into dmabufs
+                                the compositor imports
+
+A window draws on the GPU when it can: `LYS_UI_RENDERER` unset or
+`auto` opens one Vulkan device per application and, where the
+compositor imports a dmabuf layout the device renders (ARGB8888 in a
+shared modifier), records each frame and renders it into a dmabuf
+buffer. The CPU canvas draws otherwise, into shared memory.
+`LYS_UI_RENDERER=cpu` always draws on the CPU, and `=gpu` makes a GPU
+that cannot draw an error from `Run`. Both paths paint the same pixels:
+the GPU mirrors the canvas's integer arithmetic, and every widget
+golden is checked on both (`just gpu`). The Vulkan loader is found
+through the library path, which the nix packages set.
 
 Each layer talks only to its neighbors: widgets never touch the wire,
 the session never knows widgets exist, and everything above the session

@@ -38,7 +38,13 @@ import (
 
 // Application is a set of windows sharing one session.
 type Application struct {
-	sess        *wlsession.Session
+	sess *wlsession.Session
+	// gpu is the windows' GPU renderer (renderer), nil drawing on the
+	// CPU; gpuTried marks the one attempt to open it, gpuErr its
+	// failure under LYS_UI_RENDERER=gpu.
+	gpu         *gpuRenderer
+	gpuTried    bool
+	gpuErr      error
 	tooltipFace *render.Typeface
 	// tooltipOpts tunes tooltips (SetTooltipOptions).
 	tooltipOpts TooltipOptions
@@ -635,6 +641,11 @@ func (a *Application) newWindow(host Host, scale int, root widget.Widget, hooks 
 	ov.SetOn(a.inspectOn)
 	w := newHostWindow(a.sess, host, scale, ov, hooks, a.dnd, a.primary, animKind, hostCloser(host))
 	w.styleRoot = root
+	// A renderer that failed draws nothing: Run reports the failure
+	// before the loop's first draw.
+	if r, err := a.renderer(); err == nil {
+		w.renderer = r
+	}
 	w.keyChain = a.combineOnKey(hooks.onKey)
 	if w.input != nil {
 		w.input.transferError = a.reportTransfer
@@ -713,7 +724,11 @@ func (a *Application) Run() error {
 		if a.portals != nil {
 			a.portals.close()
 		}
+		a.closeRenderer()
 	}()
+	if _, err := a.renderer(); err != nil {
+		return err
+	}
 	a.startAccessibility()
 	a.wireSession()
 	err := a.loop()

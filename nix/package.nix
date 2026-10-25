@@ -23,6 +23,15 @@
           env.CGO_ENABLED = "0";
           vendorHash = "sha256-felNnnH8nFJsk0t3RAvfO4ZN5zHyrsr/fWmq0DAUBEE=";
           doCheck = false;
+          # The GPU renderer loads the Vulkan loader at run time (no
+          # cgo, so no rpath): the binaries find it through the
+          # wrapper's library path, NixOS having none of its own.
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postFixup = ''
+            for bin in $out/bin/*; do
+              wrapProgram "$bin" --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.vulkan-loader ]}
+            done
+          '';
           # third_party/ holds patched upstream packages lys-ui imports;
           # they build as dependencies, not as targets of their own.
           excludedPackages = [ "third_party" ];

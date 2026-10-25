@@ -83,6 +83,9 @@ type hostWindow struct {
 	kick atomic.Bool
 
 	pool *buffer.Pool
+	// renderer draws the window's frames on the GPU into dmabuf
+	// buffers; nil draws them on the CPU into shared memory.
+	renderer *gpuRenderer
 	// surf is the wire half of the host surface; production wraps the
 	// wl_surface, tests substitute a recorder.
 	surf surfaceHandle
@@ -162,7 +165,8 @@ type hostWindow struct {
 	// it stays unanswered past frameStaleAfter.
 	frameArmedAt time.Time
 	drawErr      error
-	// paintedPixels is the pixel count the last frame actually wrote;
+	// paintedPixels is the pixel count the last frame actually wrote
+	// on the CPU, and the area of the region it repainted on the GPU;
 	// the paint-count tests pin it.
 	paintedPixels int
 	// lastDamage mirrors the rects the last frame damaged; tests and
@@ -436,8 +440,11 @@ func (w *hostWindow) Destroy() {
 // device scale. The session arena owns the release-event wiring.
 func (w *hostWindow) create() (*buffer.Buffer, error) {
 	bw, bh := w.layoutSize()
-	return buffer.NewFile(w.sess.Shm(),
-		scale.DeviceSize(bw, w.frac120), scale.DeviceSize(bh, w.frac120), w.scale)
+	dw, dh := scale.DeviceSize(bw, w.frac120), scale.DeviceSize(bh, w.frac120)
+	if w.renderer != nil {
+		return w.renderer.newBuffer(w.sess, dw, dh, w.scale)
+	}
+	return buffer.NewFile(w.sess.Shm(), dw, dh, w.scale)
 }
 
 // scaleWire is the surface-scale seam beside surfaceHandle: the requests
@@ -881,20 +888,19 @@ func (w *hostWindow) draw() bool {
 	debug.Log("frame", "draw %dx%d at %d/120: %d damage rect(s), region %dx%d",
 		bw, bh, w.frac120, len(rects), region.W, region.H)
 
-	cv := w.canvas.Reset(b.Data, b.Stride, b.Width, b.Height, w.devNum(), scale.Denom)
-	prev := cv.PushClipDevice(region)
-	cv.ClearDevice(region, w.cfg.background)
-	// The focus ring draws right after its widget, in tree order, so
-	// what paints later (a card over the list) covers it.
-	if f := w.focusRingWidget(); f != nil {
-		cv.MarkFocus(widget.FocusRingOwner(f), func(cv *render.Canvas) { widget.PaintFocusRing(cv, f) })
+	if b.Target != nil {
+		cv := w.renderer.rec.ResetRecorder(b.Width, b.Height, w.devNum(), scale.Denom)
+		w.paintTree(cv, region)
+		if err := w.renderer.dev.Render(cv.Recording(), b.Target); err != nil {
+			w.drawErr = fmt.Errorf("app: GPU frame: %w", err)
+			return false
+		}
+		w.paintedPixels = region.W * region.H
+	} else {
+		cv := w.canvas.Reset(b.Data, b.Stride, b.Width, b.Height, w.devNum(), scale.Denom)
+		w.paintTree(cv, region)
+		w.paintedPixels = cv.Touched()
 	}
-	cv.BeginOverlays()
-	w.router.Root.Paint(cv)
-	cv.FlushOverlays()
-	cv.FinishFocus()
-	cv.PopClip(prev)
-	w.paintedPixels = cv.Touched()
 	w.lastDamage = append(w.lastDamage[:0], rects...)
 
 	if err := w.surf.Attach(b); err != nil {
@@ -928,6 +934,23 @@ func (w *hostWindow) draw() bool {
 	w.framePending = true
 	w.frameArmedAt = time.Now()
 	return true
+}
+
+// paintTree paints the window's tree onto cv within the device region:
+// the background, the tree with its overlays on top, and the focus
+// ring right after its widget, in tree order, so what paints later (a
+// card over the list) covers it.
+func (w *hostWindow) paintTree(cv *render.Canvas, region render.Rect) {
+	prev := cv.PushClipDevice(region)
+	cv.ClearDevice(region, w.cfg.background)
+	if f := w.focusRingWidget(); f != nil {
+		cv.MarkFocus(widget.FocusRingOwner(f), func(cv *render.Canvas) { widget.PaintFocusRing(cv, f) })
+	}
+	cv.BeginOverlays()
+	w.router.Root.Paint(cv)
+	cv.FlushOverlays()
+	cv.FinishFocus()
+	cv.PopClip(prev)
 }
 
 // focusRingWidget returns the widget the keyboard focus ring is drawn

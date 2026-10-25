@@ -5,6 +5,8 @@
 package wlsession
 
 import (
+	"slices"
+
 	"github.com/neurlang/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/dmabuf"
@@ -73,3 +75,17 @@ func (s *Session) Dmabuf() *wlr.ZwpDmabufV1 { return s.dmabuf }
 // DmabufImports reports whether the compositor advertised the layout;
 // importing any other is a fatal protocol error.
 func (s *Session) DmabufImports(l DmabufLayout) bool { return s.dmabufLayouts[l] }
+
+// DmabufModifiers lists, sorted, the explicit modifiers the compositor
+// imports format in (dmabuf.ModifierInvalid, an implicit layout, left
+// out).
+func (s *Session) DmabufModifiers(format uint32) []uint64 {
+	var mods []uint64
+	for l := range s.dmabufLayouts {
+		if l.Format == format && l.Modifier != dmabuf.ModifierInvalid {
+			mods = append(mods, l.Modifier)
+		}
+	}
+	slices.Sort(mods)
+	return mods
+}
