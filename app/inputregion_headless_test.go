@@ -8,15 +8,22 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-ui/app"
+	"github.com/stubbedev/lys-ui/capture"
 	"github.com/stubbedev/lys-ui/internal/headlesstest/inproc"
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/vinput"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
+var (
+	regionBelow = render.RGB(0x20, 0x40, 0xd0)
+	regionPanel = render.RGB(0xd0, 0x30, 0x20)
+)
+
 // A floating panel on a full-screen overlay takes input only over
 // itself: a click beside it reaches the surface beneath, one on it
-// does not.
+// does not. Each click goes out once both surfaces are on screen, so a
+// retried click never lands late.
 func TestHeadlessFloatingPanelPassesClicksThrough(t *testing.T) {
 	inproc.Require(t)
 	var below, panel atomic.Int32
@@ -24,10 +31,11 @@ func TestHeadlessFloatingPanelPassesClicksThrough(t *testing.T) {
 		all := app.AnchorTop | app.AnchorBottom | app.AnchorLeft | app.AnchorRight
 		under := widget.NewDrawingArea(10, 10)
 		under.SetOnPointer(func(widget.PointerEvent) bool { below.Add(1); return true })
-		if _, err := a.NewLayer(app.LayerConfig{Output: out, Layer: app.LayerBottom, Anchor: all, Namespace: "lys-ui-region-below", Root: under, Background: render.RGB(0x20, 0x40, 0xd0)}); err != nil {
+		if _, err := a.NewLayer(app.LayerConfig{Output: out, Layer: app.LayerBottom, Anchor: all, Namespace: "lys-ui-region-below", Root: under, Background: regionBelow}); err != nil {
 			return err
 		}
 		body := widget.NewDrawingArea(300, 200)
+		body.OnDraw = func(cv *render.Canvas, r render.Rect) { cv.FillRect(r, regionPanel) }
 		body.SetOnPointer(func(widget.PointerEvent) bool { panel.Add(1); return true })
 		f := widget.NewFloatingPanel(nil, body)
 		_, err := a.NewLayer(app.LayerConfig{Output: out, Layer: app.LayerOverlay, Anchor: all, Namespace: "lys-ui-region-panel", Root: f})
@@ -39,6 +47,18 @@ func TestHeadlessFloatingPanelPassesClicksThrough(t *testing.T) {
 	}
 	defer d.Close()
 	w, h := d.OutputSize()
+	c := inproc.Capture(t)
+	inproc.Eventually(t, "the panel over the layer beneath on screen", func() error {
+		f, err := c.CaptureOutput(c.Outputs()[0], capture.Options{})
+		if err != nil {
+			return err
+		}
+		img, err := f.Image()
+		if err != nil {
+			return err
+		}
+		return errors.Join(inproc.WantColor(img, 10, 10, regionBelow), inproc.WantColor(img, int(w/2), int(h/2), regionPanel))
+	})
 	click := func(x, y uint32) {
 		t.Helper()
 		for _, step := range []error{d.MotionAbsolute(x, y, uint32(w), uint32(h)), d.Button(0x110, true), d.Button(0x110, false), d.Roundtrip()} {
@@ -47,32 +67,21 @@ func TestHeadlessFloatingPanelPassesClicksThrough(t *testing.T) {
 			}
 		}
 	}
-	inproc.Eventually(t, "a click beside the panel reaching the layer beneath", func() error {
-		click(10, 10)
-		if below.Load() == 0 {
-			return fmt.Errorf("the layer beneath saw no press (the panel saw %d)", panel.Load())
-		}
-		return nil
-	})
-	// The retried clicks land on the app's goroutine after the check
-	// that ended the retries: wait for the count to settle.
-	var seen int32
-	inproc.Eventually(t, "the clicks beneath settling", func() error {
-		seen = below.Load()
-		time.Sleep(100 * time.Millisecond)
-		if n := below.Load(); n != seen {
-			return fmt.Errorf("still counting (%d→%d)", seen, n)
-		}
-		return nil
-	})
-	inproc.Eventually(t, "a click on the panel staying on it", func() error {
-		click(uint32(w/2), uint32(h/2))
-		if panel.Load() == 0 {
-			return errors.New("the panel saw no press")
-		}
-		return nil
-	})
-	if below.Load() != seen {
-		t.Errorf("a click on the panel also reached the layer beneath (%d→%d)", seen, below.Load())
+	reach := func(what string, n *atomic.Int32, want int32) {
+		t.Helper()
+		inproc.Eventually(t, what, func() error {
+			if got := n.Load(); got != want {
+				return fmt.Errorf("%d presses, want %d", got, want)
+			}
+			return nil
+		})
+	}
+	click(10, 10)
+	reach("a click beside the panel reaching the layer beneath", &below, 1)
+	click(uint32(w/2), uint32(h/2))
+	reach("a click on the panel staying on it", &panel, 1)
+	time.Sleep(100 * time.Millisecond)
+	if n := below.Load(); n != 1 {
+		t.Errorf("a click on the panel also reached the layer beneath (%d presses there)", n)
 	}
 }
