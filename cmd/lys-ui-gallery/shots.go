@@ -214,10 +214,11 @@ func (s *shooter) all() error {
 // logical size.
 func (s *shooter) one(i int, theme func() *widget.Theme, suffix string) (size shotSize, err error) {
 	var (
-		d    demo
-		g    *gallery
-		win  *app.Window
-		view *ui.View
+		d      demo
+		g      *gallery
+		win    *app.Window
+		view   *ui.View
+		window widget.Size
 	)
 	s.on(func() {
 		widget.SetTheme(theme())
@@ -225,10 +226,10 @@ func (s *shooter) one(i int, theme func() *widget.Theme, suffix string) (size sh
 		d = g.demos(func(galleryMsg) {})[i]
 		var root widget.Widget
 		root, view = ui.Build(s.env, d.host(d.bodyNode().Padding(render.UniformInsets(shotPad)).Classes(css.Background)))
-		frame := d.windowSize(root)
+		window = d.windowSize(root)
 		win, err = s.app.NewWindow(app.WindowConfig{
 			Title: d.title, AppID: shotsAppID,
-			Width: uint32(frame.W), Height: uint32(frame.H),
+			Width: uint32(window.W), Height: uint32(window.H),
 			Root: root, Background: widget.Current().Bg, Opaque: true,
 		})
 		g.win = win
@@ -270,7 +271,11 @@ func (s *shooter) one(i int, theme func() *widget.Theme, suffix string) (size sh
 		stage = color.RGBA{R: bg[0], G: bg[1], B: bg[2], A: 255}
 	})
 	sc := int(s.out.Scale)
-	shot := frame(img, stage, sc)
+	content := contentBounds(img, stage)
+	if inside := image.Rect(0, 0, window.W*sc, window.H*sc); !content.In(inside) {
+		return shotSize{}, fmt.Errorf("shots: %s: the content spans %v, past its %v window: give the demo more room", d.title, content, inside)
+	}
+	shot := frame(img, content, stage, sc)
 	size = shotSize{Width: shot.Bounds().Dx() / sc, Height: shot.Bounds().Dy() / sc}
 	return size, writeAtomic(filepath.Join(s.dir, slug(d.title)+suffix+".png"), func(w io.Writer) error { return png.Encode(w, shot) })
 }
@@ -378,37 +383,31 @@ func (s *shooter) cleared() error {
 }
 
 // blank reports whether img is the bare output: nothing mapped yet.
-func blank(img *image.RGBA) bool { return trim(img).Bounds().Empty() }
-
-// trim crops img to what differs from the output's background, which
-// the far corner shows.
-func trim(img *image.RGBA) *image.RGBA {
+func blank(img *image.RGBA) bool {
+	bare := bareColor(img)
 	b := img.Bounds()
-	bg := img.RGBAAt(b.Max.X-1, b.Max.Y-1)
-	box := image.Rectangle{}
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
-			if img.RGBAAt(x, y) != bg {
-				box = box.Union(image.Rect(x, y, x+1, y+1))
+			if img.RGBAAt(x, y) != bare {
+				return false
 			}
 		}
 	}
-	cropped, ok := img.SubImage(box).(*image.RGBA)
-	if !ok {
-		panic("shots: an RGBA image cropped to another type")
-	}
-	return cropped
+	return true
 }
 
-// frame stages a capture: the content - what is neither the output's
-// background nor the stage's, the window's own fill - centered on a
-// stage of the theme's background, shotMargin from its edges and at
-// least shotStageW by shotStageH, the output's bare pixels between a
-// window and its popups filled with the stage too. scale is the
-// output's, logical to device pixels.
-func frame(img *image.RGBA, stage color.RGBA, scale int) *image.RGBA {
+// bareColor is the output's own background, where nothing is mapped:
+// the capture's far corner, which no shot window reaches.
+func bareColor(img *image.RGBA) color.RGBA {
 	b := img.Bounds()
-	bare := img.RGBAAt(b.Max.X-1, b.Max.Y-1)
+	return img.RGBAAt(b.Max.X-1, b.Max.Y-1)
+}
+
+// contentBounds is what of a capture is neither the output's
+// background nor the stage, the window's own fill.
+func contentBounds(img *image.RGBA, stage color.RGBA) image.Rectangle {
+	b := img.Bounds()
+	bare := bareColor(img)
 	content := image.Rectangle{}
 	for y := b.Min.Y; y < b.Max.Y; y++ {
 		for x := b.Min.X; x < b.Max.X; x++ {
@@ -417,6 +416,16 @@ func frame(img *image.RGBA, stage color.RGBA, scale int) *image.RGBA {
 			}
 		}
 	}
+	return content
+}
+
+// frame stages a capture's content centered on a stage of the theme's
+// background, shotMargin from its edges and at least shotStageW by
+// shotStageH, the output's bare pixels between a window and its popups
+// filled with the stage too. scale is the output's, logical to device
+// pixels.
+func frame(img *image.RGBA, content image.Rectangle, stage color.RGBA, scale int) *image.RGBA {
+	bare := bareColor(img)
 	m := shotMargin * scale
 	w := max(content.Dx()+2*m, shotStageW*scale)
 	h := max(content.Dy()+2*m, shotStageH*scale)

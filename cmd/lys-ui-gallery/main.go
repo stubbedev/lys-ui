@@ -577,10 +577,10 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			widget.MenuItem{Label: "Reload", Accel: "Ctrl+R", OnClick: func() {}},
 			widget.MenuSeparator(),
 			widget.MenuItem{Label: "Show Bookmarks", Kind: widget.ItemCheck, Checked: true, OnClick: func() {}},
-		).Classes("drop-zone").Ref(&contextMenu)).opens(secondaryClick, center(&contextMenu)),
+		).Classes("drop-zone").Ref(&contextMenu)).opens(secondaryClick, center(&contextMenu)).room(320, 300),
 		section("Data Table", g.dataTable()),
 		section("Date Picker", g.datePickers(&datePicker)).opens(click, center(&datePicker)).room(360, 420),
-		section("Dialog", ui.Aligned(ui.Button(ui.Label("Edit Profile"), 0, 0).Classes(css.Outline).Ref(&dialogButton).OnClick(g.dialog), widget.AlignStart)).opens(click, center(&dialogButton)).room(560, 340),
+		section("Dialog", ui.Aligned(ui.Button(ui.Label("Edit Profile"), 0, 0).Classes(css.Outline).Ref(&dialogButton).OnClick(g.dialog), widget.AlignStart)).opens(click, center(&dialogButton)).room(560, 400),
 		section("Drawer", ui.Aligned(ui.Button(ui.Label("Open Drawer"), 0, 0).Classes(css.Outline).Ref(&drawerButton).OnClick(func() { drawer.SetOpen(true) }), widget.AlignStart)).
 			opens(click, center(&drawerButton)).room(640, 420).
 			hosts(func(page ui.Node) ui.Node {
@@ -589,7 +589,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 					Footer(ui.Button(ui.Label("Submit"), 0, 0).Classes(css.SuggestedAction).OnClick(func() { drawer.SetOpen(false) })).
 					Ref(&drawer)
 			}),
-		section("Dropdown Menu", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).Ref(&g.menuButton).OnClick(g.dropdownMenu), widget.AlignStart)).opens(click, center(&g.menuButton)),
+		section("Dropdown Menu", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).Ref(&g.menuButton).OnClick(g.dropdownMenu), widget.AlignStart)).opens(click, center(&g.menuButton)).room(320, 260),
 		section("Empty", ui.StatusPage("", "No projects yet", "You haven't created any projects yet. Get started by creating your first project.").
 			Icon(ui.Symbol(widget.SymbolMaximize, 24)).
 			Child(ui.Button(ui.Label("Create project"), 0, 0).Classes(css.SuggestedAction))),
@@ -601,7 +601,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 				ui.Label("A pure-Go widget toolkit for Wayland desktops, no cgo.").Wrap(true),
 				ui.Label("Part of the lys desktop since 2026").Classes(css.Caption, css.DimLabel),
 			).Spacing(4),
-		), widget.AlignStart)).opens(hover, center(&hoverTrigger)).room(360, 240),
+		), widget.AlignStart)).opens(hover, center(&hoverTrigger)).room(480, 260),
 		section("Input", ui.Aligned(ui.Entry().Placeholder("Email").SizeRequest(320, 0), widget.AlignStart)),
 		section("Input Group",
 			ui.InputGroup(ui.Entry().Placeholder("Search...")).
@@ -622,7 +622,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 		),
 		section("Kbd", ui.Row(ui.KbdGroup("Ctrl", "Shift", "P"), ui.Label("opens the command palette")).Spacing(12)),
 		section("Menubar", ui.Aligned(ui.MenuBar(menubarMenus()...).Ref(&g.menubar), widget.AlignStart)).
-			opens(click, func() image.Point { b := g.menubar.Root(0).Bounds(); return image.Pt(b.X+b.W/2, b.Y+b.H/2) }),
+			opens(click, func() image.Point { b := g.menubar.Root(0).Bounds(); return image.Pt(b.X+b.W/2, b.Y+b.H/2) }).room(480, 280),
 		section("Navigation Menu", ui.Aligned(ui.NavigationMenu(
 			widget.NavigationMenuItem{Label: "Getting started", Content: widget.NewNavigationLinks(g.env.Face, 2,
 				widget.NavigationLink{Title: "Introduction", Description: "Re-usable components built on lys-ui's widgets."},
@@ -637,7 +637,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			widget.NavigationMenuItem{Label: "Docs", OnActivate: func() {}},
 		).Ref(&navMenu), widget.AlignStart)).opens(click, leading(&navMenu, 40)).room(640, 300),
 		section("Pagination", ui.Pagination(10, 5)),
-		section("Popover", ui.Aligned(ui.Button(ui.Label("Open popover"), 0, 0).Classes(css.Outline).Ref(&g.popoverButton).OnClick(g.popover), widget.AlignStart)).opens(click, center(&g.popoverButton)),
+		section("Popover", ui.Aligned(ui.Button(ui.Label("Open popover"), 0, 0).Classes(css.Outline).Ref(&g.popoverButton).OnClick(g.popover), widget.AlignStart)).opens(click, center(&g.popoverButton)).room(400, 360),
 		section("Progress", ui.Aligned(ui.ProgressBar(0.66).SizeRequest(360, 0), widget.AlignStart)),
 		section("Radio Group", g.radioGroup()),
 		section("Resizable", ui.Aligned(ui.Column(ui.Expand(ui.Paned(widget.Row,
@@ -684,7 +684,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			ui.ToggleButton(ui.Label("Italic"), 0, 0).Classes(css.Outline),
 			ui.ToggleButton(ui.Label("Underline"), 0, 0).Classes(css.Outline),
 		), widget.AlignStart)),
-		section("Tooltip", ui.Aligned(ui.Button(ui.Label("Hover"), 0, 0).Classes(css.Outline).Tooltip("Add to library").Ref(&tooltipButton), widget.AlignStart)).opens(hover, center(&tooltipButton)),
+		section("Tooltip", ui.Aligned(ui.Button(ui.Label("Hover"), 0, 0).Classes(css.Outline).Tooltip("Add to library").Ref(&tooltipButton), widget.AlignStart)).opens(hover, center(&tooltipButton)).room(240, 140),
 		section("Typography",
 			ui.Label("The Joke Tax Chronicles").Classes(css.H1),
 			ui.Label("Once upon a time, in a far-off land, there was a very lazy king who spent all day lounging on his throne.").Classes(css.Lead).Wrap(true),
