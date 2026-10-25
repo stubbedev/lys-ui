@@ -292,6 +292,12 @@ func sizedMeasure(w Widget, n *node, v *style.Values, con Constraints) Size {
 // widens, and the narrowed box sits by the widget's alignment (fill
 // reads as start, the CSS block placement).
 func holdSlot(n *node, r render.Rect, h, v Align) render.Rect {
+	return fitSlot(r, n.cssMin, n.cssMax, h, v)
+}
+
+// fitSlot holds r between lo and hi on each axis, a narrowed axis
+// placed by its alignment (fill reads as start).
+func fitSlot(r render.Rect, lo, hi Size, h, v Align) render.Rect {
 	fit := func(pos, size, lo, hi int, a Align) (int, int) {
 		want := max(min(size, hi), lo)
 		switch a {
@@ -302,7 +308,7 @@ func holdSlot(n *node, r render.Rect, h, v Align) render.Rect {
 		}
 		return pos, want
 	}
-	r.X, r.W = fit(r.X, r.W, n.cssMin.W, n.cssMax.W, h)
-	r.Y, r.H = fit(r.Y, r.H, n.cssMin.H, n.cssMax.H, v)
+	r.X, r.W = fit(r.X, r.W, lo.W, hi.W, h)
+	r.Y, r.H = fit(r.Y, r.H, lo.H, hi.H, v)
 	return r
 }

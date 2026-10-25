@@ -19,7 +19,9 @@ type layoutProps struct {
 	margin           render.Insets
 	// request is the size request, a floor on each axis; 0 leaves the
 	// axis to the widget.
-	request          Size
+	request Size
+	// maximum caps each axis's border box; 0 leaves the axis unbounded.
+	maximum          Size
 	expandValid      bool
 	expandH, expandV bool
 }
@@ -85,6 +87,35 @@ func (n *node) SetSizeRequest(w, h int) {
 
 // SizeRequest returns the size request (zero axes unset).
 func (n *node) SizeRequest() Size { return n.layout.request }
+
+// SetMaximumSize caps the widget's size, the typed max-width and
+// max-height: a container never measures it larger than w x h (its
+// border box) and holds a wider slot to it by its alignment, fill
+// reading as start. What the content paints past the cap is clipped.
+// A zero axis is unbounded; negative values are zero. The size
+// request wins where the two cross, so equal values pin an exact size.
+func (n *node) SetMaximumSize(w, h int) {
+	limit := Size{W: max(w, 0), H: max(h, 0)}
+	if n.layout.maximum != limit {
+		n.layout.maximum = limit
+		n.InvalidateLayout()
+	}
+}
+
+// MaximumSize returns the size cap (zero axes unbounded).
+func (n *node) MaximumSize() Size { return n.layout.maximum }
+
+// capped is the maximum with an unbounded axis indefinite and the size
+// request raising a cap below it.
+func (l *layoutProps) capped() Size {
+	axis := func(limit, req int) int {
+		if limit == 0 {
+			return indefinite
+		}
+		return max(limit, req)
+	}
+	return Size{W: axis(l.maximum.W, l.request.W), H: axis(l.maximum.H, l.request.H)}
+}
 
 // HAlign returns the horizontal placement.
 func (n *node) HAlign() Align { return n.layout.halign }
@@ -179,19 +210,21 @@ func ArrangeAsChild(w Widget, r render.Rect) { arrangeChild(w, r) }
 func measureMargin(w Widget, con Constraints) Size {
 	var m render.Insets
 	var req Size
+	hi := Size{W: indefinite, H: indefinite}
 	if l := layoutOf(w); l != nil {
-		m, req = l.margin, l.request
+		m, req, hi = l.margin, l.request, l.capped()
 	}
-	if m.Zero() && req == (Size{}) {
+	if m.Zero() && req == (Size{}) && hi == (Size{W: indefinite, H: indefinite}) {
 		return w.Measure(con)
 	}
 	mw, mh := m.Left+m.Right, m.Top+m.Bottom
+	maxW, maxH := min(max(0, con.Max.W-mw), hi.W), min(max(0, con.Max.H-mh), hi.H)
 	inner := Constraints{
-		Min: Size{W: max(0, con.Min.W-mw, min(req.W, con.Max.W-mw)), H: max(0, con.Min.H-mh, min(req.H, con.Max.H-mh))},
-		Max: Size{W: max(0, con.Max.W-mw), H: max(0, con.Max.H-mh)},
+		Min: Size{W: min(max(0, con.Min.W-mw, min(req.W, con.Max.W-mw)), maxW), H: min(max(0, con.Min.H-mh, min(req.H, con.Max.H-mh)), maxH)},
+		Max: Size{W: maxW, H: maxH},
 	}
 	s := w.Measure(inner)
-	s = Size{W: max(s.W, min(req.W, inner.Max.W)), H: max(s.H, min(req.H, inner.Max.H))}
+	s = Size{W: min(max(s.W, min(req.W, inner.Max.W)), maxW), H: min(max(s.H, min(req.H, inner.Max.H)), maxH)}
 	return Size{W: min(s.W+mw, con.Max.W), H: min(s.H+mh, con.Max.H)}
 }
 
@@ -220,13 +253,16 @@ func arrangeChild(w Widget, r render.Rect) {
 	if v != nil && cssSized(v) {
 		r = holdSlot(n, r, h, va)
 	}
-	if l == nil || (l.margin.Zero() && l.halign == AlignFill && l.valign == AlignFill) {
+	if l == nil || (l.margin.Zero() && l.maximum == (Size{}) && l.halign == AlignFill && l.valign == AlignFill) {
 		// A size request only floors the measure: a fill child takes
 		// its slot, which the container sized from that measure.
 		arrangeAt(w, v, r)
 		return
 	}
 	r = l.margin.Shrink(r)
+	if l.maximum != (Size{}) {
+		r = fitSlot(r, Size{}, l.capped(), h, va)
+	}
 	if h != AlignFill || va != AlignFill {
 		nat := w.Measure(Constraints{Max: Size{W: r.W, H: r.H}})
 		nat = Size{W: max(nat.W, min(l.request.W, r.W)), H: max(nat.H, min(l.request.H, r.H))}

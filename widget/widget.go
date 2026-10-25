@@ -857,7 +857,12 @@ func PaintChild(cv *render.Canvas, w Widget) {
 			return
 		}
 	}
-	switch n := nodeOf(w); {
+	n := nodeOf(w)
+	if n != nil && n.layout.maximum != (Size{}) {
+		prev := cv.PushClip(n.bounds)
+		defer cv.PopClip(prev)
+	}
+	switch {
 	case n != nil && n.sharedTag != "":
 		n.paintShared(cv, w)
 	case n != nil && n.moving(w):

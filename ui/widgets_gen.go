@@ -30,6 +30,7 @@ type nodeProps interface {
 	SetInlineStylePriority(css string, priority int)
 	SetLayoutMotion(m widget.LayoutMotion)
 	SetMargin(m render.Insets)
+	SetMaximumSize(w int, h int)
 	SetOnClickWithin(fn func())
 	SetOnFocusChanged(fn func(focused bool))
 	SetOnHoverWithin(fn func(on bool))
@@ -214,6 +215,12 @@ func (b *base[W, B]) Margin(m render.Insets) B {
 // WatchMargin re-applies SetMargin with get's value after every update.
 func (b *base[W, B]) WatchMargin(get func() render.Insets) B {
 	b.watch(func(w W) { w.SetMargin(get()) })
+	return b.self
+}
+
+// MaximumSize calls SetMaximumSize on the widget.
+func (b *base[W, B]) MaximumSize(arg int, h int) B {
+	b.do(func(s *Scope, w W) { w.SetMaximumSize(arg, h) })
 	return b.self
 }
 
