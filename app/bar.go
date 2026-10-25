@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 
+	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -72,7 +73,9 @@ func (w *BarWindow) reserve(width, height int) {
 	if w.cfg.Bar.Edge().Vertical() {
 		thick = width
 	}
-	_ = w.SetExclusiveZone(int32(thick))
+	if err := w.SetExclusiveZone(int32(thick)); err != nil {
+		logutil.L().Warn("app: bar: reserve its exclusive zone", "thickness", thick, "err", err)
+	}
 }
 
 // barAnchor anchors a bar to its edge and both ends of it.
