@@ -197,3 +197,16 @@ func TestCompositeTextFollowsTheRootSize(t *testing.T) {
 		t.Errorf("a part rule gave the title %v, want 30", px(it.title))
 	}
 }
+
+// An ellipsizing item gives up its width down to the ellipsis instead
+// of its longest token, so a narrow row keeps its actions inside.
+func TestItemEllipsize(t *testing.T) {
+	face := goldenFace(t)
+	it := NewItem(face, "WH-1000XM4-WIRELESS-NOISE-CANCELLING", "00:1B:66:A2:5C:3F:00:1B:66:A2")
+	it.AddAction(NewButton(NewLabel(face, 14, "Connect", 0), 0, 0))
+	wrapped := MinWidth(it)
+	it.SetEllipsize(true)
+	if got := MinWidth(it); got >= wrapped {
+		t.Errorf("ellipsizing item's minimum %d, not below the wrapping one's %d", got, wrapped)
+	}
+}

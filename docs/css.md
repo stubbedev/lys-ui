@@ -27,7 +27,12 @@ box.AttachStylesheet(widget.NewStylesheet(css, widget.StylePriorityApplication))
 
 - **Priorities** follow GTK's provider priorities: `StylePriorityFallback`,
   `Theme` (regenerated on `SetTheme`), `Settings`, `Application` (the
-  `LoadStylesheet` slot), and `User` (inline styles).
+  `LoadStylesheet` slot), and `User` (inline styles). An app-wide
+  default that the theme's state rules should still outrank (a plain
+  button's transparent fill under the theme's `:hover` and `:checked`
+  fills) belongs at `StylePriorityTheme`, added after the theme with
+  `AddStylesheet`: at `Application` it beats every theme rule, states
+  included.
 - **Scoped files.** `NewStylesheetFile(path, priority)` reads a sheet
   for `AttachStylesheet` from a file, so its `@import` rules resolve
   relative to it; it hot-reloads like the installed file sheets.

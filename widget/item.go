@@ -94,6 +94,21 @@ func (it *Item) SetDescription(description string) {
 	it.desc.SetVisible(description != "")
 }
 
+// SetEllipsize keeps the title and the description on one line each,
+// ending in an ellipsis when the row is too narrow, instead of
+// wrapping: a one-token name (a device's address) then no longer sets
+// the row's minimum width and pushes its actions out.
+func (it *Item) SetEllipsize(on bool) {
+	mode := EllipsizeNone
+	if on {
+		mode = EllipsizeEnd
+	}
+	for _, l := range [...]*Label{it.title, it.desc} {
+		l.SetWrap(!on)
+		l.SetEllipsize(mode)
+	}
+}
+
 // SetOnActivate makes the whole row a control running fn on a click
 // outside its actions, Enter or Space, with the hover fill and the
 // focus ring; nil makes it a plain row again.

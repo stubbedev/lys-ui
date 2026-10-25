@@ -4489,6 +4489,18 @@ func (b *ItemBuilder) WatchDescription(get func() string) *ItemBuilder {
 	return b
 }
 
+// Ellipsize calls (*widget.Item).SetEllipsize.
+func (b *ItemBuilder) Ellipsize(on bool) *ItemBuilder {
+	b.do(func(s *Scope, w *widget.Item) { w.SetEllipsize(on) })
+	return b
+}
+
+// WatchEllipsize re-applies SetEllipsize with get's value after every update.
+func (b *ItemBuilder) WatchEllipsize(get func() bool) *ItemBuilder {
+	b.watch(func(w *widget.Item) { w.SetEllipsize(get()) })
+	return b
+}
+
 // Media calls (*widget.Item).SetMedia.
 func (b *ItemBuilder) Media(child Node, bare bool) *ItemBuilder {
 	b.do(func(s *Scope, w *widget.Item) { w.SetMedia(build(s, child), bare) })
