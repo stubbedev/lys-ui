@@ -582,6 +582,12 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			).Donut(true)),
 		).Spacing(16)),
 		section("Checkbox", ui.Aligned(ui.CheckButton(true).Child(ui.Label("Accept terms and conditions")), widget.AlignStart)),
+		section("Chip", ui.ChipBox().
+			Append(ui.Chip("workspaces").Leading(ui.ColorSwatch(render.RGB(0x3b, 0x82, 0xf6)))).
+			Append(ui.Chip("clock").OnDismiss(func() {})).
+			Append(ui.Chip("battery").OnDismiss(func() {})).
+			Append(ui.Chip("network").OnDismiss(func() {})).
+			Classes(demoSmall)),
 		section("Collapsible", ui.Expander("@stubbedev starred 3 repositories", ui.Column(
 			ui.Label("stubbedev/lys-ui"), ui.Label("stubbedev/lys-shell"), ui.Label("stubbedev/lys-wm"),
 		).Spacing(8))),

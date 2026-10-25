@@ -34,12 +34,15 @@ type Badge struct {
 	variant BadgeVariant
 }
 
+// badgeTextPx is a badge's and a chip's text size.
+const badgeTextPx = 12
+
 // NewBadge returns a default-variant badge reading text.
 func NewBadge(face render.Font, text string) *Badge {
 	face = requireFace("widget.NewBadge", face)
 	b := &Badge{row: NewBox(Row, 4, 0)}
 	b.SetElement("badge")
-	b.label = NewLabel(face, 12, text, 0)
+	b.label = NewLabel(face, badgeTextPx, text, 0)
 	b.row.AppendAligned(b.label, false, AlignCenter)
 	b.initComposite(b, b.row)
 	b.boxed = true

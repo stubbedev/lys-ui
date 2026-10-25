@@ -1664,6 +1664,86 @@ func (b *CheckButtonBuilder) OnChanged(fn func(checked bool)) *CheckButtonBuilde
 	return b
 }
 
+// ChipBuilder builds a widget.Chip.
+type ChipBuilder struct {
+	base[*widget.Chip, *ChipBuilder]
+	face render.Font
+	size float64
+}
+
+// Chip builds a widget.Chip with widget.NewChip.
+func Chip(text string) *ChipBuilder {
+	b := &ChipBuilder{}
+	b.init(b, func(s *Scope) *widget.Chip { return widget.NewChip(s.face(b.face), text) })
+	return b
+}
+
+// Font overrides the environment's typeface and size for this widget; zero values keep the environment's.
+func (b *ChipBuilder) Font(face render.Font, sizePx float64) *ChipBuilder {
+	b.face, b.size = face, sizePx
+	return b
+}
+
+// Content calls (*widget.Chip).SetContent.
+func (b *ChipBuilder) Content(child Node) *ChipBuilder {
+	b.do(func(s *Scope, w *widget.Chip) { w.SetContent(build(s, child)) })
+	return b
+}
+
+// Leading calls (*widget.Chip).SetLeading.
+func (b *ChipBuilder) Leading(child Node) *ChipBuilder {
+	b.do(func(s *Scope, w *widget.Chip) { w.SetLeading(build(s, child)) })
+	return b
+}
+
+// OnDismiss calls (*widget.Chip).SetOnDismiss.
+func (b *ChipBuilder) OnDismiss(arg func()) *ChipBuilder {
+	b.do(func(s *Scope, w *widget.Chip) { w.SetOnDismiss(arg) })
+	return b
+}
+
+// Text calls (*widget.Chip).SetText.
+func (b *ChipBuilder) Text(text string) *ChipBuilder {
+	b.do(func(s *Scope, w *widget.Chip) { w.SetText(text) })
+	return b
+}
+
+// WatchText re-applies SetText with get's value after every update.
+func (b *ChipBuilder) WatchText(get func() string) *ChipBuilder {
+	b.watch(func(w *widget.Chip) { w.SetText(get()) })
+	return b
+}
+
+// ChipBoxBuilder builds a widget.ChipBox.
+type ChipBoxBuilder struct {
+	base[*widget.ChipBox, *ChipBoxBuilder]
+}
+
+// ChipBox builds a widget.ChipBox with widget.NewChipBox.
+func ChipBox() *ChipBoxBuilder {
+	b := &ChipBoxBuilder{}
+	b.init(b, func(s *Scope) *widget.ChipBox { return widget.NewChipBox() })
+	return b
+}
+
+// Append calls (*widget.ChipBox).Append.
+func (b *ChipBoxBuilder) Append(c Of[*widget.Chip]) *ChipBoxBuilder {
+	b.do(func(s *Scope, w *widget.ChipBox) { w.Append(buildOf(s, c)) })
+	return b
+}
+
+// Insert calls (*widget.ChipBox).Insert.
+func (b *ChipBoxBuilder) Insert(i int, c Of[*widget.Chip]) *ChipBoxBuilder {
+	b.do(func(s *Scope, w *widget.ChipBox) { w.Insert(i, buildOf(s, c)) })
+	return b
+}
+
+// OnMoved sets the widget's OnMoved field.
+func (b *ChipBoxBuilder) OnMoved(fn func(src *widget.ChipBox, from int, to int)) *ChipBoxBuilder {
+	b.do(func(_ *Scope, w *widget.ChipBox) { w.OnMoved = fn })
+	return b
+}
+
 // ClampBuilder builds a widget.Clamp.
 type ClampBuilder struct {
 	base[*widget.Clamp, *ClampBuilder]
