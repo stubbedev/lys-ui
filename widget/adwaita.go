@@ -274,7 +274,7 @@ func controlRules() [][2]string {
 		{"combobox > button." + css.Outline + ", datepicker > button." + css.Outline, "padding: 0px 12px;"},
 		{"datepicker > button." + css.Outline, "font-weight: 400;"},
 		{"datepicker .placeholder", "color: @muted_fg_color;"},
-		{"calendar button.nav", "background-color: transparent; border-radius: 6px; color: @muted_fg_color;"},
+		{"calendar button.nav", "background-color: transparent; border-radius: 8px; color: @window_fg_color;"},
 		{"calendar button.nav:hover", "background-color: @muted_bg_color; color: @window_fg_color;"},
 		{"sheet .title", "font-weight: 600;"},
 		{"sheet .description", "color: @muted_fg_color;"},
