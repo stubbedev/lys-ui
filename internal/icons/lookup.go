@@ -45,12 +45,16 @@ func (c *Cache) Lookup(name string, size int, frac120 uint32) (string, error) {
 func (c *Cache) resolveLocked(name string, size int, frac120 uint32) (string, error) {
 	paths := c.searchPathsLocked()
 	scale := dirScale(frac120)
-	for _, t := range themeChain(c.theme, paths) {
-		if path := lookupTheme(t, paths, name, size, scale); path != "" {
+	if c.files == nil {
+		c.chain = themeChain(c.theme, paths)
+		c.files = dirIndex{}
+	}
+	for _, t := range c.chain {
+		if path := lookupTheme(c.files, t, paths, name, size, scale); path != "" {
 			return path, nil
 		}
 	}
-	if path := lookupUnthemed(paths, name); path != "" {
+	if path := lookupUnthemed(c.files, paths, name); path != "" {
 		return path, nil
 	}
 	if path := lookupBuiltin(name); path != "" {
@@ -63,19 +67,19 @@ func (c *Cache) resolveLocked(name string, size int, frac120 uint32) (string, er
 // directory at the requested scale falls back to its scale-1
 // directories (the raster then upscales into the larger device box),
 // matching how GTK serves scale-1-only themes on hidpi.
-func lookupTheme(t *Theme, baseDirs []string, name string, size, scale int) string {
-	if path := lookupThemeScale(t, baseDirs, name, size, scale); path != "" {
+func lookupTheme(ix dirIndex, t *Theme, baseDirs []string, name string, size, scale int) string {
+	if path := lookupThemeScale(ix, t, baseDirs, name, size, scale); path != "" {
 		return path
 	}
 	if scale != 1 {
-		return lookupThemeScale(t, baseDirs, name, size, 1)
+		return lookupThemeScale(ix, t, baseDirs, name, size, 1)
 	}
 	return ""
 }
 
 // lookupThemeScale runs the exact pass then the nearest pass at one
 // integer directory scale.
-func lookupThemeScale(t *Theme, baseDirs []string, name string, size, scale int) string {
+func lookupThemeScale(ix dirIndex, t *Theme, baseDirs []string, name string, size, scale int) string {
 	// Exact pass: the first directory whose size rule accepts the
 	// request, in declaration order, wins.
 	for _, base := range baseDirs {
@@ -83,7 +87,7 @@ func lookupThemeScale(t *Theme, baseDirs []string, name string, size, scale int)
 			if !d.matches(size, scale) {
 				continue
 			}
-			if path := findIconFile(base, t.DirName, d.Path, name); path != "" {
+			if path := findIconFile(ix, base, t.DirName, d.Path, name); path != "" {
 				return path
 			}
 		}
@@ -101,7 +105,7 @@ func lookupThemeScale(t *Theme, baseDirs []string, name string, size, scale int)
 			if best != "" && dist >= bestDist {
 				continue
 			}
-			if path := findIconFile(base, t.DirName, d.Path, name); path != "" {
+			if path := findIconFile(ix, base, t.DirName, d.Path, name); path != "" {
 				best, bestDist = path, dist
 			}
 		}
@@ -111,9 +115,9 @@ func lookupThemeScale(t *Theme, baseDirs []string, name string, size, scale int)
 
 // lookupUnthemed is the spec's fallback: base directories are searched
 // for the bare name, no theme or size rule involved.
-func lookupUnthemed(baseDirs []string, name string) string {
+func lookupUnthemed(ix dirIndex, baseDirs []string, name string) string {
 	for _, base := range baseDirs {
-		if path := findIconFile(base, "", "", name); path != "" {
+		if path := findIconFile(ix, base, "", "", name); path != "" {
 			return path
 		}
 	}
@@ -123,12 +127,12 @@ func lookupUnthemed(baseDirs []string, name string) string {
 // findIconFile returns the first existing file for the icon name under
 // base/theme/dir with a known extension. A "-symbolic" name also tries
 // its unsuffixed base: themes often ship only the plain glyph.
-func findIconFile(base, theme, dir, name string) string {
+func findIconFile(ix dirIndex, base, theme, dir, name string) string {
+	d := filepath.Join(base, theme, dir)
 	for _, nm := range nameCandidates(name) {
 		for _, ext := range extensions {
-			path := filepath.Join(base, theme, dir, nm+ext)
-			if isFile(path) {
-				return path
+			if ix.isFile(d, nm+ext) {
+				return filepath.Join(d, nm+ext)
 			}
 		}
 	}
@@ -143,10 +147,62 @@ func nameCandidates(name string) []string {
 	return []string{name}
 }
 
-// isFile reports whether path exists and is a regular file.
-func isFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.Mode().IsRegular()
+// fileKind is what a directory entry is, as far as a lookup needs.
+type fileKind uint8
+
+const (
+	// fileLink is a symlink not yet followed: themes link their sizes
+	// and aliases, and a lookup stats one only when it asks for it.
+	fileLink fileKind = iota + 1
+	fileRegular
+	fileOther
+)
+
+// dirIndex holds the entries of the theme directories lookups have
+// read, each read once: a lookup answers from memory instead of
+// statting every candidate path, as GTK's icon-theme.cache does. A
+// cache reset drops it, so icons installed since are found.
+type dirIndex map[string]map[string]fileKind
+
+// isFile reports whether dir/name exists and is (or links to) a
+// regular file.
+func (ix dirIndex) isFile(dir, name string) bool {
+	entries, ok := ix[dir]
+	if !ok {
+		entries = readEntries(dir)
+		ix[dir] = entries
+	}
+	switch entries[name] {
+	case fileRegular:
+		return true
+	case fileLink:
+		kind := fileOther
+		if info, err := os.Stat(filepath.Join(dir, name)); err == nil && info.Mode().IsRegular() {
+			kind = fileRegular
+		}
+		entries[name] = kind
+		return kind == fileRegular
+	}
+	return false
+}
+
+// readEntries lists dir's files and links; a missing or unreadable
+// directory holds none.
+func readEntries(dir string) map[string]fileKind {
+	des, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	entries := make(map[string]fileKind, len(des))
+	for _, de := range des {
+		switch t := de.Type(); {
+		case t.IsRegular():
+			entries[de.Name()] = fileRegular
+		case t&os.ModeSymlink != 0:
+			entries[de.Name()] = fileLink
+		}
+	}
+	return entries
 }
 
 // symbolicSuffix marks a symbolic icon name.

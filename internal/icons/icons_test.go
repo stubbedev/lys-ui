@@ -689,3 +689,39 @@ func TestCacheSearchPaths(t *testing.T) {
 		t.Errorf("nil paths = %v, want the XDG default %v", got, want)
 	}
 }
+
+// Lookups answer from each directory's listing, read once: a linked
+// icon resolves through its link and a dangling link does not, and an
+// icon installed after a lookup shows once the theme is invalidated,
+// as an installed icon theme announces itself.
+func TestLookupIndexesDirectories(t *testing.T) {
+	root := writeTree(t)
+	c := newTestCacheAt(t, "testtheme", root)
+	apps := filepath.Join(root, "hicolor", "16x16", "apps")
+	if err := os.Symlink("plain.svg", filepath.Join(apps, "linked.svg")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("missing.svg", filepath.Join(apps, "dangling.svg")); err != nil {
+		t.Fatal(err)
+	}
+	if path, err := c.Lookup("linked", 16, 120); err != nil || filepath.Base(path) != "linked.svg" {
+		t.Errorf("linked icon: %q, %v", path, err)
+	}
+	if _, err := c.Lookup("dangling", 16, 120); err == nil {
+		t.Error("a dangling link resolved")
+	}
+	if _, err := c.Lookup("late", 16, 120); err == nil {
+		t.Fatal("an icon resolved before it was installed")
+	}
+	plain, err := os.ReadFile(filepath.Join(apps, "plain.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(apps, "late.svg"), plain, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.InvalidateTheme()
+	if path, err := c.Lookup("late", 16, 120); err != nil || filepath.Base(path) != "late.svg" {
+		t.Errorf("installed icon after InvalidateTheme: %q, %v", path, err)
+	}
+}

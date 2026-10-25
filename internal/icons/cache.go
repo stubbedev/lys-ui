@@ -60,6 +60,11 @@ type Cache struct {
 
 	entries map[cacheKey]*cacheEntry
 	order   []cacheKey
+
+	// chain is the theme inheritance chain lookups walk, parsed once;
+	// files indexes the directories they read. A reset drops both.
+	chain []*Theme
+	files dirIndex
 }
 
 // DefaultTheme is GTK's default icon theme, the one lookups start on
@@ -168,6 +173,7 @@ func (c *Cache) OnReset(fn func()) {
 func (c *Cache) resetLocked() []func() {
 	c.entries = map[cacheKey]*cacheEntry{}
 	c.order = nil
+	c.chain, c.files = nil, nil
 	c.gen++
 	return slices.Clone(c.resetListeners)
 }
