@@ -13,7 +13,8 @@ func testBar(t *testing.T, edge BarEdge) (*Bar, *BarButton, *BarSeparator, *Segm
 	segs := NewSegmentIndicator(5)
 	segs.SetActive(1)
 	segs.SetSegmentState(2, SegmentOccupied)
-	segs.SetSegmentState(4, SegmentUrgent)
+	segs.SetSegmentState(4, SegmentOccupied)
+	segs.SetSegmentUrgent(4, true)
 	b.Start().AppendAligned(segs, false, AlignCenter)
 	b.Center().Append(NewLabel(face, 14, "12:45", 0), false)
 	sep := NewBarSeparator()
@@ -92,6 +93,7 @@ func TestSegmentIndicator(t *testing.T) {
 	}
 	segs.SetActive(3)
 	segs.SetSegmentState(4, SegmentEmpty)
+	segs.SetSegmentUrgent(4, false)
 	segs.SetCount(4)
 	if segs.segs[1].HasClass(segmentActive) || !segs.segs[3].HasClass(segmentActive) || segs.Count() != 4 || segs.Active() != 3 {
 		t.Error("moving the active segment or trimming the count left stale state")
@@ -202,5 +204,64 @@ func TestSegmentContentAndButtons(t *testing.T) {
 	arrangeTree(t, row, 400, 40)
 	if len(seg.child.(*Box).Children()) != 0 {
 		t.Error("clearing the content left it in the segment")
+	}
+}
+
+// An urgent segment stays occupied, and urgency clears on its own.
+func TestSegmentUrgencyKeepsState(t *testing.T) {
+	segs := NewSegmentIndicator(2)
+	segs.SetSegmentState(0, SegmentOccupied)
+	segs.SetSegmentUrgent(0, true)
+	if seg := segs.Segment(0); !seg.HasClass("occupied") || !seg.HasClass("urgent") {
+		t.Fatalf("an urgent occupied segment has classes %v", seg.Classes())
+	}
+	segs.SetSegmentUrgent(0, false)
+	if seg := segs.Segment(0); !seg.HasClass("occupied") || seg.HasClass("urgent") {
+		t.Fatalf("clearing urgency left classes %v", seg.Classes())
+	}
+	segs.SetSegmentUrgent(5, true)
+}
+
+// The segments element paints its own CSS box, and a segment wider
+// than its content centres it.
+func TestSegmentsBoxAndCentredContent(t *testing.T) {
+	face := goldenFace(t)
+	segs := NewSegmentIndicator(2)
+	label := NewLabel(face, 12, "1", 0)
+	segs.SetSegmentContent(0, label)
+	loadCSS(t, `segments { background-color: #ff0000; } button.segment { min-width: 40px; min-height: 24px; }`)
+	row := NewBox(Row, 0, 0).Append(segs, false)
+	const w, h = 200, 40
+	arrangeTree(t, row, w, h)
+	arrangeTree(t, row, w, h)
+	seg, lb := segs.Segment(0).Bounds(), label.Bounds()
+	if dx := (lb.X + lb.W/2) - (seg.X + seg.W/2); dx < -1 || dx > 1 {
+		t.Errorf("content %v off the centre of its segment %v by %d", lb, seg, dx)
+	}
+	if dy := (lb.Y + lb.H/2) - (seg.Y + seg.H/2); dy < -1 || dy > 1 {
+		t.Errorf("content %v off the middle of its segment %v by %d", lb, seg, dy)
+	}
+	data := make([]byte, render.Stride(w)*h)
+	segs.Paint(render.New(data, render.Stride(w), w, h))
+	sb := segs.Bounds()
+	gap := render.ColorFromBytes(data[(sb.Y+sb.H/2)*render.Stride(w)+(segs.Segment(1).Bounds().X-1)*4:])
+	if gap.R() != 0xff || gap.G() != 0 {
+		t.Errorf("between segments the indicator painted %v, want its CSS red", gap)
+	}
+}
+
+// A bar button's part takes the align-self a stylesheet gives it: a
+// stretched icon block fills the button's height.
+func TestBarButtonPartAlignSelf(t *testing.T) {
+	face := goldenFace(t)
+	icon := NewBox(Row, 0, 0)
+	icon.AddClass("prefix")
+	b := NewBarButton(face, icon, "label")
+	loadCSS(t, `button.bar-button .prefix { align-self: stretch; min-width: 10px; } button.bar-button label { padding: 8px 0; }`)
+	arrangeTree(t, NewBox(Row, 0, 0).Append(b, false), 300, 60)
+	arrangeTree(t, NewBox(Row, 0, 0).Append(b, false), 300, 60)
+	row := b.row.Bounds()
+	if ib := icon.Bounds(); ib.Y != row.Y || ib.H != row.H {
+		t.Errorf("stretched icon %v does not fill the button's row %v", ib, row)
 	}
 }

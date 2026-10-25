@@ -422,11 +422,7 @@ func (l *List) visible() (first, last int) {
 			r = l.newRow(i)
 			l.rows[i] = r
 		}
-		if i == n-1 {
-			r.AddClass(listRowLast)
-		} else {
-			r.RemoveClass(listRowLast)
-		}
+		r.SetClass(listRowLast, i == n-1)
 	}
 	return first, last
 }

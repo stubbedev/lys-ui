@@ -91,11 +91,7 @@ func (b *Bar) SetEdge(edge BarEdge) {
 	}
 	b.RemoveClass(barEdges...)
 	b.AddClass(edge.class())
-	if edge.Vertical() {
-		b.AddClass("vertical")
-	} else {
-		b.RemoveClass("vertical")
-	}
+	b.SetClass("vertical", edge.Vertical())
 	walkWidgets(b, func(w Widget) bool {
 		if l, ok := w.(interface{ InvalidateLayout() }); ok {
 			l.InvalidateLayout()
@@ -247,11 +243,7 @@ func (b *BarButton) Arrange(r render.Rect) {
 	if v := barEdgeOf(b).Vertical(); v != b.vertical {
 		b.vertical = v
 		b.syncLabel()
-		if v {
-			b.AddClass("vertical")
-		} else {
-			b.RemoveClass("vertical")
-		}
+		b.SetClass("vertical", v)
 	}
 	b.Button.Arrange(r)
 }
@@ -335,19 +327,19 @@ const (
 	// SegmentOccupied is a segment with something in it, a workspace
 	// with windows.
 	SegmentOccupied
-	// SegmentUrgent is a segment asking for attention.
-	SegmentUrgent
 )
 
-// segmentActive is the active segment's class.
-const segmentActive = "active"
-
-// segmentClasses are the state classes a segment carries.
-var segmentClasses = []string{"occupied", "urgent"}
+// The classes a segment's state, activity and urgency set.
+const (
+	segmentActive   = "active"
+	segmentOccupied = "occupied"
+	segmentUrgent   = "urgent"
+)
 
 // SegmentIndicator is a row of segments, one per workspace or page:
 // the active one drawn long and filled, occupied and urgent ones in
 // their theme colours. A segment can hold content (SetSegmentContent),
+// centred in it,
 // and Segment reaches its button. A click on a segment reports it
 // through OnSelect. In a vertical bar the segments stack. It styles as the
 // segments element, each segment a button.segment with the active,
@@ -364,6 +356,7 @@ type SegmentIndicator struct {
 // NewSegmentIndicator returns n empty segments, none active.
 func NewSegmentIndicator(n int) *SegmentIndicator {
 	s := &SegmentIndicator{box: NewBox(Row, Current().Spacing/2, 0), active: -1}
+	s.boxed = true
 	s.SetElement("segments")
 	s.initComposite(s, s.box)
 	s.SetCount(n)
@@ -377,7 +370,10 @@ func (s *SegmentIndicator) SetCount(n int) {
 		s.segs = s.segs[:len(s.segs)-1]
 	}
 	for i := len(s.segs); i < n; i++ {
-		seg := NewButton(NewBox(Row, 0, 0), 0, 0)
+		slot := NewBox(Row, 0, 0)
+		slot.SetHAlign(AlignCenter)
+		slot.SetVAlign(AlignCenter)
+		seg := NewButton(slot, 0, 0)
 		seg.AddClass("segment")
 		seg.SetAccessibleName(Tr("Segment") + " " + itoa(i+1))
 		seg.OnClick = func() {
@@ -440,14 +436,19 @@ func (s *SegmentIndicator) SetActive(i int) {
 // Active is the active segment, -1 for none.
 func (s *SegmentIndicator) Active() int { return s.active }
 
-// SetSegmentState marks segment i; out of range does nothing.
+// SetSegmentState marks segment i empty or occupied; out of range does
+// nothing.
 func (s *SegmentIndicator) SetSegmentState(i int, st SegmentState) {
-	if i < 0 || i >= len(s.segs) {
-		return
+	if seg := s.Segment(i); seg != nil {
+		seg.SetClass(segmentOccupied, st == SegmentOccupied)
 	}
-	s.segs[i].RemoveClass(segmentClasses...)
-	if st != SegmentEmpty {
-		s.segs[i].AddClass(segmentClasses[st-1])
+}
+
+// SetSegmentUrgent marks segment i as asking for attention or not,
+// whatever its state; out of range does nothing.
+func (s *SegmentIndicator) SetSegmentUrgent(i int, urgent bool) {
+	if seg := s.Segment(i); seg != nil {
+		seg.SetClass(segmentUrgent, urgent)
 	}
 }
 

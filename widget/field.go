@@ -104,20 +104,9 @@ func (f *Field) Description() string { return f.desc.Text() }
 func (f *Field) SetError(msg string) {
 	f.err.SetText(msg)
 	invalid := msg != ""
-	if invalid {
-		f.AddClass("invalid")
-	} else {
-		f.RemoveClass("invalid")
-	}
-	if c, ok := f.control.(interface {
-		AddClass(...string)
-		RemoveClass(...string)
-	}); ok {
-		if invalid {
-			c.AddClass(css.Error)
-		} else {
-			c.RemoveClass(css.Error)
-		}
+	f.SetClass("invalid", invalid)
+	if c, ok := f.control.(interface{ SetClass(string, bool) }); ok {
+		c.SetClass(css.Error, invalid)
 	}
 	f.layout()
 }

@@ -945,6 +945,15 @@ func (n *node) RemoveClass(names ...string) {
 	}
 }
 
+// SetClass adds the class name when on and removes it otherwise.
+func (n *node) SetClass(name string, on bool) {
+	if on {
+		n.AddClass(name)
+		return
+	}
+	n.RemoveClass(name)
+}
+
 // SetClasses replaces the class list wholesale — the GTK
 // set_css_classes idiom for widgets whose modifiers are recomputed at
 // once. Order is irrelevant to matching.

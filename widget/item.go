@@ -169,11 +169,7 @@ func (it *Item) SetVariant(v ItemVariant) {
 
 // SetSmall switches to the small size.
 func (it *Item) SetSmall(on bool) {
-	if on {
-		it.AddClass(css.Small)
-	} else {
-		it.RemoveClass(css.Small)
-	}
+	it.SetClass(css.Small, on)
 }
 
 // ButtonGroup joins buttons into one control: side by side or stacked,

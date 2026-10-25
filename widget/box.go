@@ -28,6 +28,28 @@ type childEntry struct {
 	cross Align
 }
 
+// crossAlign is the child's placement across the box: its align-self
+// where a stylesheet declares one, else AppendAligned's.
+func (c *childEntry) crossAlign() Align {
+	v := styleOf(c.w)
+	if !v.Has(style.PropAlignSelf) {
+		return c.cross
+	}
+	switch v.Layout.AlignSelf.Kind {
+	case style.BoxNormal, style.BoxStretch:
+		return AlignFill
+	case style.BoxStart, style.BoxFlexStart, style.BoxSelfStart, style.BoxLeft:
+		return AlignStart
+	case style.BoxEnd, style.BoxFlexEnd, style.BoxSelfEnd, style.BoxRight:
+		return AlignEnd
+	case style.BoxCenter:
+		return AlignCenter
+	case style.BoxBaseline, style.BoxLastBaseline:
+		return AlignBaseline
+	}
+	return c.cross
+}
+
 // Box is a container that lays its children along one axis with fixed
 // spacing and padding. The cross axis stretches children to the inner
 // height (Row) or width (Column) of the box, unless a child was added
@@ -397,7 +419,7 @@ func (b *Box) baselineGroup() (above, below int, ok bool) {
 		return 0, 0, false
 	}
 	for _, c := range b.child {
-		if c.cross != AlignBaseline || !flows(c.w) {
+		if c.crossAlign() != AlignBaseline || !flows(c.w) {
 			continue
 		}
 		if base, has := baselineOf(c.w); has {
@@ -438,7 +460,7 @@ func (b *Box) Baseline() (int, bool) {
 		if !ok {
 			continue
 		}
-		switch c.cross {
+		switch c.crossAlign() {
 		case AlignStart:
 		case AlignEnd:
 			base += cross - c.nat.H
@@ -623,7 +645,7 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 			}
 			rect = render.Rect{X: x, Y: inner.Y, W: size, H: inner.H}
 			natural := Size{W: size, H: min(c.nat.H, inner.H)}
-			switch c.cross {
+			switch cross := c.crossAlign(); cross {
 			case AlignFill:
 			case AlignBaseline:
 				if base, ok := baselineOf(c.w); grouped && ok {
@@ -632,12 +654,12 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 					rect = alignRect(rect, natural, AlignFill, AlignCenter)
 				}
 			default:
-				rect = alignRect(rect, natural, AlignFill, c.cross)
+				rect = alignRect(rect, natural, AlignFill, cross)
 			}
 		} else {
 			rect = render.Rect{X: inner.X, Y: inner.Y + pos, W: inner.W, H: size}
-			if c.cross != AlignFill {
-				rect = alignRect(rect, Size{W: min(c.nat.W, inner.W), H: size}, c.cross, AlignFill)
+			if cross := c.crossAlign(); cross != AlignFill {
+				rect = alignRect(rect, Size{W: min(c.nat.W, inner.W), H: size}, cross, AlignFill)
 			}
 		}
 		arrangeChild(c.w, rect)

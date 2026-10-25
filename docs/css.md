@@ -633,7 +633,9 @@ way a `div` is in a browser.
 **The interaction rule.** Where the stylesheet sets a layout property,
 CSS wins; where it does not, the programmatic layout stands. A Box
 without a `display` declaration keeps its GTK box layout (axis,
-spacing, expand, AppendAligned, homogeneous), and inside a CSS layout
+spacing, expand, AppendAligned, homogeneous), a child's declared
+`align-self` placing it across the box over AppendAligned's, and
+inside a CSS layout
 an undeclared property falls back to the programmatic setting: the
 box axis for `flex-direction` (a column box is a column flexbox), the
 box spacing for `gap`, Append's expand (or SetHExpand/SetVExpand) for

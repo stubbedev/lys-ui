@@ -17,6 +17,7 @@ type nodeProps interface {
 	AttachStylesheet(s *widget.Stylesheet)
 	SetAccessibleName(name string)
 	SetAttr(name string, value string)
+	SetClass(name string, on bool)
 	SetClasses(names ...string)
 	SetCursorName(s string)
 	SetDebugName(name string)
@@ -73,6 +74,12 @@ func (b *base[W, B]) WatchAccessibleName(get func() string) B {
 // Attr calls SetAttr on the widget.
 func (b *base[W, B]) Attr(name string, text string) B {
 	b.do(func(s *Scope, w W) { w.SetAttr(name, text) })
+	return b.self
+}
+
+// Class calls SetClass on the widget.
+func (b *base[W, B]) Class(name string, on bool) B {
+	b.do(func(s *Scope, w W) { w.SetClass(name, on) })
 	return b.self
 }
 
@@ -6732,6 +6739,12 @@ func (b *SegmentIndicatorBuilder) SegmentContent(i int, child Node) *SegmentIndi
 // SegmentState calls (*widget.SegmentIndicator).SetSegmentState.
 func (b *SegmentIndicatorBuilder) SegmentState(i int, st widget.SegmentState) *SegmentIndicatorBuilder {
 	b.do(func(s *Scope, w *widget.SegmentIndicator) { w.SetSegmentState(i, st) })
+	return b
+}
+
+// SegmentUrgent calls (*widget.SegmentIndicator).SetSegmentUrgent.
+func (b *SegmentIndicatorBuilder) SegmentUrgent(i int, urgent bool) *SegmentIndicatorBuilder {
+	b.do(func(s *Scope, w *widget.SegmentIndicator) { w.SetSegmentUrgent(i, urgent) })
 	return b
 }
 
