@@ -556,3 +556,34 @@ func TestRichLabelFollowsTheCSSFontSize(t *testing.T) {
 		t.Errorf("rich label under font-size 12px %v, want the 12px label's %v", got, want)
 	}
 }
+
+// A RichLabel measures and paints inside its CSS box, as a Label does:
+// padding insets the text, and wraps at the content width (#274).
+func TestRichLabelCSSBox(t *testing.T) {
+	face := testFace(t)
+	loadCSS(t, `.x { padding: 0px 40px; }`)
+	firstInk := func(w Widget) int {
+		box := NewBox(Column, 0, 0)
+		box.Append(w, false)
+		buf := paintPixels(t, box, 300, 60)
+		for x := range 300 {
+			for y := range 60 {
+				if pxAt(buf, 300, x, y).A() > 0x40 {
+					return x
+				}
+			}
+		}
+		return -1
+	}
+	rl := NewRichLabel(face, 14, "Hello <b>x</b>", render.RGB(0xff, 0xff, 0xff))
+	rl.AddClass("x")
+	l := NewLabel(face, 14, "Hello x", render.RGB(0xff, 0xff, 0xff))
+	l.AddClass("x")
+	if r, p := firstInk(rl), firstInk(l); r != p || r < 40 {
+		t.Errorf("rich label inks from x=%d, label from x=%d; want both inset by the 40px padding", r, p)
+	}
+	plain := NewRichLabel(face, 14, "Hello <b>x</b>", 0)
+	if got, want := rl.Measure(unbounded).W, plain.Measure(unbounded).W+80; got != want {
+		t.Errorf("padded rich label measures %d wide, want %d", got, want)
+	}
+}

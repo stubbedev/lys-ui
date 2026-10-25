@@ -57,6 +57,9 @@ type RichLabel struct {
 	runes                      int
 	text                       string
 	natural                    Size
+	// content is the arranged content box the text lays out in: the
+	// border box less the CSS border and padding.
+	content render.Rect
 
 	// selStart/selEnd bound the highlighted rune range while selOn.
 	selStart, selEnd int
@@ -395,14 +398,17 @@ func (l *RichLabel) SetMaxWidthChars(n int) {
 // unset.
 func (l *RichLabel) MaxWidthChars() int { return l.maxChars }
 
-// Arrange records the box and fits the line to its width.
+// Arrange records the border box inside r, the margin box, and fits
+// the line to the content box's width.
 func (l *RichLabel) Arrange(r render.Rect) {
-	l.node.Arrange(r)
+	border, content := boxRects(boxOf(l.style(l), render.Insets{}), r)
+	l.node.Arrange(border)
+	l.content = content
 	if l.wrap {
-		l.reflow(r.W)
+		l.reflow(content.W)
 		return
 	}
-	l.fit(r.W)
+	l.fit(content.W)
 }
 
 // reflow lays the wrapped rows out to width w: the whole text on one
@@ -628,8 +634,9 @@ func styleAt(spans []MarkupRun, i int) TextStyle {
 }
 
 // Measure returns the line's total advance and its line height - the
-// maximum over the runs - clamped to con. Wrap mode reports the widest
-// wrapped row and one line height per row at the offered width.
+// maximum over the runs - inside the CSS box, clamped to con. Wrap mode
+// reports the widest wrapped row and one line height per row at the
+// offered content width.
 func (l *RichLabel) Measure(con Constraints) Size {
 	if s, ok := l.measureHit(con); ok {
 		return s
@@ -637,6 +644,12 @@ func (l *RichLabel) Measure(con Constraints) Size {
 	if l.px() != l.shapedPx {
 		l.retext()
 	}
+	v := l.style(l)
+	return l.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, l.measureText))
+}
+
+// measureText is Measure inside the CSS box.
+func (l *RichLabel) measureText(con Constraints) Size {
 	limit := con.Max.W
 	if c := l.widthCap(); c > 0 {
 		limit = min(limit, c)
@@ -647,11 +660,11 @@ func (l *RichLabel) Measure(con Constraints) Size {
 		for _, line := range l.lines {
 			w = max(w, int(math.Ceil(line.advance)))
 		}
-		return l.measureStore(con, clampSize(Size{W: w, H: len(l.lines) * l.natural.H}, con))
+		return clampSize(Size{W: w, H: len(l.lines) * l.natural.H}, con)
 	}
 	nat := l.natural
 	nat.W = min(nat.W, limit)
-	return l.measureStore(con, clampSize(nat, con))
+	return clampSize(nat, con)
 }
 
 // widthCap is the max-width-chars cap in pixels: n approximate
@@ -678,17 +691,19 @@ func (l *RichLabel) ShrinkableWidth() int {
 
 // MinSize is a wrapping label's floor: the widest unbreakable token —
 // wrapping narrower than that clips tokens, the one thing wrapping
-// promised not to do — and one line height.
+// promised not to do — and one line height, inside the CSS box.
 func (l *RichLabel) MinSize() Size {
-	if !l.wrap || l.text == "" {
-		return Size{H: l.natural.H}
+	o := boxOf(l.style(l), render.Insets{}).outer()
+	floor := Size{H: l.natural.H}
+	if l.wrap && l.text != "" {
+		w := 0.0
+		for _, tok := range l.wrapSpans(1) {
+			line, _, _ := l.shapeOne(tok)
+			w = math.Max(w, line.advance)
+		}
+		floor.W = int(math.Ceil(w))
 	}
-	w := 0.0
-	for _, tok := range l.wrapSpans(1) {
-		line, _, _ := l.shapeOne(tok)
-		w = math.Max(w, line.advance)
-	}
-	return Size{W: int(math.Ceil(w)), H: l.natural.H}
+	return Size{W: floor.W + o.Left + o.Right, H: floor.H + o.Top + o.Bottom}
 }
 
 // lineGeom resolves the aligned line origin and the runs' shared
@@ -697,7 +712,7 @@ func (l *RichLabel) MinSize() Size {
 // plain label's DrawAligned applies.
 func (l *RichLabel) lineGeom() (lineX float64, baseline int, ok bool) {
 	lineH := l.natural.H
-	if l.bounds.H < lineH {
+	if l.content.H < lineH {
 		return 0, 0, false
 	}
 	align := l.align
@@ -711,13 +726,13 @@ func (l *RichLabel) lineGeom() (lineX float64, baseline int, ok bool) {
 	}
 	switch align {
 	case render.AlignCenter:
-		lineX = float64(l.bounds.X) + (float64(l.bounds.W)-l.advance)/2
+		lineX = float64(l.content.X) + (float64(l.content.W)-l.advance)/2
 	case render.AlignEnd:
-		lineX = float64(l.bounds.X) + float64(l.bounds.W) - l.advance
+		lineX = float64(l.content.X) + float64(l.content.W) - l.advance
 	default:
-		lineX = float64(l.bounds.X)
+		lineX = float64(l.content.X)
 	}
-	baseline = l.bounds.Y + int(math.Round((float64(l.bounds.H)-float64(lineH))/2+l.lineAsc))
+	baseline = l.content.Y + int(math.Round((float64(l.content.H)-float64(lineH))/2+l.lineAsc))
 	return lineX, baseline, true
 }
 
@@ -737,14 +752,14 @@ func (l *RichLabel) rowGeom(i int) (float64, int) {
 	var x float64
 	switch align {
 	case render.AlignCenter:
-		x = float64(l.bounds.X) + (float64(l.bounds.W)-line.advance)/2
+		x = float64(l.content.X) + (float64(l.content.W)-line.advance)/2
 	case render.AlignEnd:
-		x = float64(l.bounds.X) + float64(l.bounds.W) - line.advance
+		x = float64(l.content.X) + float64(l.content.W) - line.advance
 	default:
-		x = float64(l.bounds.X)
+		x = float64(l.content.X)
 	}
 	lineH := l.natural.H
-	top := l.bounds.Y + max(0, (l.bounds.H-len(l.lines)*lineH)/2)
+	top := l.content.Y + max(0, (l.content.H-len(l.lines)*lineH)/2)
 	return x, top + i*lineH + int(math.Round(l.lineAsc))
 }
 
@@ -753,6 +768,9 @@ func (l *RichLabel) rowGeom(i int) (float64, int) {
 // over the label color, faded by its alpha), and an underline for link
 // runs. Wrap mode lays one row per baseline.
 func (l *RichLabel) Paint(cv *render.Canvas) {
+	if v := l.style(l); pickc(0, v, style.PropBackgroundColor, 0) != 0 || hasBoxLayers(v) {
+		paintBoxBehind(cv, v, l.bounds, radiusOr(v, 0), borderOf(v), pickc(0, v, style.PropBackgroundColor, 0))
+	}
 	if start, end, on := l.selection(); on {
 		a := Current().Accent
 		hl := render.RGBA(a.R(), a.G(), a.B(), 90)
@@ -878,7 +896,7 @@ func (l *RichLabel) SelectionBands(start, end int) []render.Rect {
 		if x1 <= x0 {
 			continue
 		}
-		bands = append(bands, render.Rect{X: x0, Y: l.bounds.Y, W: x1 - x0, H: l.bounds.H})
+		bands = append(bands, render.Rect{X: x0, Y: l.content.Y, W: x1 - x0, H: l.content.H})
 	}
 	return bands
 }
@@ -891,7 +909,7 @@ func (l *RichLabel) linkAt(p Point) (string, bool) {
 	}
 	if l.wrap && l.lines != nil {
 		lineH := l.natural.H
-		top := l.bounds.Y + max(0, (l.bounds.H-len(l.lines)*lineH)/2)
+		top := l.content.Y + max(0, (l.content.H-len(l.lines)*lineH)/2)
 		row := (p.Y - top) / lineH
 		if row < 0 || row >= len(l.lines) {
 			return "", false
@@ -978,7 +996,7 @@ func (l *RichLabel) SelectedText() (string, bool) {
 func (l *RichLabel) runeAt(p Point) int {
 	if l.wrap && l.lines != nil {
 		lineH := l.natural.H
-		top := l.bounds.Y + max(0, (l.bounds.H-len(l.lines)*lineH)/2)
+		top := l.content.Y + max(0, (l.content.H-len(l.lines)*lineH)/2)
 		row := max(0, (p.Y-top)/lineH)
 		if row >= len(l.lines) {
 			return l.runes
