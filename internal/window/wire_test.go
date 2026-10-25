@@ -457,3 +457,29 @@ func TestExportRequestsAHandleAndDropsItOnClose(t *testing.T) {
 		t.Error("a nil exporter exported")
 	}
 }
+
+// Close destroys the toplevel and then its xdg_surface, so the window
+// leaves the screen: the close only marked it closed once, and a
+// multi-window application's closed window stayed mapped until the
+// process exited (#278). A second Close sends nothing.
+func TestCloseDestroysTheRole(t *testing.T) {
+	frames := headlesstest.WireServer(t, "wayland-test")
+	w := newWireWindow(t, Config{Title: "t", AppID: "t"})
+	toplevel, xdgSurface := uint32(w.Toplevel.Id()), uint32(w.XdgSurface.Id())
+	w.Close()
+	w.Close()
+	_ = w.SetTitle("after close")
+	if w.Toplevel != nil || w.XdgSurface != nil {
+		t.Fatal("the closed window kept its role objects")
+	}
+	destroyed := func(id uint32) func(headlesstest.WireFrame) bool {
+		return func(f headlesstest.WireFrame) bool { return f.Obj == id && f.Opcode == 0 }
+	}
+	headlesstest.WaitForFrame(t, frames, "xdg_toplevel.destroy", destroyed(toplevel))
+	headlesstest.WaitForFrame(t, frames, "xdg_surface.destroy", destroyed(xdgSurface))
+	select {
+	case f := <-frames:
+		t.Errorf("a request followed the teardown: object %d opcode %d", f.Obj, f.Opcode)
+	case <-time.After(100 * time.Millisecond):
+	}
+}

@@ -487,12 +487,34 @@ func (w *Window) EnsureUsable() error {
 // Closed reports whether the window was closed.
 func (w *Window) Closed() bool { return w.closed }
 
-// Close marks the window closed from the client side (a keybinding, for
-// instance). The next loop check exits.
+// Close closes the window, from the client side or on the compositor's
+// close request: it destroys the toplevel role, which unmaps the
+// surface, and marks the window closed for the next loop check. The
+// wl_surface stays with its owner. Idempotent.
 func (w *Window) Close() {
 	w.teardownDialog()
 	w.teardownExport()
+	w.teardownRole()
 	w.closed = true
+}
+
+// teardownRole destroys the toplevel's role objects in the order
+// xdg-shell requires: the decoration and the toplevel before their
+// xdg_surface. Without them the window is wireless, which every
+// request method already tolerates.
+func (w *Window) teardownRole() {
+	if w.decoration != nil {
+		_ = w.decoration.Destroy()
+		w.decoration = nil
+	}
+	if w.Toplevel != nil {
+		_ = w.Toplevel.Destroy()
+		w.Toplevel = nil
+	}
+	if w.XdgSurface != nil {
+		_ = w.XdgSurface.Destroy()
+		w.XdgSurface = nil
+	}
 }
 
 // Size returns the last configured size in surface (logical) pixels. An
