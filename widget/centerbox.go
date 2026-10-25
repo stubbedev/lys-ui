@@ -63,20 +63,20 @@ func (b *CenterBox) Measure(con Constraints) Size {
 	if sz, ok := b.measureHit(con); ok {
 		return sz
 	}
-	var main, cross int
-	for _, c := range b.Children() {
-		m, x := b.along(measureChild(b, c, Constraints{Max: con.Max}))
-		main += m
-		cross = max(cross, x)
-	}
-	sz := Size{W: main, H: cross}
-	if b.axis == Column {
-		sz = Size{W: cross, H: main}
-	}
 	v := b.style(b)
-	sz.W = max(sz.W, picki(v, style.PropMinWidth, 0))
-	sz.H = max(sz.H, picki(v, style.PropMinHeight, 0))
-	return b.measureStore(con, Size{W: min(sz.W, con.Max.W), H: min(sz.H, con.Max.H)})
+	return b.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
+		var main, cross int
+		for _, c := range b.Children() {
+			m, x := b.along(measureChild(b, c, Constraints{Max: inner.Max}))
+			main += m
+			cross = max(cross, x)
+		}
+		sz := Size{W: main, H: cross}
+		if b.axis == Column {
+			sz = Size{W: cross, H: main}
+		}
+		return clampSize(sz, inner)
+	}))
 }
 
 // ArrangeRoot records the box's own rect.
@@ -86,8 +86,8 @@ func (b *CenterBox) ArrangeRoot(r render.Rect) { b.node.Arrange(r) }
 // and the center slot at the middle unless a side would overlap it;
 // every slot spans the box's thickness.
 func (b *CenterBox) Arrange(r render.Rect) {
-	b.ArrangeRoot(r)
-	inner := boxOf(b.style(b), render.Insets{}).outer().Shrink(r)
+	border, inner := boxRects(boxOf(b.style(b), render.Insets{}), r)
+	b.ArrangeRoot(border)
 	size, _ := b.along(Size{W: inner.W, H: inner.H})
 	extent := func(w Widget) int {
 		if w == nil {

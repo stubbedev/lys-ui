@@ -79,3 +79,21 @@ func TestCenterBoxColumn(t *testing.T) {
 		t.Errorf("top %v mid %v bottom %v, want 0, 135 and 260 across the 50px width", tb, mb, bb)
 	}
 }
+
+// A padded CenterBox measures its content plus its insets, so the
+// children get their natural size inside (#275).
+func TestCenterBoxCSSInsets(t *testing.T) {
+	loadCSS(t, `.details { padding: 8px 0px; }`)
+	mid := NewSpacer(30, 34)
+	cb := NewCenterBox(nil, mid, nil)
+	cb.AddClass("details")
+	host := NewBox(Column, 0, 0)
+	host.Append(cb, false)
+	arrangeTree(t, host, 300, 200)
+	if got := cb.Bounds().H; got != 50 {
+		t.Errorf("padded center box %d tall, want the 34px child plus 16px", got)
+	}
+	if got := mid.Bounds().H; got != 34 {
+		t.Errorf("the child got %d px, want its natural 34", got)
+	}
+}
