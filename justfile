@@ -31,10 +31,11 @@ atspi:
     go test ./internal/atspi/
 
 # The GPU renderer's tests on lavapipe, Mesa's CPU Vulkan driver, so
-# they gate without a GPU; `go test ./gpu/...` alone runs them on the
-# host's device, or skips them without one.
+# they gate without a GPU: its own, and every widget golden rendered on
+# the GPU against the CPU's pixels. `go test ./gpu/...` alone runs its
+# own on the host's device, or skips them without one.
 gpu:
-    LYS_UI_TEST_GPU=lavapipe go test -count=1 ./gpu/...
+    LYS_UI_TEST_GPU=lavapipe go test -count=1 ./gpu/... ./widget
 
 # Run the suite under the race detector. It needs cgo, so only this
 # recipe enables it, with the dev shell's pinned C compiler

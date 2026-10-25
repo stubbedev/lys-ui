@@ -25,6 +25,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/golden"
+	"github.com/stubbedev/lys-ui/internal/gputest"
 	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/render"
 )
@@ -140,6 +141,9 @@ func NewGolden(t *testing.T, w Widget, name string, opts ...goldenOption) {
 		draw(rec)
 		buf := make([]byte, stride*bh)
 		rec.Recording().Paint(render.New(buf, stride, bw, bh))
+		if gputest.Enabled() {
+			checkGoldenGPU(t, name, rec.Recording(), buf, bw, bh)
+		}
 		return buf
 	}
 
