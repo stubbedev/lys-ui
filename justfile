@@ -156,6 +156,20 @@ glass:
 shadcn:
     go run ./cmd/lys-ui-shadcn
 
+# Screenshot every shadcn gallery demo, overlay opened, in both
+# palettes into dir: the gallery's -shots mode on a private headless
+# sway that floats its windows at the origin. The docs site shows them.
+docshots dir="docs/public/components":
+    #!/bin/sh
+    env="{{test_dir}}-shots"
+    just test-env "$env" || exit 1
+    trap 'just test-env-stop "$env"' EXIT INT TERM
+    . "$env/client.env"
+    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$env"
+    # Scale 2, so the shots stay sharp on high-density screens.
+    swaymsg -s "$(ls "$env"/sway-ipc.*.sock)" output '*' scale 2 >/dev/null || exit 1
+    go run ./cmd/lys-ui-shadcn -shots "{{dir}}"
+
 # Run the application-model demo (lys-ui-multi): per-output bars,
 # on-demand windows, close-request veto, Escape quits.
 multi:
@@ -218,6 +232,7 @@ test-env dir=test_dir:
         'for_window [app_id="dev.stubbe.lys.ui.states"] floating enable, move position 40 40, resize set 420 280' \
         'for_window [app_id="dev.stubbe.lys.ui.multilist"] floating enable, move position 0 0, resize set 300 300' \
         'for_window [title="modal dialog"] floating enable, move position 340 0' \
+        'for_window [app_id="dev.stubbe.lys.ui.shots"] floating enable, move position 0 0' \
         > "$dir/sway.cfg"
     # The pid file must hold sway itself, not the dev shell wrapper:
     # a wrapper that runs the command through a shell without exec'ing

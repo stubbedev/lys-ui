@@ -7,7 +7,9 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
+	"image"
 	"log"
 	"os"
 	"strconv"
@@ -23,7 +25,13 @@ import (
 )
 
 func main() {
-	switch err := run(); {
+	shotsDir := flag.String("shots", "", "write a PNG of every demo, in both palettes, to this directory and exit")
+	flag.Parse()
+	cmd := run
+	if *shotsDir != "" {
+		cmd = func() error { return runShots(*shotsDir) }
+	}
+	switch err := cmd(); {
 	case err == nil, errors.Is(err, app.ErrClosed):
 	case errors.Is(err, app.ErrDisconnected):
 		os.Exit(app.DisconnectExitCode)
@@ -111,27 +119,93 @@ type submitted struct{ name string }
 func (togglePalette) galleryMsg() {}
 func (submitted) galleryMsg()     {}
 
+// demo is one gallery section: a title over its body. A component
+// that lives in an overlay names the action that opens it, and a sheet
+// hosts the content it slides over.
+type demo struct {
+	title string
+	body  []ui.Node
+	wrap  func(ui.Node) ui.Node
+	// gesture at the point target names opens the overlay; minSize
+	// gives the overlay room in a shot window.
+	gesture gesture
+	target  func() image.Point
+	minSize widget.Size
+}
+
+// section is the demo titled title showing body.
+func section(title string, body ...ui.Node) demo { return demo{title: title, body: body} }
+
+// opens names the gesture and the point that open the demo's overlay.
+func (d demo) opens(g gesture, target func() image.Point) demo {
+	d.gesture, d.target = g, target
+	return d
+}
+
+// room gives the demo's shot window at least w by h for its overlay.
+func (d demo) room(w, h int) demo { d.minSize = widget.Size{W: w, H: h}; return d }
+
+// windowSize is the shot window for the demo built as root: its
+// natural size, and the room its overlay asks for.
+func (d demo) windowSize(root widget.Widget) widget.Size {
+	n := root.Measure(widget.Constraints{Max: widget.Size{W: shotMaxWidth, H: 4096}})
+	return widget.Size{W: max(n.W, d.minSize.W), H: max(n.H, d.minSize.H)}
+}
+
+// center is the point at the middle of *w, read when the shot needs it.
+func center[W widget.Boundser](w *W) func() image.Point {
+	return func() image.Point {
+		b := (*w).Bounds()
+		return image.Pt(b.X+b.W/2, b.Y+b.H/2)
+	}
+}
+
+// leading is the point inset px into *w's leading edge, vertically
+// centered: the first trigger of a row of them.
+func leading[W widget.Boundser](w *W, inset int) func() image.Point {
+	return func() image.Point {
+		b := (*w).Bounds()
+		return image.Pt(b.X+inset, b.Y+b.H/2)
+	}
+}
+
+// hosts names how the demo's overlay wraps the content under it.
+func (d demo) hosts(fn func(ui.Node) ui.Node) demo { d.wrap = fn; return d }
+
+// host wraps content in the demo's overlay, if it has one.
+func (d demo) host(content ui.Node) ui.Node {
+	if d.wrap == nil {
+		return content
+	}
+	return d.wrap(content)
+}
+
+// node is the demo as a gallery section: its title over its body.
+func (d demo) node() ui.Node {
+	return ui.Column(append([]ui.Node{ui.Label(d.title).Classes(css.H4)}, d.body...)...).Spacing(12)
+}
+
 type gallery struct {
 	env           ui.Env
 	status        string
-	openSheet     func()
-	openDrawer    func()
 	sidebar       *widget.Sidebar
 	app           *app.Application
 	win           *app.Window
 	menuButton    *widget.Button
 	popoverButton *widget.Button
 	menubar       *widget.MenuBar
+	// shown is the dialog a demo opened last.
+	shown *app.Dialog
 }
 
 // demoMenu is the dropdown and menubar demos' menu.
 func demoMenu() []widget.MenuItem {
 	return []widget.MenuItem{
-		{Label: "Profile", Accel: "Shift+Ctrl+P"},
-		{Label: "Billing", Accel: "Ctrl+B"},
-		{Label: "Settings", Accel: "Ctrl+S"},
+		{Label: "Profile", Accel: "Shift+Ctrl+P", OnClick: func() {}},
+		{Label: "Billing", Accel: "Ctrl+B", OnClick: func() {}},
+		{Label: "Settings", Accel: "Ctrl+S", OnClick: func() {}},
 		{Kind: widget.ItemSeparator},
-		{Label: "Log out", Accel: "Shift+Ctrl+Q"},
+		{Label: "Log out", Accel: "Shift+Ctrl+Q", OnClick: func() {}},
 	}
 }
 
@@ -152,13 +226,14 @@ func (g *gallery) popover() {
 		ui.Label("Set the dimensions for the layer.").Classes(css.Muted),
 		ui.Field("Width", ui.Entry().Text("100%")),
 		ui.Field("Height", ui.Entry().Text("25px")),
-	).Spacing(8).Padding(render.UniformInsets(16)))
+	).Spacing(8).Padding(render.UniformInsets(16)).Classes("popover-demo"))
 	widget.OpenPopover(g.popoverButton, g.popoverButton, content, widget.PopoverOptions{OnClosed: view.Close})
 }
 
 // alertDialog opens the Alert Dialog demo.
 func (g *gallery) alertDialog() {
-	if _, err := g.app.MessageBox(g.win, "Are you absolutely sure?",
+	var err error
+	if g.shown, err = g.app.MessageBox(g.win, "Are you absolutely sure?",
 		"This action cannot be undone. This will permanently delete your account and remove your data from our servers.",
 		[]app.DialogButton{{Label: "Cancel", Response: "cancel", Role: app.ButtonRoleCancel}, {Label: "Continue", Response: "continue", Role: app.ButtonRoleDefault}}); err != nil {
 		log.Printf("lys-ui-shadcn: alert dialog: %v", err)
@@ -171,8 +246,9 @@ func (g *gallery) dialog() {
 		ui.Field("Name", ui.Entry().Text("Pedro Duarte")),
 		ui.Field("Username", ui.Entry().Text("@peduarte")),
 	).Spacing(16))
-	if _, err := g.app.NewDialog(g.win, app.DialogConfig{
-		Title: "Edit profile", Width: 425, Height: 260, Content: content, Modal: true, OnClosed: view.Close,
+	var err error
+	if g.shown, err = g.app.NewDialog(g.win, app.DialogConfig{
+		Title: "Edit profile", Width: 425, Content: content, Modal: true, OnClosed: view.Close,
 		Buttons: []app.DialogButton{{Label: "Cancel", Response: "cancel", Role: app.ButtonRoleCancel}, {Label: "Save changes", Response: "save", Role: app.ButtonRoleDefault}},
 	}); err != nil {
 		log.Printf("lys-ui-shadcn: dialog: %v", err)
@@ -228,11 +304,11 @@ func (g *gallery) sidebarDemo() ui.Node {
 
 // datePickers is the Date Picker section: a date, a date with a time,
 // and a range with presets relative to today.
-func (g *gallery) datePickers() ui.Node {
+func (g *gallery) datePickers(first **widget.DatePicker) ui.Node {
 	today := widget.Today()
 	start := func(n ui.Node) ui.Node { return ui.Aligned(n, widget.AlignStart) }
 	return ui.Column(
-		start(ui.DatePicker("Pick a date")),
+		start(ui.DatePicker("Pick a date").Ref(first)),
 		start(ui.DatePicker("Pick a date and time").TimeInput(true)),
 		start(ui.DatePicker("Pick a range").Mode(widget.CalendarRange).Presets(
 			widget.DatePreset{Label: "Today", From: today, To: today},
@@ -243,10 +319,11 @@ func (g *gallery) datePickers() ui.Node {
 }
 
 // galleryCSS styles the gallery's own pieces: the context menu's
-// dashed drop zone, the hover card's width.
+// dashed drop zone, the hover card's and the popover's widths.
 const galleryCSS = `
 .drop-zone { border: 1px dashed @borders; border-radius: 8px; padding: 48px; }
 .hovercard-content { min-width: 280px; padding: 16px; }
+.popover-demo { width: 320px; }
 .sidebar-demo { min-height: 360px; border: 1px solid @borders; border-radius: 8px; }
 .datatable-demo { min-height: 520px; }
 `
@@ -307,7 +384,7 @@ func (g *gallery) dataTable() ui.Node {
 
 // form is the Field and Form section: two required entries and a
 // switch, validated on blur and on submit.
-func (g *gallery) form(cx *component.Context[galleryMsg, struct{}]) ui.Node {
+func (g *gallery) form(send func(galleryMsg)) ui.Node {
 	var name, email *widget.Entry
 	var form *widget.Form
 	required := func(e **widget.Entry, what string) func() string {
@@ -329,7 +406,7 @@ func (g *gallery) form(cx *component.Context[galleryMsg, struct{}]) ui.Node {
 				return ""
 			}).
 			Add(ui.Field("Newsletter", ui.Switch(true)).Description("Monthly product updates.").Orientation(widget.FieldHorizontal), nil).
-			OnSubmit(func() { cx.Input(submitted{name: name.Text()}) }),
+			OnSubmit(func() { send(submitted{name: name.Text()}) }),
 		ui.Row(
 			ui.Button(ui.Label("Submit"), 0, 0).Classes(css.SuggestedAction).OnClick(func() { form.Submit() }),
 			ui.Label("").Classes(css.Muted).WatchText(func() string { return g.status }),
@@ -347,18 +424,37 @@ func (g *gallery) carousel() ui.Node {
 }
 
 func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widget {
-	section := func(title string, body ...ui.Node) ui.Node {
-		return ui.Column(append([]ui.Node{ui.Label(title).Classes(css.H4)}, body...)...).Spacing(12)
-	}
-	text := func(s string) ui.Node { return ui.Label(s).Wrap(true) }
 	header := ui.Row(
 		ui.Expand(ui.Label("shadcn/ui in lys-ui").Classes(css.H2)),
 		ui.Button(ui.Label("Toggle palette"), 0, 0).Classes(css.Outline).
 			OnClick(func() { cx.Input(togglePalette{}) }),
 	).Spacing(16)
-	var sheet *widget.Sheet
-	page := ui.Scroll(ui.Clamp(680, ui.Column(
-		header,
+	demos := g.demos(func(m galleryMsg) { cx.Input(m) })
+	sections := []ui.Node{header}
+	for _, d := range demos {
+		sections = append(sections, d.node())
+	}
+	page := ui.Node(ui.Scroll(ui.Clamp(680, ui.Column(sections...).Spacing(40).Padding(render.UniformInsets(32)))).VerticalOnly(true).Classes(css.Background))
+	for _, d := range demos {
+		page = d.host(page)
+	}
+	return ui.Mount(cx, g.env, page)
+}
+
+// demos is every section of the gallery, in order. send delivers the
+// form's submission to the gallery component.
+func (g *gallery) demos(send func(galleryMsg)) []demo {
+	text := func(s string) ui.Node { return ui.Label(s).Wrap(true) }
+	var sheet, drawer *widget.Sheet
+	var (
+		alertButton, dialogButton, drawerButton, sheetButton, toastButton, hoverTrigger, tooltipButton *widget.Button
+		contextMenu                                                                                    *widget.ContextMenu
+		combobox                                                                                       *widget.Combobox[string]
+		datePicker                                                                                     *widget.DatePicker
+		navMenu                                                                                        *widget.NavigationMenu
+		selectMenu                                                                                     *widget.Dropdown
+	)
+	return []demo{
 		section("Accordion", ui.Accordion(widget.AccordionSingle).Collapsible(true).
 			Append(ui.AccordionItem("Is it accessible?", text("Yes. The triggers take focus, and Up, Down, Home and End move between them."))).
 			Append(ui.AccordionItem("Is it styled?", text("Yes. It comes with default styles that match the other components' aesthetic.")).Open(true)).
@@ -368,7 +464,7 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 				Icon(ui.Symbol(widget.SymbolCrosshair, 16)),
 			ui.Alert("Unable to process your payment.", "Please verify your billing information and try again.").
 				Icon(ui.Symbol(widget.SymbolClose, 16)).Variant(widget.AlertDestructive)),
-		section("Alert Dialog", ui.Aligned(ui.Button(ui.Label("Show Dialog"), 0, 0).Classes(css.Outline).OnClick(g.alertDialog), widget.AlignStart)),
+		section("Alert Dialog", ui.Aligned(ui.Button(ui.Label("Show Dialog"), 0, 0).Classes(css.Outline).Ref(&alertButton).OnClick(g.alertDialog), widget.AlignStart)).opens(click, center(&alertButton)).room(560, 260),
 		section("Aspect Ratio", ui.Aligned(ui.AspectFrame(ui.Column().SizeRequest(360, 0).Classes(css.Card), 16.0/9), widget.AlignStart)),
 		section("Avatar", ui.Row(ui.Avatar(40, "Ada Lovelace"), ui.Avatar(40, "Grace Hopper"), ui.Avatar(40, "")).Spacing(12)),
 		section("Badge", ui.Row(
@@ -414,13 +510,13 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 		section("Collapsible", ui.Expander("@peduarte starred 3 repositories", ui.Column(
 			ui.Label("@radix-ui/primitives"), ui.Label("@radix-ui/colors"), ui.Label("@stitches/react"),
 		).Spacing(8))),
-		section("Combobox", ui.Aligned(ui.Combobox("Select framework...",
+		section("Combobox", ui.Aligned(ui.Combobox[string]("Select framework...",
 			widget.ComboboxOption[string]{Value: "next", Label: "Next.js"},
 			widget.ComboboxOption[string]{Value: "svelte", Label: "SvelteKit"},
 			widget.ComboboxOption[string]{Value: "nuxt", Label: "Nuxt.js"},
 			widget.ComboboxOption[string]{Value: "remix", Label: "Remix"},
 			widget.ComboboxOption[string]{Value: "astro", Label: "Astro"},
-		), widget.AlignStart)),
+		).Ref(&combobox), widget.AlignStart)).opens(click, center(&combobox)).room(300, 300),
 		section("Command", ui.Command("Type a command or search...", commandGroups(func() {})...).Classes(css.Card)),
 		section("Context Menu", ui.ContextMenu(
 			ui.Label("Right click here").Classes(css.Muted),
@@ -429,24 +525,31 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 			widget.MenuItem{Label: "Reload", Accel: "Ctrl+R", OnClick: func() {}},
 			widget.MenuSeparator(),
 			widget.MenuItem{Label: "Show Bookmarks", Kind: widget.ItemCheck, Checked: true, OnClick: func() {}},
-		).Classes("drop-zone")),
+		).Classes("drop-zone").Ref(&contextMenu)).opens(secondaryClick, center(&contextMenu)),
 		section("Data Table", g.dataTable()),
-		section("Date Picker", g.datePickers()),
-		section("Dialog", ui.Aligned(ui.Button(ui.Label("Edit Profile"), 0, 0).Classes(css.Outline).OnClick(g.dialog), widget.AlignStart)),
-		section("Drawer", ui.Aligned(ui.Button(ui.Label("Open Drawer"), 0, 0).Classes(css.Outline).OnClick(func() { g.openDrawer() }), widget.AlignStart)),
-		section("Dropdown Menu", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).Ref(&g.menuButton).OnClick(g.dropdownMenu), widget.AlignStart)),
+		section("Date Picker", g.datePickers(&datePicker)).opens(click, center(&datePicker)).room(360, 420),
+		section("Dialog", ui.Aligned(ui.Button(ui.Label("Edit Profile"), 0, 0).Classes(css.Outline).Ref(&dialogButton).OnClick(g.dialog), widget.AlignStart)).opens(click, center(&dialogButton)).room(560, 340),
+		section("Drawer", ui.Aligned(ui.Button(ui.Label("Open Drawer"), 0, 0).Classes(css.Outline).Ref(&drawerButton).OnClick(func() { drawer.SetOpen(true) }), widget.AlignStart)).
+			opens(click, center(&drawerButton)).room(640, 420).
+			hosts(func(page ui.Node) ui.Node {
+				return ui.Sheet(page, ui.Aligned(ui.Label("350 calories per day").Classes(css.H3), widget.AlignCenter), widget.SheetBottom).
+					Header(g.env.Face, "Move Goal", "Set your daily activity goal.").
+					Footer(ui.Button(ui.Label("Submit"), 0, 0).Classes(css.SuggestedAction).OnClick(func() { drawer.SetOpen(false) })).
+					Ref(&drawer)
+			}),
+		section("Dropdown Menu", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).Ref(&g.menuButton).OnClick(g.dropdownMenu), widget.AlignStart)).opens(click, center(&g.menuButton)),
 		section("Empty", ui.StatusPage("", "No projects yet", "You haven't created any projects yet. Get started by creating your first project.").
 			Icon(ui.Symbol(widget.SymbolMaximize, 24)).
 			Child(ui.Button(ui.Label("Create project"), 0, 0).Classes(css.SuggestedAction))),
-		section("Field and Form", g.form(cx)),
+		section("Field and Form", g.form(send)),
 		section("Hover Card", ui.Aligned(ui.HoverCard(
-			ui.Button(ui.Label("@nextjs"), 0, 0).Classes(css.Link),
+			ui.Button(ui.Label("@nextjs"), 0, 0).Classes(css.Link).Ref(&hoverTrigger),
 			ui.Column(
 				ui.Label("@nextjs").Classes(css.H4),
 				ui.Label("The React Framework - created and maintained by @vercel.").Wrap(true),
 				ui.Label("Joined December 2021").Classes(css.Muted),
 			).Spacing(8),
-		), widget.AlignStart)),
+		), widget.AlignStart)).opens(hover, center(&hoverTrigger)).room(360, 240),
 		section("Input", ui.Aligned(ui.Entry().Placeholder("Email").SizeRequest(320, 0), widget.AlignStart)),
 		section("Input Group",
 			ui.InputGroup(ui.Entry().Placeholder("Search...")).
@@ -466,7 +569,8 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 			).Classes(css.Card),
 		),
 		section("Kbd", ui.Row(ui.KbdGroup("Ctrl", "Shift", "P"), ui.Label("opens the command palette")).Spacing(12)),
-		section("Menubar", ui.Aligned(ui.MenuBar("File", "Edit", "View", "Profiles").Ref(&g.menubar).OnRoot(g.menubarRoot), widget.AlignStart)),
+		section("Menubar", ui.Aligned(ui.MenuBar("File", "Edit", "View", "Profiles").Ref(&g.menubar).OnRoot(g.menubarRoot), widget.AlignStart)).
+			opens(click, func() image.Point { b := g.menubar.Root(0).Bounds(); return image.Pt(b.X+b.W/2, b.Y+b.H/2) }),
 		section("Navigation Menu", ui.Aligned(ui.NavigationMenu(
 			widget.NavigationMenuItem{Label: "Getting started", Content: widget.NewNavigationLinks(g.env.Face, 2,
 				widget.NavigationLink{Title: "Introduction", Description: "Re-usable components built on lys-ui's widgets."},
@@ -479,28 +583,35 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 				widget.NavigationLink{Title: "Hover Card", Description: "Preview content behind a link."},
 			)},
 			widget.NavigationMenuItem{Label: "Docs", OnActivate: func() {}},
-		), widget.AlignStart)),
+		).Ref(&navMenu), widget.AlignStart)).opens(click, leading(&navMenu, 40)).room(640, 300),
 		section("Pagination", ui.Pagination(10, 5)),
-		section("Popover", ui.Aligned(ui.Button(ui.Label("Open popover"), 0, 0).Classes(css.Outline).Ref(&g.popoverButton).OnClick(g.popover), widget.AlignStart)),
+		section("Popover", ui.Aligned(ui.Button(ui.Label("Open popover"), 0, 0).Classes(css.Outline).Ref(&g.popoverButton).OnClick(g.popover), widget.AlignStart)).opens(click, center(&g.popoverButton)),
 		section("Progress", ui.Aligned(ui.ProgressBar(0.66).SizeRequest(360, 0), widget.AlignStart)),
 		section("Radio Group", g.radioGroup()),
 		section("Resizable", ui.Column(ui.Expand(ui.Paned(widget.Row, ui.Label("One").HAlign(widget.AlignCenter), ui.Label("Two").HAlign(widget.AlignCenter)).Position(200))).SizeRequest(0, 160).Classes(css.Card)),
 		section("Scroll Area", ui.Aligned(g.scrollArea(), widget.AlignStart)),
-		section("Select", ui.Aligned(ui.Dropdown([]string{"Apple", "Banana", "Blueberry", "Grapes", "Pineapple"}, 0), widget.AlignStart)),
+		section("Select", ui.Aligned(ui.Dropdown([]string{"Apple", "Banana", "Blueberry", "Grapes", "Pineapple"}, 0).Ref(&selectMenu), widget.AlignStart)).opens(click, center(&selectMenu)).room(320, 320),
 		section("Separator", ui.Column(
 			ui.Label("Radix Primitives").Classes(css.Heading),
 			ui.Label("An open-source UI component library.").Classes(css.Muted),
 			ui.Separator(widget.Horizontal),
 			ui.Row(ui.Label("Blog"), ui.Label("Docs"), ui.Label("Source")).Spacing(16),
 		).Spacing(8)),
-		section("Sheet", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).OnClick(func() { g.openSheet() }), widget.AlignStart)),
+		section("Sheet", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).Ref(&sheetButton).OnClick(func() { sheet.SetOpen(true) }), widget.AlignStart)).
+			opens(click, center(&sheetButton)).room(720, 480).
+			hosts(func(page ui.Node) ui.Node {
+				return ui.Sheet(page, ui.Field("Name", ui.Entry().Text("Pedro Duarte")), widget.SheetRight).
+					Header(g.env.Face, "Edit profile", "Make changes to your profile here. Click save when you're done.").
+					Footer(ui.Button(ui.Label("Save changes"), 0, 0).Classes(css.SuggestedAction).OnClick(func() { sheet.SetOpen(false) })).
+					Ref(&sheet)
+			}),
 		section("Sidebar", g.sidebarDemo()),
 		section("Skeleton", ui.Row(
 			ui.Skeleton(48, 48),
 			ui.Column(ui.Skeleton(240, 14), ui.Skeleton(180, 14)).Spacing(8),
 		).Spacing(16)),
 		section("Slider", ui.Aligned(ui.Slider(0, 100, 1, 50).SizeRequest(360, 0), widget.AlignStart)),
-		section("Sonner", ui.Aligned(ui.Button(ui.Label("Show Toast"), 0, 0).Classes(css.Outline).OnClick(g.toast), widget.AlignStart)),
+		section("Sonner", ui.Aligned(ui.Button(ui.Label("Show Toast"), 0, 0).Classes(css.Outline).Ref(&toastButton).OnClick(g.toast), widget.AlignStart)).opens(click, center(&toastButton)).room(480, 200),
 		section("Spinner", ui.Row(ui.Spinner(16), ui.Label("Processing payment...")).Spacing(8)),
 		section("Switch", ui.Row(ui.Switch(false), ui.Label("Airplane Mode")).Spacing(8)),
 		section("Table", g.table()),
@@ -514,7 +625,7 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 			ui.ToggleButton(ui.Label("Italic"), 0, 0).Classes(css.Outline),
 			ui.ToggleButton(ui.Label("Underline"), 0, 0).Classes(css.Outline),
 		), widget.AlignStart)),
-		section("Tooltip", ui.Aligned(ui.Button(ui.Label("Hover"), 0, 0).Classes(css.Outline).Tooltip("Add to library"), widget.AlignStart)),
+		section("Tooltip", ui.Aligned(ui.Button(ui.Label("Hover"), 0, 0).Classes(css.Outline).Tooltip("Add to library").Ref(&tooltipButton), widget.AlignStart)).opens(hover, center(&tooltipButton)),
 		section("Typography",
 			ui.Label("The Joke Tax Chronicles").Classes(css.H1),
 			ui.Label("Once upon a time, in a far-off land, there was a very lazy king who spent all day lounging on his throne.").Classes(css.Lead).Wrap(true),
@@ -524,18 +635,7 @@ func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widge
 			ui.Aligned(ui.Label("ui.Label(text).Classes(css.InlineCode)").Classes(css.InlineCode), widget.AlignStart),
 			ui.Label("Enter your email address.").Classes(css.Muted),
 		),
-	).Spacing(40).Padding(render.UniformInsets(32)))).VerticalOnly(true).Classes(css.Background)
-	var drawer *widget.Sheet
-	g.openSheet = func() { sheet.SetOpen(true) }
-	g.openDrawer = func() { drawer.SetOpen(true) }
-	withDrawer := ui.Sheet(page, ui.Aligned(ui.Label("350 calories per day").Classes(css.H3), widget.AlignCenter), widget.SheetBottom).
-		Header(g.env.Face, "Move Goal", "Set your daily activity goal.").
-		Footer(ui.Button(ui.Label("Submit"), 0, 0).Classes(css.SuggestedAction).OnClick(func() { drawer.SetOpen(false) })).
-		Ref(&drawer)
-	return ui.Mount(cx, g.env, ui.Sheet(withDrawer, ui.Field("Name", ui.Entry().Text("Pedro Duarte")), widget.SheetRight).
-		Header(g.env.Face, "Edit profile", "Make changes to your profile here. Click save when you're done.").
-		Footer(ui.Button(ui.Label("Save changes"), 0, 0).Classes(css.SuggestedAction).OnClick(func() { sheet.SetOpen(false) })).
-		Ref(&sheet))
+	}
 }
 
 func (g *gallery) Update(_ *component.Context[galleryMsg, struct{}], msg galleryMsg) {
