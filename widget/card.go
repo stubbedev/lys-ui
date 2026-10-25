@@ -2,16 +2,13 @@ package widget
 
 import "github.com/stubbedev/lys-ui/render"
 
-// cardTitleStep is how far a card's title steps over the text size.
-const cardTitleStep = 1.125
-
 // Card is the card anatomy as one widget: a header with the title, an
 // optional muted description and an optional trailing action, then the
 // content, then a footer of actions, right-aligned unless SetFooterAlign
 // says otherwise. The sections space themselves and pad the card from
 // the theme (three Spacing between them, three Padding around), so a
 // caller sets no margins; the text sizes follow the theme's TextSize,
-// the title a step over it. It is the card element, styled as the .card
+// the title at TitleSize. It is the card element, styled as the .card
 // class is, and its parts the .card-header,
 // .card-title, .card-description, .card-action, .card-content and
 // .card-footer classes a stylesheet restyles.
@@ -41,7 +38,7 @@ func NewCard(face render.Font, title string) *Card {
 		actionSlot:  NewBox(Column, 0, 0),
 		contentSlot: NewBox(Column, 0, 0),
 	}
-	c.title = NewLabel(face, th.TextSize*cardTitleStep, title, 0)
+	c.title = NewLabel(face, th.TitleSize(), title, 0)
 	c.title.SetWrap(true)
 	c.desc = NewLabel(face, th.TextSize, "", 0)
 	c.desc.SetWrap(true)

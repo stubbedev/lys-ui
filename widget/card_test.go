@@ -96,3 +96,13 @@ func TestGoldenCard(t *testing.T) {
 		})
 	}
 }
+
+// The title is the theme's TitleSize, tracking its TextSize.
+func TestCardTitleIsTheThemeTitleSize(t *testing.T) {
+	SetTheme(DarkTheme().WithTextSize(16))
+	defer SetTheme(nil)
+	c := NewCard(goldenFace(t), "Settings")
+	if got, want := c.title.SizePx(), Current().TitleSize(); got != want || want != 18 {
+		t.Errorf("title at %v, want the theme's title size %v (18 over 16)", got, want)
+	}
+}

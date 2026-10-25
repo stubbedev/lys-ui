@@ -372,6 +372,13 @@ func (t *Theme) WithMotion(short, medium, long time.Duration) *Theme {
 	return t.with(func(n *Theme) { n.MotionShort, n.MotionMedium, n.MotionLong = short, medium, long })
 }
 
+// titleStep is how far a title steps over the text size.
+const titleStep = 1.125
+
+// TitleSize is the size of a title over text at TextSize: a card's, a
+// dialog's or a window's heading.
+func (t *Theme) TitleSize() float64 { return t.TextSize * titleStep }
+
 // MotionDurations returns the motion tokens in effect: the theme's, the
 // toolkit's where unset, and zero throughout when Animations is off.
 func (t *Theme) MotionDurations() (short, medium, long time.Duration) {
