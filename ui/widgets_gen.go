@@ -4477,9 +4477,27 @@ func (b *ItemBuilder) AddAction(child Node) *ItemBuilder {
 	return b
 }
 
+// Description calls (*widget.Item).SetDescription.
+func (b *ItemBuilder) Description(description string) *ItemBuilder {
+	b.do(func(s *Scope, w *widget.Item) { w.SetDescription(description) })
+	return b
+}
+
+// WatchDescription re-applies SetDescription with get's value after every update.
+func (b *ItemBuilder) WatchDescription(get func() string) *ItemBuilder {
+	b.watch(func(w *widget.Item) { w.SetDescription(get()) })
+	return b
+}
+
 // Media calls (*widget.Item).SetMedia.
 func (b *ItemBuilder) Media(child Node, bare bool) *ItemBuilder {
 	b.do(func(s *Scope, w *widget.Item) { w.SetMedia(build(s, child), bare) })
+	return b
+}
+
+// OnActivate calls (*widget.Item).SetOnActivate.
+func (b *ItemBuilder) OnActivate(arg func()) *ItemBuilder {
+	b.do(func(s *Scope, w *widget.Item) { w.SetOnActivate(arg) })
 	return b
 }
 
@@ -4492,6 +4510,18 @@ func (b *ItemBuilder) Small(on bool) *ItemBuilder {
 // WatchSmall re-applies SetSmall with get's value after every update.
 func (b *ItemBuilder) WatchSmall(get func() bool) *ItemBuilder {
 	b.watch(func(w *widget.Item) { w.SetSmall(get()) })
+	return b
+}
+
+// Title calls (*widget.Item).SetTitle.
+func (b *ItemBuilder) Title(title string) *ItemBuilder {
+	b.do(func(s *Scope, w *widget.Item) { w.SetTitle(title) })
+	return b
+}
+
+// WatchTitle re-applies SetTitle with get's value after every update.
+func (b *ItemBuilder) WatchTitle(get func() string) *ItemBuilder {
+	b.watch(func(w *widget.Item) { w.SetTitle(get()) })
 	return b
 }
 

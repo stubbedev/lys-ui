@@ -1,6 +1,8 @@
 package widget
 
 import (
+	"slices"
+
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget/css"
 )
@@ -23,18 +25,22 @@ var itemClasses = [...]string{ItemDefault: "", ItemOutline: css.Outline, ItemMut
 
 // Item is a content row (shadcn/ui's Item): media - an icon on a muted
 // tile, an avatar - then a title over a description, then actions, for
-// lists and cards. It styles as the `item` element with the variant's
-// class (.outline, .muted), .small for the small size, its .media tile,
-// .title and .description.
+// lists and cards. Its text and media update in place, so a live list
+// reconciles rows instead of rebuilding them, and SetOnActivate makes
+// the whole row a control (click, Enter, Space). It styles as the
+// `item` element with the variant's class (.outline, .muted), .small
+// for the small size, .activatable while it activates, its .media
+// tile, .title and .description.
 type Item struct {
 	composite
-	row     *Box
-	text    *Box
-	media   *Box
-	title   *Label
-	desc    *Label
-	actions *Box
-	variant ItemVariant
+	row      *Box
+	text     *Box
+	media    *Box
+	title    *Label
+	desc     *Label
+	actions  *Box
+	variant  ItemVariant
+	activate func()
 }
 
 // NewItem returns a default item; an empty description shows the
@@ -47,12 +53,11 @@ func NewItem(face render.Font, title, description string) *Item {
 	it.title.AddClass("title")
 	it.title.SetWrap(true)
 	it.text.Append(it.title, false)
-	if description != "" {
-		it.desc = NewLabel(face, 14, description, 0)
-		it.desc.AddClass("description")
-		it.desc.SetWrap(true)
-		it.text.Append(it.desc, false)
-	}
+	it.desc = NewLabel(face, 14, description, 0)
+	it.desc.AddClass("description")
+	it.desc.SetWrap(true)
+	it.desc.SetVisible(description != "")
+	it.text.Append(it.desc, false)
 	it.row.AppendAligned(it.text, true, AlignCenter)
 	it.row.AppendAligned(it.actions, false, AlignCenter)
 	it.initComposite(it, it.row)
@@ -78,6 +83,59 @@ func (it *Item) SetMedia(w Widget, bare bool) {
 	}
 	it.media.Append(NewSpacer(0, 0), true).AppendAligned(w, false, AlignCenter).Append(NewSpacer(0, 0), true)
 	it.row.InsertAligned(0, it.media, false, AlignCenter)
+}
+
+// SetTitle replaces the title.
+func (it *Item) SetTitle(title string) { it.title.SetText(title) }
+
+// SetDescription replaces the description; empty hides its line.
+func (it *Item) SetDescription(description string) {
+	it.desc.SetText(description)
+	it.desc.SetVisible(description != "")
+}
+
+// SetOnActivate makes the whole row a control running fn on a click
+// outside its actions, Enter or Space, with the hover fill and the
+// focus ring; nil makes it a plain row again.
+func (it *Item) SetOnActivate(fn func()) {
+	it.activate = fn
+	if fn == nil {
+		it.RemoveClass(css.Activatable)
+		it.SetCursorName("")
+		return
+	}
+	it.AddClass(css.Activatable)
+	it.SetCursorName("pointer")
+}
+
+// focusable implements focusOptOut: only an activatable item takes the
+// focus.
+func (it *Item) focusable() bool { return it.activate != nil }
+
+// HitTest resolves an activatable item to itself, but for its action
+// buttons; a plain item hits its parts.
+func (it *Item) HitTest(p Point) Widget {
+	if it.activate == nil {
+		return it.composite.HitTest(p)
+	}
+	if hit := it.actions.HitTest(p); hit != nil && hit != Widget(it.actions) {
+		return hit
+	}
+	return it.HitLeaf(it, p)
+}
+
+// ClickAt runs the activation.
+func (it *Item) ClickAt(Point) {
+	if it.activate != nil {
+		it.activate()
+	}
+}
+
+// KeyAction runs the activation on Enter or Space.
+func (it *Item) KeyAction(a KeyAction, _ Mods) {
+	if it.activate != nil && (a == KeyEnter || a == KeySpace) {
+		it.activate()
+	}
 }
 
 // AddAction appends w (a button) to the row's end.
@@ -174,4 +232,30 @@ func (g *ItemGroup) Append(w Widget) {
 	}
 	g.box.Append(w, false)
 	g.items++
+}
+
+// Remove drops item w with the separator that set it apart (the one
+// before it, or after it for the first), reporting whether w was in
+// the group.
+func (g *ItemGroup) Remove(w Widget) bool {
+	kids := g.box.Children()
+	i := slices.Index(kids, w)
+	if i < 0 {
+		return false
+	}
+	g.box.Remove(w)
+	switch {
+	case i > 0:
+		g.box.Remove(kids[i-1])
+	case len(kids) > 1:
+		g.box.Remove(kids[1])
+	}
+	g.items--
+	return true
+}
+
+// Clear drops every item.
+func (g *ItemGroup) Clear() {
+	g.box.Clear()
+	g.items = 0
 }

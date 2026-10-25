@@ -249,12 +249,20 @@ func (t *ToggleButton) a11yPressed() bool { return t.active }
 // A combo box's accessible name is its current selection.
 func (d *Dropdown) a11yName() string { return d.Selection() }
 
+// focusOptOut is a key handler that takes the focus only some of the
+// time: an Item while it activates.
+type focusOptOut interface{ focusable() bool }
+
 // isFocusable reports whether focus can land on w, by Tab traversal or
-// SetFocus: it handles key actions, is enabled, and is rendered — a
-// widget hidden by SetVisible, display: none or visibility: hidden
-// takes no focus, the same as a disabled one.
+// SetFocus: it handles key actions (and has not opted out), is
+// enabled, and is rendered — a widget hidden by SetVisible, display:
+// none or visibility: hidden takes no focus, the same as a disabled
+// one.
 func isFocusable(w Widget) bool {
 	if _, ok := w.(KeyActionHandler); !ok {
+		return false
+	}
+	if o, ok := w.(focusOptOut); ok && !o.focusable() {
 		return false
 	}
 	return IsEnabled(w) && rendered(w)

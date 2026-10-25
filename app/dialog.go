@@ -554,7 +554,7 @@ func (a *Application) MessageBox(parent *Window, title, text string, buttons []D
 	}
 	body := widget.NewLabel(face, 14, text, 0)
 	body.SetWrap(true)
-	body.AddClass(css.DimLabel)
+	body.AddClass(css.DimLabel, "description")
 	return a.NewDialog(parent, DialogConfig{
 		Title:           title,
 		Width:           440,
@@ -622,6 +622,7 @@ func (a *Application) dialogRoot(cfg DialogConfig, respond func(string)) (widget
 		primary = defaultResponse(cfg.Buttons)
 	}
 	footer := widget.NewBox(widget.Row, 8, 0)
+	footer.AddClass("footer")
 	footer.Append(widget.NewSpacer(0, 0), true)
 	for _, b := range cfg.Buttons {
 		resp := b.Response
