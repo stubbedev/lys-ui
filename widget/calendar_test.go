@@ -249,3 +249,14 @@ func TestCalendarWeekStartAndWeekend(t *testing.T) {
 		t.Errorf("Friday weekend: Saturday tinted %v, Friday %v", red(sat), red(fri))
 	}
 }
+
+// Selecting the zero date clears the selection without moving the
+// calendar off the shown month.
+func TestCalendarSelectZeroClears(t *testing.T) {
+	day := DateOf(time.Date(2026, time.October, 14, 0, 0, 0, 0, time.UTC))
+	c := NewCalendar(goldenFace(t), 14, day)
+	c.Select(Date{})
+	if !c.Selection().IsZero() || c.Shown() != day.FirstOfMonth() || c.cursor != day {
+		t.Errorf("after clearing: selection %v, shown %v, cursor %v; want none, October 2026, the 14th", c.Selection(), c.Shown(), c.cursor)
+	}
+}

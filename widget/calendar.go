@@ -339,10 +339,14 @@ func (c *Calendar) DayMarked(d Date) bool { return c.marks[d] }
 func (c *Calendar) Selection() Date { return c.sel }
 
 // Select applies d as single mode's selection, shows its month if it
-// is not shown, and fires OnSelect.
+// is not shown, and fires OnSelect. A zero d clears the selection,
+// keeping the shown month and the keyboard's day.
 func (c *Calendar) Select(d Date) {
-	c.sel, c.cursor = d, d
-	c.reveal(d)
+	c.sel = d
+	if !d.IsZero() {
+		c.cursor = d
+		c.reveal(d)
+	}
 	c.Invalidate()
 	if c.OnSelect != nil {
 		c.OnSelect(d)
