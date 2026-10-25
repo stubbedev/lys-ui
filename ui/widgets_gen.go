@@ -6362,9 +6362,27 @@ func (b *SidebarBuilder) Font(face render.Font, sizePx float64) *SidebarBuilder 
 	return b
 }
 
+// AddCollapsibleGroup calls (*widget.Sidebar).AddCollapsibleGroup.
+func (b *SidebarBuilder) AddCollapsibleGroup(label string, open bool, items ...widget.SidebarItem) *SidebarBuilder {
+	b.do(func(s *Scope, w *widget.Sidebar) { w.AddCollapsibleGroup(label, open, items...) })
+	return b
+}
+
 // AddGroup calls (*widget.Sidebar).AddGroup.
 func (b *SidebarBuilder) AddGroup(label string, items ...widget.SidebarItem) *SidebarBuilder {
 	b.do(func(s *Scope, w *widget.Sidebar) { w.AddGroup(label, items...) })
+	return b
+}
+
+// Active calls (*widget.Sidebar).SetActive.
+func (b *SidebarBuilder) Active(id string) *SidebarBuilder {
+	b.do(func(s *Scope, w *widget.Sidebar) { w.SetActive(id) })
+	return b
+}
+
+// WatchActive re-applies SetActive with get's value after every update.
+func (b *SidebarBuilder) WatchActive(get func() string) *SidebarBuilder {
+	b.watch(func(w *widget.Sidebar) { w.SetActive(get()) })
 	return b
 }
 
@@ -6413,6 +6431,30 @@ func (b *SidebarBuilder) NarrowWidth(arg int) *SidebarBuilder {
 // WatchNarrowWidth re-applies SetNarrowWidth with get's value after every update.
 func (b *SidebarBuilder) WatchNarrowWidth(get func() int) *SidebarBuilder {
 	b.watch(func(w *widget.Sidebar) { w.SetNarrowWidth(get()) })
+	return b
+}
+
+// Resizable calls (*widget.Sidebar).SetResizable.
+func (b *SidebarBuilder) Resizable(min int, max int) *SidebarBuilder {
+	b.do(func(s *Scope, w *widget.Sidebar) { w.SetResizable(min, max) })
+	return b
+}
+
+// Width calls (*widget.Sidebar).SetWidth.
+func (b *SidebarBuilder) Width(px int) *SidebarBuilder {
+	b.do(func(s *Scope, w *widget.Sidebar) { w.SetWidth(px) })
+	return b
+}
+
+// WatchWidth re-applies SetWidth with get's value after every update.
+func (b *SidebarBuilder) WatchWidth(get func() int) *SidebarBuilder {
+	b.watch(func(w *widget.Sidebar) { w.SetWidth(get()) })
+	return b
+}
+
+// OnWidthChanged sets the widget's OnWidthChanged field.
+func (b *SidebarBuilder) OnWidthChanged(fn func(width int)) *SidebarBuilder {
+	b.do(func(_ *Scope, w *widget.Sidebar) { w.OnWidthChanged = fn })
 	return b
 }
 

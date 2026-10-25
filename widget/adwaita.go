@@ -281,6 +281,8 @@ func controlRules() [][2]string {
 		{"sidebar .sheet-panel", "padding: 0px;"},
 		{"sidebar .group-label", "font-size: 0.75rem; font-weight: 500; color: @muted_fg_color; padding: 8px 8px 4px 8px;"},
 		{"sidebar button.item label", "font-size: 0.875rem;"},
+		{"sidebar button.group-label", "background-color: transparent; min-height: 0px; border-radius: 6px; font-size: 0.75rem;"},
+		{"sidebar button.group-label:hover", "background-color: @muted_bg_color;"},
 		{"sidebar button.item", "background-color: transparent; min-height: 32px; padding: 0px 8px; border-radius: 6px; font-weight: 400; color: @sidebar_fg_color;"},
 		{"sidebar button.item:hover", "background-color: @muted_bg_color;"},
 		{"sidebar button.item:checked", "background-color: @muted_bg_color; font-weight: 500;"},

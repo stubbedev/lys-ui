@@ -117,3 +117,59 @@ func TestGoldenShadcnSidebar(t *testing.T) {
 		})
 	}
 }
+
+// A collapsible group folds its items on its label, SetActive picks an
+// item from outside and shows it (opening its group and its submenu),
+// and the width sets and drags within its bounds (#272).
+func TestSidebarSettingsApp(t *testing.T) {
+	s, _ := newTestSidebar(t, 900)
+	s.AddCollapsibleGroup("Advanced", false,
+		SidebarItem{Label: "Developer", ID: "dev"},
+		SidebarItem{Label: "Experimental", Items: []SidebarItem{{Label: "Flags", ID: "flags"}}},
+	)
+	arrangeTree(t, s, 900, 600)
+	dev := s.rows[len(s.rows)-3]
+	if dev.id != "dev" || IsVisible(dev.group) {
+		t.Fatalf("collapsed group: row %q visible %v", dev.id, IsVisible(dev.group))
+	}
+	head := s.labels[len(s.labels)-1].(*Button)
+	head.OnClick()
+	if !IsVisible(dev.group) {
+		t.Error("clicking the group label left it folded")
+	}
+	head.OnClick()
+
+	if !s.SetActive("flags") {
+		t.Fatal("SetActive did not find flags")
+	}
+	flags := s.rows[len(s.rows)-1]
+	if !flags.button.HasState(StateChecked) || !IsVisible(flags.group) || !IsVisible(flags.parent) {
+		t.Errorf("after SetActive: checked %v, group shown %v, submenu shown %v", flags.button.HasState(StateChecked), IsVisible(flags.group), IsVisible(flags.parent))
+	}
+	if s.rows[0].button.HasState(StateChecked) {
+		t.Error("the previously active item stayed active")
+	}
+	if s.SetActive("nope") {
+		t.Error("SetActive found an unknown id")
+	}
+
+	s.SetWidth(300)
+	arrangeTree(t, s, 900, 600)
+	if got := s.dock.Bounds().W; got != 300 {
+		t.Fatalf("docked width %d after SetWidth(300)", got)
+	}
+	reported := 0
+	s.OnWidthChanged = func(w int) { reported = w }
+	s.SetResizable(200, 400)
+	b := s.dock.Bounds()
+	edge := Point{X: b.X + b.W, Y: b.Y + b.H/2}
+	if s.HitTest(edge) != Widget(s) {
+		t.Fatal("the panel's edge is not the resize handle")
+	}
+	s.PressAt(edge)
+	s.DragMove(Point{X: edge.X + 500, Y: edge.Y})
+	s.PressEnd()
+	if s.Width() != 400 || reported != 400 {
+		t.Errorf("dragged past the bound: width %d reported %d, want 400", s.Width(), reported)
+	}
+}

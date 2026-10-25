@@ -36,6 +36,8 @@ const (
 // SidebarItem is one entry of a Sidebar group.
 type SidebarItem struct {
 	Label string
+	// ID names the item for SetActive; empty uses its Label.
+	ID string
 	// Icon leads the row and is what the icon rail shows; nil shows
 	// none.
 	Icon Widget
@@ -49,13 +51,23 @@ type SidebarItem struct {
 	Items []SidebarItem
 }
 
-// sidebarRow is an item's row and the parts collapsing hides.
+// sidebarRow is an item's row and the parts collapsing hides; parent
+// is the submenu holding it, nil at a group's top level.
 type sidebarRow struct {
+	id     string
 	button *Button
 	label  *Label
 	badge  *Label
 	sub    *Box
+	parent *Box
+	// group is the collapsible group's items box holding the row, nil
+	// in a plain group.
+	group *Box
 }
+
+// sidebarHandle is the resize handle's half width either side of the
+// panel's edge.
+const sidebarHandle = 3
 
 // Sidebar is an application sidebar (shadcn/ui's Sidebar) beside
 // content: a header, groups of items with icons, badges and submenus,
@@ -84,15 +96,26 @@ type Sidebar struct {
 	groups  *Box
 	footer  *Box
 	rows    []*sidebarRow
-	labels  []*Label
+	labels  []Widget
 	trigger *Button
 	bps     breakpoints
+
+	// openWidth is the expanded width (SetWidth); minWidth and maxWidth
+	// bound the drag that resizes it, zero when it does not resize.
+	openWidth          int
+	minWidth, maxWidth int
+	resize             dragGesture
+	resizeFrom         int
+
+	// OnWidthChanged fires with the expanded width after a drag
+	// resized it, for the app to keep.
+	OnWidthChanged func(width int)
 }
 
 // NewSidebar returns an expanded sidebar beside content, collapsing off
 // canvas.
 func NewSidebar(face render.Font, content Widget) *Sidebar {
-	s := &Sidebar{face: requireFace("widget.NewSidebar", face), expanded: true, width: sidebarWidth}
+	s := &Sidebar{face: requireFace("widget.NewSidebar", face), expanded: true, width: sidebarWidth, openWidth: sidebarWidth}
 	s.SetElement("sidebar")
 	s.header = NewBox(Column, 8, 0)
 	s.groups = NewBox(Column, 8, 0)
@@ -136,15 +159,58 @@ func (s *Sidebar) AddGroup(label string, items ...SidebarItem) {
 		s.labels = append(s.labels, l)
 	}
 	for _, it := range items {
-		g.Append(s.item(it), false)
+		g.Append(s.item(it, nil), false)
 	}
 	s.groups.Append(g, false)
 	s.applyCollapse()
 }
 
-// item builds an item's row, its submenu under it.
-func (s *Sidebar) item(it SidebarItem) Widget {
-	r := &sidebarRow{label: NewLabel(s.face, 14, it.Label, 0)}
+// AddCollapsibleGroup appends a group whose label folds its items
+// (shadcn's collapsible SidebarGroup): clicking the label, or its
+// chevron, shows and hides them, open to start with when open.
+func (s *Sidebar) AddCollapsibleGroup(label string, open bool, items ...SidebarItem) {
+	body := NewBox(Column, 2, 0)
+	first := len(s.rows)
+	for _, it := range items {
+		body.Append(s.item(it, nil), false)
+	}
+	for _, r := range s.rows[first:] {
+		r.group = body
+	}
+	body.SetVisible(open)
+	chevron := NewSymbol(SymbolChevronRight, 12)
+	if open {
+		chevron.SetKind(SymbolChevronDown)
+	}
+	line := NewBox(Row, 4, 0)
+	line.AppendAligned(NewLabel(s.face, 12, label, 0), true, AlignCenter)
+	line.AppendAligned(chevron, false, AlignCenter)
+	head := NewButton(line, 0, 0)
+	head.AddClass("group-label")
+	head.SetAccessibleName(label)
+	head.OnClick = func() {
+		body.SetVisible(!body.Visible())
+		if body.Visible() {
+			chevron.SetKind(SymbolChevronDown)
+		} else {
+			chevron.SetKind(SymbolChevronRight)
+		}
+	}
+	g := NewBox(Column, 2, 0)
+	g.Append(head, false).Append(body, false)
+	s.groups.Append(g, false)
+	s.labels = append(s.labels, head)
+	s.applyCollapse()
+}
+
+// item builds an item's row under parent (a submenu, nil at a
+// group's top level), its own submenu under it.
+func (s *Sidebar) item(it SidebarItem, parent *Box) Widget {
+	id := it.ID
+	if id == "" {
+		id = it.Label
+	}
+	r := &sidebarRow{id: id, label: NewLabel(s.face, 14, it.Label, 0), parent: parent}
 	line := NewBox(Row, 8, 0)
 	if it.Icon != nil {
 		line.AppendAligned(it.Icon, false, AlignCenter)
@@ -168,7 +234,7 @@ func (s *Sidebar) item(it SidebarItem) Widget {
 	r.sub = NewBox(Column, 2, 0)
 	r.sub.AddClass("sub")
 	for _, child := range it.Items {
-		r.sub.Append(s.item(child), false)
+		r.sub.Append(s.item(child, r.sub), false)
 	}
 	r.sub.SetVisible(it.Active)
 	r.button.OnClick = func() { r.sub.SetVisible(!r.sub.Visible()) }
@@ -190,6 +256,99 @@ func (s *Sidebar) activate(r *sidebarRow, run func()) {
 	}
 }
 
+// SetActive makes the item called id (its ID, else its Label) the
+// active one, as a click would without running it, and shows it: its
+// submenu and its collapsed group open. It reports whether an item
+// has that id.
+func (s *Sidebar) SetActive(id string) bool {
+	var found *sidebarRow
+	for _, r := range s.rows {
+		if r.id == id && found == nil {
+			found = r
+		}
+	}
+	if found == nil {
+		return false
+	}
+	for _, r := range s.rows {
+		r.button.SetState(StateChecked, r == found)
+	}
+	if found.parent != nil {
+		found.parent.SetVisible(true)
+	}
+	if found.group != nil {
+		found.group.SetVisible(true)
+	}
+	return true
+}
+
+// SetWidth sets the expanded width, shadcn's 16rem (256px) by default.
+func (s *Sidebar) SetWidth(px int) {
+	s.openWidth = max(sidebarRail, px)
+	if s.expanded && s.slide == nil {
+		s.width = float64(s.openWidth)
+		s.dock.fixedWidth = s.openWidth
+		s.dock.InvalidateLayout()
+	}
+}
+
+// Width returns the expanded width.
+func (s *Sidebar) Width() int { return s.openWidth }
+
+// SetResizable lets the user drag the docked panel's edge to resize it
+// between min and max pixels (OnWidthChanged reports the result); a
+// zero max turns it off.
+func (s *Sidebar) SetResizable(min, max int) {
+	s.minWidth, s.maxWidth = min, max
+}
+
+// onHandle reports whether p is on the docked, expanded panel's edge
+// while the sidebar resizes.
+func (s *Sidebar) onHandle(p Point) bool {
+	if s.maxWidth == 0 || s.narrow || !s.expanded || !IsVisible(s.dock) {
+		return false
+	}
+	edge := s.dock.Bounds().X + s.dock.Bounds().W
+	b := s.dock.Bounds()
+	return p.Y >= b.Y && p.Y < b.Y+b.H && p.X >= edge-sidebarHandle && p.X < edge+sidebarHandle
+}
+
+// HitTest takes the resize handle itself, and otherwise the panel and
+// content as laid out.
+func (s *Sidebar) HitTest(p Point) Widget {
+	if s.onHandle(p) {
+		return s
+	}
+	return s.composite.HitTest(p)
+}
+
+// CursorName is the resize cursor over the handle.
+func (s *Sidebar) CursorName() string { return "col-resize" }
+
+// PressAt starts a resize on the handle.
+func (s *Sidebar) PressAt(p Point) {
+	if s.onHandle(p) {
+		s.resize.begin(p)
+		s.resizeFrom = s.openWidth
+	}
+}
+
+// DragMove resizes the panel with the pointer, within the bounds.
+func (s *Sidebar) DragMove(p Point) {
+	dx, _, ok := s.resize.travel(p)
+	if !ok {
+		return
+	}
+	s.SetWidth(min(s.maxWidth, max(s.minWidth, s.resizeFrom+dx)))
+}
+
+// PressEnd ends a resize, reporting the new width.
+func (s *Sidebar) PressEnd() {
+	if s.resize.end() && s.OnWidthChanged != nil {
+		s.OnWidthChanged(s.openWidth)
+	}
+}
+
 // SetCollapse picks how a wide sidebar collapses.
 func (s *Sidebar) SetCollapse(c SidebarCollapse) {
 	s.collapse = c
@@ -206,7 +365,7 @@ func (s *Sidebar) SetExpanded(on bool) {
 		on = true
 	}
 	s.expanded = on
-	target := float64(sidebarWidth)
+	target := float64(s.openWidth)
 	switch {
 	case on:
 	case s.collapse == SidebarIcon:
@@ -247,7 +406,9 @@ func (s *Sidebar) applyCollapse() {
 		}
 	}
 	for _, l := range s.labels {
-		l.SetVisible(full)
+		if v, ok := l.(interface{ SetVisible(bool) }); ok {
+			v.SetVisible(full)
+		}
 	}
 	s.InvalidateLayout()
 }
