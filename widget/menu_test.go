@@ -100,8 +100,9 @@ func TestMenuPopoverNodes(t *testing.T) {
 	if got := m.style(m).Background; got != render.RGB(0x01, 0x02, 0x03) {
 		t.Errorf("card background %v, want the popover.menu rule", got)
 	}
-	if in := m.contentsInset(); in.Top != 7 || in.Left != 7 {
-		t.Errorf("contents inset %v, want the contents padding", in)
+	own := boxOf(m.style(m), render.Insets{}).outer()
+	if in := m.contentsInset(); in.Top != own.Top+7 || in.Left != own.Left+7 {
+		t.Errorf("contents inset %v, want the card's box %v plus the contents padding", in, own)
 	}
 	first := &m.rows[0]
 	if got := pickc(0, first.style(first), style.PropColor, 0); got != render.RGB(0x0a, 0x0b, 0x0c) {

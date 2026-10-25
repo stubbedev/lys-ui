@@ -169,3 +169,23 @@ func TestMenuHoverHookAndRowBounds(t *testing.T) {
 		t.Error("Items")
 	}
 }
+
+// A separator is a thin row, its rule 4px from the rows either side as
+// in shadcn's menus; it took a full item band, leaving a row-high gap
+// in every menu (#281). Hit-testing below it still lands on the row
+// drawn there, and the rows sit inside the menu's own border.
+func TestMenuSeparatorIsAThinRow(t *testing.T) {
+	m := NewMenu(entryFace(t), 13, MenuItem{Label: "one"}, MenuSeparator(), MenuItem{Label: "two"})
+	size := m.Measure(Constraints{Max: Size{W: 200, H: 400}})
+	m.Arrange(render.Rect{X: 0, Y: 0, W: size.W, H: size.H})
+	one, sep, two := m.RowBounds(0), m.RowBounds(1), m.RowBounds(2)
+	if sep.H != menuSeparatorBand || sep.Y != one.Y+one.H+menuRowGap || two.Y != sep.Y+sep.H+menuRowGap {
+		t.Errorf("rows %v, %v, %v: want the separator a %dpx band between them", one, sep, two, menuSeparatorBand)
+	}
+	if got := m.itemAt(Point{X: two.X + 4, Y: two.Y + two.H/2}); got != 2 {
+		t.Errorf("the second item's center maps to row %d", got)
+	}
+	if want := two.Y + two.H + menuRowGap + m.contentsInset().Bottom; size.H != want {
+		t.Errorf("menu height %d, want the rows inside the menu's box, %d", size.H, want)
+	}
+}

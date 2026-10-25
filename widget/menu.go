@@ -374,8 +374,9 @@ func (m *Menu) Measure(con Constraints) Size {
 	cv := m.contents.style(&m.contents)
 	co := boxOf(cv, menuContentsPad).outer()
 	v := m.style(m)
+	rows := m.rowTop(len(m.items), m.bandH())
 	return m.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		h := len(m.items)*m.stride() + co.Top + co.Bottom
+		h := rows + co.Top + co.Bottom
 		return clampSize(Size{W: w + co.Left + co.Right, H: h}, inner)
 	}))
 }
@@ -387,11 +388,22 @@ var (
 	menuRowPad      = render.Insets{Right: 8, Left: 8}
 )
 
-// bandH is the laid-out row band: the styled modelbuttons' floor
-// (min-height plus vertical padding) over the theme's line band.
+// menuRowGap is the gap below every row; menuSeparatorBand a
+// separator row's band, its 1px rule centered, so with the gaps the
+// rule keeps shadcn's 4px from the rows either side.
+const (
+	menuRowGap        = 2
+	menuSeparatorBand = 5
+)
+
+// bandH is the laid-out band of an item row: the styled modelbuttons'
+// floor (min-height plus vertical padding) over the theme's line band.
 func (m *Menu) bandH() int {
 	h := m.itemH - 2
 	for i := range m.rows {
+		if m.items[i].Kind == ItemSeparator {
+			continue
+		}
 		rv := m.rows[i].style(&m.rows[i])
 		pad := boxOf(rv, menuRowPad).outer()
 		h = max(h, picki(rv, style.PropMinHeight, 0)+pad.Top+pad.Bottom)
@@ -450,7 +462,8 @@ func (m *Menu) Paint(cv *render.Canvas) {
 	fx.pop()
 
 	cw := m.contents.style(&m.contents)
-	_, rowsRect := boxRects(boxOf(cw, menuContentsPad), m.bounds)
+	_, inside := boxRects(boxOf(v, render.Insets{}), m.bounds)
+	_, rowsRect := boxRects(boxOf(cw, menuContentsPad), inside)
 	m.contents.Arrange(rowsRect)
 	cradii := radiusOr(cw, 0)
 	cfx := pushEffects(cv, &m.contents.node, cw, rowsRect, cradii)
@@ -459,18 +472,17 @@ func (m *Menu) Paint(cv *render.Canvas) {
 
 	lineH := m.face.Shape("lg", m.sizePx).LineHeight()
 	slot := m.iconSlot()
-	band, stride := m.bandH(), m.bandH()+2
+	itemBand := m.bandH()
+	y := rowsRect.Y
 	for i, it := range m.items {
+		band := m.band(i, itemBand)
+		slotRect := render.Rect{X: rowsRect.X, Y: y, W: rowsRect.W, H: band}
+		y += band + menuRowGap
 		rp := &m.rows[i]
 		rv := rp.style(rp)
 		pad := boxOf(rv, menuRowPad)
-		_, rowContent := boxRects(pad, render.Rect{
-			X: rowsRect.X,
-			Y: rowsRect.Y + i*stride,
-			W: rowsRect.W,
-			H: band,
-		})
-		row := pad.margin.Shrink(render.Rect{X: rowsRect.X, Y: rowsRect.Y + i*stride, W: rowsRect.W, H: band})
+		_, rowContent := boxRects(pad, slotRect)
+		row := pad.margin.Shrink(slotRect)
 		rp.Arrange(row)
 		rradii := radiusOr(rv, t.Radius)
 		rfx := pushEffects(cv, &rp.node, rv, row, rradii)
@@ -590,33 +602,58 @@ func (m *Menu) RowBounds(i int) render.Rect {
 	if i < 0 || i >= len(m.items) {
 		return render.Rect{}
 	}
-	in := m.contentsInset()
-	return render.Rect{X: m.bounds.X, Y: m.bounds.Y + in.Top + i*m.stride(), W: m.bounds.W, H: m.bandH()}
+	in, itemBand := m.contentsInset(), m.bandH()
+	return render.Rect{X: m.bounds.X, Y: m.bounds.Y + in.Top + m.rowTop(i, itemBand), W: m.bounds.W, H: m.band(i, itemBand)}
 }
 
 // Items returns the menu's rows.
 func (m *Menu) Items() []MenuItem { return m.items }
 
-// contentsInset is the row area's inset inside the card: the contents
-// node's box (the 4px pad unstyled).
+// contentsInset is the row area's inset inside the menu's bounds: the
+// menu's own box (its border, say), then the contents node's (the 4px
+// pad unstyled) - where Paint places the rows.
 func (m *Menu) contentsInset() render.Insets {
-	cw := m.contents.style(&m.contents)
-	return boxOf(cw, menuContentsPad).outer()
+	own := boxOf(m.style(m), render.Insets{}).outer()
+	in := boxOf(m.contents.style(&m.contents), menuContentsPad).outer()
+	return render.Insets{Top: own.Top + in.Top, Right: own.Right + in.Right, Bottom: own.Bottom + in.Bottom, Left: own.Left + in.Left}
 }
 
-// stride is the row stride: a band plus the 2px gap.
-func (m *Menu) stride() int { return m.bandH() + 2 }
+// band is row i's band: itemBand for an item, menuSeparatorBand for
+// a separator.
+func (m *Menu) band(i, itemBand int) int {
+	if m.items[i].Kind == ItemSeparator {
+		return menuSeparatorBand
+	}
+	return itemBand
+}
+
+// rowTop is row i's offset below the row area's top: the bands and
+// gaps of the rows above it. Row len(items) is the area's height.
+func (m *Menu) rowTop(i, itemBand int) int {
+	y := 0
+	for j := range i {
+		y += m.band(j, itemBand) + menuRowGap
+	}
+	return y
+}
 
 // itemAt maps a root-space point to an item index, -1 outside.
 func (m *Menu) itemAt(p Point) int {
 	if p.X < m.bounds.X || p.X >= m.bounds.X+m.bounds.W {
 		return -1
 	}
-	i := (p.Y - m.bounds.Y - m.contentsInset().Top) / m.stride()
-	if i < 0 || i >= len(m.items) {
+	dy, itemBand := p.Y-m.bounds.Y-m.contentsInset().Top, m.bandH()
+	if dy < 0 {
 		return -1
 	}
-	return i
+	top := 0
+	for i := range m.items {
+		top += m.band(i, itemBand) + menuRowGap
+		if dy < top {
+			return i
+		}
+	}
+	return -1
 }
 
 // ClickAt activates the clicked row (or opens its submenu) and
