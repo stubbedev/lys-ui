@@ -68,6 +68,9 @@ type MenuItem struct {
 	Accel    string
 	Mnemonic rune
 	Items    []MenuItem
+	// OnOpen runs as the row's submenu opens, before it shows: a
+	// DBusMenu's AboutToShow.
+	OnOpen   func()
 	Icon     *Icon
 	Disabled bool
 }

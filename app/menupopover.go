@@ -179,6 +179,9 @@ func (m *MenuPopover) openSubmenu(depth, row int, items []widget.MenuItem) {
 		return
 	}
 	m.closeBelow(depth)
+	if open := parent.menu.Items()[row].OnOpen; open != nil {
+		open()
+	}
 	lvl := m.newLevel(depth+1, items)
 	pop, err := m.open(parent.pop, rowAnchor{parent.menu.RowBounds(row)}, lvl.menu, func() {
 		// Closed on its own (Esc, Left) or with its parent: the chain

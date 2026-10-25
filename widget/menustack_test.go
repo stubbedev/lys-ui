@@ -13,7 +13,7 @@ func stackFixture(t *testing.T, fired *string) *MenuStack {
 	t.Helper()
 	return NewMenuStack(entryFace(t), 14,
 		MenuItem{Label: "Open", OnClick: func() { *fired = "open" }},
-		MenuItem{Label: "Share", Items: []MenuItem{
+		MenuItem{Label: "Share", OnOpen: func() { *fired = "share opened" }, Items: []MenuItem{
 			{Label: "Mail", OnClick: func() { *fired = "mail" }},
 			{Label: "A much longer submenu label", OnClick: func() { *fired = "long" }},
 		}},
@@ -38,8 +38,8 @@ func TestMenuStackSlidesIntoSubmenus(t *testing.T) {
 	layStack(s)
 
 	s.ClickAt(stackRow(s, 1))
-	if s.Depth() != 2 {
-		t.Fatalf("depth after the submenu row = %d, want 2", s.Depth())
+	if s.Depth() != 2 || fired != "share opened" {
+		t.Fatalf("depth after the submenu row = %d, fired %q; want 2 and its OnOpen", s.Depth(), fired)
 	}
 	if dismissed != 0 {
 		t.Fatal("opening a submenu dismissed the stack")

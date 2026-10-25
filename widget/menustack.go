@@ -74,6 +74,9 @@ func (s *MenuStack) level(items []MenuItem, parent string) *Menu {
 	m := NewMenu(s.face, s.sizePx, rows...)
 	m.OnDismiss = func() { s.dismissed = true }
 	m.OnSubmenu = func(index int, sub []MenuItem) {
+		if open := m.items[index].OnOpen; open != nil {
+			open()
+		}
 		s.path = append(s.path, s.level(sub, m.items[index].Label))
 		s.InvalidateLayout()
 	}

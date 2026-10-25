@@ -53,7 +53,7 @@ func TestMenuPopoverNestsSubmenus(t *testing.T) {
 	closed := 0
 	items := []widget.MenuItem{
 		{Label: "Open", OnClick: func() { log = append(log, "open") }},
-		{Label: "Recent", Items: []widget.MenuItem{
+		{Label: "Recent", OnOpen: func() { log = append(log, "recent opened") }, Items: []widget.MenuItem{
 			{Label: "a.txt", OnClick: func() { log = append(log, "a") }},
 			{Label: "More", Items: []widget.MenuItem{{Label: "deep", OnClick: func() { log = append(log, "deep") }}}},
 		}},
@@ -76,9 +76,10 @@ func TestMenuPopoverNestsSubmenus(t *testing.T) {
 	}
 	// Hovering it again reopens nothing; a sibling closes it.
 	root.HoverMove(rowPoint(root, 1))
-	if len(f.opened) != 2 {
-		t.Error("re-hovering the open row opened it again")
+	if len(f.opened) != 2 || len(log) != 1 || log[0] != "recent opened" {
+		t.Errorf("re-hovering the open row opened it again, or OnOpen ran %v", log)
 	}
+	log = nil
 	root.HoverMove(rowPoint(root, 0))
 	if m.Depth() != 1 || f.opened[1].pop.Closed() != true {
 		t.Errorf("sibling hover: depth %d", m.Depth())
@@ -108,12 +109,13 @@ func TestMenuPopoverNestsSubmenus(t *testing.T) {
 	}
 
 	// A leaf deep down closes the whole chain, then acts, once.
+	log = nil
 	root.ClickAt(rowPoint(root, 1))
 	sub = m.Level(1)
 	sub.ClickAt(rowPoint(sub, 1))
 	deep := m.Level(2)
 	deep.ClickAt(rowPoint(deep, 0))
-	if !m.Closed() || closed != 1 || len(log) != 1 || log[0] != "deep" {
+	if !m.Closed() || closed != 1 || len(log) != 2 || log[0] != "recent opened" || log[1] != "deep" {
 		t.Errorf("leaf: closed %v (%d), log %v", m.Closed(), closed, log)
 	}
 	for _, lvl := range f.opened {
