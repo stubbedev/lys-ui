@@ -357,10 +357,19 @@ func (g *gallery) datePickers(first **widget.DatePicker) ui.Node {
 	).Spacing(12)
 }
 
+// demoSmall and demoMedium are the widths a demo that fills its offer
+// keeps, the reference's max-w-sm and max-w-md.
+const (
+	demoSmall  = "demo-sm"
+	demoMedium = "demo-md"
+)
+
 // galleryCSS styles the gallery's own pieces: the context menu's
 // dashed drop zone, the bordered demo frames, the hover card's and the
-// popover's widths.
+// popover's widths, and the demo widths.
 const galleryCSS = `
+.demo-sm { width: 384px; }
+.demo-md { width: 448px; }
 .drop-zone { border: 1px dashed @borders; border-radius: 8px; padding: 48px; }
 .bordered { border: 1px solid @borders; border-radius: 8px; }
 .hovercard-content { width: 320px; padding: 16px; }
@@ -452,7 +461,20 @@ func (g *gallery) form(send func(galleryMsg)) ui.Node {
 			ui.Button(ui.Label("Submit"), 0, 0).Classes(css.SuggestedAction).OnClick(func() { form.Submit() }),
 			ui.Label("").Classes(css.Muted).WatchText(func() string { return g.status }),
 		).Spacing(16),
-	).Spacing(24)
+	).Spacing(24).Classes(demoSmall)
+}
+
+// tabPage is a Tabs demo page: a card 16px under the tab strip with
+// a heading, its fields and the action that saves them.
+func tabPage(title, description, action string, fields ...ui.Node) ui.Node {
+	return ui.Column(ui.Column(
+		ui.Column(
+			ui.Label(title).Classes(css.Heading),
+			ui.Label(description).Classes(css.Muted).Wrap(true),
+		).Spacing(6),
+		ui.Column(fields...).Spacing(12),
+		ui.Aligned(ui.Button(ui.Label(action), 0, 0).Classes(css.SuggestedAction), widget.AlignStart),
+	).Spacing(24).Padding(render.UniformInsets(24)).Classes(css.Card)).Padding(render.Insets{Top: 16})
 }
 
 // pane is a Resizable demo pane: its name centered in it.
@@ -547,7 +569,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			).Spacing(6),
 			ui.Field("Name", ui.Entry().Placeholder("Name of your project")),
 			ui.Row(ui.Expand(ui.Spacer(0, 0)), ui.Button(ui.Label("Cancel"), 0, 0).Classes(css.Outline), ui.Button(ui.Label("Deploy"), 0, 0).Classes(css.SuggestedAction)).Spacing(8),
-		).Spacing(24).Padding(render.UniformInsets(24)).SizeRequest(360, 0).Classes(css.Card), widget.AlignStart)),
+		).Spacing(24).Padding(render.UniformInsets(24)).Classes(css.Card, demoSmall), widget.AlignStart)),
 		section("Carousel", g.carousel()),
 		section("Chart", ui.Row(
 			ui.Expand(ui.Chart(widget.ChartBar, []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun"},
@@ -593,7 +615,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 		section("Empty", ui.StatusPage("", "No projects yet", "You haven't created any projects yet. Get started by creating your first project.").
 			Icon(ui.Symbol(widget.SymbolMaximize, 24)).
 			Child(ui.Button(ui.Label("Create project"), 0, 0).Classes(css.SuggestedAction))),
-		section("Field and Form", g.form(send)),
+		section("Field and Form", ui.Aligned(g.form(send), widget.AlignStart)),
 		section("Hover Card", ui.Aligned(ui.HoverCard(
 			ui.Button(ui.Label("@lys-ui"), 0, 0).Classes(css.Link).Ref(&hoverTrigger),
 			ui.Column(
@@ -610,7 +632,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 				Prepend(ui.Label("https://")).
 				Append(ui.Button(ui.Label("Copy"), 0, 0).Classes(css.Ghost, css.Small))),
 		section("Input OTP", ui.InputOTP(widget.OTPDigits, 3, 3)),
-		section("Item",
+		section("Item", ui.Aligned(ui.Column(
 			ui.Item("Basic Item", "A simple item with title and description.").Variant(widget.ItemOutline).
 				AddAction(ui.Button(ui.Label("Action"), 0, 0).Classes(css.Outline, css.Small)),
 			ui.Item("Your profile has been verified.", "").Variant(widget.ItemMuted).Small(true),
@@ -619,7 +641,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 				ui.Item("grace", "grace@example.com"),
 				ui.Item("linus", "linus@example.com"),
 			).Classes(css.Card),
-		),
+		).Spacing(16).Classes(demoMedium), widget.AlignStart)),
 		section("Kbd", ui.Row(ui.KbdGroup("Ctrl", "Shift", "P"), ui.Label("opens the command palette")).Spacing(12)),
 		section("Menubar", ui.Aligned(ui.MenuBar(menubarMenus()...).Ref(&g.menubar), widget.AlignStart)).
 			opens(click, func() image.Point { b := g.menubar.Root(0).Bounds(); return image.Pt(b.X+b.W/2, b.Y+b.H/2) }).room(480, 280),
@@ -670,9 +692,11 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 		section("Spinner", ui.Row(ui.Spinner(16), ui.Label("Processing payment...")).Spacing(8)),
 		section("Switch", ui.Row(ui.Switch(false), ui.Label("Airplane Mode")).Spacing(8)),
 		section("Table", g.table()),
-		section("Tabs", ui.Aligned(ui.Notebook().SizeRequest(400, 0).
-			AppendTab("Account", text("Make changes to your account here.")).
-			AppendTab("Password", text("Change your password here.")), widget.AlignStart)),
+		section("Tabs", ui.Aligned(ui.Notebook().Classes(demoSmall).
+			AppendTab("Account", tabPage("Account", "Make changes to your account here.", "Save changes",
+				ui.Field("Name", ui.Entry().Text("Ada Lovelace")), ui.Field("Username", ui.Entry().Text("@ada")))).
+			AppendTab("Password", tabPage("Password", "Change your password here.", "Save password",
+				ui.Field("Current password", ui.Entry()), ui.Field("New password", ui.Entry()))), widget.AlignStart)),
 		section("Textarea", ui.Aligned(ui.TextArea().Placeholder("Type your message here.").SizeRequest(400, 80), widget.AlignStart)),
 		section("Toggle", ui.Row(
 			ui.ToggleButton(ui.Label("Bold"), 0, 0).Classes(css.Outline),
