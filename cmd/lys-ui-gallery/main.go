@@ -599,7 +599,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			widget.MenuItem{Label: "Reload", Accel: "Ctrl+R", OnClick: func() {}},
 			widget.MenuSeparator(),
 			widget.MenuItem{Label: "Show Bookmarks", Kind: widget.ItemCheck, Checked: true, OnClick: func() {}},
-		).Classes("drop-zone").Ref(&contextMenu)).opens(secondaryClick, center(&contextMenu)).room(320, 300),
+		).Classes("drop-zone").Ref(&contextMenu)).opens(secondaryClick, leading(&contextMenu, 260)).room(460, 300),
 		section("Data Table", g.dataTable()),
 		section("Date Picker", g.datePickers(&datePicker)).opens(click, center(&datePicker)).room(360, 420),
 		section("Dialog", ui.Aligned(ui.Button(ui.Label("Edit Profile"), 0, 0).Classes(css.Outline).Ref(&dialogButton).OnClick(g.dialog), widget.AlignStart)).opens(click, center(&dialogButton)).room(560, 400),
@@ -613,7 +613,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 			}),
 		section("Dropdown Menu", ui.Aligned(ui.Button(ui.Label("Open"), 0, 0).Classes(css.Outline).Ref(&g.menuButton).OnClick(g.dropdownMenu), widget.AlignStart)).opens(click, center(&g.menuButton)).room(320, 260),
 		section("Empty", ui.StatusPage("", "No projects yet", "You haven't created any projects yet. Get started by creating your first project.").
-			Icon(ui.Symbol(widget.SymbolMaximize, 24)).
+			Icon(ui.Symbol(widget.SymbolFolder, 24)).
 			Child(ui.Button(ui.Label("Create project"), 0, 0).Classes(css.SuggestedAction))),
 		section("Field and Form", ui.Aligned(g.form(send), widget.AlignStart)),
 		section("Hover Card", ui.Aligned(ui.HoverCard(
