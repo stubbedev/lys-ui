@@ -6,12 +6,11 @@ import (
 	"github.com/stubbedev/lys-ui/render"
 )
 
-// ContextMenu gives a region a context menu (shadcn/ui's Context
-// Menu): a right click anywhere on its child, a long press, or the
-// Menu key (Shift+F10) while something inside it has the focus opens
-// items as a menu at the pointer - submenus, check and radio items and
-// shortcuts included, as Menu renders them. It styles as the
-// `contextmenu` element.
+// ContextMenu gives a region a context menu: a right click anywhere on
+// its child, a long press, or the Menu key (Shift+F10) while something
+// inside it has the focus opens items as a menu at the pointer -
+// submenus, check and radio items and shortcuts included, as Menu
+// renders them. It styles as the `contextmenu` element.
 type ContextMenu struct {
 	composite
 	face   render.Font

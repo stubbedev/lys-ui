@@ -566,7 +566,7 @@ func (a *Application) CalendarDialog(parent *Window, initial widget.Date, onSele
 	return d, err
 }
 
-// MessageBox opens the standard preset, shadcn/ui's AlertDialog: the
+// MessageBox opens the standard preset, an alert dialog: the
 // title over the muted text, wrapped, above the buttons, the dialog as
 // tall as they need.
 func (a *Application) MessageBox(parent *Window, title, text string, buttons []DialogButton) (*Dialog, error) {
@@ -622,9 +622,9 @@ func cancelResponse(buttons []DialogButton) string {
 var ErrNoDialogFace = errors.New("app: dialog text face unavailable: no configured tooltip face and the system has no sans font")
 
 // dialogRoot builds the dialog window's root: the content in the
-// toolkit's card, shadcn/ui's Dialog: the title, the content and the
-// footer of buttons, each in its appearance (by default the default
-// response's on the primary fill and the others outlined); or, Bare, the content alone.
+// toolkit's card: the title, the content and the footer of buttons,
+// each in its appearance (by default the default response's on the
+// primary fill and the others outlined); or, Bare, the content alone.
 func (a *Application) dialogRoot(cfg DialogConfig, respond func(string)) (widget.Widget, render.Color, error) {
 	if cfg.Bare {
 		return cfg.Content, cfg.Background, nil

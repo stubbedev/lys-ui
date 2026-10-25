@@ -72,8 +72,8 @@ type barSpec struct {
 
 // barSpecOf reads the scrollbar-color/width pair off one computed
 // style — the Scroll's own for its bars, the standalone Scrollbar's
-// (inherited) for itself. auto keeps the built-in look, shadcn's
-// ScrollArea: a border-colored thumb on a transparent track.
+// (inherited) for itself. auto keeps the built-in look: a
+// border-colored thumb on a transparent track.
 func barSpecOf(v *style.Values) barSpec {
 	spec := barSpec{thumb: Current().Border}
 	if v.Has(style.PropScrollbarColor) && !v.BarColorAuto {

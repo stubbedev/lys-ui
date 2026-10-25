@@ -3,11 +3,10 @@ package widget
 import "github.com/stubbedev/lys-ui/render"
 
 // InputGroup is an entry with addons before and after it - icons, text,
-// buttons - inside one shared border and one focus ring (shadcn/ui's
-// InputGroup): the group draws the input's border, ring-colored while
-// its entry has the focus, and the keyboard focus ring goes around the
-// whole group. It styles as the `inputgroup` element; addon text and
-// icons take the muted color.
+// buttons - inside one shared border and one focus ring: the group
+// draws the input's border, ring-colored while its entry has the focus,
+// and the keyboard focus ring goes around the whole group. It styles as
+// the `inputgroup` element; addon text and icons take the muted color.
 type InputGroup struct {
 	composite
 	row   *Box

@@ -14,7 +14,7 @@ const dataTablePageSize = 10
 // dataTableCheckWidth is the selection column's width.
 const dataTableCheckWidth = 40
 
-// DataTable is shadcn/ui's data table on a ColumnView: a text filter
+// DataTable is a data table on a ColumnView: a text filter
 // over the rows, a Columns menu that hides and shows columns, sorting
 // by the sortable columns' headers, row selection with a check column
 // (the header check selecting the page), and pages of rows with a

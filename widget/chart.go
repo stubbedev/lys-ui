@@ -14,7 +14,7 @@ import (
 // ChartKind is how a Chart draws its data.
 type ChartKind uint8
 
-// The chart kinds, shadcn/ui's (Recharts) set.
+// The chart kinds.
 const (
 	// ChartBar draws a bar per series per category, grouped, or
 	// stacked with SetStacked.
@@ -51,7 +51,7 @@ type ChartSeries struct {
 // chartDuration is a data change's transition.
 const chartDuration = 400 * time.Millisecond
 
-// Chart plots categories of data (shadcn/ui's Chart): bars grouped or
+// Chart plots categories of data: bars grouped or
 // stacked, areas, lines, a pie or donut, a radar, or radial bars, in
 // the theme's chart colors (@chart_1 to @chart_5). The cartesian kinds
 // draw a value axis on rounded ticks, horizontal grid lines and the
@@ -162,8 +162,8 @@ func (c *Chart) cartesian() bool {
 }
 
 // The chart's text and spacing, and its natural size: the narrowest
-// plot that still reads, which a filling or expanding slot widens as
-// shadcn's full-width charts.
+// plot that still reads, which a filling or expanding slot widens to
+// the slot's width.
 const (
 	chartText   = 12
 	chartLegend = 28

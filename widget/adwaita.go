@@ -159,7 +159,7 @@ var classRules = [][2]string{
 
 // tabLists and tabTriggers are the three tab strips' lists and tabs -
 // StackSwitcher and ViewSwitcher (a togglegroup), TabBar, Notebook -
-// styled as shadcn's Tabs: a muted list of muted tabs, the active one
+// styled as tabs: a muted list of muted tabs, the active one
 // raised on the background fill.
 const (
 	tabLists    = "togglegroup, viewswitcher, tabbar, notebook > header > tabs"
@@ -167,13 +167,13 @@ const (
 	activeTabs  = "togglegroup button:checked, viewswitcher button:checked, tabbar tab:selected, notebook tab:checked"
 )
 
-// variants are the button classes that take shadcn/ui's full button
-// shape; a plain button keeps the padding and radius its constructor
-// was given, so internal buttons (calendar navigation, column headers,
-// window controls) keep theirs.
+// variants are the button classes that take the full button shape; a
+// plain button keeps the padding and radius its constructor was given,
+// so internal buttons (calendar navigation, column headers, window
+// controls) keep theirs.
 var variants = []string{css.SuggestedAction, css.DestructiveAction, css.Secondary, css.Outline, css.Ghost, css.Link}
 
-// controlRules give the controls shadcn/ui's look: hairline input
+// controlRules give the controls the toolkit's look: hairline input
 // borders, the button variants and sizes, and the floating surfaces.
 // Every color is a named color, so a palette switch restyles them.
 func controlRules() [][2]string {
@@ -346,9 +346,9 @@ func controlRules() [][2]string {
 	}
 }
 
-// darkRules are shadcn/ui v4's dark: variants, added on a dark
-// palette: the inputs and outline controls take a translucent input
-// fill, and the destructive fills soften to 60%.
+// darkRules are the dark variants, added on a dark palette: the inputs
+// and outline controls take a translucent input fill, and the
+// destructive fills soften to 60%.
 var darkRules = [][2]string{
 	{"entry, spinbutton, textview, inputgroup, inputotp .slot, dropdown > button, combobox > button, datepicker > button, checkbutton check, checkbutton radio", "background-color: alpha(@input_border_color, 0.3);"},
 	{"inputgroup entry", "background-color: transparent;"},

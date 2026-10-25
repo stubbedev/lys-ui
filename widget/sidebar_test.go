@@ -24,7 +24,7 @@ func newTestSidebar(t *testing.T, width int) (*Sidebar, *[]string) {
 			{Label: "Team", OnActivate: pick("team")},
 		}},
 	)
-	s.SetFooter(NewLabel(face, 14, "shadcn", 0))
+	s.SetFooter(NewLabel(face, 14, "lys", 0))
 	arrangeTree(t, s, width, 400)
 	arrangeTree(t, s, width, 400)
 	return s, &picked
@@ -97,9 +97,9 @@ func TestSidebarNarrow(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnSidebar pins the expanded sidebar and the icon rail,
+// TestGoldenSidebar pins the expanded sidebar and the icon rail,
 // in both palettes.
-func TestGoldenShadcnSidebar(t *testing.T) {
+func TestGoldenSidebar(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		th   *Theme
@@ -113,7 +113,7 @@ func TestGoldenShadcnSidebar(t *testing.T) {
 			rail.SetExpanded(false)
 			row := NewBox(Row, 16, 0).Append(wide, true).Append(rail, true)
 			row.SetHomogeneous(true)
-			NewGolden(t, row, "shadcn-sidebar-"+tc.name, goldenTheme(tc.th), goldenFrame(1616, 320))
+			NewGolden(t, row, "sidebar-"+tc.name, goldenTheme(tc.th), goldenFrame(1616, 320))
 		})
 	}
 }

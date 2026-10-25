@@ -5,7 +5,7 @@ import (
 	"github.com/stubbedev/lys-ui/widget/css"
 )
 
-// AlertVariant picks an alert's look, the shadcn/ui variants.
+// AlertVariant picks an alert's look.
 type AlertVariant uint8
 
 // The alert variants.
@@ -16,7 +16,7 @@ const (
 	AlertDestructive
 )
 
-// Alert is an inline callout in the content flow (shadcn/ui's Alert):
+// Alert is an inline callout in the content flow:
 // an optional icon beside a title and a wrapped description, on a
 // bordered card. Unlike Banner it carries no action and does not slide;
 // it is there for as long as the content shows it. It styles as the

@@ -84,9 +84,9 @@ func TestCommandKeyboardAndClick(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnCommand pins the command with its groups, a
+// TestGoldenCommand pins the command with its groups, a
 // shortcut, a disabled item and the highlight, in both palettes.
-func TestGoldenShadcnCommand(t *testing.T) {
+func TestGoldenCommand(t *testing.T) {
 	face := goldenFace(t)
 	for _, tc := range []struct {
 		name string
@@ -98,7 +98,7 @@ func TestGoldenShadcnCommand(t *testing.T) {
 			var picked []string
 			c := NewCommand(face, "Type a command or search...", testCommandGroups(&picked)...)
 			c.AddClass(css.Card)
-			NewGolden(t, c, "shadcn-command-"+tc.name, goldenTheme(tc.th), goldenFrame(360, 330))
+			NewGolden(t, c, "command-"+tc.name, goldenTheme(tc.th), goldenFrame(360, 330))
 		})
 	}
 }

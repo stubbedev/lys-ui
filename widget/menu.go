@@ -178,7 +178,7 @@ type Menu struct {
 	showMnemonics bool
 }
 
-// menuDisabledAlpha fades a disabled row's text, shadcn's opacity-50.
+// menuDisabledAlpha fades a disabled row's text.
 const menuDisabledAlpha = 0.5
 
 // SetMnemonicsVisible underlines the rows' Alt-letters, as a menu the
@@ -390,7 +390,7 @@ var (
 
 // menuRowGap is the gap below every row; menuSeparatorBand a
 // separator row's band, its 1px rule centered, so with the gaps the
-// rule keeps shadcn's 4px from the rows either side.
+// rule keeps 4px from the rows either side.
 const (
 	menuRowGap        = 2
 	menuSeparatorBand = 5

@@ -1,6 +1,6 @@
-// Command lys-ui-shadcn is the shadcn/ui gallery: every shadcn
-// component lys-ui implements, one titled section each, declared with
-// the typed ui builders in the shadcn dark and light palettes. Ctrl+K
+// Command lys-ui-gallery is the component gallery: every component
+// lys-ui implements, one titled section each, declared with the typed
+// ui builders in the dark and light palettes. Ctrl+K
 // opens the command palette as a dialog, Ctrl+T or the header button
 // toggles the palette, Escape closes.
 package main
@@ -56,8 +56,8 @@ func run() error {
 	gal := &gallery{env: ui.Env{Face: app.FontFallback(face), Size: 14}, app: application}
 	var win *app.Window
 	ctrl, win, err = component.Window(application, app.WindowConfig{
-		Title:      "lys-ui shadcn gallery",
-		AppID:      "dev.stubbe.lys.ui.shadcn",
+		Title:      "lys-ui gallery",
+		AppID:      "dev.stubbe.lys.ui.gallery",
 		Width:      760,
 		Height:     820,
 		Background: widget.Current().Bg,
@@ -72,7 +72,7 @@ func run() error {
 		"Ctrl+B": widget.NewAction("sidebar", func() { gal.sidebar.Toggle() }),
 		"Ctrl+K": widget.NewAction("command", func() {
 			if err := openCommandDialog(application, win, app.FontFallback(face)); err != nil {
-				log.Printf("lys-ui-shadcn: command dialog: %v", err)
+				log.Printf("lys-ui-gallery: command dialog: %v", err)
 			}
 		}),
 	} {
@@ -209,7 +209,7 @@ func demoMenu() []widget.MenuItem {
 	}
 }
 
-// menubarMenus are the Menubar demo's menus, shadcn's menubar-demo.
+// menubarMenus are the Menubar demo's menus.
 func menubarMenus() []widget.MenuBarMenu {
 	item := func(label, accel string) widget.MenuItem {
 		return widget.MenuItem{Label: label, Accel: accel, OnClick: func() {}}
@@ -266,7 +266,7 @@ func (g *gallery) alertDialog() {
 	if g.shown, err = g.app.MessageBox(g.win, "Are you absolutely sure?",
 		"This action cannot be undone. This will permanently delete your account and remove your data from our servers.",
 		[]app.DialogButton{{Label: "Cancel", Response: "cancel", Role: app.ButtonRoleCancel}, {Label: "Continue", Response: "continue", Role: app.ButtonRoleDefault}}); err != nil {
-		log.Printf("lys-ui-shadcn: alert dialog: %v", err)
+		log.Printf("lys-ui-gallery: alert dialog: %v", err)
 	}
 }
 
@@ -281,14 +281,14 @@ func (g *gallery) dialog() {
 		Title: "Edit profile", Width: 425, Content: content, Modal: true, OnClosed: view.Close,
 		Buttons: []app.DialogButton{{Label: "Cancel", Response: "cancel", Role: app.ButtonRoleCancel}, {Label: "Save changes", Response: "save", Role: app.ButtonRoleDefault}},
 	}); err != nil {
-		log.Printf("lys-ui-shadcn: dialog: %v", err)
+		log.Printf("lys-ui-gallery: dialog: %v", err)
 	}
 }
 
 // toast shows the Sonner demo.
 func (g *gallery) toast() {
 	if _, err := g.app.ShowToast("Event has been created", 4*time.Second, nil); err != nil {
-		log.Printf("lys-ui-shadcn: toast: %v", err)
+		log.Printf("lys-ui-gallery: toast: %v", err)
 	}
 }
 
@@ -328,7 +328,7 @@ func (g *gallery) sidebarDemo() ui.Node {
 				{Label: "General"}, {Label: "Team"}, {Label: "Billing"},
 			}},
 		).
-		Footer(ui.Label("shadcn").Classes(css.Muted)).
+		Footer(ui.Label("lys-ui").Classes(css.Muted)).
 		Ref(&g.sidebar).Classes("sidebar-demo")
 }
 
@@ -369,7 +369,7 @@ type payment struct {
 // invoice is a row of the Table demo.
 type invoice struct{ id, status, method, amount string }
 
-// table is shadcn's plain table demo: a few invoices, no paging,
+// table is the plain table demo: a few invoices, no paging,
 // sorting or selection.
 func (g *gallery) table() ui.Node {
 	rows := widget.SliceModel[invoice]{
@@ -444,7 +444,7 @@ func (g *gallery) form(send func(galleryMsg)) ui.Node {
 	).Spacing(24)
 }
 
-// carousel is shadcn's carousel demo: five numbered slides.
+// carousel is the carousel demo: five numbered slides.
 func (g *gallery) carousel() ui.Node {
 	c := ui.Carousel().SizeRequest(0, 160)
 	for i := range 5 {
@@ -455,7 +455,7 @@ func (g *gallery) carousel() ui.Node {
 
 func (g *gallery) Init(cx *component.Context[galleryMsg, struct{}]) widget.Widget {
 	header := ui.Row(
-		ui.Expand(ui.Label("shadcn/ui in lys-ui").Classes(css.H2)),
+		ui.Expand(ui.Label("lys-ui components").Classes(css.H2)),
 		ui.Button(ui.Label("Toggle palette"), 0, 0).Classes(css.Outline).
 			OnClick(func() { cx.Input(togglePalette{}) }),
 	).Spacing(16)
@@ -593,9 +593,9 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 				AddAction(ui.Button(ui.Label("Action"), 0, 0).Classes(css.Outline, css.Small)),
 			ui.Item("Your profile has been verified.", "").Variant(widget.ItemMuted).Small(true),
 			ui.ItemGroup(
-				ui.Item("shadcn", "shadcn@vercel.com"),
-				ui.Item("maxleiter", "maxleiter@vercel.com"),
-				ui.Item("evilrabbit", "evilrabbit@vercel.com"),
+				ui.Item("ada", "ada@example.com"),
+				ui.Item("maxleiter", "maxleiter@example.com"),
+				ui.Item("evilrabbit", "evilrabbit@example.com"),
 			).Classes(css.Card),
 		),
 		section("Kbd", ui.Row(ui.KbdGroup("Ctrl", "Shift", "P"), ui.Label("opens the command palette")).Spacing(12)),

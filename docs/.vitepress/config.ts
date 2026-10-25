@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'lys-ui',
-  description: 'A pure-Go Wayland widget toolkit with shadcn/ui components.',
+  description: 'A pure-Go Wayland widget toolkit.',
   base: '/lys-ui/',
   cleanUrls: true,
   lastUpdated: true,

@@ -72,9 +72,9 @@ func TestSheetTrapsFocusAndCloses(t *testing.T) {
 	_ = save
 }
 
-// TestGoldenShadcnSheet pins an open right sheet with its header,
+// TestGoldenSheet pins an open right sheet with its header,
 // field and footer, in both palettes.
-func TestGoldenShadcnSheet(t *testing.T) {
+func TestGoldenSheet(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		th   *Theme
@@ -86,7 +86,7 @@ func TestGoldenShadcnSheet(t *testing.T) {
 			s.SetOpen(true)
 			s.Measure(Constraints{Max: Size{W: 600, H: 400}})
 			s.Arrange(render.Rect{W: 600, H: 400})
-			NewGolden(t, s, "shadcn-sheet-"+tc.name, goldenTheme(tc.th), goldenFrame(600, 400))
+			NewGolden(t, s, "sheet-"+tc.name, goldenTheme(tc.th), goldenFrame(600, 400))
 		})
 	}
 }

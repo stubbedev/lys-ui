@@ -6,7 +6,7 @@ import (
 	"github.com/stubbedev/lys-ui/render"
 )
 
-// Breadcrumb is the path to the current page (shadcn/ui's Breadcrumb):
+// Breadcrumb is the path to the current page:
 // a link per ancestor, chevrons between, and the current page last,
 // not a link. A path longer than SetMaxItems collapses its middle into
 // an ellipsis that opens the hidden ancestors as a menu. It styles as
@@ -25,7 +25,7 @@ type Breadcrumb struct {
 	OnNavigate func(i int)
 }
 
-// breadcrumbSize is the text size, shadcn's text-sm.
+// breadcrumbSize is the text size.
 const breadcrumbSize = 14
 
 // minCollapsed is the fewest items a collapsed path shows: the first

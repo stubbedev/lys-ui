@@ -190,9 +190,9 @@ func TestCalendarNamesSwap(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnCalendar pins a single calendar and a two-month
+// TestGoldenCalendarRange pins a single calendar and a two-month
 // range, in both palettes.
-func TestGoldenShadcnCalendar(t *testing.T) {
+func TestGoldenCalendarRange(t *testing.T) {
 	face := goldenFace(t)
 	for _, tc := range []struct {
 		name string
@@ -209,7 +209,7 @@ func TestGoldenShadcnCalendar(t *testing.T) {
 			rng.SetMonths(2)
 			rng.SetRange(Date{2026, time.September, 24}, Date{2026, time.October, 6})
 			col := NewBox(Column, 24, 0).Append(single, false).Append(rng, false)
-			NewGolden(t, col, "shadcn-calendar-"+tc.name, goldenTheme(tc.th))
+			NewGolden(t, col, "calendar-"+tc.name, goldenTheme(tc.th))
 		})
 	}
 }

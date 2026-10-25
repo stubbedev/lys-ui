@@ -160,9 +160,9 @@ func TestAccessibleNameWins(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnNavigation pins the breadcrumb, full and collapsed,
+// TestGoldenNavigation pins the breadcrumb, full and collapsed,
 // and the pagination, in both palettes.
-func TestGoldenShadcnNavigation(t *testing.T) {
+func TestGoldenNavigation(t *testing.T) {
 	face := goldenFace(t)
 	for _, tc := range []struct {
 		name string
@@ -177,7 +177,7 @@ func TestGoldenShadcnNavigation(t *testing.T) {
 			long.SetMaxItems(3)
 			col.Append(long, false)
 			col.Append(NewPagination(face, 10, 5), false)
-			NewGolden(t, col, "shadcn-navigation-"+tc.name, goldenTheme(tc.th), goldenFrame(520, 150))
+			NewGolden(t, col, "navigation-"+tc.name, goldenTheme(tc.th), goldenFrame(520, 150))
 		})
 	}
 }

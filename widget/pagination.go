@@ -7,7 +7,7 @@ import (
 	"github.com/stubbedev/lys-ui/render"
 )
 
-// Pagination steps through numbered pages (shadcn/ui's Pagination):
+// Pagination steps through numbered pages:
 // Previous, the page links around the current one with the first and
 // last always shown and ellipses for the gaps, and Next. Pages count
 // from 1. It styles as the `pagination` element: each link a
@@ -32,7 +32,7 @@ type Pagination struct {
 	OnPageChanged func(page int)
 }
 
-// paginationSize is the text size, shadcn's text-sm.
+// paginationSize is the text size.
 const paginationSize = 14
 
 // NewPagination returns a pagination over count pages at page, with

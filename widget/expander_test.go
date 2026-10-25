@@ -268,7 +268,7 @@ func TestExpanderTitleAndArrowNodes(t *testing.T) {
 	}
 }
 
-// TestGoldenExpander pins shadcn's Collapsible trigger: the title at
+// TestGoldenExpander pins the collapsible trigger: the title at
 // the start and the chevron at the end, down when closed, up when open.
 func TestGoldenExpander(t *testing.T) {
 	t.Cleanup(anim.SetInstant(true))

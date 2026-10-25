@@ -106,9 +106,9 @@ func TestAccordionKeyboard(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnAccordion pins the accordion with its middle item
+// TestGoldenAccordion pins the accordion with its middle item
 // open, in both palettes.
-func TestGoldenShadcnAccordion(t *testing.T) {
+func TestGoldenAccordion(t *testing.T) {
 	face := goldenFace(t)
 	for _, tc := range []struct {
 		name string
@@ -130,7 +130,7 @@ func TestGoldenShadcnAccordion(t *testing.T) {
 				a.Append(NewAccordionItem(face, s[0], body))
 			}
 			a.Items()[1].SetOpen(true)
-			NewGolden(t, a, "shadcn-accordion-"+tc.name, goldenTheme(tc.th), goldenFrame(400, 200))
+			NewGolden(t, a, "accordion-"+tc.name, goldenTheme(tc.th), goldenFrame(400, 200))
 		})
 	}
 }

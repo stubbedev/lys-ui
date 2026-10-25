@@ -170,8 +170,8 @@ func TestMenuHoverHookAndRowBounds(t *testing.T) {
 	}
 }
 
-// A separator is a thin row, its rule 4px from the rows either side as
-// in shadcn's menus; it took a full item band, leaving a row-high gap
+// A separator is a thin row, its rule 4px from the rows either side;
+// it took a full item band, leaving a row-high gap
 // in every menu (#281). Hit-testing below it still lands on the row
 // drawn there, and the rows sit inside the menu's own border.
 func TestMenuSeparatorIsAThinRow(t *testing.T) {

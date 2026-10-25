@@ -23,10 +23,10 @@ type DatePreset struct {
 	From, To Date
 }
 
-// datePickerWidth is the trigger's width, shadcn's w-[240px].
+// datePickerWidth is the trigger's width.
 const datePickerWidth = 240
 
-// DatePicker is a date field (shadcn/ui's Date Picker): an outline
+// DatePicker is a date field: an outline
 // button showing the picked date - or range - formatted for the
 // locale, that opens a Calendar in a popover. A single-date picker
 // closes on a pick; a range picker shows two months and closes once

@@ -133,9 +133,9 @@ func TestDatePickerRejectsBadTimes(t *testing.T) {
 	p.SetTime(TimeOfDay{24, 0})
 }
 
-// TestGoldenShadcnDatePicker pins the trigger empty and picked, and the
+// TestGoldenDatePicker pins the trigger empty and picked, and the
 // open range popover with presets and two months, in both palettes.
-func TestGoldenShadcnDatePicker(t *testing.T) {
+func TestGoldenDatePicker(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		th   *Theme
@@ -155,7 +155,7 @@ func TestGoldenShadcnDatePicker(t *testing.T) {
 			cal.SetToday(Date{2026, time.October, 2})
 			col := NewBox(Column, 12, 0)
 			col.Append(empty, false).Append(picked, false).Append(rng, false).Append(host.popovers[0], false)
-			NewGolden(t, col, "shadcn-datepicker-"+tc.name, goldenTheme(tc.th))
+			NewGolden(t, col, "datepicker-"+tc.name, goldenTheme(tc.th))
 		})
 	}
 }

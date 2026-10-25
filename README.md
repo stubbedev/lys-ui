@@ -8,7 +8,7 @@
   A pure-Go (no cgo) widget toolkit for Wayland, built as a
   feature-complete counterpart of <a href="https://relm4.org">relm4</a>: a component
   framework with typed messages, a retained widget tree with
-  GTK4/libadwaita-class widgets and every shadcn/ui component,
+  GTK4/libadwaita-class widgets and a modern component set,
   xdg-shell and layer-shell windows, a GTK-flavored CSS engine over a
   typed palette, the desktop's portals and protocols, and an event loop
   that idles at 0% CPU.
@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="https://stubbedev.github.io/lys-ui/components/card.png" width="380" alt="A shadcn/ui card in lys-ui">
+  <img src="https://stubbedev.github.io/lys-ui/components/card.png" width="380" alt="A card in lys-ui">
 </p>
 
 The [documentation site](https://stubbedev.github.io/lys-ui/) shows a
@@ -187,6 +187,7 @@ toolchain. Pushing a `v*` tag releases `lys-ui-hello`, `lys-ui-bar` and
 | Command | What it shows |
 | --- | --- |
 | `cmd/lys-ui-hello` | the showcase as a component: core widgets, a context menu on typed actions, tooltips, Tab focus, drag-to-move |
+| `cmd/lys-ui-gallery` | every component in one window, both palettes; `-shots` screenshots each for the docs site |
 | `cmd/lys-ui-bar` | a layer-shell top bar repainting only what changed each second |
 | `cmd/lys-ui-panel` | a right-anchored layer-shell panel with live widgets |
 | `cmd/lys-ui-launcher` | a launcher: a keyboard-exclusive overlay, a filtered app grid, live toplevel thumbnails through `capture` |

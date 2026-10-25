@@ -1,6 +1,6 @@
 # The documentation site on GitHub Pages: VitePress over docs/, with a
-# screenshot of every shadcn component taken fresh from the code on
-# each push. The shots run the gallery's -shots mode on a private
+# screenshot of every component taken fresh from the code on each
+# push. The shots run the gallery's -shots mode on a private
 # headless sway inside the flake's dev shell (just docshots), the same
 # environment the CI headless gate uses, so the site never shows a
 # stale widget.

@@ -30,7 +30,7 @@ func (c OTPCharset) accept(r rune) (rune, bool) {
 	return 0, false
 }
 
-// InputOTP is a one-time-code input (shadcn/ui's InputOTP): a fixed
+// InputOTP is a one-time-code input: a fixed
 // number of slots in groups, one character each, the groups split by
 // a dash. It takes the focus as one field: typing fills the active
 // slot and advances, Backspace and Delete clear, Left, Right, Home and
@@ -53,7 +53,7 @@ type InputOTP struct {
 	OnComplete func(code string)
 }
 
-// otpSlotSize is a slot's side, shadcn's size-9.
+// otpSlotSize is a slot's side.
 const otpSlotSize = 36
 
 // NewInputOTP returns an empty code input of the groups' slot counts:

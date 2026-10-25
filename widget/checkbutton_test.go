@@ -127,7 +127,7 @@ func TestCheckButtonChild(t *testing.T) {
 	}
 }
 
-// The theme spaces the child 8px after the check, shadcn's gap-2, and
+// The theme spaces the child 8px after the check, and
 // the first measure already sees `checkbutton > check` rules: the check
 // is linked when the checkbox is built, not when it is arranged.
 func TestCheckButtonGapAndFirstMeasure(t *testing.T) {

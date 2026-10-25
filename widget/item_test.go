@@ -6,10 +6,10 @@ import (
 	"github.com/stubbedev/lys-ui/widget/css"
 )
 
-// TestGoldenShadcnItemButtonGroup pins the item variants and sizes,
+// TestGoldenItemButtonGroup pins the item variants and sizes,
 // and joined button groups - horizontal, nested with a separator, and
 // vertical - in both palettes.
-func TestGoldenShadcnItemButtonGroup(t *testing.T) {
+func TestGoldenItemButtonGroup(t *testing.T) {
 	face := goldenFace(t)
 	for _, tc := range []struct {
 		name string
@@ -43,7 +43,7 @@ func TestGoldenShadcnItemButtonGroup(t *testing.T) {
 			vertical.SetVertical(true)
 			row.AppendAligned(vertical, false, AlignStart)
 			col.Append(row, false)
-			NewGolden(t, col, "shadcn-item-"+tc.name, goldenTheme(tc.th), goldenFrame(640, 470))
+			NewGolden(t, col, "item-"+tc.name, goldenTheme(tc.th), goldenFrame(640, 470))
 		})
 	}
 }
@@ -52,8 +52,8 @@ func TestGoldenShadcnItemButtonGroup(t *testing.T) {
 // around them (#265).
 func TestItemGroupSeparators(t *testing.T) {
 	face := goldenFace(t)
-	g := NewItemGroup(NewItem(face, "shadcn", "shadcn@vercel.com"), NewItem(face, "maxleiter", "maxleiter@vercel.com"))
-	g.Append(NewItem(face, "evilrabbit", "evilrabbit@vercel.com"))
+	g := NewItemGroup(NewItem(face, "ada", "ada@example.com"), NewItem(face, "maxleiter", "maxleiter@example.com"))
+	g.Append(NewItem(face, "evilrabbit", "evilrabbit@example.com"))
 	kids := g.box.Children()
 	seps := 0
 	for i, k := range kids {
@@ -74,9 +74,9 @@ func TestGoldenItemGroup(t *testing.T) {
 	face := goldenFace(t)
 	for _, shot := range bothPalettes("itemgroup") {
 		g := NewItemGroup(
-			NewItem(face, "shadcn", "shadcn@vercel.com"),
-			NewItem(face, "maxleiter", "maxleiter@vercel.com"),
-			NewItem(face, "evilrabbit", "evilrabbit@vercel.com"),
+			NewItem(face, "ada", "ada@example.com"),
+			NewItem(face, "maxleiter", "maxleiter@example.com"),
+			NewItem(face, "evilrabbit", "evilrabbit@example.com"),
 		)
 		NewGolden(t, g, shot.name, goldenTheme(shot.th), goldenFrame(320, 250))
 	}

@@ -63,10 +63,10 @@ func TestChartDataAndSummary(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnChart pins every kind - bars grouped and stacked with
+// TestGoldenChart pins every kind - bars grouped and stacked with
 // a tooltip, areas, lines, a donut, a radar and radial bars - in both
 // palettes.
-func TestGoldenShadcnChart(t *testing.T) {
+func TestGoldenChart(t *testing.T) {
 	face := goldenFace(t)
 	for _, tc := range []struct {
 		name string
@@ -92,7 +92,7 @@ func TestGoldenShadcnChart(t *testing.T) {
 			for i, c := range []*Chart{bar, stacked, area, line, donut, radar, radial} {
 				grid.Attach(cell(c), i%2, i/2, 1, 1)
 			}
-			NewGolden(t, grid, "shadcn-chart-"+tc.name, goldenTheme(tc.th),
+			NewGolden(t, grid, "chart-"+tc.name, goldenTheme(tc.th),
 				goldenAfterArrange(func() {
 					plot := bar.plot()
 					bar.HoverMove(Point{X: plot.X + plot.W/6 + 4, Y: plot.Y + 20})

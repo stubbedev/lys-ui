@@ -7,7 +7,7 @@ import (
 	"github.com/stubbedev/lys-ui/widget/css"
 )
 
-// ItemVariant picks an Item's look, shadcn/ui's variants.
+// ItemVariant picks an Item's look.
 type ItemVariant uint8
 
 // The item variants.
@@ -23,7 +23,7 @@ const (
 // itemClasses are the variants' classes on the item element.
 var itemClasses = [...]string{ItemDefault: "", ItemOutline: css.Outline, ItemMuted: css.Muted}
 
-// Item is a content row (shadcn/ui's Item): media - an icon on a muted
+// Item is a content row: media - an icon on a muted
 // tile, an avatar - then a title over a description, then actions, for
 // lists and cards. Its text and media update in place, so a live list
 // reconciles rows instead of rebuilding them, and SetOnActivate makes
@@ -167,7 +167,7 @@ func (it *Item) SetVariant(v ItemVariant) {
 	it.variant = v
 }
 
-// SetSmall switches to the small size, shadcn's size="sm".
+// SetSmall switches to the small size.
 func (it *Item) SetSmall(on bool) {
 	if on {
 		it.AddClass(css.Small)
@@ -176,11 +176,10 @@ func (it *Item) SetSmall(on bool) {
 	}
 }
 
-// ButtonGroup joins buttons into one control (shadcn/ui's Button
-// Group): side by side or stacked, only the outer corners rounded and
-// the inner borders shared, with SetSeparator lines between and groups
-// nesting in groups. It styles as the `buttongroup` element, .vertical
-// when stacked.
+// ButtonGroup joins buttons into one control: side by side or stacked,
+// only the outer corners rounded and the inner borders shared, with
+// SetSeparator lines between and groups nesting in groups. It styles as
+// the `buttongroup` element, .vertical when stacked.
 type ButtonGroup struct {
 	composite
 	box *Box
@@ -210,7 +209,7 @@ func (g *ButtonGroup) SetVertical(on bool) {
 }
 
 // Append adds w (a button, a separator, a nested group) at the end.
-// Nested groups sit apart, shadcn's gap-2 between them.
+// Nested groups sit apart.
 func (g *ButtonGroup) Append(w Widget) {
 	if _, ok := w.(*ButtonGroup); ok {
 		g.box.SetSpacing(8)
@@ -218,7 +217,7 @@ func (g *ButtonGroup) Append(w Widget) {
 	g.box.Append(w, false)
 }
 
-// ItemGroup stacks Items into one list (shadcn/ui's Item Group), a
+// ItemGroup stacks Items into one list, a
 // separator between each item and the next. It styles as the
 // `itemgroup` element.
 type ItemGroup struct {

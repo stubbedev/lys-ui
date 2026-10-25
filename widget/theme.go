@@ -51,15 +51,15 @@ type Theme struct {
 	// code spans. Leave it unset and MutedColor derives it from
 	// Surface.
 	Muted Color
-	// Secondary fills the secondary button and badge, shadcn's
-	// --secondary: a fill of its own, so an app that paints panels in
-	// Surface can keep the button visible on them. Leave it unset and
-	// SecondaryColor derives it from MutedColor.
+	// Secondary fills the secondary button and badge: a fill of its
+	// own, so an app that paints panels in Surface can keep the
+	// button visible on them. Leave it unset and SecondaryColor
+	// derives it from MutedColor.
 	Secondary Color
 	// Sidebar fills an application sidebar. Leave it unset and
 	// SidebarColor derives it from Surface.
 	Sidebar Color
-	// Chart colors a chart's series, shadcn's chart-1 to chart-5; an
+	// Chart colors a chart's series, chart-1 to chart-5; an
 	// unset one is ChartColor's fallback (Accent).
 	Chart [5]Color
 	// Input strokes the borders of text fields and other inputs.
@@ -143,8 +143,8 @@ func SetTheme(t *Theme) {
 // Tests swap it to capture warnings.
 var themeWarn = func(msg string) { logutil.L().Warn(msg) }
 
-// DarkTheme returns the default dark palette: shadcn/ui v4's
-// neutral, a light primary on near-black, translucent hairlines.
+// DarkTheme returns the default dark palette: a neutral one, a light
+// primary on near-black, translucent hairlines.
 func DarkTheme() *Theme {
 	return &Theme{
 		Bg:             render.RGB(0x0A, 0x0A, 0x0A),
@@ -177,8 +177,8 @@ func DarkTheme() *Theme {
 	}
 }
 
-// LightTheme returns the default light palette: shadcn/ui v4's
-// neutral, a near-black primary on white.
+// LightTheme returns the default light palette: a neutral one, a
+// near-black primary on white.
 func LightTheme() *Theme {
 	return &Theme{
 		Bg:             render.RGB(0xFF, 0xFF, 0xFF),

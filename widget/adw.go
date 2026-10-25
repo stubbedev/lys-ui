@@ -158,11 +158,11 @@ func (c *ButtonContent) rebuild() {
 	c.InvalidateLayout()
 }
 
-// StatusPage is the empty/error state page (adw StatusPage, shadcn/ui's
-// Empty): an icon on a muted tile, a title, a wrapped description, and
-// an optional content area (a call-to-action button), centered in
-// whatever space it gets. It styles as the `statuspage` element with
-// .icon, .title and .description parts.
+// StatusPage is the empty/error state page (adw StatusPage): an icon on
+// a muted tile, a title, a wrapped description, and an optional content
+// area (a call-to-action button), centered in whatever space it gets.
+// It styles as the `statuspage` element with .icon, .title and
+// .description parts.
 type StatusPage struct {
 	composite
 	column  *Box
@@ -173,7 +173,7 @@ type StatusPage struct {
 	content *Box
 }
 
-// statusPageWidth is the column's widest, shadcn's max-w-sm.
+// statusPageWidth is the column's widest.
 const statusPageWidth = 384
 
 // NewStatusPage returns the page; empty icon or description drops it.
@@ -290,7 +290,7 @@ func (b *Banner) SetRevealed(on bool) { b.reveal.SetRevealed(on) }
 // Revealed reports whether the banner is showing.
 func (b *Banner) Revealed() bool { return b.reveal.Revealed() }
 
-// Avatar is the round portrait (shadcn/ui's Avatar): an image cropped
+// Avatar is the round portrait: an image cropped
 // to a circle, or the fallback of the name's initials on the muted
 // fill. It styles as the `avatar` element: background-color is the
 // fallback's fill and color its initials.

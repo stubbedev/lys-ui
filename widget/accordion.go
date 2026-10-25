@@ -5,7 +5,7 @@ import "github.com/stubbedev/lys-ui/render"
 // AccordionMode is how many of an accordion's items may be open.
 type AccordionMode uint8
 
-// The accordion modes, shadcn/ui's type.
+// The accordion modes.
 const (
 	// AccordionSingle keeps at most one item open: opening one closes
 	// the others.
@@ -14,18 +14,18 @@ const (
 	AccordionMultiple
 )
 
-// accordionDuration is the content's reveal, shadcn's accordion-down.
+// accordionDuration is the content's reveal.
 const accordionDuration = defaultRevealDuration
 
-// Accordion is a vertical stack of collapsible sections (shadcn/ui's
-// Accordion): each item a trigger row - the title, and a chevron that
-// turns over as the item opens - above content whose height animates
-// open and closed. In AccordionSingle mode opening an item closes the
-// open one, and SetCollapsible decides whether the open item may close
-// leaving none open. Up and Down move focus between the triggers, Home
-// and End to the first and last. It styles as the `accordion` element,
-// each item an .item (:checked while open) holding a button.trigger
-// and its .content.
+// Accordion is a vertical stack of collapsible sections: each item a
+// trigger row - the title, and a chevron that turns over as the item
+// opens - above content whose height animates open and closed. In
+// AccordionSingle mode opening an item closes the open one, and
+// SetCollapsible decides whether the open item may close leaving none
+// open. Up and Down move focus between the triggers, Home and End to
+// the first and last. It styles as the `accordion` element, each item
+// an .item (:checked while open) holding a button.trigger and its
+// .content.
 type Accordion struct {
 	composite
 	column      *Box
@@ -49,7 +49,7 @@ type AccordionItem struct {
 }
 
 // NewAccordion returns an empty accordion in mode; a single-mode one
-// starts not collapsible, as shadcn's does.
+// starts not collapsible.
 func NewAccordion(mode AccordionMode) *Accordion {
 	a := &Accordion{column: NewBox(Column, 0, 0), mode: mode}
 	a.SetElement("accordion")

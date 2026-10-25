@@ -24,8 +24,8 @@ const (
 type ProgressBar struct {
 	meter
 	// Fill and Trough color the bar; zero is the theme's accent (or
-	// the accent-color) and, shadcn's Progress track, the fill at a
-	// fifth of its opacity, under the trough and progress rules.
+	// the accent-color) and, for the trough, the fill at a fifth of
+	// its opacity, under the trough and progress rules.
 	Fill, Trough render.Color
 	// PulseStep is how far one Pulse moves the block (GTK pulse-step).
 	PulseStep float64

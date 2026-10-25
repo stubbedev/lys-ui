@@ -5,7 +5,7 @@ import (
 	"github.com/stubbedev/lys-ui/widget/css"
 )
 
-// BadgeVariant picks a badge's look, the shadcn/ui variants.
+// BadgeVariant picks a badge's look.
 type BadgeVariant uint8
 
 // The badge variants.
@@ -24,7 +24,7 @@ const (
 var badgeClasses = [...]string{BadgeDefault: "", BadgeSecondary: css.Secondary, BadgeDestructive: css.Destructive, BadgeOutline: css.Outline}
 
 // Badge is a small inline pill label - a status, a count, a tag - with
-// an optional leading icon (shadcn/ui's Badge). It styles as the
+// an optional leading icon. It styles as the
 // `badge` element with the variant's class.
 type Badge struct {
 	composite
@@ -79,7 +79,7 @@ func (b *Badge) SetIcon(w Widget) {
 	b.InvalidateLayout()
 }
 
-// NewKbd draws one key as a keycap (shadcn/ui's Kbd): a .keycap label.
+// NewKbd draws one key as a keycap: a .keycap label.
 func NewKbd(face render.Font, key string) *Label {
 	l := NewLabel(requireFace("widget.NewKbd", face), 12, key, 0)
 	l.AddClass(css.Keycap)
@@ -87,8 +87,8 @@ func NewKbd(face render.Font, key string) *Label {
 	return l
 }
 
-// NewKbdGroup draws a key combination as keycaps side by side
-// (shadcn/ui's KbdGroup): NewKbdGroup(face, "Ctrl", "Shift", "P").
+// NewKbdGroup draws a key combination as keycaps side by side:
+// NewKbdGroup(face, "Ctrl", "Shift", "P").
 func NewKbdGroup(face render.Font, keys ...string) *Box {
 	row := NewBox(Row, 3, 0)
 	for _, k := range keys {
@@ -97,9 +97,9 @@ func NewKbdGroup(face render.Font, keys ...string) *Box {
 	return row
 }
 
-// NewSkeleton is a width x height placeholder block that pulses while content
-// loads (shadcn/ui's Skeleton): the `skeleton` element, a muted
-// rounded fill whose pulse stops under reduced motion.
+// NewSkeleton is a width x height placeholder block that pulses while
+// content loads: the `skeleton` element, a muted rounded fill whose
+// pulse stops under reduced motion.
 func NewSkeleton(width, height int) *Box {
 	b := NewBox(Column, 0, 0)
 	b.SetElement("skeleton")
@@ -108,7 +108,7 @@ func NewSkeleton(width, height int) *Box {
 }
 
 // NewBulletList is a typography list: each item a wrapped label behind
-// a bullet, indented like shadcn/ui's ul.
+// a bullet, indented.
 func NewBulletList(face render.Font, sizePx float64, items ...string) *Box {
 	face = requireFace("widget.NewBulletList", face)
 	list := NewBox(Column, 6, 0)

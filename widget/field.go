@@ -9,7 +9,7 @@ import (
 // control.
 type FieldOrientation uint8
 
-// The field orientations, shadcn/ui's.
+// The field orientations.
 const (
 	// FieldVertical stacks the label, the control, the description and
 	// the error.
@@ -22,14 +22,14 @@ const (
 	FieldResponsive
 )
 
-// fieldResponsiveMin is where a responsive field turns horizontal,
-// shadcn's @md container width.
+// fieldResponsiveMin is where a responsive field turns horizontal: a
+// 448px container.
 const fieldResponsiveMin = 448
 
-// fieldTextSize is the label and help text size, shadcn's text-sm.
+// fieldTextSize is the label and help text size.
 const fieldTextSize = 14
 
-// Field is a labeled form control (shadcn/ui's Field): a label, the
+// Field is a labeled form control: a label, the
 // control, an optional description and an error message, which turns
 // the field invalid - the control takes the .error class and the label
 // the destructive color. The label also names the control for
@@ -198,9 +198,9 @@ func (f *Field) Arrange(r render.Rect) {
 	f.composite.Arrange(r)
 }
 
-// FieldSet groups related fields under a legend (shadcn/ui's
-// FieldSet): the legend, an optional description, and the fields. It
-// styles as the `fieldset` element with a .legend label.
+// FieldSet groups related fields under a legend: the legend, an
+// optional description, and the fields. It styles as the `fieldset`
+// element with a .legend label.
 type FieldSet struct {
 	composite
 	box    *Box
@@ -239,8 +239,8 @@ func (s *FieldSet) SetDescription(text string) {
 // Add appends a field (or any widget) to the set.
 func (s *FieldSet) Add(w Widget) { s.fields.Append(w, false) }
 
-// NewFieldGroup returns the column fields stack in (shadcn/ui's
-// FieldGroup), styled as the `fieldgroup` element.
+// NewFieldGroup returns the column fields stack in, styled as the
+// `fieldgroup` element.
 func NewFieldGroup() *Box {
 	g := NewBox(Column, 28, 0)
 	g.SetElement("fieldgroup")

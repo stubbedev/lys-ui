@@ -35,17 +35,16 @@ const navLinkWidth = 240
 // navMenuIndicator is the caret's half width under the open trigger.
 const navMenuIndicator = 6
 
-// NavigationMenu is a site's top navigation (shadcn/ui's Navigation
-// Menu): a row of triggers whose panels open in one shared viewport
-// under the menu, so moving between triggers swaps the panel in place
-// and the viewport resizes to it, while a caret under the open trigger
-// slides along. Resting the pointer on a trigger opens its panel, and
-// it stays open while the pointer is on the menu or the panel; Enter,
-// Space or Down on a focused trigger opens it with the keyboard in the
-// panel, Left and Right step between the triggers, and Escape closes.
-// It styles as the `navigationmenu` element: button.trigger rows
-// (:checked while open), the .viewport panel box, and the panels'
-// button.link entries.
+// NavigationMenu is a site's top navigation: a row of triggers whose
+// panels open in one shared viewport under the menu, so moving between
+// triggers swaps the panel in place and the viewport resizes to it,
+// while a caret under the open trigger slides along. Resting the
+// pointer on a trigger opens its panel, and it stays open while the
+// pointer is on the menu or the panel; Enter, Space or Down on a
+// focused trigger opens it with the keyboard in the panel, Left and
+// Right step between the triggers, and Escape closes. It styles as the
+// `navigationmenu` element: button.trigger rows (:checked while open),
+// the .viewport panel box, and the panels' button.link entries.
 type NavigationMenu struct {
 	composite
 	face     render.Font
@@ -296,8 +295,7 @@ func (m *NavigationMenu) Paint(cv *render.Canvas) {
 }
 
 // NewNavigationLinks is a navigation panel: a grid of cols columns of
-// links, each its title over a muted description, shadcn's
-// ListItem.
+// links, each its title over a muted description.
 func NewNavigationLinks(face render.Font, cols int, links ...NavigationLink) *Grid {
 	face = requireFace("widget.NewNavigationLinks", face)
 	g := NewGrid(8, 8)

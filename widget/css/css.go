@@ -76,7 +76,7 @@ const (
 	Title2 = "title-2"
 	Title3 = "title-3"
 	Title4 = "title-4"
-	// The typography classes, shadcn/ui's: display headings H1 to H4,
+	// The typography classes: display headings H1 to H4,
 	// Lead (a large muted intro), LargeText, SmallText, Muted
 	// (secondary text), Blockquote and InlineCode, for labels.
 	H1         = "h1"
@@ -97,7 +97,7 @@ const (
 	Warning = "warning"
 )
 
-// Button variants and sizes, the shadcn/ui names: a plain button is
+// Button variants and sizes: a plain button is
 // the secondary variant, SuggestedAction the default (primary) one.
 const (
 	// Secondary is the quiet filled button, the plain button's look.
@@ -111,9 +111,9 @@ const (
 	// Small and Large step the control height down and up.
 	Small = "small"
 	Large = "large"
-	// Icon makes a button a square for an icon alone, 36px, or 32px and
-	// 40px with Small and Large (shadcn's size="icon", icon-sm,
-	// icon-lg); it composes with every variant.
+	// Icon makes a button a square for an icon alone, 36px, or 32px
+	// and 40px with Small and Large; it composes with every
+	// variant.
 	Icon = "icon"
 )
 
@@ -152,7 +152,7 @@ const (
 	ShadeColor           = "shade_color"
 	BordersColor         = "borders"
 
-	// The shadcn tokens libadwaita has no name for: the muted fill,
+	// The tokens libadwaita has no name for: the muted fill,
 	// input borders, the focus ring and the five chart colors
 	// (--chart-1 to --chart-5).
 	MutedBgColor     = "muted_bg_color"

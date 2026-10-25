@@ -21,10 +21,10 @@ func TestInputGroupOwnsTheFocusRing(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnInputGroup pins groups with a leading icon, trailing
+// TestGoldenInputGroup pins groups with a leading icon, trailing
 // text, a trailing button, a focused entry and an invalid group, in
 // both palettes.
-func TestGoldenShadcnInputGroup(t *testing.T) {
+func TestGoldenInputGroup(t *testing.T) {
 	face := goldenFace(t)
 	for _, tc := range []struct {
 		name string
@@ -52,7 +52,7 @@ func TestGoldenShadcnInputGroup(t *testing.T) {
 			bad.Prepend(NewLabel(face, 14, "@", 0))
 			bad.AddClass(css.Error)
 			col.Append(bad, false)
-			NewGolden(t, col, "shadcn-inputgroup-"+tc.name, goldenTheme(tc.th), goldenFrame(360, 140), goldenFocus(search))
+			NewGolden(t, col, "inputgroup-"+tc.name, goldenTheme(tc.th), goldenFrame(360, 140), goldenFocus(search))
 		})
 	}
 }

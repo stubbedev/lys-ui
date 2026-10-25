@@ -5,8 +5,7 @@ that imports the toolkit.
 
 ## Geist-Variable.ttf, GeistMono-Variable.ttf
 
-Geist and Geist Mono, the families shadcn/ui is designed around, as
-variable fonts (wght 100-900).
+Geist and Geist Mono, as variable fonts (wght 100-900).
 
 - Source: https://github.com/vercel/geist-font at
   75d647056bcbd9eaba3a14b1b58290d0692685d6,

@@ -23,13 +23,13 @@ const (
 	bodyPadX = 2
 )
 
-// Expander is a collapsible section (shadcn/ui's Collapsible): a
-// header row (the title, and a chevron at the end turning from down to
-// up) toggles the child beneath it. Toggling animates the height over
-// the animation clock, with the chevron turning on the same progress, and the open state is remembered — a collapsed
-// expander reopens to where it was, and state survives being hidden
-// by a parent. Children exposes the child only while open, so focus
-// traversal never lands inside a closed section.
+// Expander is a collapsible section: a header row (the title, and a
+// chevron at the end turning from down to up) toggles the child beneath
+// it. Toggling animates the height over the animation clock, with the
+// chevron turning on the same progress, and the open state is
+// remembered — a collapsed expander reopens to where it was, and state
+// survives being hidden by a parent. Children exposes the child only
+// while open, so focus traversal never lands inside a closed section.
 type Expander struct {
 	node
 	face   render.Font

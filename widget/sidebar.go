@@ -10,7 +10,7 @@ import (
 // SidebarCollapse is how a Sidebar collapses on a wide window.
 type SidebarCollapse uint8
 
-// The collapse modes, shadcn's collapsible.
+// The collapse modes.
 const (
 	// SidebarOffcanvas slides the sidebar away entirely.
 	SidebarOffcanvas SidebarCollapse = iota
@@ -21,13 +21,13 @@ const (
 )
 
 const (
-	// sidebarWidth, sidebarRail and sidebarMobile are shadcn's
-	// 16rem, 3rem and the off-canvas 18rem.
+	// sidebarWidth, sidebarRail and sidebarMobile are the docked,
+	// the icon-rail and the off-canvas widths.
 	sidebarWidth  = 256
 	sidebarRail   = 48
 	sidebarMobile = 288
-	// sidebarNarrow is the width below which the sidebar is off-canvas,
-	// shadcn's md breakpoint.
+	// sidebarNarrow is the width below which the sidebar is
+	// off-canvas.
 	sidebarNarrow = 768
 	// sidebarSlide is the expand and collapse.
 	sidebarSlide = 200 * time.Millisecond
@@ -69,13 +69,13 @@ type sidebarRow struct {
 // panel's edge.
 const sidebarHandle = 3
 
-// Sidebar is an application sidebar (shadcn/ui's Sidebar) beside
+// Sidebar is an application sidebar beside
 // content: a header, groups of items with icons, badges and submenus,
 // and a footer. On a wide window it docks beside the content and
 // Toggle collapses it - off canvas or to an icon rail - with a slide;
-// below shadcn's md width it hides and Toggle opens it as a sheet
+// below its narrow width it hides and Toggle opens it as a sheet
 // over the content. Picking an item makes it the active one. Bind
-// ToggleAction to Ctrl+B, shadcn's shortcut, with an accelerator; the
+// ToggleAction to Ctrl+B with an accelerator; the
 // Trigger button toggles it too. It styles as the `sidebar` element:
 // the .panel, .group-label labels, button.item rows (:checked while
 // active), .badge labels and .sub submenus.
@@ -166,7 +166,7 @@ func (s *Sidebar) AddGroup(label string, items ...SidebarItem) {
 }
 
 // AddCollapsibleGroup appends a group whose label folds its items
-// (shadcn's collapsible SidebarGroup): clicking the label, or its
+// (a collapsible group): clicking the label, or its
 // chevron, shows and hides them, open to start with when open.
 func (s *Sidebar) AddCollapsibleGroup(label string, open bool, items ...SidebarItem) {
 	body := NewBox(Column, 2, 0)
@@ -282,7 +282,7 @@ func (s *Sidebar) SetActive(id string) bool {
 	return true
 }
 
-// SetWidth sets the expanded width, shadcn's 16rem (256px) by default.
+// SetWidth sets the expanded width, 256px by default.
 func (s *Sidebar) SetWidth(px int) {
 	s.openWidth = max(sidebarRail, px)
 	if s.expanded && s.slide == nil {
@@ -423,8 +423,8 @@ func (s *Sidebar) Toggle() {
 	s.SetExpanded(!s.expanded)
 }
 
-// ToggleAction is Toggle as an action, for an accelerator: shadcn
-// binds Ctrl+B.
+// ToggleAction is Toggle as an action, for an accelerator (Ctrl+B,
+// say).
 func (s *Sidebar) ToggleAction() Activatable { return NewAction("sidebar.toggle", s.Toggle) }
 
 // Trigger returns the button that toggles the sidebar, for the
@@ -457,7 +457,7 @@ func (s *Sidebar) setNarrow(narrow bool) {
 }
 
 // SetNarrowWidth moves the breakpoint below which the sidebar is off
-// canvas (shadcn's md, 768px, by default): the sidebar measures its
+// canvas (768px by default): the sidebar measures its
 // own width, so one inside a narrower region of a wide window wants a
 // lower one.
 func (s *Sidebar) SetNarrowWidth(w int) {

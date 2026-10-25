@@ -85,9 +85,9 @@ func TestNavigationMenuKeyboard(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnNavigationMenu pins the menu with its first panel
+// TestGoldenNavigationMenu pins the menu with its first panel
 // open and the panel itself, in both palettes.
-func TestGoldenShadcnNavigationMenu(t *testing.T) {
+func TestGoldenNavigationMenu(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		th   *Theme
@@ -98,7 +98,7 @@ func TestGoldenShadcnNavigationMenu(t *testing.T) {
 			m, host, _ := newTestNavMenu(t)
 			m.triggers[0].OnClick()
 			col := NewBox(Column, 8, 0).Append(m, false).Append(host.popovers[0], false)
-			NewGolden(t, col, "shadcn-navmenu-"+tc.name, goldenTheme(tc.th))
+			NewGolden(t, col, "navmenu-"+tc.name, goldenTheme(tc.th))
 		})
 	}
 }

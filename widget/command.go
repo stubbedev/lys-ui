@@ -61,19 +61,18 @@ func (r *commandRow) ClickAt(Point) {
 // commandListHeight caps the list, cmdk's max-h-[300px].
 const commandListHeight = 300
 
-// commandTextSize is the item text size, shadcn's text-sm.
+// commandTextSize is the item text size.
 const commandTextSize = 14
 
-// Command is a searchable list of actions (shadcn/ui's Command, after
-// cmdk): a search entry over grouped items that filters them fuzzily
-// as the query is typed, ranking the best matches first within each
-// group and the groups by their best, with an empty state when nothing
-// matches. Up, Down, Home and End move the highlight while the entry
-// keeps the focus; Enter or a click picks the highlighted item. It
-// works inline or as a popover's or dialog's content. It styles as the
-// `command` element: the .input row, .heading labels, .item rows
-// (:selected while highlighted), .shortcut labels, .separator lines and
-// the .empty label.
+// Command is a searchable list of actions: a search entry over grouped
+// items that filters them fuzzily as the query is typed, ranking the
+// best matches first within each group and the groups by their best,
+// with an empty state when nothing matches. Up, Down, Home and End move
+// the highlight while the entry keeps the focus; Enter or a click picks
+// the highlighted item. It works inline or as a popover's or dialog's
+// content. It styles as the `command` element: the .input row, .heading
+// labels, .item rows (:selected while highlighted), .shortcut labels,
+// .separator lines and the .empty label.
 type Command struct {
 	composite
 	face      render.Font

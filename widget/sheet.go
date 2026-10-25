@@ -13,7 +13,7 @@ type SheetSide uint8
 
 // The sheet sides.
 const (
-	// SheetRight slides in from the right edge, shadcn's default.
+	// SheetRight slides in from the right edge.
 	SheetRight SheetSide = iota
 	// SheetLeft slides in from the left edge.
 	SheetLeft
@@ -26,22 +26,22 @@ const (
 const (
 	// sheetHandle is a bottom sheet's drag strip at its top edge.
 	sheetHandle = 24
-	// sheetWidth caps a side sheet's width, shadcn's sm:max-w-sm; it
-	// takes at most three quarters of the widget below that.
+	// sheetWidth caps a side sheet's width; it takes at most three
+	// quarters of the widget below that.
 	sheetWidth = 384
-	// sheetDuration is the slide, shadcn's 300ms open.
+	// sheetDuration is the slide.
 	sheetDuration = 300 * time.Millisecond
 )
 
-// Sheet is a panel over content (shadcn/ui's Sheet, and adw's
-// BottomSheet as NewBottomSheet): SetOpen slides the panel in from its
-// side over a dimmed backdrop. A click on the backdrop and Escape close
-// it, and while it is open Tab stays inside the panel. A bottom sheet
-// carries a grab handle: dragging it down past a third of the sheet
-// dismisses it, a shorter drag springs back. Side and top sheets take
-// an optional header (SetHeader), footer (SetFooter) and a close button.
-// It styles as the `sheet` element; the panel as `.sheet-panel`, its
-// header's .title and .description.
+// Sheet is a panel over content (and adw's BottomSheet as
+// NewBottomSheet): SetOpen slides the panel in from its side over a
+// dimmed backdrop. A click on the backdrop and Escape close it, and
+// while it is open Tab stays inside the panel. A bottom sheet carries a
+// grab handle: dragging it down past a third of the sheet dismisses it,
+// a shorter drag springs back. Side and top sheets take an optional
+// header (SetHeader), footer (SetFooter) and a close button. It styles
+// as the `sheet` element; the panel as `.sheet-panel`, its header's
+// .title and .description.
 type Sheet struct {
 	composite
 	side  SheetSide
@@ -80,8 +80,7 @@ func NewSheet(content, body Widget, side SheetSide) *Sheet {
 }
 
 // NewBottomSheet returns a closed sheet sliding sheet up from the
-// bottom over content, with the grab handle (adw BottomSheet, shadcn's
-// Drawer).
+// bottom over content, with the grab handle (adw BottomSheet).
 func NewBottomSheet(content, sheet Widget) *Sheet { return NewSheet(content, sheet, SheetBottom) }
 
 // SetHeader puts a title and a description above the body, with a

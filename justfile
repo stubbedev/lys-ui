@@ -151,12 +151,12 @@ demo-headless LYS_UI_DEBUG="input,frame": test-env test-build
 glass:
     go run ./cmd/lys-ui-glass
 
-# Run the shadcn/ui gallery: every shadcn component lys-ui implements,
-# built with the ui builders; t toggles light and dark, Escape quits.
-shadcn:
-    go run ./cmd/lys-ui-shadcn
+# Run the component gallery: every component lys-ui implements, built
+# with the ui builders; Ctrl+T toggles light and dark, Escape quits.
+gallery:
+    go run ./cmd/lys-ui-gallery
 
-# Screenshot every shadcn gallery demo, overlay opened, in both
+# Screenshot every gallery demo, overlay opened, in both
 # palettes into dir: the gallery's -shots mode on a private headless
 # sway that floats its windows at the origin. The docs site shows them.
 docshots dir="docs/public/components":
@@ -168,7 +168,7 @@ docshots dir="docs/public/components":
     export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$env"
     # Scale 2, so the shots stay sharp on high-density screens.
     swaymsg -s "$(ls "$env"/sway-ipc.*.sock)" output '*' scale 2 >/dev/null || exit 1
-    go run ./cmd/lys-ui-shadcn -shots "{{dir}}"
+    go run ./cmd/lys-ui-gallery -shots "{{dir}}"
 
 # Run the application-model demo (lys-ui-multi): per-output bars,
 # on-demand windows, close-request veto, Escape quits.

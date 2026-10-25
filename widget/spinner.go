@@ -20,12 +20,12 @@ const (
 	spinnerWidth  = 2.0 / 24
 )
 
-// Spinner is an indeterminate activity indicator (shadcn/ui's Spinner,
-// lucide's Loader2): a rotating open ring in the text color, the
-// `spinner` element's color. The rotation is animation-clock driven — one frame
-// invalidation per step, and no timer at all unless the spinner is
-// both spinning and visible. A hidden or stopped spinner schedules no
-// wake, so an idle app with a parked spinner costs nothing.
+// Spinner is an indeterminate activity indicator (lucide's Loader2): a
+// rotating open ring in the text color, the `spinner` element's color.
+// The rotation is animation-clock driven — one frame invalidation per
+// step, and no timer at all unless the spinner is both spinning and
+// visible. A hidden or stopped spinner schedules no wake, so an idle
+// app with a parked spinner costs nothing.
 type Spinner struct {
 	node
 	size int

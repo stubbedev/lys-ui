@@ -135,7 +135,7 @@ const (
 	CalendarRange
 )
 
-// Calendar is a month grid (shadcn/ui's Calendar): the month title
+// Calendar is a month grid: the month title
 // between previous and next buttons, the weekday header, and the days
 // with the adjacent months' leading and trailing days muted. Today
 // takes the muted wash, a picked day the primary fill, and a range's

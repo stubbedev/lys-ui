@@ -1,6 +1,6 @@
 package widget
 
-// Form validates a column of fields (shadcn/ui's Form): each field
+// Form validates a column of fields: each field
 // added with a validator - a closure that reads its control's value
 // and returns the error message, or "" while it is valid. A field
 // shows its error once the focus leaves it, and Submit validates every

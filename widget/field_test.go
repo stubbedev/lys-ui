@@ -52,9 +52,9 @@ func TestFieldResponsive(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnField pins a field set with a valid, an invalid and
+// TestGoldenField pins a field set with a valid, an invalid and
 // a horizontal field, in both palettes.
-func TestGoldenShadcnField(t *testing.T) {
+func TestGoldenField(t *testing.T) {
 	face := goldenFace(t)
 	for _, tc := range []struct {
 		name string
@@ -75,7 +75,7 @@ func TestGoldenShadcnField(t *testing.T) {
 			news.SetDescription("Monthly product updates.")
 			news.SetOrientation(FieldHorizontal)
 			set.Add(news)
-			NewGolden(t, set, "shadcn-field-"+tc.name, goldenTheme(tc.th), goldenFrame(400, 380))
+			NewGolden(t, set, "field-"+tc.name, goldenTheme(tc.th), goldenFrame(400, 380))
 		})
 	}
 }

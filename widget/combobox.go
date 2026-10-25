@@ -16,17 +16,16 @@ type ComboboxOption[T comparable] struct {
 	Label string
 }
 
-// comboboxWidth is the trigger's and list's least width, shadcn's
-// w-[200px].
+// comboboxWidth is the trigger's and list's least width.
 const comboboxWidth = 200
 
-// Combobox picks typed values from a searchable list (shadcn/ui's
-// Combobox): an outline button showing the selection that opens a
-// Command of the options in a popover, a check trailing each selected
-// one. A single-choice combobox closes on a pick, and picking the
-// selected option clears it; a multiple-choice one toggles the picked
-// option and stays open. It styles as the `combobox` element: the
-// button.outline trigger and its .placeholder text.
+// Combobox picks typed values from a searchable list: an outline button
+// showing the selection that opens a Command of the options in a
+// popover, a check trailing each selected one. A single-choice combobox
+// closes on a pick, and picking the selected option clears it; a
+// multiple-choice one toggles the picked option and stays open. It
+// styles as the `combobox` element: the button.outline trigger and its
+// .placeholder text.
 type Combobox[T comparable] struct {
 	composite
 	face        render.Font

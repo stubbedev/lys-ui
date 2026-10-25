@@ -81,9 +81,9 @@ func TestComboboxRejectsUnknownValues(t *testing.T) {
 	c.SetSelected(framework(9))
 }
 
-// TestGoldenShadcnCombobox pins the trigger empty and with a pick, and
+// TestGoldenCombobox pins the trigger empty and with a pick, and
 // the open list with its check, in both palettes.
-func TestGoldenShadcnCombobox(t *testing.T) {
+func TestGoldenCombobox(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		th   *Theme
@@ -97,15 +97,15 @@ func TestGoldenShadcnCombobox(t *testing.T) {
 			picked.trigger.OnClick()
 			col := NewBox(Column, 12, 0)
 			col.Append(empty, false).Append(picked, false).Append(host.popovers[0], false)
-			NewGolden(t, col, "shadcn-combobox-"+tc.name, goldenTheme(tc.th), goldenFrame(220, 260))
+			NewGolden(t, col, "combobox-"+tc.name, goldenTheme(tc.th), goldenFrame(220, 260))
 		})
 	}
 }
 
 // An option's check trails its row, after the label, and the trigger
-// reads its placeholder in the button's own color: shadcn's combobox,
-// where the check sat in a leading slot that indented every option
-// and the placeholder was muted (#281).
+// reads its placeholder in the button's own color: the check sat in a
+// leading slot that indented every option, and the placeholder was
+// muted (#281).
 func TestComboboxCheckTrailsTheOption(t *testing.T) {
 	c, host := newTestCombobox(t)
 	c.trigger.OnClick()

@@ -4,11 +4,11 @@ import (
 	"github.com/stubbedev/lys-ui/render"
 )
 
-// MenuBar is the in-window primary navigation (#91, shadcn/ui's
-// Menubar): a bordered, rounded strip of root buttons, each opening
-// its menu below through the surface's host - the PopoverMenuBar
-// shape. It styles as the `menubar` element, its roots as
-// `menubar > box > button`, the root whose menu is open :checked.
+// MenuBar is the in-window primary navigation (#91): a bordered,
+// rounded strip of root buttons, each opening its menu below through
+// the surface's host - the PopoverMenuBar shape. It styles as the
+// `menubar` element, its roots as `menubar > box > button`, the root
+// whose menu is open :checked.
 //
 // Keyboard: F10 focuses the bar's first button when the app routes the
 // key to it - MenuBar implements KeyActionHandler for exactly that

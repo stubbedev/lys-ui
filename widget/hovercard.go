@@ -6,19 +6,19 @@ import (
 	"github.com/stubbedev/lys-ui/anim"
 )
 
-// The hover card's delays, shadcn's (Radix) defaults.
+// The hover card's delays.
 const (
 	hoverCardOpenDelay  = 700 * time.Millisecond
 	hoverCardCloseDelay = 300 * time.Millisecond
 )
 
-// HoverCard previews content beside a trigger (shadcn/ui's Hover
-// Card): resting the pointer on the trigger opens the card after a
-// delay, and it stays open while the pointer is on the trigger or the
-// card, closing a moment after it leaves both. Keyboard focus on the
-// trigger opens it the same way. The card takes no input grab: what
-// the user points at keeps the keyboard. It styles as the `hovercard`
-// element; the card's content as a .hovercard-content box.
+// HoverCard previews content beside a trigger: resting the pointer on
+// the trigger opens the card after a delay, and it stays open while the
+// pointer is on the trigger or the card, closing a moment after it
+// leaves both. Keyboard focus on the trigger opens it the same way. The
+// card takes no input grab: what the user points at keeps the keyboard.
+// It styles as the `hovercard` element; the card's content as a
+// .hovercard-content box.
 type HoverCard struct {
 	composite
 	content Widget

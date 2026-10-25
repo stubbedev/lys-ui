@@ -1,5 +1,5 @@
 // Package uifont embeds the faces lys-ui's default look is drawn in:
-// Geist and Geist Mono, the families shadcn/ui is designed around, as
+// Geist and Geist Mono, as
 // variable fonts so every weight is one file. internal/sysfont
 // registers them in the font store, so they resolve by family name
 // like any installed font. README.md records the source and checksums;

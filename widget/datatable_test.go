@@ -84,9 +84,9 @@ func TestDataTableSelectPageAndColumns(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnDataTable pins the toolbar, the table with a sorted
+// TestGoldenDataTable pins the toolbar, the table with a sorted
 // column and selected rows, and the footer, in both palettes.
-func TestGoldenShadcnDataTable(t *testing.T) {
+func TestGoldenDataTable(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		th   *Theme
@@ -99,7 +99,7 @@ func TestGoldenShadcnDataTable(t *testing.T) {
 			tbl.SortBy(1, true)
 			tbl.view.List().SelectRows(1, 2)
 			tbl.listSelected([]int{1, 2})
-			NewGolden(t, tbl, "shadcn-datatable-"+tc.name, goldenTheme(tc.th), goldenFrame(700, 360))
+			NewGolden(t, tbl, "datatable-"+tc.name, goldenTheme(tc.th), goldenFrame(700, 360))
 		})
 	}
 }

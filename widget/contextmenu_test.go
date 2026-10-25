@@ -70,10 +70,10 @@ func TestContextMenuYieldsToButtonHandlers(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnMenu pins the context menu's look: shortcuts, a
+// TestGoldenMenu pins the context menu's look: shortcuts, a
 // disabled row, a submenu, separators, checks and radios, a hovered
 // row, in both palettes.
-func TestGoldenShadcnMenu(t *testing.T) {
+func TestGoldenMenu(t *testing.T) {
 	face := goldenFace(t)
 	for _, tc := range []struct {
 		name string
@@ -94,7 +94,7 @@ func TestGoldenShadcnMenu(t *testing.T) {
 				MenuItem{Label: "Pedro Duarte", Kind: ItemRadio, Checked: true, Group: "people", OnClick: func() {}},
 				MenuItem{Label: "Colm Tuite", Kind: ItemRadio, Group: "people", OnClick: func() {}},
 			)
-			NewGolden(t, m, "shadcn-menu-"+tc.name, goldenTheme(tc.th),
+			NewGolden(t, m, "menu-"+tc.name, goldenTheme(tc.th),
 				goldenAfterArrange(func() { hoverMenuRow(m, face.Shape("lg", 14).LineHeight()+12, 2) }))
 		})
 	}

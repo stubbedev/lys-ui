@@ -261,13 +261,12 @@ const (
 	carouselNavInset = 8
 )
 
-// Carousel is a horizontal swipeable page strip (shadcn/ui's
-// Carousel): pages side by side at the carousel's width, pointer drags
-// and touchpad swipes pan, releases snap to the nearest page on the
-// animation clock, the round previous and next buttons step a page
-// (disabled at the ends, Left and Right on them step too), and the
-// painted dots index the position. It styles as the `carousel`
-// element: the button.nav pair.
+// Carousel is a horizontal swipeable page strip: pages side by side at
+// the carousel's width, pointer drags and touchpad swipes pan, releases
+// snap to the nearest page on the animation clock, the round previous
+// and next buttons step a page (disabled at the ends, Left and Right on
+// them step too), and the painted dots index the position. It styles as
+// the `carousel` element: the button.nav pair.
 type Carousel struct {
 	node
 	face   render.Font

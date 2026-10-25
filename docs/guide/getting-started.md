@@ -41,12 +41,12 @@ implementation.
 The [README](https://github.com/stubbedev/lys-ui#packages) lists every
 package and demo.
 
-## The shadcn gallery
+## The gallery
 
 ```sh
-just shadcn
+just gallery
 ```
 
-opens every shadcn/ui component in one window. Ctrl+T toggles the
+opens every component in one window. Ctrl+T toggles the
 palette, Ctrl+K opens the command palette, and Escape quits.
 [Widgets](../widgets) shows each one.

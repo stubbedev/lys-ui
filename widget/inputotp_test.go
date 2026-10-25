@@ -69,9 +69,9 @@ func TestInputOTPRingFollowsTheSlot(t *testing.T) {
 	}
 }
 
-// TestGoldenShadcnInputOTP pins a focused, half-filled code of two
+// TestGoldenInputOTP pins a focused, half-filled code of two
 // groups in both palettes.
-func TestGoldenShadcnInputOTP(t *testing.T) {
+func TestGoldenInputOTP(t *testing.T) {
 	face := goldenFace(t)
 	for _, tc := range []struct {
 		name string
@@ -85,7 +85,7 @@ func TestGoldenShadcnInputOTP(t *testing.T) {
 			r := &Router{Root: o}
 			arrangeTree(t, o, 300, 60)
 			r.SetFocus(o)
-			NewGolden(t, o, "shadcn-inputotp-"+tc.name, goldenTheme(tc.th), goldenFocus(o))
+			NewGolden(t, o, "inputotp-"+tc.name, goldenTheme(tc.th), goldenFocus(o))
 		})
 	}
 }
