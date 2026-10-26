@@ -68,10 +68,9 @@ type PopoverConfig struct {
 	// always grabs.
 	NoAutohide bool
 	// MaxWidth and MaxHeight cap the content when measured, in place
-	// of the default ceilings (the host's width; 600px tall) - a tall
-	// dropdown clamping to the monitor less a margin, the way a GTK
-	// popover stays on the output; a wide one wrapping its text. Zero
-	// keeps the default.
+	// of the default ceiling, the largest output's size - a list held
+	// shorter than the output; a wide one wrapping its text. Zero keeps
+	// the default.
 	MaxWidth, MaxHeight int
 }
 
@@ -730,10 +729,6 @@ type keyboardModer interface {
 	holdKeyboard(KeyboardMode) error
 }
 
-// popoverMaxH caps a popover's height when its content is measured,
-// for a config that names no ceiling of its own.
-const popoverMaxH = 600
-
 // outputs is the session's outputs; a wireless application (tests)
 // has none.
 func (a *Application) outputs() []*wlsession.Output {
@@ -744,15 +739,17 @@ func (a *Application) outputs() []*wlsession.Output {
 }
 
 // popoverCeiling is the content's measure ceiling: maxW and maxH, or
-// where unset the largest output's width (fitBounds) and popoverMaxH -
-// the one rule the open and every refit share. A popup may outgrow the
-// window it hangs from; the positioner keeps it on its output.
+// where unset the largest output's size (fitBounds) - the one rule the
+// open and every refit share. A popup may outgrow the window it hangs
+// from; the positioner keeps it on its output, resizing it where the
+// room left is shorter, and its content scrolls inside.
 func popoverCeiling(outputs []*wlsession.Output, maxW, maxH int) widget.Size {
+	bound := fitBounds(nil, outputs)
 	if maxW <= 0 {
-		maxW = fitBounds(nil, outputs).W
+		maxW = bound.W
 	}
 	if maxH <= 0 {
-		maxH = popoverMaxH
+		maxH = bound.H
 	}
 	return widget.Size{W: maxW, H: maxH}
 }

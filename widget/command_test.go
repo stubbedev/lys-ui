@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget/css"
 )
 
@@ -200,5 +201,82 @@ func TestCommandSearchKeepsTheFocusInTheEntry(t *testing.T) {
 	r.FocusNext()
 	if r.Focused() != c.FocusTarget() {
 		t.Errorf("traversal focused %T, want the search entry", r.Focused())
+	}
+}
+
+// manyGroups is n headed groups of m items each.
+func manyGroups(n, m int) []CommandGroup {
+	groups := make([]CommandGroup, n)
+	for g := range groups {
+		groups[g].Heading = fmt.Sprintf("Group %d", g)
+		for i := range m {
+			groups[g].Items = append(groups[g].Items, CommandItem{Label: fmt.Sprintf("Item %d.%d", g, i)})
+		}
+	}
+	return groups
+}
+
+// A pick list is as tall as its rows wherever its ceiling allows, and
+// scrolls only when held shorter; a search palette keeps cmdk's 300px
+// list (#322).
+func TestCommandListGrowsToItsRows(t *testing.T) {
+	face := testFace(t)
+	list := NewCommandList(face, manyGroups(6, 6)...)
+	tall := list.Measure(Constraints{Max: Size{W: 300, H: 4000}})
+	if tall.H <= commandListHeight {
+		t.Fatalf("pick list measured %dpx tall under a 4000px ceiling, want its rows' height past %d", tall.H, commandListHeight)
+	}
+	arrangeTree(t, list, 300, tall.H)
+	if list.scroll.AxisRange(Column).Overflows() {
+		t.Error("a pick list at its natural height scrolls")
+	}
+	short := NewCommandList(face, manyGroups(6, 6)...)
+	if h := short.Measure(Constraints{Max: Size{W: 300, H: 200}}).H; h != 200 {
+		t.Errorf("pick list under a 200px ceiling measured %d, want 200", h)
+	}
+	arrangeTree(t, short, 300, 200)
+	if !short.scroll.AxisRange(Column).Overflows() {
+		t.Error("a pick list held to 200px does not scroll")
+	}
+	var picked []string
+	palette := NewCommand(face, "Search...", append(testCommandGroups(&picked), manyGroups(6, 6)...)...)
+	if h := palette.scroll.Measure(Constraints{Max: Size{W: 300, H: 4000}}).H; h != commandListHeight {
+		t.Errorf("search palette list %dpx tall, want cmdk's %d", h, commandListHeight)
+	}
+}
+
+// A highlight set before the list is laid out shows once it is, its
+// group's heading whole above it when both fit, and no heading opens
+// cut at the viewport's top edge; a viewport too short for both still
+// shows the row (#322).
+func TestCommandListRevealsTheHighlightWithItsHeading(t *testing.T) {
+	face := testFace(t)
+	for _, tc := range []struct {
+		h, row  int
+		heading bool
+	}{{200, 4 * 6, true}, {200, 4*6 + 3, true}, {200, 4*6 + 4, false}, {40, 4 * 6, false}} {
+		list := NewCommandList(face, manyGroups(6, 6)...)
+		list.highlightRow(tc.row)
+		for range 3 {
+			arrangeTree(t, list, 300, tc.h)
+			if !LayoutPending(list) {
+				break
+			}
+		}
+		view := list.scroll.view
+		view.H = list.scroll.viewH
+		inside := func(r render.Rect) bool { return r.Y >= view.Y && r.Y+r.H <= view.Y+view.H }
+		row := list.shown[list.highlight].Bounds()
+		if !inside(row) {
+			t.Errorf("%dpx: highlighted row %v outside the viewport %v", tc.h, row, view)
+		}
+		if heading := list.headings[4].Bounds(); tc.heading && !inside(heading) {
+			t.Errorf("%dpx, row %d: heading %v cut by the viewport %v", tc.h, tc.row, heading, view)
+		}
+		for _, hd := range list.headings {
+			if b := hd.Bounds(); b.Y < view.Y && b.Y+b.H > view.Y {
+				t.Errorf("%dpx, row %d: heading %v cut at the viewport's top %v", tc.h, tc.row, b, view)
+			}
+		}
 	}
 }

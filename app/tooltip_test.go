@@ -265,7 +265,8 @@ func TestTooltipOptions(t *testing.T) {
 }
 
 // Point and rect anchors, and the popover ceiling's defaults: the
-// widest output, not the host window, bounds an unset width (#279).
+// largest output, not the host window, bounds an unset width (#279)
+// and an unset height (#322).
 func TestAnchorsAndPopoverCeiling(t *testing.T) {
 	if b := AnchorAt(30, 40).Bounds(); b != (render.Rect{X: 30, Y: 40, W: 1, H: 1}) {
 		t.Errorf("AnchorAt = %+v", b)
@@ -275,8 +276,8 @@ func TestAnchorsAndPopoverCeiling(t *testing.T) {
 		t.Error("AnchorRect")
 	}
 	outputs := []*wlsession.Output{{LogicalW: 1280, LogicalH: 800}, {LogicalW: 2560, LogicalH: 1440}}
-	if got := popoverCeiling(outputs, 0, 0); got != (widget.Size{W: 2560, H: popoverMaxH}) {
-		t.Errorf("default ceiling %+v, want the widest output's width", got)
+	if got := popoverCeiling(outputs, 0, 0); got != (widget.Size{W: 2560, H: 1440}) {
+		t.Errorf("default ceiling %+v, want the largest output's size", got)
 	}
 	if got := popoverCeiling(outputs, 300, 200); got != (widget.Size{W: 300, H: 200}) {
 		t.Errorf("set ceiling %+v", got)

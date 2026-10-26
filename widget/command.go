@@ -89,7 +89,10 @@ type Command struct {
 	rows      []*commandRow
 	shown     []*commandRow
 	highlight int
-	typeAhead typeAhead
+	// revealPending is a highlight set before the rows were laid out,
+	// revealed by the next Arrange.
+	revealPending bool
+	typeAhead     typeAhead
 }
 
 // NewCommand returns a command over groups whose search entry shows
@@ -125,8 +128,11 @@ func (c *Command) build(search *Box, groups []CommandGroup) {
 	c.empty.SetAlignment(render.AlignCenter)
 	c.scroll = NewScroll(c.list)
 	c.scroll.VerticalOnly = true
-	c.scroll.SetMaxContentHeight(commandListHeight)
+	// A search palette holds cmdk's list height; a pick list is as tall
+	// as its rows, scrolling only where its popover is held shorter.
+	c.scroll.SetMaxContentHeight(0)
 	if search != nil {
+		c.scroll.SetMaxContentHeight(commandListHeight)
 		c.column.Append(search, false)
 	}
 	c.column.Append(c.scroll, true)
@@ -273,15 +279,55 @@ func (c *Command) firstEnabled(i, step int) int {
 }
 
 // moveHighlight highlights shown row i (-1 for none) and scrolls it
-// into view.
+// into view, now or, before the rows are laid out, at the next
+// Arrange.
 func (c *Command) moveHighlight(i int) {
 	for j, r := range c.shown {
 		r.SetState(StateSelected, j == i)
 	}
 	c.highlight = i
-	if i >= 0 {
-		RevealRect(c.shown[i], c.shown[i].Bounds())
+	c.revealPending = i >= 0 && c.shown[i].Bounds().Empty()
+	if i >= 0 && !c.revealPending {
+		row, start := c.highlightSpan()
+		if start.Y+c.scroll.viewH >= row.Y+row.H {
+			row = row.Union(start)
+		}
+		RevealRect(c.shown[i], row)
 	}
+}
+
+// Arrange lays the command out and reveals a highlight set before its
+// rows had a place.
+func (c *Command) Arrange(r render.Rect) {
+	c.composite.Arrange(r)
+	if c.revealPending && c.highlight >= 0 && !c.shown[c.highlight].Bounds().Empty() {
+		c.revealPending = false
+		// Opening, the viewport starts at the highlight's group (its
+		// separator and heading) when the row shows below it, else at
+		// the row: no heading opens cut at the top.
+		row, start := c.highlightSpan()
+		top := row.Y
+		if start.Y+c.scroll.viewH >= row.Y+row.H {
+			top = start.Y
+		}
+		RevealRect(c.shown[c.highlight], render.Rect{X: row.X, Y: top, W: row.W, H: c.scroll.viewH})
+	}
+}
+
+// highlightSpan is the highlighted row's bounds and those of its
+// group's start: the separator and heading above the group's first
+// row, or that row.
+func (c *Command) highlightSpan() (row, start render.Rect) {
+	r := c.shown[c.highlight]
+	kids := c.list.Children()
+	at := slices.Index(kids, Widget(r))
+	for at > 0 {
+		if prev, ok := kids[at-1].(*commandRow); ok && prev.group != r.group {
+			break
+		}
+		at--
+	}
+	return r.Bounds(), boundsOf(kids[at])
 }
 
 // Highlighted returns the highlighted item and whether there is one.
