@@ -30,6 +30,10 @@ func animNext() time.Time {
 }
 
 func TestNextWake(t *testing.T) {
+	// The clock is global: tweens other tests left running (a switch's
+	// slide) must not count as this loop's (#323).
+	animclock.Reset()
+	t.Cleanup(animclock.Reset)
 	never := time.Time{}
 	now := time.Now()
 
