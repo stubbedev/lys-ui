@@ -157,6 +157,12 @@ just atspi         # the AT-SPI bridge on a private accessibility bus
 just atspi-verify  # the bridge against real at-spi2-core
 ```
 
+`just docker <recipe>` runs any recipe in a container that sees only the
+dev shell's store paths, the checkout, `/dev/kvm` and the GPUs' render
+nodes: no host runtime dir, session bus or display socket, so nothing it
+runs reaches the desktop session. `just docker race 16g` raises its
+memory cap.
+
 `just bench` runs the benchmarks; CI archives the numbers without
 gating on them ([bench/baseline.md](bench/baseline.md) holds the
 method and the allocation budgets the tests enforce). `just goldens`
@@ -166,6 +172,10 @@ change.
 `nix build .#lys-ui` builds the module and every demo with the pinned
 toolchain. Pushing a `v*` tag releases `lys-ui-hello`, `lys-ui-bar` and
 `lys-ui-panel` (linux/amd64 and arm64) through goreleaser.
+
+`.github/workflows/security.yml` runs CodeQL (Go and GitHub Actions),
+Grype and govulncheck; dependency review gates pull requests.
+Dependabot keeps the module and the pinned workflow actions current.
 
 ## Documentation
 
