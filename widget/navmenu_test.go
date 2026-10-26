@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/lys-ui/anim"
@@ -82,6 +83,25 @@ func TestNavigationMenuKeyboard(t *testing.T) {
 	r.KeyAction(KeyDismiss, 0)
 	if m.Active() != -1 {
 		t.Error("Escape left the panel open")
+	}
+}
+
+// Left and Right skip a disabled trigger instead of stalling on it.
+func TestNavigationMenuKeyboardSkipsDisabled(t *testing.T) {
+	m, _, _ := newTestNavMenu(t)
+	m.triggers[1].SetEnabled(false)
+	r := &Router{Root: m}
+	focused := func() int {
+		return slices.IndexFunc(m.triggers, func(b *Button) bool { return r.Focused() == Widget(b) })
+	}
+	r.SetFocus(m.triggers[0])
+	r.KeyAction(KeyRight, 0)
+	if got := focused(); got != 2 {
+		t.Fatalf("Right past the disabled trigger focused trigger %d, want 2", got)
+	}
+	r.KeyAction(KeyLeft, 0)
+	if got := focused(); got != 0 {
+		t.Errorf("Left past the disabled trigger focused trigger %d, want 0", got)
 	}
 }
 
