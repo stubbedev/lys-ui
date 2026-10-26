@@ -860,3 +860,24 @@ func TestHiddenWidgetsTakeNoFocus(t *testing.T) {
 		t.Errorf("focus %T stayed on a switch that went display: none", r.Focused())
 	}
 }
+
+// With @container rules loaded, a query container's resize restyles
+// its descendants; any other widget's resize, a tooltip arranged or a
+// row moving, leaves every style as it was, so it damages only its own
+// pixels instead of every widget in every window (#328).
+func TestOnlyAQueryContainerResizeRestyles(t *testing.T) {
+	loadCSS(t, `.q { container-type: inline-size; } @container (min-width: 100px) { .x { color: #ff0000; } }`)
+	plain, query := newStub(10, 10), newStub(10, 10)
+	query.AddClass("q")
+	row := NewBox(Row, 0, 0).Append(plain, false).Append(query, false)
+	settle(t, row, 50, 10)
+	before := styleGen
+	plain.Arrange(render.Rect{W: 80, H: 10})
+	if styleGen != before {
+		t.Errorf("a plain widget's resize restyled everything (styleGen %d -> %d)", before, styleGen)
+	}
+	query.Arrange(render.Rect{W: 120, H: 10})
+	if styleGen == before {
+		t.Error("a query container's resize restyled nothing")
+	}
+}

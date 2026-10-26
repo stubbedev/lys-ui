@@ -91,6 +91,9 @@ type sensitivity struct {
 	// @container rules: the viewport and preference setters restyle
 	// only then (containers resize with the window).
 	media bool
+	// containers reports @container rules or container units: a query
+	// container's resize restyles then.
+	containers bool
 	// has reports a :has() selector: a descendant or following
 	// sibling's facts feed an ancestor's match, so class and state
 	// changes restyle up the tree too.
@@ -176,7 +179,10 @@ func relayer() {
 		layersNow = append(layersNow, style.Layer{Sheet: s.sheet, Priority: s.priority})
 	}
 	for _, s := range append(slices.Clone(sheets), scopedSheets...) {
-		if s.sheet.MediaQueries() > 0 || s.sheet.ContainerQueries() > 0 || s.sheet.Sensitivity().CqUnits {
+		if s.sheet.ContainerQueries() > 0 || s.sheet.Sensitivity().CqUnits {
+			sensNow.media, sensNow.containers = true, true
+		}
+		if s.sheet.MediaQueries() > 0 {
 			sensNow.media = true
 		}
 		sn := s.sheet.Sensitivity()
@@ -2184,15 +2190,16 @@ func (n *node) invalidateState(changed style.State) {
 }
 
 // restyleState is invalidateState for the propagated states — the
-// hover chain and focus-within — which no widget paints from itself:
-// the cascade is marked stale, and only a moved value repaints.
-func (n *node) restyleState(changed style.State) {
+// hover chain and focus-within — on w, whose node is n, which no widget
+// paints from itself: the cascade is marked stale, and only a moved
+// value repaints, the root's subtree included.
+func (n *node) restyleState(w Widget, changed style.State) {
 	n.styleDirty = true
 	if n.unseen() {
 		return
 	}
 	markDamage()
-	n.scope(sensNow.states&changed != 0 || sensNow.has, sensNow.siblingFacts)
+	n.scope(w, sensNow.states&changed != 0 || sensNow.has, sensNow.siblingFacts)
 }
 
 // invalidateClasses is invalidateState for a class-list change.
@@ -2220,12 +2227,14 @@ func (n *node) invalidateScope(sub, sib bool) {
 		}
 		markDamage()
 	}
-	n.scope(sub, sib)
+	n.scope(n.self, sub, sib)
 }
 
-// scope marks the dependents of a flipped fact: the subtree when sub,
-// the parent's children (and theirs) when sib.
-func (n *node) scope(sub, sib bool) {
+// scope marks the dependents of a flipped fact on w, n's widget (nil
+// when unknown): the subtree when sub, the parent's children (and
+// theirs) when sib. A root, which has no siblings, restyles its own
+// subtree; only its moved values repaint.
+func (n *node) scope(w Widget, sub, sib bool) {
 	if !sub && !sib {
 		return
 	}
@@ -2233,8 +2242,11 @@ func (n *node) scope(sub, sib bool) {
 		restyleSubtree(n.parent)
 		return
 	}
-	if n.self != nil {
-		restyleSubtree(n.self)
+	if w == nil {
+		w = n.self
+	}
+	if w != nil {
+		restyleSubtree(w)
 		return
 	}
 	if n.unseen() {
@@ -2262,14 +2274,14 @@ func setHoverChain(old, new Widget) {
 	for w := old; w != nil; w = parentOf(w) {
 		if n := nodeOf(w); n != nil && n.hoverChain && !in[n] {
 			n.hoverChain = false
-			n.restyleState(style.Hover)
+			n.restyleState(w, style.Hover)
 			notifyHoverWithin(w, n, false)
 		}
 	}
 	for w := new; w != nil; w = parentOf(w) {
 		if n := nodeOf(w); n != nil && !n.hoverChain {
 			n.hoverChain = true
-			n.restyleState(style.Hover)
+			n.restyleState(w, style.Hover)
 			notifyHoverWithin(w, n, true)
 		}
 	}

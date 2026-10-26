@@ -733,3 +733,44 @@ func TestTransformOnScaledOutput(t *testing.T) {
 		}
 	}
 }
+
+// The pointer over the surface's empty space, between widgets, still
+// hovers the root: the root's :hover stays on, instead of flipping off
+// and back, which restyled and repainted every widget in the window on
+// each crossing of a gap (#328).
+func TestHoverChainKeepsTheRootOverAGap(t *testing.T) {
+	loadCSS(t, `.outer { display: contents; } .outer:hover label { color: #00ff00; } label + label { color: #0000ff; }`)
+	a, b := NewSpacer(40, 20), NewSpacer(40, 20)
+	root := NewBox(Row, 40, 0)
+	root.AddClass("outer")
+	root.Append(a, false)
+	root.Append(b, false)
+	arrangeTree(t, root, 200, 20)
+	r := &Router{Root: root}
+	r.Move(Point{X: a.Bounds().X + 2, Y: 5})
+	CollectDamage(root)
+	gap := Point{X: a.Bounds().X + a.Bounds().W + 20, Y: 5}
+	if root.HitTest(gap) != nil {
+		t.Fatalf("the gap hits %T, want nothing", root.HitTest(gap))
+	}
+	gen := styleGen
+	r.Move(gap)
+	if !root.hoverChain {
+		t.Error("the root left the hover chain over a gap")
+	}
+	r.Move(Point{X: b.Bounds().X + 2, Y: 5})
+	if styleGen != gen {
+		t.Errorf("crossing a gap restyled the whole tree (styleGen %d -> %d)", gen, styleGen)
+	}
+	if rects, _ := CollectDamage(root); len(rects) > 0 && rects[0] == root.Bounds() {
+		t.Errorf("crossing a gap repainted the root's whole box: %v", rects)
+	}
+	gen = styleGen
+	r.Leave()
+	if root.hoverChain {
+		t.Error("leave kept the root hovered")
+	}
+	if styleGen != gen {
+		t.Errorf("the pointer leaving restyled every tree, not the root's (styleGen %d -> %d)", gen, styleGen)
+	}
+}

@@ -477,7 +477,10 @@ type Router struct {
 	Root Widget
 
 	hover, pressed, focus Widget
-	dragging              bool
+	// chained is the widget whose ancestry holds :hover: the hovered
+	// widget, or over the surface's empty space the root.
+	chained  Widget
+	dragging bool
 	// pointer is where the pointer rests while pointerIn, for Rehover.
 	pointer   Point
 	pointerIn bool
@@ -516,12 +519,12 @@ func (r *Router) Move(p Point) {
 		if h, ok := r.hover.(HoverSetter); ok {
 			h.SetHovered(false)
 		}
-		setHoverChain(r.hover, hit)
 		r.hover = hit
 		if h, ok := hit.(HoverSetter); ok {
 			h.SetHovered(true)
 		}
 	}
+	r.rechain(hit)
 	if h, ok := r.hover.(HoverMover); ok {
 		h.HoverMove(p)
 	}
@@ -530,6 +533,18 @@ func (r *Router) Move(p Point) {
 			d.DragMove(p)
 		}
 	}
+}
+
+// rechain moves the :hover chain to w's ancestry; with w nil while the
+// pointer is over the surface, to the root's, which the pointer still
+// hovers: a gap between widgets leaves the root's chain as it was
+// instead of flipping the whole tree's :hover off and back.
+func (r *Router) rechain(w Widget) {
+	if w == nil && r.pointerIn {
+		w = r.Root
+	}
+	setHoverChain(r.chained, w)
+	r.chained = w
 }
 
 // hitAt is the enabled widget at p, or nil.
@@ -651,7 +666,7 @@ func shiftFocusWithin(w Widget, delta int) {
 		was := n.focusWithin > 0
 		n.focusWithin = max(0, n.focusWithin+delta)
 		if was != (n.focusWithin > 0) {
-			n.restyleState(style.FocusWithin)
+			n.restyleState(w, style.FocusWithin)
 		}
 	}
 }
@@ -701,8 +716,8 @@ func (r *Router) Leave() {
 	if h, ok := r.hover.(HoverSetter); ok {
 		h.SetHovered(false)
 	}
-	setHoverChain(r.hover, nil)
 	r.hover = nil
+	r.rechain(nil)
 }
 
 // Pressed returns the widget an implicit press is active on, or nil.
@@ -751,8 +766,8 @@ func (r *Router) Forget(w Widget) {
 		if h, ok := r.hover.(HoverSetter); ok {
 			h.SetHovered(false)
 		}
-		setHoverChain(r.hover, nil)
 		r.hover = nil
+		r.rechain(nil)
 	}
 	if inSubtree(r.pressed, w) {
 		r.CancelPress()

@@ -650,14 +650,26 @@ func (n *node) Arrange(r render.Rect) {
 		n.InvalidateRect(n.ink.Grow(n.bounds))
 		n.Invalidate()
 	}
-	// A resized widget can be a query container: its descendants'
-	// @container conditions and container units recompute against the
-	// new bounds, like a viewport change restyles @media rules.
-	if r != n.bounds && sensNow.media {
+	// A resized query container's descendants recompute their
+	// @container conditions and container units against the new
+	// bounds, as a viewport change restyles @media rules; any other
+	// widget's resize leaves every style as it was.
+	if r != n.bounds && sensNow.containers && n.queryContainer() {
 		styleGen++
 		markDamage()
 	}
 	n.bounds = r
+}
+
+// queryContainer reports whether the node's computed container-type
+// makes it a query container; before its container records it, the
+// last computed style answers.
+func (n *node) queryContainer() bool {
+	v := &n.cs
+	if n.self != nil {
+		v = n.style(n.self)
+	}
+	return v.ContainerType != style.ContainerNormal
 }
 
 // Bounds returns the last arranged rect. Before the first Arrange —
