@@ -35,8 +35,12 @@ atspi:
 # the GPU against the CPU's pixels, and the app's GPU frame tests.
 # `go test ./gpu/...` alone runs its own on the host's device, or skips
 # them without one.
+# The gpu package runs verbose: a driver crash kills the test binary
+# without a Go trace, and the last test it started is the only name
+# the log then has (#352).
 gpu:
-    LYS_UI_TEST_GPU=lavapipe go test -count=1 ./gpu/... ./widget
+    LYS_UI_TEST_GPU=lavapipe go test -count=1 -v ./gpu/...
+    LYS_UI_TEST_GPU=lavapipe go test -count=1 ./widget
     LYS_UI_TEST_GPU=lavapipe go test -count=1 -run GPU ./app
 
 # The GPU paths on this host's own GPU, under the validation layer:
