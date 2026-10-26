@@ -436,8 +436,8 @@ func (o *Overlay) HitTest(p Point) Widget {
 }
 
 // Scroll embeds a child larger than the viewport and shifts it by an
-// offset. Overflowing axes reserve a scrollbar gutter; the bars fade
-// in on hover or scrolling and out after a dwell, drag 1:1, and gutter
+// offset. With ShowBars, overflowing axes reserve a scrollbar gutter;
+// the bars fade in on hover or scrolling and out after a dwell, drag 1:1, and gutter
 // clicks page. A child smaller than the viewport is centered, or
 // stretched along an axis when the matching Fill flag is set.
 type Scroll struct {
@@ -468,7 +468,6 @@ type Scroll struct {
 	// VerticalOnly scrolls up and down only (GTK's hscrollbar-policy
 	// never): the child is measured and laid out at the viewport's
 	// width, so a wrapping label wraps there instead of at infinity.
-	// The bar's gutter is always reserved beside it.
 	VerticalOnly bool
 	// PropagateNaturalWidth (GTK's propagate-natural-width) makes a
 	// VerticalOnly scroll ask for its child's natural width; without
@@ -733,13 +732,14 @@ func (s *Scroll) measureContent(con Constraints) Size {
 		s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
 		if s.VerticalOnly {
 			// The bar's column is reserved only once the content
-			// overflows the height on offer: a list that fits keeps
-			// its full width, as an overlay-scrolled one does.
+			// overflows the height on offer and only for a bar that
+			// shows: a list that fits, or one without bars, keeps its
+			// full width and its insets even.
 			limit := con.Max.H
 			if s.maxH > 0 {
 				limit = min(limit, s.maxH)
 			}
-			if overflows = s.nat.H > limit; overflows {
+			if overflows = s.ShowBars && s.nat.H > limit; overflows {
 				w = max(0, w-gutter)
 				s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
 			}
@@ -772,7 +772,7 @@ func (s *Scroll) measureContent(con Constraints) Size {
 	case s.maxH > 0 && want.H > s.maxH:
 		// Capped, the content overflows: the vertical bar's gutter
 		// comes on top of the content width, not out of it.
-		if !s.VerticalOnly && !stable {
+		if !s.VerticalOnly && !stable && s.ShowBars {
 			want.W += gutter
 		}
 		want.H = s.maxH
@@ -798,7 +798,7 @@ func (s *Scroll) SetMaxContentHeight(h int) {
 func (s *Scroll) MaxContentHeight() int { return s.maxH }
 
 // Arrange pins the viewport to r, reserving a gutter for each
-// overflowing axis, and places the child at the negative offset:
+// overflowing axis that shows a bar, and places the child at the negative offset:
 // stretched across the viewport when Fill is set and the child is
 // smaller, centered when it is smaller without fill, otherwise at its
 // natural size shifted by the offset.
@@ -809,10 +809,10 @@ func (s *Scroll) Arrange(r render.Rect) {
 	r = inner
 	gutterV, gutterH := 0, 0
 	stable, both := s.gutterStable()
-	if s.nat.H > r.H && r.H > 40 || stable {
+	if s.ShowBars && s.nat.H > r.H && r.H > 40 || stable {
 		gutterV = gutter
 	}
-	if s.nat.W > r.W && r.W > 40 {
+	if s.ShowBars && s.nat.W > r.W && r.W > 40 {
 		gutterH = gutter
 	}
 	if s.VerticalOnly {
@@ -826,7 +826,7 @@ func (s *Scroll) Arrange(r render.Rect) {
 				s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
 				s.measuredAt = w
 			}
-			if gutterV == 0 && s.nat.H > r.H {
+			if gutterV == 0 && s.ShowBars && s.nat.H > r.H {
 				// Overflowing, the bar takes its column; the content
 				// keeps the narrower width even if it now fits, so the
 				// layout cannot flip back and forth.
@@ -931,7 +931,7 @@ func (s *Scroll) tickFade() {
 // Role implements Roleer.
 func (s *Scroll) Role() Role { return RoleScrollArea }
 
-// HitTest returns the widget under p: the scrollbar gutters belong to
+// HitTest returns the widget under p: the shown scrollbars belong to
 // the scroll itself (a press there drags or pages, never hits content),
 // the child's bounds already carry the scroll offset so hit-testing
 // through a scrolled viewport lands on the right content, and anything
@@ -955,10 +955,10 @@ func (s *Scroll) HitTest(p Point) Widget {
 }
 
 // vBarGeometry returns the vertical track and handle rects; the track
-// width is zero when there is no vertical overflow.
+// width is zero without bars or vertical overflow.
 func (s *Scroll) vBarGeometry() (track, handle render.Rect) {
 	r := s.AxisRange(Column)
-	if !r.Overflows() {
+	if !s.ShowBars || !r.Overflows() {
 		return track, handle
 	}
 	track = render.Rect{X: s.view.X + s.view.W - gutter, Y: s.view.Y, W: gutter, H: s.viewH}
@@ -966,10 +966,10 @@ func (s *Scroll) vBarGeometry() (track, handle render.Rect) {
 }
 
 // hBarGeometry returns the horizontal track and handle rects; the
-// track height is zero when there is no horizontal overflow.
+// track height is zero without bars or horizontal overflow.
 func (s *Scroll) hBarGeometry() (track, handle render.Rect) {
 	r := s.AxisRange(Row)
-	if !r.Overflows() {
+	if !s.ShowBars || !r.Overflows() {
 		return track, handle
 	}
 	track = render.Rect{X: s.view.X, Y: s.view.Y + s.view.H - gutter, W: s.viewW, H: gutter}

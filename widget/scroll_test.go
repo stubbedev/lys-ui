@@ -86,6 +86,7 @@ func TestHorizontalWheelScrolls(t *testing.T) {
 func TestScrollMaxContentHeight(t *testing.T) {
 	unbounded := Constraints{Max: Size{W: 500, H: 500}}
 	s := propagating(NewScroll(newStub(60, 200)))
+	s.ShowBars = true
 	if got := s.Measure(unbounded); got != (Size{W: 60, H: 200}) {
 		t.Errorf("uncapped = %v, want the natural 60x200", got)
 	}
@@ -118,7 +119,7 @@ func TestScrollVerticalOnly(t *testing.T) {
 	label := NewLabel(face, 12, text, render.RGB(255, 255, 255))
 	label.SetWrap(true)
 	s := NewScroll(label)
-	s.VerticalOnly = true
+	s.VerticalOnly, s.ShowBars = true, true
 	if got := s.Measure(Constraints{Max: Size{W: 120, H: 50}}); got.W > 120 {
 		t.Errorf("measured %v, wider than the 120 it was given", got)
 	}

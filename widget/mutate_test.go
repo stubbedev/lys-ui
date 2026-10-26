@@ -357,6 +357,7 @@ func TestStackRemove(t *testing.T) {
 func TestScrollSetChild(t *testing.T) {
 	t.Run("swaps content and resets the scroll position", func(t *testing.T) {
 		s := NewScroll(newStub(60, 200))
+		s.ShowBars = true
 		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 		s.SetOffset(0, 50)

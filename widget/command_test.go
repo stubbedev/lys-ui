@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -120,6 +121,24 @@ func TestCommandRowsAreCentered(t *testing.T) {
 	}
 	if bg := c.input.style(c.input).Background; bg.A() != 0 {
 		t.Errorf("search entry background %#x, want none", uint32(bg))
+	}
+}
+
+// A list long enough to scroll keeps its rows centered too: its scroll
+// shows no bars, so it reserves no bar gutter on the right (#317).
+func TestCommandListOverflowingRowsAreCentered(t *testing.T) {
+	items := make([]CommandItem, 40)
+	for i := range items {
+		items[i] = CommandItem{Label: fmt.Sprintf("Item %d", i)}
+	}
+	c := NewCommandList(testFace(t), CommandGroup{Heading: "Many", Items: items})
+	arrangeTree(t, c, 320, 400)
+	if r := c.scroll.AxisRange(Column); !r.Overflows() {
+		t.Fatal("the list does not overflow")
+	}
+	cb, row := c.Bounds(), c.rows[0].Bounds()
+	if left, right := row.X-cb.X, cb.X+cb.W-(row.X+row.W); left != right {
+		t.Errorf("row inset %d on the left, %d on the right", left, right)
 	}
 }
 

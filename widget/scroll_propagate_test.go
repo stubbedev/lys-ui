@@ -115,20 +115,22 @@ func TestWrappingRichLabelMinContent(t *testing.T) {
 }
 
 // A vertical-only scroll reserves its bar's column only while the
-// content overflows: content that fits keeps the viewport's whole
-// width, and content that overflows gives the bar its gutter (#281).
+// content overflows and the bar shows: content that fits keeps the
+// viewport's whole width (#281), content that overflows gives the bar
+// its gutter, and without bars it keeps the whole width too (#317).
 func TestVerticalScrollGutterOnlyWhenOverflowing(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		rows int
+		bars bool
 		want int
-	}{{"fits", 2, 200}, {"overflows", 40, 200 - gutter}} {
+	}{{"fits", 2, true, 200}, {"overflows", 40, true, 200 - gutter}, {"overflows without bars", 40, false, 200}} {
 		content := NewBox(Column, 0, 0)
 		for range tc.rows {
 			content.Append(NewSpacer(10, 20), false)
 		}
 		s := NewScroll(content)
-		s.VerticalOnly = true
+		s.VerticalOnly, s.ShowBars = true, tc.bars
 		s.Measure(Constraints{Max: Size{W: 200, H: 100}})
 		s.Arrange(render.Rect{W: 200, H: 100})
 		if got := content.Bounds().W; got != tc.want {

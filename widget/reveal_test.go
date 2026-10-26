@@ -117,7 +117,7 @@ func TestScrollCSSBox(t *testing.T) {
 	loadCSS(t, `.ed { background-color: #ff0000; border: 2px solid #00ff00; padding: 5px; min-height: 80px; }`)
 	leaf := &solidLeaf{sz: Size{W: 40, H: 200}, col: render.RGB(0, 0, 0xff)}
 	s := propagating(NewScroll(leaf))
-	s.VerticalOnly = true
+	s.VerticalOnly, s.ShowBars = true, true
 	s.AddClass("ed")
 	if sz := s.Measure(Constraints{Max: Size{W: 100, H: 300}}); sz.H != 214 {
 		t.Errorf("height %d, want the content and its insets", sz.H)
