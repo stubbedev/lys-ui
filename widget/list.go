@@ -306,9 +306,15 @@ func (l *List) selectionSingle(i int) {
 	}
 }
 
-// reveal implements selectionHost.
+// reveal implements selectionHost. Before the first layout there is
+// no viewport to scroll against, so the reveal waits for Arrange.
 func (l *List) reveal(i int) {
 	l.kin.stop()
+	if l.viewH <= 0 {
+		l.revealAt = i + 1
+		return
+	}
+	l.revealAt = 0
 	l.scrollTo(i)
 }
 
@@ -441,6 +447,12 @@ func (l *List) Arrange(r render.Rect) {
 	l.cols = l.fitColumns(r.W)
 	l.measureRowH()
 	l.offY = min(l.offY, l.scrollMax())
+	if i := l.revealAt - 1; i >= 0 && l.viewH > 0 {
+		l.revealAt = 0
+		if i < l.model.len() {
+			l.scrollTo(i)
+		}
+	}
 }
 
 // visible returns the half-open range of rows inside the viewport and

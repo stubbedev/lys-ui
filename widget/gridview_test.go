@@ -111,3 +111,24 @@ func TestGridViewBorderSpacing(t *testing.T) {
 		t.Errorf("cell 4 at (%d, %d), want (68, 23) with 6px columns and 3px lines", got.X, got.Y)
 	}
 }
+
+// A selection made before the first layout reveals once the grid has a
+// viewport: an item already in view leaves the grid at the top, and one
+// further down scrolls just far enough (#373).
+func TestGridViewRevealsAnEarlySelectionAfterLayout(t *testing.T) {
+	g := NewGridView[Widget](newCountingModel(100), 50, 20)
+	g.Select(1)
+	frame(t, g, 160, 60)
+	if g.offY != 0 {
+		t.Errorf("selecting an item of the first line scrolled to %d, want 0", g.offY)
+	}
+
+	g = NewGridView[Widget](newCountingModel(100), 50, 20)
+	g.Select(31)
+	frame(t, g, 160, 60)
+	// Item 31 is line 10 of three columns: its bottom, 220, meets the
+	// viewport's.
+	if g.offY != 220-60 {
+		t.Errorf("selecting item 31 scrolled to %d, want 160", g.offY)
+	}
+}
