@@ -1,6 +1,8 @@
 package widget
 
 import (
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -1082,17 +1084,21 @@ func (r *listRow) KeyAction(a KeyAction, mods Mods) { r.list.KeyAction(a, mods) 
 // SelectAll forwards the ctrl+a select-all route into the list.
 func (r *listRow) SelectAll() { r.list.SelectAll() }
 
-// styleChildren are the materialized rows and the height probe
-// (styleKids).
+// styleChildren are the height probe and the materialized rows in
+// model order (styleKids), so sibling selectors see a stable order.
 func (l *List) appendStyleKids(buf []Widget) []Widget {
 	if l.probe != nil {
 		buf = append(buf, l.probe)
 	}
-	for _, r := range l.rows {
-		buf = append(buf, r)
+	for _, i := range slices.Sorted(maps.Keys(l.rows)) {
+		buf = append(buf, l.rows[i])
 	}
 	return buf
 }
+
+// modelPosition implements modelPositioner: the row's place in the
+// model.
+func (r *listRow) modelPosition() (int, int) { return r.idx + 1, r.list.model.len() }
 
 // appendStyleKids is the row widget, inheriting through the proxy.
 func (r *listRow) appendStyleKids(buf []Widget) []Widget { return append(buf, r.row) }

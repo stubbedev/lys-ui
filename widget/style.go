@@ -1247,6 +1247,9 @@ func (s *styleTargeter) StylePrev() style.Node {
 }
 
 func (s *styleTargeter) StylePosition() (int, int) {
+	if p, ok := s.w.(modelPositioner); ok {
+		return p.modelPosition()
+	}
 	sib, idx := visibleSiblings(s.n, s.w)
 	if idx < 0 {
 		return 1, 1
@@ -1255,6 +1258,9 @@ func (s *styleTargeter) StylePosition() (int, int) {
 }
 
 func (s *styleTargeter) StyleTypedPosition(element string) (int, int) {
+	if p, ok := s.w.(modelPositioner); ok {
+		return p.modelPosition()
+	}
 	sib, idx := visibleSiblings(s.n, s.w)
 	if idx < 0 {
 		return 1, 1
@@ -1331,6 +1337,15 @@ func (s *styleTargeter) StyleContainers(buf []style.Container) []style.Container
 		pw = styleParentOf(pn)
 	}
 	return buf
+}
+
+// modelPositioner is a virtualized item whose structural position is
+// its place in the model, not among the few items materialized beside
+// it: a List row counts as the model's row, so row:nth-child(even)
+// stripes the same items however far the list scrolled.
+type modelPositioner interface {
+	// modelPosition is the 1-based index and the model's length.
+	modelPosition() (index, count int)
 }
 
 // visibleSiblings returns the visible children of n's parent and n's

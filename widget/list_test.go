@@ -531,3 +531,30 @@ func TestListRowMarginHitsNoRow(t *testing.T) {
 		t.Errorf("a point inside row 0's border box hit %v, want row 0", got)
 	}
 }
+
+// :nth-child counts a row's place in the model, not among the rows
+// materialized beside it, so zebra stripes stay on the same items as
+// the list scrolls, and every run stripes alike (#381).
+func TestListRowNthChildIsTheModelIndex(t *testing.T) {
+	loadCSS(t, `row:nth-child(even) { background-color: #010203; }`)
+	l := NewList(newCountingModel(40), 10)
+	host := NewBox(Column, 0, 0)
+	host.Append(l, true)
+	check := func(when string) {
+		t.Helper()
+		for i, r := range l.rows {
+			striped := r.style(r).Has(style.PropBackgroundColor)
+			if want := (i+1)%2 == 0; striped != want {
+				t.Errorf("%s: row %d striped %v, want %v", when, i, striped, want)
+			}
+		}
+	}
+	frame(t, host, 100, 50)
+	check("at the top")
+	l.ScrollBy(0, 3)
+	frame(t, host, 100, 50)
+	if _, first := l.rows[0]; first {
+		t.Fatal("the scroll left row 0 materialized; scroll further")
+	}
+	check("scrolled")
+}
