@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/neurlang/wayland/xdg"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/stubbedev/lys-ui/internal/window"

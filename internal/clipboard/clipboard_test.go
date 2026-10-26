@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/transfer"

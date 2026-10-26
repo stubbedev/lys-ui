@@ -13,7 +13,7 @@ import (
 	"io"
 	"syscall"
 
-	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 )
 
 // DisconnectReason classifies why the compositor connection ended.

@@ -10,8 +10,8 @@ package buffer
 import (
 	"testing"
 
-	"github.com/neurlang/wayland/wl"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 )
 
 // TestFormatIsArgb8888NotXrgb pins the format constant: flipping it to

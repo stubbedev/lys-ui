@@ -7,9 +7,9 @@ package buffer
 import (
 	"errors"
 
-	"github.com/neurlang/wayland/wl"
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 )
 
 // ErrBusy reports that every buffer in the pool is held by the compositor.

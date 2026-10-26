@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/neurlang/wayland/wlcursor"
-	"github.com/neurlang/wayland/wlcursor/xcursor"
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor/xcursor"
 
 	"github.com/stubbedev/lys-ui/internal/intconv"
 )

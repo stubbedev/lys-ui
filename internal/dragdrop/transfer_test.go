@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/internal/xfer"
 	"github.com/stubbedev/lys-ui/transfer"

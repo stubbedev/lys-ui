@@ -5,7 +5,7 @@
 // pointer the wire writes as id 0 with every proxy method safe on it.
 package wlnull
 
-import "github.com/neurlang/wayland/wl"
+import "github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 // Object is the nil-safe null proxy type.
 type Object struct{}

@@ -4,9 +4,9 @@
 package wlsession
 
 import (
-	text "github.com/neurlang/wayland/unstable/text-input-v3"
-	"github.com/neurlang/wayland/wl"
 	"github.com/stubbedev/lys-lib/debug"
+	text "github.com/stubbedev/lys-lib/third_party/wayland/unstable/text-input-v3"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/internal/intconv"
 )

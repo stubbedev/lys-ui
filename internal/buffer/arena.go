@@ -13,10 +13,10 @@ import (
 	"os"
 	"sync"
 
-	wlos "github.com/neurlang/wayland/os"
-	"github.com/neurlang/wayland/wl"
-	"github.com/neurlang/wayland/wlclient"
 	"github.com/stubbedev/lys-lib/render"
+	wlos "github.com/stubbedev/lys-lib/third_party/wayland/os"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/intconv"

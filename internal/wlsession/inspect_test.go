@@ -3,8 +3,8 @@ package wlsession
 import (
 	"testing"
 
-	"github.com/neurlang/wayland/wl"
-	"github.com/neurlang/wayland/wlcursor"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor"
 	"github.com/stubbedev/lys-lib/wlr"
 )
 

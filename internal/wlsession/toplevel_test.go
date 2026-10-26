@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
 )
 

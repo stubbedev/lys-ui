@@ -7,8 +7,8 @@
 package wlsession
 
 import (
-	"github.com/neurlang/wayland/wl"
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
 )
 

@@ -1,8 +1,8 @@
 package app
 
 import (
-	"github.com/neurlang/wayland/xdg"
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 )

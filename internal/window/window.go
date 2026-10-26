@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"strings"
 
-	xdeco "github.com/neurlang/wayland/unstable/xdg-decoration-v1"
-	"github.com/neurlang/wayland/wl"
-	"github.com/neurlang/wayland/xdg"
 	"github.com/stubbedev/lys-lib/debug"
+	xdeco "github.com/stubbedev/lys-lib/third_party/wayland/unstable/xdg-decoration-v1"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
+	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/intconv"

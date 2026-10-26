@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/neurlang/wayland/wl"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/sessionlock"

@@ -226,7 +226,8 @@ Dependabot keeps the module and the pinned workflow actions current.
 ## Dependencies
 
 All pure Go:
-[neurlang/wayland](https://github.com/neurlang/wayland),
+[neurlang/wayland](https://github.com/neurlang/wayland) (patched, in
+lys-lib's `third_party/wayland`),
 [godbus/dbus](https://github.com/godbus/dbus),
 [go-text/typesetting](https://github.com/go-text/typesetting),
 [rivo/uniseg](https://github.com/rivo/uniseg),
@@ -236,7 +237,6 @@ All pure Go:
 [srwiley/oksvg](https://github.com/srwiley/oksvg) +
 [rasterx](https://github.com/srwiley/rasterx),
 [kettek/apng](https://github.com/kettek/apng),
-[yalue/native_endian](https://github.com/yalue/native_endian),
 [unxed/xkb-go](https://github.com/unxed/xkb-go), and
 [jfreymuth/pulse](https://github.com/jfreymuth/pulse) (the PulseAudio
 protocol, which pipewire-pulse also serves). `media.OpenFile` runs
