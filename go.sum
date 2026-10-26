@@ -22,6 +22,8 @@ github.com/stubbedev/lys-lib v0.1.1-0.20261026142145-4dd7053ef2cc h1:SsHdJaP5St0
 github.com/stubbedev/lys-lib v0.1.1-0.20261026142145-4dd7053ef2cc/go.mod h1:/5L/FaNpjEQ/oxO950F+5HMIzbBDH79Tdxkt61pIZek=
 github.com/stubbedev/lys-lib v0.1.1-0.20261026191924-e2219c1e69e6 h1:f2ANS9CsidoBLGlBzU5+s1KsXz1SVHTodEkx/nAndOU=
 github.com/stubbedev/lys-lib v0.1.1-0.20261026191924-e2219c1e69e6/go.mod h1:GWrgbYajj2prZbvYvGy12XMOc9HdjkdJthrIackSZwM=
+github.com/stubbedev/lys-lib v0.1.1-0.20261026202728-b4a8ee331f90 h1:zPteB30P5nSC42lBidLbGJ+WdAForamGB5VOQNfxVWA=
+github.com/stubbedev/lys-lib v0.1.1-0.20261026202728-b4a8ee331f90/go.mod h1:GWrgbYajj2prZbvYvGy12XMOc9HdjkdJthrIackSZwM=
 github.com/unxed/xkb-go v0.1.9 h1:t2lhW6bcPxzX/1DBf9jIRoo13KhMm9+XUPJT4o5a/Kw=
 github.com/unxed/xkb-go v0.1.9/go.mod h1:p0uH0w1PGo5GU/qxcyj65edin5qHssAhvJTjCZ8nxNU=
 github.com/yalue/native_endian v1.0.2 h1:e4SxBbaCoOOO4E3axd7FSriUhzc1bIzqZGG5jl6Evbg=

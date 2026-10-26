@@ -7,7 +7,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jfreymuth/pulse v0.1.3
 	github.com/neurlang/wayland v0.4.5
-	github.com/stubbedev/lys-lib v0.1.1-0.20261026191924-e2219c1e69e6
+	github.com/stubbedev/lys-lib v0.1.1-0.20261026202728-b4a8ee331f90
 	github.com/unxed/xkb-go v0.1.9
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
