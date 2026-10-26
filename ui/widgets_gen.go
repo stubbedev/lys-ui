@@ -5907,6 +5907,102 @@ func (b *PanedBuilder) OnPositionChanged(fn func(position int)) *PanedBuilder {
 	return b
 }
 
+// PileBuilder builds a widget.Pile.
+type PileBuilder struct {
+	base[*widget.Pile, *PileBuilder]
+}
+
+// Pile builds a widget.Pile with widget.NewPile.
+func Pile() *PileBuilder {
+	b := &PileBuilder{}
+	b.init(b, func(s *Scope) *widget.Pile { return widget.NewPile() })
+	return b
+}
+
+// Append calls (*widget.Pile).Append.
+func (b *PileBuilder) Append(child Node) *PileBuilder {
+	b.do(func(s *Scope, w *widget.Pile) { w.Append(build(s, child)) })
+	return b
+}
+
+// Insert calls (*widget.Pile).Insert.
+func (b *PileBuilder) Insert(i int, child Node) *PileBuilder {
+	b.do(func(s *Scope, w *widget.Pile) { w.Insert(i, build(s, child)) })
+	return b
+}
+
+// Expanded calls (*widget.Pile).SetExpanded.
+func (b *PileBuilder) Expanded(on bool) *PileBuilder {
+	b.do(func(s *Scope, w *widget.Pile) { w.SetExpanded(on) })
+	return b
+}
+
+// WatchExpanded re-applies SetExpanded with get's value after every update.
+func (b *PileBuilder) WatchExpanded(get func() bool) *PileBuilder {
+	b.watch(func(w *widget.Pile) { w.SetExpanded(get()) })
+	return b
+}
+
+// Peek calls (*widget.Pile).SetPeek.
+func (b *PileBuilder) Peek(n int) *PileBuilder {
+	b.do(func(s *Scope, w *widget.Pile) { w.SetPeek(n) })
+	return b
+}
+
+// WatchPeek re-applies SetPeek with get's value after every update.
+func (b *PileBuilder) WatchPeek(get func() int) *PileBuilder {
+	b.watch(func(w *widget.Pile) { w.SetPeek(get()) })
+	return b
+}
+
+// PeekEdge calls (*widget.Pile).SetPeekEdge.
+func (b *PileBuilder) PeekEdge(e widget.Edge) *PileBuilder {
+	b.do(func(s *Scope, w *widget.Pile) { w.SetPeekEdge(e) })
+	return b
+}
+
+// WatchPeekEdge re-applies SetPeekEdge with get's value after every update.
+func (b *PileBuilder) WatchPeekEdge(get func() widget.Edge) *PileBuilder {
+	b.watch(func(w *widget.Pile) { w.SetPeekEdge(get()) })
+	return b
+}
+
+// PeekInset calls (*widget.Pile).SetPeekInset.
+func (b *PileBuilder) PeekInset(px int) *PileBuilder {
+	b.do(func(s *Scope, w *widget.Pile) { w.SetPeekInset(px) })
+	return b
+}
+
+// WatchPeekInset re-applies SetPeekInset with get's value after every update.
+func (b *PileBuilder) WatchPeekInset(get func() int) *PileBuilder {
+	b.watch(func(w *widget.Pile) { w.SetPeekInset(get()) })
+	return b
+}
+
+// PeekOffset calls (*widget.Pile).SetPeekOffset.
+func (b *PileBuilder) PeekOffset(px int) *PileBuilder {
+	b.do(func(s *Scope, w *widget.Pile) { w.SetPeekOffset(px) })
+	return b
+}
+
+// WatchPeekOffset re-applies SetPeekOffset with get's value after every update.
+func (b *PileBuilder) WatchPeekOffset(get func() int) *PileBuilder {
+	b.watch(func(w *widget.Pile) { w.SetPeekOffset(get()) })
+	return b
+}
+
+// Spacing calls (*widget.Pile).SetSpacing.
+func (b *PileBuilder) Spacing(px int) *PileBuilder {
+	b.do(func(s *Scope, w *widget.Pile) { w.SetSpacing(px) })
+	return b
+}
+
+// WatchSpacing re-applies SetSpacing with get's value after every update.
+func (b *PileBuilder) WatchSpacing(get func() int) *PileBuilder {
+	b.watch(func(w *widget.Pile) { w.SetSpacing(get()) })
+	return b
+}
+
 // PreferencesGroupBuilder builds a widget.PreferencesGroup.
 type PreferencesGroupBuilder struct {
 	base[*widget.PreferencesGroup, *PreferencesGroupBuilder]
