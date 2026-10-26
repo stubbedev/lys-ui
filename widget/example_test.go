@@ -97,7 +97,7 @@ func (h *popoverHost) OpenPopover(_ widget.Boundser, _ widget.Widget, opts widge
 	return func() {}
 }
 
-func (h *popoverHost) Focus(widget.Widget) {}
+func (h *popoverHost) Focus(widget.Widget) error { return nil }
 
 func ExampleDropdown() {
 	// A dropdown is a closed face showing the selection; Enter, Space,

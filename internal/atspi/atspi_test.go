@@ -43,6 +43,8 @@ type testScene struct {
 	loop  sync.Mutex
 	roots []widget.Widget
 	focus widget.Widget
+	// refuse, when set, is what SetFocus fails with.
+	refuse error
 }
 
 func (s *testScene) Roots() []widget.Widget {
@@ -63,10 +65,14 @@ func (s *testScene) Invoke(fn func()) {
 	fn()
 }
 
-func (s *testScene) SetFocus(w widget.Widget) {
+func (s *testScene) SetFocus(w widget.Widget) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.refuse != nil {
+		return s.refuse
+	}
 	s.focus = w
+	return nil
 }
 
 // startA11yBus launches a private bus standing in for the
@@ -551,6 +557,14 @@ func TestTextInterface(t *testing.T) {
 	}
 	if f.scene.Focused() != widget.Widget(f.entry) {
 		t.Error("GrabFocus did not focus the entry")
+	}
+
+	// A focus the router refuses answers false.
+	f.scene.mu.Lock()
+	f.scene.refuse = widget.ErrNotFocusable
+	f.scene.mu.Unlock()
+	if err := f.obj(entryPath).Call("org.a11y.atspi.Component.GrabFocus", 0).Store(&ok); err != nil || ok {
+		t.Errorf("refused GrabFocus answered %v %v, want false", ok, err)
 	}
 }
 

@@ -196,6 +196,9 @@ func (a *Application) NewDialog(parent DialogParent, cfg DialogConfig) (*Dialog,
 			}
 		},
 		OnClosed: func() {
+			if d == nil {
+				return
+			}
 			for i, x := range a.dialogs {
 				if x == d {
 					a.dialogs = append(a.dialogs[:i], a.dialogs[i+1:]...)
@@ -226,10 +229,13 @@ func (a *Application) NewDialog(parent DialogParent, cfg DialogConfig) (*Dialog,
 		hw.isDialog = true
 		hw.blocked = false
 	}
-	d = &Dialog{app: a, win: w, cfg: cfg}
 	if cfg.Focus != nil {
-		w.SetFocus(cfg.Focus)
+		if err := w.SetFocus(cfg.Focus); err != nil {
+			w.Close()
+			return nil, fmt.Errorf("app: dialog focus: %w", err)
+		}
 	}
+	d = &Dialog{app: a, win: w, cfg: cfg}
 	a.dialogs = append(a.dialogs, d)
 	if cfg.Modal {
 		a.blockAll(true)

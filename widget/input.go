@@ -1,6 +1,8 @@
 package widget
 
 import (
+	"errors"
+	"fmt"
 	"slices"
 	"time"
 
@@ -998,7 +1000,9 @@ func (r *Router) KeyAction(a KeyAction, mods Mods) {
 		}
 		if nav, ok := w.(FocusNavigator); ok {
 			if next := nav.NavigateFocus(target, a); next != nil {
-				r.SetFocus(next)
+				if err := r.SetFocus(next); err != nil {
+					panic(fmt.Sprintf("widget: %T.NavigateFocus broke the FocusNavigator contract: %v", nav, err))
+				}
 				return
 			}
 		}
@@ -1137,22 +1141,34 @@ func walkTree(w Widget, depth int, fn func(Widget, int)) {
 	}
 }
 
+// ErrNotFocusable is SetFocus refusing a widget that cannot take
+// focus: it has no KeyActionHandler, opted out, or is disabled or
+// hidden.
+var ErrNotFocusable = errors.New("widget: not focusable")
+
+// ErrNotInTree is SetFocus refusing a widget outside the router's tree.
+var ErrNotInTree = errors.New("widget: not in the focused tree")
+
 // SetFocus moves keyboard focus to w, the programmatic counterpart of
 // clicking it: a search entry that should take typing the moment its
-// surface maps is focused this way. A w that cannot take focus (no
-// KeyActionHandler, disabled, or hidden) or is not in this router's
-// tree is ignored and focus stays where it was; nil clears focus.
-func (r *Router) SetFocus(w Widget) {
+// surface maps is focused this way. A w that cannot take focus fails
+// with ErrNotFocusable and one outside this router's tree with
+// ErrNotInTree, leaving focus where it was; nil clears focus.
+func (r *Router) SetFocus(w Widget) error {
 	if w == nil {
 		setFocusStyle(r.focus, nil, false)
 		r.focus = nil
-		return
+		return nil
 	}
-	if !isFocusable(w) || !inTree(r.Root, w) {
-		return
+	if !isFocusable(w) {
+		return fmt.Errorf("widget: focus %T: %w", w, ErrNotFocusable)
+	}
+	if !inTree(r.Root, w) {
+		return fmt.Errorf("widget: focus %T: %w", w, ErrNotInTree)
 	}
 	setFocusStyle(r.focus, w, false)
 	r.focus = w
+	return nil
 }
 
 // inTree reports whether w is root or sits below it in paint order.

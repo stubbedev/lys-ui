@@ -88,7 +88,7 @@ type fakeSurfaceHost struct {
 	menuAnchorers []Boundser
 }
 
-func (h *fakeSurfaceHost) Focus(Widget) {}
+func (h *fakeSurfaceHost) Focus(Widget) error { return nil }
 
 func (h *fakeSurfaceHost) OpenPopover(_ Boundser, content Widget, opts PopoverOptions) func() {
 	h.popovers = append(h.popovers, content)

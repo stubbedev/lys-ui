@@ -2,6 +2,7 @@ package widget
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -16,7 +17,9 @@ func TestSetFocus(t *testing.T) {
 
 	t.Run("a focusable widget in the tree takes focus", func(t *testing.T) {
 		r := &Router{Root: root}
-		r.SetFocus(b)
+		if err := r.SetFocus(b); err != nil {
+			t.Fatal(err)
+		}
 		if r.Focused() != Widget(b) {
 			t.Fatalf("focus = %v, want b", r.Focused())
 		}
@@ -36,30 +39,36 @@ func TestSetFocus(t *testing.T) {
 		}
 	})
 
-	t.Run("what cannot take keys is ignored", func(t *testing.T) {
+	t.Run("what cannot take keys is refused", func(t *testing.T) {
 		r := &Router{Root: root}
 		r.SetFocus(a)
-		r.SetFocus(root) // a Box has no KeyAction
+		if err := r.SetFocus(root); !errors.Is(err, ErrNotFocusable) { // a Box has no KeyAction
+			t.Errorf("err = %v, want ErrNotFocusable", err)
+		}
 		if r.Focused() != Widget(a) {
 			t.Errorf("focus = %v, want a kept", r.Focused())
 		}
 	})
 
-	t.Run("a widget outside the tree is ignored", func(t *testing.T) {
+	t.Run("a widget outside the tree is refused", func(t *testing.T) {
 		r := &Router{Root: root}
 		r.SetFocus(a)
-		r.SetFocus(newFocusTarget())
+		if err := r.SetFocus(newFocusTarget()); !errors.Is(err, ErrNotInTree) {
+			t.Errorf("err = %v, want ErrNotInTree", err)
+		}
 		if r.Focused() != Widget(a) {
 			t.Errorf("focus = %v, want a kept", r.Focused())
 		}
 	})
 
-	t.Run("a disabled widget is ignored", func(t *testing.T) {
+	t.Run("a disabled widget is refused", func(t *testing.T) {
 		r := &Router{Root: root}
 		r.SetFocus(a)
 		b.SetEnabled(false)
 		defer b.SetEnabled(true)
-		r.SetFocus(b)
+		if err := r.SetFocus(b); !errors.Is(err, ErrNotFocusable) {
+			t.Errorf("err = %v, want ErrNotFocusable", err)
+		}
 		if r.Focused() != Widget(a) {
 			t.Errorf("focus = %v, want a kept", r.Focused())
 		}

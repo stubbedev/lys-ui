@@ -20,7 +20,7 @@ type surfaceHost struct {
 }
 
 // Focus implements widget.SurfaceHost.
-func (p surfaceHost) Focus(w widget.Widget) { p.router.SetFocus(w) }
+func (p surfaceHost) Focus(w widget.Widget) error { return p.router.SetFocus(w) }
 
 // OpenMenu implements widget.SurfaceHost.
 func (p surfaceHost) OpenMenu(anchor widget.Boundser, face render.Font, sizePx float64, items []widget.MenuItem, opts widget.MenuOptions) {

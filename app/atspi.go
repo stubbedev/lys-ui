@@ -144,9 +144,14 @@ func (a *Application) Focused() widget.Widget {
 // SetFocus implements atspi.Scene: focus moves to w in the window
 // whose tree holds it, through that window's router (the path a click
 // takes), and the window repaints.
-func (a *Application) SetFocus(w widget.Widget) {
-	if hw := a.windowOf(w); hw != nil {
-		hw.router.SetFocus(w)
-		hw.dirty = true
+func (a *Application) SetFocus(w widget.Widget) error {
+	hw := a.windowOf(w)
+	if hw == nil {
+		return fmt.Errorf("app: focus %T: %w", w, widget.ErrNotInTree)
 	}
+	if err := hw.router.SetFocus(w); err != nil {
+		return err
+	}
+	hw.dirty = true
+	return nil
 }

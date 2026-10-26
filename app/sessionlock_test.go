@@ -71,9 +71,35 @@ func TestSessionLockSetFocus(t *testing.T) {
 	a := &hostWindow{router: &widget.Router{Root: entryA}}
 	b := &hostWindow{router: &widget.Router{Root: entryB}}
 	l := &SessionLock{surfaces: map[*Output]*hostWindow{{}: a, {}: b}}
-	l.SetFocus(entryB)
+	if err := l.SetFocus(entryB); err != nil {
+		t.Fatal(err)
+	}
 	if a.router.Focused() != nil || b.router.Focused() != entryB {
 		t.Errorf("focus: a=%v b=%v, want only b's entry", a.router.Focused(), b.router.Focused())
+	}
+	if err := l.SetFocus(widget.NewEntry(face, 14, 0)); !errors.Is(err, widget.ErrNotInTree) {
+		t.Errorf("a widget no lock surface holds: err = %v, want ErrNotInTree", err)
+	}
+	entryA.SetEnabled(false)
+	if err := l.SetFocus(entryA); !errors.Is(err, widget.ErrNotFocusable) {
+		t.Errorf("a disabled entry: err = %v, want ErrNotFocusable", err)
+	}
+}
+
+// SetFocus on a surface that is gone fails with ErrClosed instead of
+// doing nothing.
+func TestSetFocusOnClosedSurface(t *testing.T) {
+	a := &Application{}
+	e := widget.NewBox(widget.Column, 0, 0)
+	if err := (&Window{app: a}).SetFocus(e); !errors.Is(err, ErrClosed) {
+		t.Errorf("window: err = %v, want ErrClosed", err)
+	}
+	if err := (&LayerWindow{app: a}).SetFocus(e); !errors.Is(err, ErrClosed) {
+		t.Errorf("layer: err = %v, want ErrClosed", err)
+	}
+	p := &Popover{closed: true}
+	if err := p.SetFocus(e); !errors.Is(err, ErrClosed) {
+		t.Errorf("popover: err = %v, want ErrClosed", err)
 	}
 }
 

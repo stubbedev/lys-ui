@@ -1215,12 +1215,10 @@ func (w *Window) State() WindowState {
 }
 
 // SetFocus moves the window's keyboard focus to target, a widget of its
-// tree; see widget.Router.SetFocus for what is ignored.
-func (w *Window) SetFocus(target widget.Widget) {
-	if hw := w.app.hostWindowOf(w); hw != nil {
-		hw.router.SetFocus(target)
-		hw.dirty = true
-	}
+// tree; it fails as widget.Router.SetFocus does, and with ErrClosed
+// once the window is gone.
+func (w *Window) SetFocus(target widget.Widget) error {
+	return w.app.focusIn(w, target)
 }
 
 // LayerWindow is the application's handle on one layer surface.
@@ -1248,13 +1246,24 @@ func (l *LayerWindow) Close() {
 }
 
 // SetFocus moves the surface's keyboard focus to w, a widget of its
-// tree; see widget.Router.SetFocus for what is ignored. The compositor
-// still decides whether the surface itself holds the keyboard.
-func (l *LayerWindow) SetFocus(w widget.Widget) {
-	if hw := l.app.hostWindowOf(l); hw != nil {
-		hw.router.SetFocus(w)
-		hw.dirty = true
+// tree; it fails as widget.Router.SetFocus does, and with ErrClosed
+// once the surface is gone. The compositor still decides whether the
+// surface itself holds the keyboard.
+func (l *LayerWindow) SetFocus(w widget.Widget) error {
+	return l.app.focusIn(l, w)
+}
+
+// focusIn moves the focus of h's surface to w and repaints it.
+func (a *Application) focusIn(h Host, w widget.Widget) error {
+	hw := a.hostWindowOf(h)
+	if hw == nil {
+		return fmt.Errorf("app: focus %T: %w", w, ErrClosed)
 	}
+	if err := hw.router.SetFocus(w); err != nil {
+		return err
+	}
+	hw.dirty = true
+	return nil
 }
 
 // SetSize requests a new surface size in logical pixels. A zero axis

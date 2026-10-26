@@ -182,13 +182,21 @@ func (l *SessionLock) Cancel() error {
 
 // SetFocus moves keyboard focus to w in the lock surface whose tree
 // holds it (a password entry, after a failed attempt re-enabled it);
-// see widget.Router.SetFocus for what is ignored. The compositor still
+// it fails as widget.Router.SetFocus does. The compositor still
 // decides which lock surface holds the keyboard.
-func (l *SessionLock) SetFocus(w widget.Widget) {
+func (l *SessionLock) SetFocus(w widget.Widget) error {
 	for _, hw := range l.surfaces {
-		hw.router.SetFocus(w)
+		err := hw.router.SetFocus(w)
+		if errors.Is(err, widget.ErrNotInTree) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
 		hw.dirty = true
+		return nil
 	}
+	return fmt.Errorf("app: focus %T: %w", w, widget.ErrNotInTree)
 }
 
 // Outputs returns the outputs currently covered by a lock surface.
@@ -242,12 +250,19 @@ func (l *SessionLock) cover(out *Output) {
 	if _, ok := l.surfaces[out]; ok {
 		return
 	}
-	hw, err := l.app.newLockWindow(l.lock, out, l.cfg.Surface(out))
+	content := l.cfg.Surface(out)
+	hw, err := l.app.newLockWindow(l.lock, out, content)
 	if err != nil {
 		logutil.L().Warn("app: session lock: lock surface", "output", out.Name, "err", err)
 		return
 	}
 	l.surfaces[out] = hw
+	if content.Focus == nil {
+		return
+	}
+	if err := hw.router.SetFocus(content.Focus); err != nil {
+		logutil.L().Error("app: session lock: lock surface focus", "output", out.Name, "err", err)
+	}
 }
 
 // uncover destroys the lock surface of an unplugged output, as the
@@ -293,9 +308,6 @@ func (a *Application) newLockWindow(lock *sessionlock.Lock, out *Output, content
 	}, content.OnClosed, surfx.KindMenu)
 	if out.Transform != 0 && hw.sc != nil {
 		_ = hw.sc.SetTransform(out.Transform)
-	}
-	if content.Focus != nil {
-		hw.router.SetFocus(content.Focus)
 	}
 	return hw, nil
 }

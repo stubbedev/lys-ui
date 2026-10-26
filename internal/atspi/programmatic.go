@@ -12,8 +12,9 @@ import (
 // The calls that reach widgets: AT-driven focus, the caret and
 // selection setters, and the per-character geometry. Setters queue on
 // the loop and answer at once from the snapshot (the next sample
-// reports the outcome, as for DoAction); the geometry is shaping-time
-// state no snapshot carries, so its probes run on the loop and wait.
+// reports the outcome, as for DoAction); focus and the geometry run on
+// the loop and wait, since the router's verdict and shaping-time state
+// are nothing a snapshot carries.
 
 // loopTimeout bounds a probe waiting on the loop: a stalled loop
 // answers the zero value rather than hanging the AT.
@@ -38,15 +39,16 @@ func (b *Bridge) onLoop(fn func()) bool {
 }
 
 // GrabFocus moves keyboard focus to a focusable widget through its
-// window's router, the same path a click takes.
+// window's router, the same path a click takes, and reports whether
+// the router took it.
 func (o *componentIface) GrabFocus() bool {
 	n := o.b.node(o.id)
 	if n == nil || !n.st.Focusable {
 		return false
 	}
 	w := n.w
-	o.b.scene.Invoke(func() { o.b.scene.SetFocus(w) })
-	return true
+	var err error
+	return o.b.onLoop(func() { err = o.b.scene.SetFocus(w) }) && err == nil
 }
 
 // selector is the node's widget as a TextSelector, nil when it has

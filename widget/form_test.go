@@ -11,7 +11,7 @@ type focusHost struct {
 	r *Router
 }
 
-func (h *focusHost) Focus(w Widget) { h.r.SetFocus(w) }
+func (h *focusHost) Focus(w Widget) error { return h.r.SetFocus(w) }
 
 // newTestForm builds a form of two required entries and a third,
 // unchecked one, hosted and arranged.
@@ -72,5 +72,19 @@ func TestFormSubmit(t *testing.T) {
 	r.KeyAction(KeyEnter, 0)
 	if submits != 1 || form.fields[1].field.Error() != "" {
 		t.Errorf("Enter: submits %d, email error %q; want one submit and no error", submits, form.fields[1].field.Error())
+	}
+}
+
+// Validation focuses the first invalid field that can take focus: a
+// disabled invalid one is passed over, not left holding nothing.
+func TestFormValidateSkipsUnfocusableFields(t *testing.T) {
+	form, r, entries := newTestForm(t)
+	entries[0].SetEnabled(false)
+	r.SetFocus(entries[2])
+	if form.Validate() {
+		t.Fatal("two empty required fields validated")
+	}
+	if r.Focused() != Widget(entries[1]) {
+		t.Errorf("focus on %T, want the invalid email past the disabled name", r.Focused())
 	}
 }

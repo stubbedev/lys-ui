@@ -140,8 +140,9 @@ type Scene interface {
 	// Invoke runs fn on the application's loop goroutine, asynchronously.
 	Invoke(fn func())
 	// SetFocus moves keyboard focus to w through its window's router
-	// (AT-driven focus); called on the loop goroutine.
-	SetFocus(w widget.Widget)
+	// (AT-driven focus), failing as widget.Router.SetFocus does; called
+	// on the loop goroutine.
+	SetFocus(w widget.Widget) error
 }
 
 // Options tune Serve. The zero value is the production default.

@@ -18,8 +18,9 @@ type SurfaceHost interface {
 	// OpenPopover opens content in a popover beside anchor, and returns
 	// what closes it.
 	OpenPopover(anchor Boundser, content Widget, opts PopoverOptions) (close func())
-	// Focus moves the surface's keyboard focus to w.
-	Focus(w Widget)
+	// Focus moves the surface's keyboard focus to w, failing as
+	// Router.SetFocus does.
+	Focus(w Widget) error
 }
 
 // SetSurfaceHost makes h serve the tree under root. A root from
@@ -99,5 +100,6 @@ func OpenPopover(from Widget, anchor Boundser, content Widget, opts PopoverOptio
 
 // GrabFocus moves the keyboard focus of w's surface to w (GTK's
 // gtk_widget_grab_focus): a form focusing its first invalid field. A
-// widget that cannot take focus leaves it where it was.
-func GrabFocus(w Widget) { hostOf(w, "GrabFocus").Focus(w) }
+// widget that cannot take focus fails with ErrNotFocusable and leaves
+// it where it was.
+func GrabFocus(w Widget) error { return hostOf(w, "GrabFocus").Focus(w) }

@@ -197,7 +197,13 @@ func TestPopoverSetFocusRoutesThroughItsRouter(t *testing.T) {
 	content.Append(b, false)
 	op, surf, _, _ := newLoopPopover(content)
 	p := op.popover
-	p.focus = func(w widget.Widget) { op.router.SetFocus(w); op.pop.MarkFrame() }
+	p.focus = func(w widget.Widget) error {
+		if err := op.router.SetFocus(w); err != nil {
+			return err
+		}
+		op.pop.MarkFrame()
+		return nil
+	}
 	p.SetFocus(b)
 	if op.router.Focused() != b || surf.frames != 1 {
 		t.Errorf("focused %v frames %d, want b and a repaint", op.router.Focused(), surf.frames)

@@ -106,7 +106,7 @@ type Popover struct {
 	closed  bool
 	closeFn func()
 	// focus moves the open popover's keyboard focus (loop only).
-	focus func(w widget.Widget)
+	focus func(w widget.Widget) error
 
 	// host is the window the popover (or its root) opened over, pop its
 	// surface, teardown its no-tween close; parent and children link a
@@ -174,13 +174,14 @@ func (p *Popover) dropChild(child *Popover) {
 }
 
 // SetFocus moves keyboard focus to w inside the open popover - a form
-// that appears in it takes typing at once (GTK's grab_focus). A w the
-// router cannot focus is ignored (see widget.Router.SetFocus); nil
-// clears focus. Loop goroutine only.
-func (p *Popover) SetFocus(w widget.Widget) {
-	if p != nil && p.focus != nil && !p.Closed() {
-		p.focus(w)
+// that appears in it takes typing at once (GTK's grab_focus). It fails
+// as widget.Router.SetFocus does, and with ErrClosed once the popover
+// is gone; nil clears focus. Loop goroutine only.
+func (p *Popover) SetFocus(w widget.Widget) error {
+	if p == nil || p.focus == nil || p.Closed() {
+		return fmt.Errorf("app: focus %T: %w", w, ErrClosed)
 	}
+	return p.focus(w)
 }
 
 // Dismiss closes the popover programmatically; OnClosed still fires
@@ -461,6 +462,15 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		unanchor()
 		return nil, err
 	}
+	router := &widget.Router{Root: keyRoot}
+	if cfg.Focus != nil {
+		if err := router.SetFocus(cfg.Focus); err != nil {
+			pop.Close()
+			restoreKeys()
+			unanchor()
+			return nil, fmt.Errorf("app: popover focus: %w", err)
+		}
+	}
 	// Dismiss, not Close: the programmatic path takes the same two-
 	// phase route as outside-clicks and Esc — input seals, OnClosed
 	// fires, and the surface runs its exit tween before the wire
@@ -491,7 +501,6 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	// the loop goroutine, keys through the same Router once a widget
 	// holds focus. Content the app mutates from Invoke repaints on the
 	// next pass, and nothing paints from a second goroutine.
-	router := &widget.Router{Root: keyRoot}
 	widget.SetSurfaceHost(cfg.Content, surfaceHost{a: a, host: host, parent: p, router: router})
 	op := &openPopover{
 		host:       host,
@@ -506,12 +515,12 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	if x, y, ok := pop.Position(); ok && basePlaced {
 		op.origin, op.placed = widget.Point{X: base.X + x, Y: base.Y + y}, true
 	}
-	if cfg.Focus != nil {
-		router.SetFocus(cfg.Focus)
-	}
-	p.focus = func(w widget.Widget) {
-		router.SetFocus(w)
+	p.focus = func(w widget.Widget) error {
+		if err := router.SetFocus(w); err != nil {
+			return err
+		}
 		op.pop.MarkFrame()
+		return nil
 	}
 	op.detach = pop.AttachInput(a.sess, router)
 	a.openPopovers = append(a.openPopovers, op)

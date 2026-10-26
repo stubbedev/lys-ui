@@ -1,5 +1,7 @@
 package widget
 
+import "fmt"
+
 // Form validates a column of fields: each field
 // added with a validator - a closure that reads its control's value
 // and returns the error message, or "" while it is valid. A field
@@ -52,19 +54,26 @@ func (ff formField) check() bool {
 }
 
 // Validate checks every field, shows each one's result, and moves the
-// focus to the first invalid field's control. It reports whether all
-// are valid.
+// focus to the first invalid field whose control can take it. It
+// reports whether all are valid.
 func (f *Form) Validate() bool {
-	var first *Field
+	valid := true
+	var first Widget
 	for _, ff := range f.fields {
-		if !ff.check() && first == nil {
-			first = ff.field
+		if ff.check() {
+			continue
+		}
+		valid = false
+		if c := ff.field.Control(); first == nil && isFocusable(c) {
+			first = c
 		}
 	}
 	if first != nil {
-		GrabFocus(first.Control())
+		if err := GrabFocus(first); err != nil {
+			panic(fmt.Sprintf("widget: Form.Validate: %v", err))
+		}
 	}
-	return first == nil
+	return valid
 }
 
 // Submit runs OnSubmit when every field is valid.

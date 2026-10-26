@@ -21,6 +21,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/window"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
+	"github.com/stubbedev/lys-ui/widget"
 )
 
 // ReconnectOptions turn a lost compositor connection into a rebuild
@@ -270,7 +271,9 @@ func (a *Application) rebuildToplevel(old *hostWindow) error {
 	if err != nil {
 		return fmt.Errorf("app: rebuild %q: %w", cfg.Title, err)
 	}
-	a.carryOver(old, hw)
+	if err := a.carryOver(old, hw); err != nil {
+		return fmt.Errorf("app: rebuild %q: %w", cfg.Title, err)
+	}
 	if state.Maximized {
 		w.Maximize()
 	}
@@ -297,7 +300,9 @@ func (a *Application) rebuildLayer(old *hostWindow) error {
 	if err != nil {
 		return fmt.Errorf("app: rebuild layer %q: %w", cfg.Namespace, err)
 	}
-	a.carryOver(old, hw)
+	if err := a.carryOver(old, hw); err != nil {
+		return fmt.Errorf("app: rebuild layer %q: %w", cfg.Namespace, err)
+	}
 	if l.alpha > 0 {
 		_ = l.SetOpacity(l.alpha)
 	}
@@ -306,12 +311,18 @@ func (a *Application) rebuildLayer(old *hostWindow) error {
 
 // carryOver moves loop-side state from a window's old loop record to
 // its rebuilt one: dialog exemption, the modal block, and keyboard
-// focus inside the tree.
-func (a *Application) carryOver(old, hw *hostWindow) {
+// focus inside the tree. A focus that went unfocusable since it was
+// set stays behind, as the old router would have dropped it.
+func (a *Application) carryOver(old, hw *hostWindow) error {
 	hw.isDialog, hw.blocked = old.isDialog, old.blocked
-	if f := old.router.Focused(); f != nil {
-		hw.router.SetFocus(f)
+	f := old.router.Focused()
+	if f == nil {
+		return nil
 	}
+	if err := hw.router.SetFocus(f); err != nil && !errors.Is(err, widget.ErrNotFocusable) {
+		return fmt.Errorf("app: carry focus over: %w", err)
+	}
+	return nil
 }
 
 // sameOutput finds the output on the current session that old was -

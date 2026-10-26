@@ -53,7 +53,9 @@ func run() error {
 				return
 			}
 			entry.SetText("")
-			lock.SetFocus(entry)
+			if err := lock.SetFocus(entry); err != nil {
+				log.Printf("lys-ui-lock: %v", err)
+			}
 		}
 	}
 	lock, err = application.LockSession(app.SessionLockConfig{
