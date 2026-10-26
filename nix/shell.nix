@@ -1,51 +1,59 @@
-{ inputs, ... }:
-{
-  perSystem = { buildGoModule, go, lib, pkgs, ... }:
-    let
-      # Rebuild a nixpkgs Go tool against the pinned toolchain: every
-      # buildGo*Module argument its override takes (gopls asks for
-      # buildGoLatestModule, the rest for buildGoModule) gets ours, so
-      # gopls, delve and the editor tools understand go 1.27 sources.
-      withPinnedGo = pkg:
-        pkg.override (lib.mapAttrs (_: _: buildGoModule)
-          (lib.filterAttrs (name: _: lib.match "buildGo.*Module" name != null)
-            (lib.functionArgs pkg.override)));
-      gpuDrivers = inputs.lys-lib.lib.gpuDriverEnv pkgs;
-    in
-    {
-      devShells.default = pkgs.mkShellNoCC ({
-        packages = [
-          go
-          pkgs.git
+{inputs, ...}: {
+  perSystem = {
+    buildGoModule,
+    go,
+    lib,
+    pkgs,
+    testFontsConf,
+    ...
+  }: let
+    # Rebuild a nixpkgs Go tool against the pinned toolchain: every
+    # buildGo*Module argument its override takes (gopls asks for
+    # buildGoLatestModule, the rest for buildGoModule) gets ours, so
+    # gopls, delve and the editor tools understand go 1.27 sources.
+    withPinnedGo = pkg:
+      pkg.override (lib.mapAttrs (_: _: buildGoModule)
+        (lib.filterAttrs (name: _: lib.match "buildGo.*Module" name != null)
+          (lib.functionArgs pkg.override)));
+    gpuDrivers = inputs.lys-lib.lib.gpuDriverEnv pkgs;
+  in {
+    formatter = pkgs.alejandra;
 
-          # Development tools
-          pkgs.golangci-lint # `just lint`, and `just fmt` through its gofumpt + gci formatters; config in .golangci.yml
-          pkgs.just # task runner
-        ]
-        # Headless test compositor: sway on WLR_BACKENDS=headless gives
-        # input integration tests a private, deterministic Wayland session
-        # (layer shell + virtual pointer protocol included) without
-        # touching the developer's real desktop. Linux only.
-        ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.sway ]
-        ++ [
-          # `just atspi`'s bus-level tests launch a private dbus-daemon as
-          # the accessibility bus and skip when it is missing; shipping it
-          # keeps that gate honest wherever the dev shell runs.
-          pkgs.dbus
-        ]
-        # Editor tooling (gopls, delve, and the tools vscode-go and
-        # vim-go install), built against the pinned Go: vscode-go
-        # expects every tool compiled with the Go it drives.
-        ++ map withPinnedGo [
-          pkgs.gopls
-          pkgs.delve
-          pkgs.gotools
-          pkgs.gomodifytags
-          pkgs.impl
-          pkgs.go-tools
-          pkgs.gotests
-          pkgs.iferr
-        ];
+    devShells.default = pkgs.mkShellNoCC ({
+        packages =
+          [
+            go
+            pkgs.git
+            pkgs.gh
+
+            # Development tools
+            pkgs.golangci-lint # `just lint`, and `just fmt` through its gofumpt + gci formatters; config in .golangci.yml
+            pkgs.just # task runner
+          ]
+          # Headless test compositor: sway on WLR_BACKENDS=headless gives
+          # input integration tests a private, deterministic Wayland session
+          # (layer shell + virtual pointer protocol included) without
+          # touching the developer's real desktop. Linux only.
+          ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.sway]
+          ++ [
+            # `just atspi`'s bus-level tests launch a private dbus-daemon as
+            # the accessibility bus and skip when it is missing; shipping it
+            # keeps that gate honest wherever the dev shell runs.
+            pkgs.dbus
+          ]
+          # Editor tooling (gopls, delve, and the tools vscode-go and
+          # vim-go install), built against the pinned Go: vscode-go
+          # expects every tool compiled with the Go it drives.
+          ++ map withPinnedGo [
+            pkgs.gopls
+            pkgs.delve
+            pkgs.gotools
+            pkgs.gomodifytags
+            pkgs.impl
+            pkgs.go-tools
+            pkgs.gotests
+            pkgs.iferr
+          ];
 
         # lys-ui is pure Go by design; keep accidental cgo out. The
         # package builds set the same thing.
@@ -70,7 +78,10 @@
         # CI runner has none. Only the recipe exports it - a developer's own
         # cursor setup inside the shell is untouched.
         LYS_UI_TEST_XCURSOR_PATH = "${pkgs.vanilla-dmz}/share/icons";
-      } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+
+        LYS_UI_TEST_FONTCONFIG = testFontsConf;
+      }
+      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
         # lys-lib's package gpu loads libvulkan and libva at runtime;
         # the loaders find the host's drivers (/run/opengl-driver on
         # NixOS).
@@ -86,5 +97,5 @@
         # gpuDriverEnv, the one hook every lys shell uses.
         inherit (gpuDrivers) shellHook;
       });
-    };
+  };
 }

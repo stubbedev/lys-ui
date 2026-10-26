@@ -1,5 +1,11 @@
 {
-  perSystem = { go, lib, pkgs, self', ... }: {
+  perSystem = {
+    go,
+    lib,
+    pkgs,
+    self',
+    ...
+  }: {
     checks = lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
       # The Hyprland side of the compositor-in-the-loop gate (#66):
       # a private NixOS VM (own kernel, own virtio-gpu DRM node,

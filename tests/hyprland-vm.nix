@@ -20,9 +20,7 @@
   src,
   go,
   goModules,
-}:
-
-let
+}: let
   # Same pin set the sway recipe uses (internal/headlesstest guards
   # them): the showcase, the states client and the multilist client
   # float at fixed sizes and positions so client-traced widget
@@ -77,12 +75,10 @@ let
   runtimeDir = "/run/user/${toString uid}";
   sig = "lys-ui-vm";
 in
-pkgs.testers.nixosTest {
-  name = "lys-ui-hyprland-vm";
+  pkgs.testers.nixosTest {
+    name = "lys-ui-hyprland-vm";
 
-  nodes.machine =
-    { ... }:
-    {
+    nodes.machine = {...}: {
       virtualisation.graphics = true;
       virtualisation.cores = 4;
       virtualisation.memorySize = 4096;
@@ -114,7 +110,7 @@ pkgs.testers.nixosTest {
       # mesa's set includes the software (swrast/llvmpipe) drivers the
       # virtio node renders with.
       hardware.graphics.enable = true;
-      hardware.graphics.extraPackages = [ pkgs.mesa ];
+      hardware.graphics.extraPackages = [pkgs.mesa];
 
       users.users.${lysUIUser} = {
         isNormalUser = true;
@@ -135,8 +131,7 @@ pkgs.testers.nixosTest {
       ];
     };
 
-  testScript =
-    ''
+    testScript = ''
       start_all()
       machine.wait_for_unit("multi-user.target")
 
@@ -278,4 +273,4 @@ pkgs.testers.nixosTest {
           raise Exception("compositor-in-the-loop suite failed on Hyprland")
       print(machine.succeed("tail -n 200 /tmp/lysuitest/suite.log"))
     '';
-}
+  }
