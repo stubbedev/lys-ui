@@ -53,10 +53,12 @@ var (
 func fontmap() (*fontscan.FontMap, error) {
 	storeOnce.Do(func() {
 		fm := fontscan.NewFontMap(quietLogger{})
-		// An empty cache path lets fontscan pick its platform default.
-		if err := fm.UseSystemFonts(""); err != nil {
-			storeErr = fmt.Errorf("sysfont: scan system fonts: %w", err)
-			return
+		if _, err := fontscan.DefaultFontDirectories(quietLogger{}); err == nil {
+			// An empty cache path lets fontscan pick its platform default.
+			if err := fm.UseSystemFonts(""); err != nil {
+				storeErr = fmt.Errorf("sysfont: scan system fonts: %w", err)
+				return
+			}
 		}
 		for _, f := range []struct {
 			family string
