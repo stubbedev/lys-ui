@@ -530,14 +530,16 @@ func selectedTint() render.Color {
 // Role implements Roleer.
 func (l *List) Role() Role { return RoleList }
 
-// HitTest returns the row proxy under p, or the list itself.
+// HitTest returns the row proxy under p, or the list itself where no
+// item is (see itemAt).
 func (l *List) HitTest(p Point) Widget {
 	if !l.bounds.Contains(p.X, p.Y) {
 		return nil
 	}
-	i := l.rowAt(p)
-	if w, ok := l.rows[i]; ok {
-		return w
+	if i, ok := l.itemAt(p); ok {
+		if w, ok := l.rows[i]; ok {
+			return w
+		}
 	}
 	return l
 }
@@ -560,10 +562,24 @@ func (l *List) claimScroll(e ScrollEvent) bool {
 
 // rowUnder is the row under p, -1 when none is.
 func (l *List) rowUnder(p Point) int {
-	if i, ok := l.rowAtExact(p); ok {
+	if i, ok := l.itemAt(p); ok {
 		return i
 	}
 	return -1
+}
+
+// itemAt maps a point to the item whose border box holds it: past the
+// last item, or in a row proxy's margin, no item is under it.
+func (l *List) itemAt(p Point) (int, bool) {
+	i, ok := l.rowAtExact(p)
+	if !ok {
+		return 0, false
+	}
+	box := l.cellRect(i)
+	if r, ok := l.rows[i]; ok {
+		box, _ = boxRects(boxOf(r.style(r), render.Insets{}), box)
+	}
+	return i, box.Contains(p.X, p.Y)
 }
 
 // rowAt maps a point to a row index, clamped into the model.
@@ -659,7 +675,7 @@ func (l *List) rowDoubleClick(r *listRow, p Point) {
 func (l *List) dragApply(p Point) {
 	l.dragPoint = p
 	if l.gestureRow < 0 {
-		if i, ok := l.rowAtExact(p); ok {
+		if i, ok := l.itemAt(p); ok {
 			l.gestureRow = i
 		} else {
 			return
@@ -741,13 +757,14 @@ func (l *List) updateAutoScroll() {
 }
 
 // HoverMove implements HoverMover: tracks the hovered row for styling
-// and per-row tooltips. Browse mode selects the hovered row (focus
-// follows the pointer). Disabled lists highlight nothing.
+// and per-row tooltips, none where no item is under the pointer.
+// Browse mode selects the hovered row (focus follows the pointer).
+// Disabled lists highlight nothing.
 func (l *List) HoverMove(p Point) {
 	if !IsEnabled(l) {
 		return
 	}
-	i := l.rowAt(p)
+	i := l.rowUnder(p)
 	if i == l.hover {
 		return
 	}
@@ -775,7 +792,7 @@ func (l *List) ClickAt(p Point) {
 	if !IsEnabled(l) {
 		return
 	}
-	if i, ok := l.rowAtExact(p); ok {
+	if i, ok := l.itemAt(p); ok {
 		l.rowClick(&listRow{list: l, idx: i, row: l.model.row(i)}, p)
 	}
 }

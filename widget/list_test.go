@@ -514,3 +514,20 @@ func TestListVisibleReachesThePartialBottomRow(t *testing.T) {
 		t.Errorf("visible rows [%d, %d), want [0, 4)", first, last)
 	}
 }
+
+// A row proxy's margin belongs to no row: a point there hits the list
+// (#371).
+func TestListRowMarginHitsNoRow(t *testing.T) {
+	loadCSS(t, `listview > row { margin: 4px; }`)
+	l := NewList[Widget](staticRows{newStub(20, 10), newStub(20, 10)}, 20)
+	frame(t, l, 100, 100)
+	if got := l.HitTest(Point{X: 50, Y: 2}); got != Widget(l) {
+		t.Errorf("a point in row 0's top margin hit %T, want the list", got)
+	}
+	if got := l.HitTest(Point{X: 2, Y: 10}); got != Widget(l) {
+		t.Errorf("a point in row 0's side margin hit %T, want the list", got)
+	}
+	if got, ok := l.HitTest(Point{X: 50, Y: 10}).(*listRow); !ok || got.idx != 0 {
+		t.Errorf("a point inside row 0's border box hit %v, want row 0", got)
+	}
+}

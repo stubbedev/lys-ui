@@ -113,3 +113,30 @@ func TestListLeftRightOnlyMoveInAGrid(t *testing.T) {
 		t.Errorf("right moved a multiple list's selection to %v", got)
 	}
 }
+
+// Past the last item of a short last line no item is hit: the list
+// takes the point, a click there selects nothing, and nothing hovers
+// (#371).
+func TestListGridEmptyCellsHitNoItem(t *testing.T) {
+	l, _ := gridList(t)
+	l.ScrollBy(0, 100)
+	frame(t, l, 160, 40)
+	empty := Point{X: 100, Y: 30}
+	if got := l.HitTest(empty); got != Widget(l) {
+		t.Fatalf("empty cell hit %T, want the list", got)
+	}
+	l.ClickAt(empty)
+	if got := l.Selection(); len(got) != 0 {
+		t.Errorf("a click past the last item selected %v", got)
+	}
+	l.HoverMove(empty)
+	if l.hover != -1 {
+		t.Errorf("hover on row %d past the last item", l.hover)
+	}
+	if got := l.rowUnder(empty); got != -1 {
+		t.Errorf("row under the empty cell = %d, want -1", got)
+	}
+	if got, ok := l.HitTest(Point{X: 10, Y: 30}).(*listRow); !ok || got.idx != 9 {
+		t.Errorf("the last item's cell hit %v, want its row", got)
+	}
+}
