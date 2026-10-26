@@ -399,7 +399,7 @@ func (f *FlowBox) HitTest(p Point) Widget {
 		if !IsVisible(c) {
 			continue
 		}
-		if hit := c.HitTest(p); hit != nil {
+		if hit := HitChild(c, p); hit != nil {
 			return hit
 		}
 	}
@@ -455,7 +455,7 @@ func (c *FlowBoxChild) Paint(cv *render.Canvas) {
 // HitTest resolves through the child; in a selectable box the wrapper
 // takes every press but those a control inside the child consumes.
 func (c *FlowBoxChild) HitTest(p Point) Widget {
-	if hit := c.child.HitTest(p); hit != nil && (c.box == nil || c.box.mode == SelectionNone || interactiveWithin(hit, c)) {
+	if hit := HitChild(c.child, p); hit != nil && (c.box == nil || c.box.mode == SelectionNone || interactiveWithin(hit, c)) {
 		return hit
 	}
 	return c.HitLeaf(c, p)

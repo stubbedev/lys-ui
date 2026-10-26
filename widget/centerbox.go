@@ -131,7 +131,7 @@ func (b *CenterBox) place(w Widget, r render.Rect, off, n int) {
 // HitTest returns the slot under p, else the box.
 func (b *CenterBox) HitTest(p Point) Widget {
 	for _, c := range b.Children() {
-		if hit := c.HitTest(p); hit != nil {
+		if hit := HitChild(c, p); hit != nil {
 			return hit
 		}
 	}

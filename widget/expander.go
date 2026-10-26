@@ -299,7 +299,7 @@ func (e *Expander) HitTest(p Point) Widget {
 		return e
 	}
 	if e.progress > 0 && e.child != nil {
-		if hit := e.child.HitTest(p); hit != nil {
+		if hit := HitChild(e.child, p); hit != nil {
 			return hit
 		}
 	}

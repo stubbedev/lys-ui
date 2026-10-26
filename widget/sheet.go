@@ -277,7 +277,7 @@ func (s *Sheet) HitTest(p Point) Widget {
 		return nil
 	}
 	if rect := s.panelRect(s.sheetRect()); rect.Contains(p.X, p.Y) {
-		if hit := s.panel.HitTest(p); hit != nil {
+		if hit := HitChild(s.panel, p); hit != nil {
 			return hit
 		}
 	}

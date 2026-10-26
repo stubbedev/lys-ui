@@ -216,3 +216,41 @@ func TestPaintChildSkipsAHiddenWidget(t *testing.T) {
 		t.Error("a widget hidden with SetVisible(false) painted")
 	}
 }
+
+// hitRow is a container from outside the kit that hit-tests its
+// children through HitChild, without a visibility filter of its own.
+type hitRow struct {
+	node
+	kids []Widget
+}
+
+func (r *hitRow) Measure(con Constraints) Size { return clampSize(Size{W: 20, H: 10}, con) }
+func (r *hitRow) Paint(*render.Canvas)         {}
+func (r *hitRow) HitTest(p Point) Widget {
+	for _, k := range r.kids {
+		if hit := HitChild(k, p); hit != nil {
+			return hit
+		}
+	}
+	return nil
+}
+
+// A widget hidden with SetVisible takes no pointer, whoever its
+// container is: HitChild skips it, as PaintChild skips painting it
+// (#386).
+func TestHitChildSkipsAHiddenWidget(t *testing.T) {
+	under, over := newFocusTarget(), newFocusTarget()
+	under.Arrange(render.Rect{W: 20, H: 10})
+	over.Arrange(render.Rect{W: 20, H: 10})
+	row := &hitRow{kids: []Widget{over, under}}
+	if got := row.HitTest(Point{X: 5, Y: 5}); got != Widget(over) {
+		t.Fatalf("hit %T, want the top child", got)
+	}
+	over.SetVisible(false)
+	if got := row.HitTest(Point{X: 5, Y: 5}); got != Widget(under) {
+		t.Errorf("with the top child hidden the hit went to %v, want the child under it", got)
+	}
+	if got := over.HitTest(Point{X: 5, Y: 5}); got != nil {
+		t.Errorf("a hidden leaf hit itself: %T", got)
+	}
+}

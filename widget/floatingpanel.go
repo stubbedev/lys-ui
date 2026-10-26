@@ -183,10 +183,10 @@ func (f *FloatingPanel) Paint(cv *render.Canvas) {
 // HitTest is the grip, then the panel; outside it the area itself
 // when OnOutside takes those presses, else nothing.
 func (f *FloatingPanel) HitTest(p Point) Widget {
-	if hit := f.grip.HitTest(p); hit != nil {
+	if hit := HitChild(f.grip, p); hit != nil {
 		return hit
 	}
-	if hit := f.panel.HitTest(p); hit != nil {
+	if hit := HitChild(f.panel, p); hit != nil {
 		return hit
 	}
 	if f.OnOutside != nil && f.bounds.Contains(p.X, p.Y) {
@@ -256,7 +256,7 @@ type panelHandle struct {
 // dropTargetAt is the nearest drop target for a drag at p: inside the
 // header under p, else the panel's ancestors.
 func (h *panelHandle) dropTargetAt(p Point) DragEnterer {
-	for w := h.child.HitTest(p); w != nil && w != Widget(h); w = parentOf(w) {
+	for w := HitChild(h.child, p); w != nil && w != Widget(h); w = parentOf(w) {
 		if d, ok := w.(DragEnterer); ok {
 			return d
 		}
@@ -314,7 +314,7 @@ func (h *panelHandle) Paint(cv *render.Canvas) { PaintChild(cv, h.child) }
 func (h *panelHandle) Children() []Widget { return []Widget{h.child} }
 
 func (h *panelHandle) HitTest(p Point) Widget {
-	if hit := h.child.HitTest(p); hit != nil && interactiveWithin(hit, h) {
+	if hit := HitChild(h.child, p); hit != nil && interactiveWithin(hit, h) {
 		return hit
 	}
 	return h.HitLeaf(h, p)

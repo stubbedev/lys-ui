@@ -573,7 +573,7 @@ func (g *Grid) Paint(cv *render.Canvas) {
 // child.
 func (g *Grid) HitTest(p Point) Widget {
 	for i := range slices.Backward(g.child) {
-		if hit := g.child[i].w.HitTest(p); hit != nil {
+		if hit := HitChild(g.child[i].w, p); hit != nil {
 			return hit
 		}
 	}

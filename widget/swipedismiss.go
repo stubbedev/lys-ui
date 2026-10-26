@@ -109,7 +109,7 @@ func (s *SwipeDismiss) Paint(cv *render.Canvas) {
 
 // HitTest is the child, else the wrapper within its bounds.
 func (s *SwipeDismiss) HitTest(p Point) Widget {
-	if hit := s.child.HitTest(p); hit != nil {
+	if hit := HitChild(s.child, p); hit != nil {
 		return hit
 	}
 	return s.HitLeaf(s, p)

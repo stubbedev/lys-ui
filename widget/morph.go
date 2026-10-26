@@ -203,7 +203,7 @@ func (m *Morph) clipAt(b render.Rect, r float64) render.Rect {
 
 // HitTest returns the child's pick, or the wrapper over its bounds.
 func (m *Morph) HitTest(p Point) Widget {
-	if hit := m.child.HitTest(p); hit != nil {
+	if hit := HitChild(m.child, p); hit != nil {
 		return hit
 	}
 	return m.HitLeaf(m, p)

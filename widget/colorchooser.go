@@ -387,11 +387,11 @@ func (c *ColorChooser) Role() Role { return RoleColorChooser }
 // HitTest returns the entry or the + button under p, else the chooser
 // (the square, strips, and swatches are its own geometry).
 func (c *ColorChooser) HitTest(p Point) Widget {
-	if hit := c.hex.HitTest(p); hit != nil {
+	if hit := HitChild(c.hex, p); hit != nil {
 		return hit
 	}
 	if c.custom != nil {
-		if hit := c.addTo.HitTest(p); hit != nil {
+		if hit := HitChild(c.addTo, p); hit != nil {
 			return hit
 		}
 	}

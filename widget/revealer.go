@@ -455,7 +455,7 @@ func (r *Revealer) HitTest(p Point) Widget {
 	if r.collapses() && !r.bounds.Contains(p.X, p.Y) {
 		return nil
 	}
-	if hit := r.child.HitTest(p); hit != nil {
+	if hit := HitChild(r.child, p); hit != nil {
 		return hit
 	}
 	return r.HitLeaf(r, p)

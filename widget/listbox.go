@@ -459,7 +459,7 @@ func (l *ListBox) HitTest(p Point) Widget {
 		if !IsVisible(r) {
 			continue
 		}
-		if hit := r.HitTest(p); hit != nil {
+		if hit := HitChild(r, p); hit != nil {
 			return hit
 		}
 	}
@@ -574,11 +574,11 @@ func (r *ListBoxRow) Paint(cv *render.Canvas) {
 // HitTest returns the child or header widget under p when it can
 // handle the hit, or the row itself.
 func (r *ListBoxRow) HitTest(p Point) Widget {
-	if hit := r.child.HitTest(p); hit != nil && (r.box == nil || r.box.mode == SelectionNone || !r.selectable || interactiveWithin(hit, r)) {
+	if hit := HitChild(r.child, p); hit != nil && (r.box == nil || r.box.mode == SelectionNone || !r.selectable || interactiveWithin(hit, r)) {
 		return hit
 	}
 	if r.header != nil && r.headNat.H > 0 {
-		if hit := r.header.HitTest(p); hit != nil {
+		if hit := HitChild(r.header, p); hit != nil {
 			return hit
 		}
 	}

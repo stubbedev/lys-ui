@@ -839,13 +839,25 @@ func notifyRemoved(ws ...Widget) {
 }
 
 // HitLeaf is the leaf hit test every widget without children routes
-// through: the widget itself inside its bounds, unless the pointer
-// passes through it (pointer-events: none on it or an ancestor).
+// through: the widget itself inside its bounds, unless it is hidden or
+// the pointer passes through it (pointer-events: none on it or an
+// ancestor).
 func (n *node) HitLeaf(self Widget, p Point) Widget {
-	if n.bounds.Contains(p.X, p.Y) && !pointerEventsNone(self) && shown(self) && !clippedOut(self, p) {
+	if n.bounds.Contains(p.X, p.Y) && ownVisible(self) && !pointerEventsNone(self) && shown(self) && !clippedOut(self, p) {
 		return self
 	}
 	return nil
+}
+
+// HitChild hit-tests a container's child at p, PaintChild's
+// counterpart: nil for a child hidden by SetVisible or display: none,
+// whoever its container is, else the child's own HitTest. Containers
+// defined outside the kit call it for their children too.
+func HitChild(w Widget, p Point) Widget {
+	if w == nil || !ownVisible(w) {
+		return nil
+	}
+	return w.HitTest(p)
 }
 
 // clampSize pins s to con.

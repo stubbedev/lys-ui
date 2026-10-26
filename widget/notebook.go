@@ -662,7 +662,7 @@ func (n *Notebook) HitTest(p Point) Widget {
 		return n
 	}
 	if n.selected < len(n.tabs) {
-		if hit := n.tabs[n.selected].w.HitTest(p); hit != nil {
+		if hit := HitChild(n.tabs[n.selected].w, p); hit != nil {
 			return hit
 		}
 	}

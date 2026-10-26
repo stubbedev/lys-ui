@@ -156,7 +156,7 @@ func (r *ProgressRing) Role() Role { return RoleProgressBar }
 // HitTest returns the child under p, else the ring inside its bounds.
 func (r *ProgressRing) HitTest(p Point) Widget {
 	if r.child != nil && IsVisible(r.child) {
-		if hit := r.child.HitTest(p); hit != nil {
+		if hit := HitChild(r.child, p); hit != nil {
 			return hit
 		}
 	}

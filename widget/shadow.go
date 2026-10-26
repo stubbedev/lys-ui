@@ -176,7 +176,7 @@ func (e *Elevation) Paint(cv *render.Canvas) {
 
 // HitTest resolves through the child alone: the shadow gutter is never
 // a hit, so clicks just outside the card pass through.
-func (e *Elevation) HitTest(p Point) Widget { return e.child.HitTest(p) }
+func (e *Elevation) HitTest(p Point) Widget { return HitChild(e.child, p) }
 
 // Children exposes the child for the damage collector, focus
 // traversal, and the accessibility walk.

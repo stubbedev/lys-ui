@@ -140,7 +140,7 @@ func (c *composite) HitTest(p Point) Widget {
 	if !c.bounds.Contains(p.X, p.Y) {
 		return nil
 	}
-	if hit := c.root.HitTest(p); hit != nil {
+	if hit := HitChild(c.root, p); hit != nil {
 		return hit
 	}
 	return c.self

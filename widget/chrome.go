@@ -137,7 +137,7 @@ func (h *HeaderBar) HitTest(p Point) Widget {
 	if !h.bounds.Contains(p.X, p.Y) {
 		return nil
 	}
-	if hit := h.row.HitTest(p); hit != nil {
+	if hit := HitChild(h.row, p); hit != nil {
 		for cur := hit; cur != nil; cur = parentOf(cur) {
 			if b, ok := cur.(*Button); ok {
 				return b

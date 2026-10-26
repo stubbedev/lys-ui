@@ -328,7 +328,7 @@ func (s *Stack) Paint(cv *render.Canvas) {
 // bounds.
 func (s *Stack) HitTest(p Point) Widget {
 	if w, ok := s.kids[s.visible]; ok {
-		if hit := w.HitTest(p); hit != nil {
+		if hit := HitChild(w, p); hit != nil {
 			return hit
 		}
 	}
@@ -432,10 +432,7 @@ func (o *Overlay) Paint(cv *render.Canvas) {
 // bounds.
 func (o *Overlay) HitTest(p Point) Widget {
 	for i := range slices.Backward(o.kids) {
-		if !IsVisible(o.kids[i]) {
-			continue
-		}
-		if hit := o.kids[i].HitTest(p); hit != nil {
+		if hit := HitChild(o.kids[i], p); hit != nil {
 			return hit
 		}
 	}
@@ -958,7 +955,7 @@ func (s *Scroll) HitTest(p Point) Widget {
 		return s
 	}
 	if s.child != nil {
-		if hit := s.child.HitTest(p); hit != nil {
+		if hit := HitChild(s.child, p); hit != nil {
 			return hit
 		}
 	}

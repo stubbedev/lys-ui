@@ -353,7 +353,7 @@ func (v *TabView) Paint(cv *render.Canvas) {
 // HitTest routes into the visible page.
 func (v *TabView) HitTest(p Point) Widget {
 	if v.selected != nil {
-		if hit := v.selected.child.HitTest(p); hit != nil {
+		if hit := HitChild(v.selected.child, p); hit != nil {
 			return hit
 		}
 	}

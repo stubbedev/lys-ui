@@ -179,7 +179,7 @@ func (f *Fixed) Paint(cv *render.Canvas) {
 // or the fixed itself when p is inside its bounds but over no child.
 func (f *Fixed) HitTest(p Point) Widget {
 	for i := range slices.Backward(f.child) {
-		if hit := f.child[i].w.HitTest(p); hit != nil {
+		if hit := HitChild(f.child[i].w, p); hit != nil {
 			return hit
 		}
 	}

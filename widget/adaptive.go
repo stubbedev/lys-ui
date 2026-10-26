@@ -430,7 +430,7 @@ func (c *Carousel) Paint(cv *render.Canvas) {
 // HitTest resolves the buttons, else the carousel itself.
 func (c *Carousel) HitTest(p Point) Widget {
 	for _, b := range c.nav {
-		if hit := b.HitTest(p); hit != nil {
+		if hit := HitChild(b, p); hit != nil {
 			return hit
 		}
 	}

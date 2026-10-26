@@ -58,7 +58,7 @@ func (f *Fader) Paint(cv *render.Canvas) {
 // fader itself over its own padding-less bounds — opacity never
 // empties the hit region.
 func (f *Fader) HitTest(p Point) Widget {
-	if hit := f.child.HitTest(p); hit != nil {
+	if hit := HitChild(f.child, p); hit != nil {
 		return hit
 	}
 	return f.HitLeaf(f, p)

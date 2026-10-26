@@ -831,10 +831,7 @@ func (b *Box) HitTest(p Point) Widget {
 	if clip, ok := b.overflowClip(v); !ok || clip.Contains(p.X, p.Y) {
 		for k := range slices.Backward(b.child) {
 			c := b.child[b.stackAt(k)]
-			if !ownVisible(c.w) {
-				continue
-			}
-			if hit := c.w.HitTest(p); hit != nil {
+			if hit := HitChild(c.w, p); hit != nil {
 				return hit
 			}
 		}

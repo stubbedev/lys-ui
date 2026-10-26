@@ -134,7 +134,7 @@ func (it *Item) HitTest(p Point) Widget {
 	if it.activate == nil {
 		return it.composite.HitTest(p)
 	}
-	if hit := it.actions.HitTest(p); hit != nil && hit != Widget(it.actions) {
+	if hit := HitChild(it.actions, p); hit != nil && hit != Widget(it.actions) {
 		return hit
 	}
 	return it.HitLeaf(it, p)
