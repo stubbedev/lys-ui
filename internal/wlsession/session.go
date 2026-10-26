@@ -96,14 +96,19 @@ const (
 type Session struct {
 	Display *wl.Display
 
-	registry         *wl.Registry
-	compositor       *wl.Compositor
-	shm              *wl.Shm
-	layerShell       *wlr.ZwlrLayerShellV1
-	viewporter       *wlr.WpViewporter
-	subcompositor    *wl.Subcompositor
-	dmabuf           *wlr.ZwpDmabufV1
-	dmabufLayouts    map[DmabufLayout]bool
+	registry      *wl.Registry
+	compositor    *wl.Compositor
+	shm           *wl.Shm
+	layerShell    *wlr.ZwlrLayerShellV1
+	viewporter    *wlr.WpViewporter
+	subcompositor *wl.Subcompositor
+	dmabuf        *wlr.ZwpDmabufV1
+	dmabufVersion uint32
+	dmabufLayouts map[DmabufLayout]bool
+	// dmabufDevice is the compositor's main device (dev_t) from the
+	// linux-dmabuf v4 default feedback; hasDmabufDevice says one came.
+	dmabufDevice     uint64
+	hasDmabufDevice  bool
 	fracScaleManager *wlr.WpScaleManagerV1
 	seat             *wl.Seat
 	seatVersion      uint32
@@ -404,6 +409,14 @@ func Connect() (*Session, error) {
 	if !s.hasArgb {
 		s.Close()
 		return nil, errors.New("wlsession: compositor lacks ARGB8888 wl_shm support")
+	}
+	if err := s.readDmabufFeedback(); err != nil {
+		if errors.Is(err, ErrDisconnected) {
+			s.Close()
+			return nil, fmt.Errorf("wlsession: linux-dmabuf feedback: %w", err)
+		}
+		logutil.L().Warn("wlsession: linux-dmabuf feedback unreadable; no dmabuf imports", "err", err)
+		s.dmabuf = nil
 	}
 	return s, nil
 }

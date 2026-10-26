@@ -60,6 +60,9 @@ type Buffer struct {
 	Stale render.Rect
 
 	busy bool
+	// pending marks a dmabuf buffer whose import the compositor has not
+	// answered yet: it has no wl_buffer, and its pool counts it busy.
+	pending bool
 
 	// arena owns this buffer's storage; nil for wire-free test buffers.
 	arena *Arena
@@ -168,7 +171,9 @@ func New(create func() (*Buffer, error), capacity int) *Pool {
 }
 
 // Acquire returns a buffer to draw the next frame into and marks it busy.
-// Free buffers are reused before new ones are allocated. ErrBusy means
+// Free buffers are reused before new ones are allocated; a new buffer
+// still pending its import joins the pool busy, and the call reports
+// ErrBusy until the compositor's answer frees it. ErrBusy means
 // every buffer is held by the compositor: skip the frame and retry after
 // a release event - the pool never grows past capacity to dodge it, and
 // pending buffers never stack beyond the cap. Allocation failures are
@@ -192,6 +197,9 @@ func (p *Pool) Acquire() (*Buffer, error) {
 		b.busy = true
 		b.pool = p
 		p.buffers = append(p.buffers, b)
+		if b.pending {
+			return nil, ErrBusy
+		}
 		return b, nil
 	}
 	return nil, ErrBusy

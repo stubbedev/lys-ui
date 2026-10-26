@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-lib/dmabuf"
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/logutil"
@@ -40,6 +41,14 @@ type gpuRenderer struct {
 	// failed is the first frame error; once set, every window draws on
 	// the CPU from its next frame.
 	failed error
+	// refused is an import the compositor refused under
+	// LYS_UI_RENDERER=gpu, where it fails the next buffer instead of
+	// sending the windows to the CPU.
+	refused error
+	// node is the compositor's main device the renderer was opened on;
+	// hasNode is false where the compositor named none.
+	node    uint64
+	hasNode bool
 	// render is the device's Render, a seam for tests.
 	render func(*render.List, *gpu.Target) error
 }
@@ -51,6 +60,17 @@ func (r *gpuRenderer) fail(err error) {
 	}
 	r.failed = err
 	logutil.L().Error("app: a GPU frame failed; every window draws on the CPU from now on", "device", r.name, "err", err)
+}
+
+// refuse takes a dmabuf import the compositor refused: every window
+// goes to the CPU, or, under LYS_UI_RENDERER=gpu, the next buffer
+// fails with it.
+func (r *gpuRenderer) refuse(err error) {
+	if r.required {
+		r.refused = err
+		return
+	}
+	r.fail(err)
 }
 
 // renderer is the application's GPU renderer, opened on first use;
@@ -88,12 +108,15 @@ func (a *Application) renderer() (*gpuRenderer, error) {
 }
 
 // openRenderer opens the GPU device and agrees on the dmabuf layouts it
-// renders and the compositor imports.
+// renders and the compositor imports. The device is the compositor's
+// main device, the one whose memory it imports; a compositor that names
+// none (linux-dmabuf before v4) gets the first device that exports.
 func (a *Application) openRenderer() (*gpuRenderer, error) {
 	if a.sess == nil || a.sess.Dmabuf() == nil {
 		return nil, errors.New("the compositor has no linux-dmabuf")
 	}
-	dev, err := gpu.Open()
+	node, hasNode := a.sess.DmabufDevice()
+	dev, err := openDevice(node, hasNode)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +125,23 @@ func (a *Application) openRenderer() (*gpuRenderer, error) {
 		dev.Close()
 		return nil, err
 	}
-	return &gpuRenderer{dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render}, nil
+	return &gpuRenderer{
+		dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render,
+		node: node, hasNode: hasNode,
+	}, nil
+}
+
+// openDevice opens the Vulkan device behind the DRM node dev when the
+// compositor named it, else the first that exports.
+func openDevice(dev uint64, named bool) (*gpu.Device, error) {
+	if !named {
+		return gpu.Open()
+	}
+	d, err := gpu.OpenNode(dev)
+	if err != nil {
+		return nil, fmt.Errorf("the compositor's main device %d:%d: %w", unix.Major(dev), unix.Minor(dev), err)
+	}
+	return d, nil
 }
 
 // agreeModifiers is the ARGB8888 layouts dev renders and the session's
@@ -133,6 +172,9 @@ func (a *Application) reagreeRenderer() error {
 		return nil
 	}
 	mods, err := a.agreeModifiers(r.dev)
+	if node, hasNode := a.sess.DmabufDevice(); err == nil && (hasNode != r.hasNode || node != r.node) {
+		err = fmt.Errorf("the new compositor imports from device %d:%d, not the renderer's", unix.Major(node), unix.Minor(node))
+	}
 	if err == nil {
 		r.modifiers = mods
 		return nil
@@ -147,7 +189,10 @@ func (a *Application) reagreeRenderer() error {
 
 // NewBuffer is a dmabuf buffer of r for a bufW x bufH surface.
 func (r *gpuRenderer) NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) (*buffer.Buffer, error) {
-	return buffer.NewDmabuf(r.dev, sess.Dmabuf(), bufW, bufH, scale, r.modifiers)
+	if r.refused != nil {
+		return nil, fmt.Errorf("app: %s=gpu: %w", rendererEnv, r.refused)
+	}
+	return buffer.NewDmabuf(r.dev, sess.Dmabuf(), bufW, bufH, scale, r.modifiers, r.refuse)
 }
 
 // Frame renders paint into b's target at device scale num over

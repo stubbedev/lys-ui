@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/gputest"
 	"github.com/stubbedev/lys-lib/render"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/logutil"
@@ -157,5 +158,43 @@ func TestRendererFallbackIsLogged(t *testing.T) {
 	}
 	if n := strings.Count(log.String(), "draws on the CPU"); n != 1 || !strings.Contains(log.String(), "no linux-dmabuf") {
 		t.Errorf("log %q: want one fallback line naming the reason", log.String())
+	}
+}
+
+// A dmabuf import the compositor refuses sends every window to the
+// CPU without touching the connection, or, under LYS_UI_RENDERER=gpu,
+// fails the next buffer with the refusal (#365).
+func TestRefusedImportFallsBackToCPU(t *testing.T) {
+	refusal := errors.New("refused")
+	r := &gpuRenderer{name: "test"}
+	r.refuse(refusal)
+	if !r.Failed() {
+		t.Error("a refused import left the windows on the GPU")
+	}
+	r = &gpuRenderer{name: "test", required: true}
+	r.refuse(refusal)
+	if r.Failed() {
+		t.Error("required GPU: a refused import sent the windows to the CPU")
+	}
+	if _, err := r.NewBuffer(nil, 4, 4, 1); !errors.Is(err, refusal) {
+		t.Errorf("required GPU: the next buffer gave %v, want the refusal", err)
+	}
+}
+
+// The renderer opens the device the compositor imports from: a named
+// main device no Vulkan device is fails, rather than opening another
+// GPU whose buffers the compositor cannot import (#365).
+func TestRendererOpensTheCompositorsDevice(t *testing.T) {
+	if _, err := gputest.SetupTest(t); err != nil {
+		t.Fatal(err)
+	}
+	nodev := unix.Mkdev(1, 3) // /dev/null, a character device no GPU is
+	d, err := openDevice(nodev, true)
+	if err == nil {
+		d.Close()
+		t.Fatalf("main device 1:3 opened %s", d.Name())
+	}
+	if !strings.Contains(err.Error(), "main device 1:3") {
+		t.Errorf("error %v does not name the main device", err)
 	}
 }

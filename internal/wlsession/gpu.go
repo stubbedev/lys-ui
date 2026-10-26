@@ -9,11 +9,15 @@ import (
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/dmabuf"
+	"github.com/stubbedev/lys-lib/dmabufwl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
 )
 
-const maxDmabufVersion = 3
+// maxDmabufVersion is 4, the first with feedback: the compositor names
+// the device its buffers must be importable on, and lists the layouts
+// there instead of the format and modifier events.
+const maxDmabufVersion = 4
 
 // DmabufLayout is a format and modifier pair the compositor imports.
 type DmabufLayout struct {
@@ -60,8 +64,40 @@ func (s *Session) bindDmabuf(ev wl.RegistryGlobalEvent) {
 	if !s.bindOptional(ev, maxDmabufVersion, mgr) {
 		return
 	}
-	s.dmabuf = mgr
+	s.dmabuf, s.dmabufVersion = mgr, version
 	debug.Log("shell", "linux-dmabuf v%d bound", version)
+}
+
+// readDmabufFeedback reads a v4 linux-dmabuf's default feedback into
+// the session's layouts and main device; an earlier version sent its
+// layouts as events already and names no device.
+func (s *Session) readDmabufFeedback() error {
+	if s.dmabuf == nil || s.dmabufVersion < 4 {
+		return nil
+	}
+	fb, err := dmabufwl.DefaultFeedback(s.dmabuf, s.dmabufVersion, s.Roundtrip)
+	if err != nil {
+		return err
+	}
+	s.applyDmabufFeedback(fb)
+	return nil
+}
+
+// applyDmabufFeedback takes the feedback's main device and layouts.
+func (s *Session) applyDmabufFeedback(fb dmabufwl.Feedback) {
+	s.dmabufDevice, s.hasDmabufDevice = fb.Device, true
+	for format, mods := range fb.Modifiers {
+		for _, m := range mods {
+			s.dmabufLayouts[DmabufLayout{Format: format, Modifier: m}] = true
+		}
+	}
+}
+
+// DmabufDevice is the compositor's main device, the dev_t of the DRM
+// node whose memory it imports buffers from; ok is false where the
+// compositor names none (linux-dmabuf before v4).
+func (s *Session) DmabufDevice() (dev uint64, ok bool) {
+	return s.dmabufDevice, s.hasDmabufDevice
 }
 
 // Subcompositor returns the bound wl_subcompositor, or nil.
