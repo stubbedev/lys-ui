@@ -198,8 +198,6 @@ func paintBackdrop(cv *render.Canvas, v *style.Values, bounds render.Rect, radii
 	p := &render.Path{}
 	render.RoundedRectPath(p, bounds, radii)
 	filt.ApplyPathMask(p, region)
-	cv.ClearDevice(region, 0)
-	cv.DrawLayer(snap, region, render.BlendNormal)
 	cv.DrawLayer(filt, region, render.BlendNormal)
 }
 

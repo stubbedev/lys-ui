@@ -191,3 +191,29 @@ func TestEffectsFastPathAllocationFree(t *testing.T) {
 		t.Errorf("the no-effect paint allocated %v allocs/paint", allocs)
 	}
 }
+
+// A backdrop filter painted inside an opacity group (a swiped card
+// fading out) leaves the backdrop around its box as it was: only the
+// box's own pixels take the filtered backdrop. The backdrop around it
+// used to come back at the group's opacity, a dark band on whatever lay
+// within the blur's reach (#340).
+func TestBackdropUnderOpacityStaysInItsBox(t *testing.T) {
+	loadCSS(t, `.g { backdrop-filter: blur(16px) saturate(1.5); background-color: rgba(40,40,60,0.5); }`)
+	glass := NewBox(Column, 0, 0)
+	glass.AddClass("g")
+	glass.Append(NewSpacer(60, 30), false)
+	glass.Measure(Constraints{Max: Size{W: 60, H: 30}})
+	glass.Arrange(render.Rect{X: 40, Y: 40, W: 60, H: 30})
+	const w, h = 140, 110
+	data := make([]byte, render.Stride(w)*h)
+	cv := render.New(data, render.Stride(w), w, h)
+	cv.Clear(cv.Rect(), render.RGB(200, 30, 30))
+	prev := cv.PushAlpha(0.5)
+	glass.Paint(cv)
+	cv.PopAlpha(prev)
+	for _, p := range [][2]int{{20, 55}, {120, 55}, {70, 20}, {70, 90}, {39, 39}} {
+		if got := render.ColorFromBytes(data[p[1]*render.Stride(w)+p[0]*4:]); got != render.RGB(200, 30, 30) {
+			t.Errorf("(%d, %d) outside the glass box became %#08x, want the untouched backdrop", p[0], p[1], uint32(got))
+		}
+	}
+}
