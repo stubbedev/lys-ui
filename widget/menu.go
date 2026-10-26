@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/lys-lib/text"
 	"github.com/unxed/xkb-go"
 
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/style"
 )
@@ -808,7 +809,7 @@ func (m *Menu) ActivateMnemonic(sym xkb.Keysym) bool {
 	if !IsEnabled(m) {
 		return false
 	}
-	i, ok := m.mnemonics[unicode.ToLower(rune(sym))]
+	i, ok := m.mnemonics[unicode.ToLower(intconv.Int32(sym))]
 	if !ok {
 		return false
 	}

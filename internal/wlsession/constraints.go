@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/wlr"
 
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/wlnull"
 )
 
@@ -204,7 +205,7 @@ func (s *Session) constrain(surf *wl.Surface, region []image.Rectangle, persiste
 			return nil, err
 		}
 		for _, rc := range region {
-			_ = r.Add(int32(rc.Min.X), int32(rc.Min.Y), int32(rc.Dx()), int32(rc.Dy()))
+			_ = r.Add(intconv.Int32(rc.Min.X), intconv.Int32(rc.Min.Y), intconv.Int32(rc.Dx()), intconv.Int32(rc.Dy()))
 		}
 		defer func() { _ = r.Destroy() }()
 		reg = r

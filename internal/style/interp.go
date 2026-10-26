@@ -249,7 +249,7 @@ func lerpColor(a, b render.Color, t float64) render.Color {
 
 // addColor sums two premultiplied colors per channel, saturating.
 func addColor(a, b render.Color) render.Color {
-	sum := func(x, y uint8) uint32 { return uint32(min(int(x)+int(y), 255)) }
+	sum := func(x, y uint8) uint32 { return uint32(min(uint16(x)+uint16(y), 255)) }
 	return render.Color(sum(a.A(), b.A())<<24 | sum(a.R(), b.R())<<16 | sum(a.G(), b.G())<<8 | sum(a.B(), b.B()))
 }
 

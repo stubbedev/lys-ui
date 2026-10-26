@@ -87,7 +87,7 @@ func (s *ScreenPick) ClickAt(p Point) {
 	x = min(max(x, b.Min.X), b.Max.X-1)
 	y = min(max(y, b.Min.Y), b.Max.Y-1)
 	r, g, bl, a := s.img.At(x, y).RGBA()
-	col := render.RGBA(uint8(r>>8), uint8(g>>8), uint8(bl>>8), uint8(a>>8))
+	col := render.RGBA(uint8(r>>8&0xff), uint8(g>>8&0xff), uint8(bl>>8&0xff), uint8(a>>8&0xff))
 	if s.OnPick != nil {
 		s.OnPick(col)
 	}

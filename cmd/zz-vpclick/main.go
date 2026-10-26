@@ -13,6 +13,7 @@ import (
 	"strconv"
 
 	"github.com/stubbedev/lys-ui/internal/headlesstest"
+	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 const usage = "usage: zz-vpclick X Y [click | dclick | scroll DY | key CODE | type TEXT]"
@@ -96,7 +97,7 @@ func parse(args []string) (func(*headlesstest.VirtualInput) error, error) {
 		if err != nil {
 			return nil, fmt.Errorf("key code %q: %w", op, err)
 		}
-		return func(in *headlesstest.VirtualInput) error { return in.Tap(uint32(code)) }, nil
+		return func(in *headlesstest.VirtualInput) error { return in.Tap(intconv.Uint32(code)) }, nil
 	case "type":
 		text, err := operand()
 		if err != nil {

@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // File descriptors and paths watched on the application loop: a
@@ -26,9 +28,18 @@ var ErrLoopEnded = errors.New("app: the application loop has ended")
 // returned. The fd stays the caller's; stop (or the loop ending) ends
 // the watch, after which fn is not called again.
 func (a *Application) WatchFD(fd int, events int16, fn func(revents int16)) (stop func(), err error) {
+	pollFD, err := intconv.CheckedInt32(fd)
+	if err != nil {
+		return nil, fmt.Errorf("app: watch fd %d: %w", fd, err)
+	}
 	wake, err := unix.Eventfd(0, unix.EFD_CLOEXEC|unix.EFD_NONBLOCK)
 	if err != nil {
 		return nil, fmt.Errorf("app: watch eventfd: %w", err)
+	}
+	pollWake, err := intconv.CheckedInt32(wake)
+	if err != nil {
+		_ = unix.Close(wake)
+		return nil, fmt.Errorf("app: watch eventfd %d: %w", wake, err)
 	}
 	var once sync.Once
 	var mu sync.Mutex
@@ -53,7 +64,7 @@ func (a *Application) WatchFD(fd int, events int16, fn func(revents int16)) (sto
 			_ = unix.Close(wake)
 			a.watchers.remove(id)
 		}()
-		pfds := []unix.PollFd{{Fd: int32(fd), Events: events}, {Fd: int32(wake), Events: unix.POLLIN}}
+		pfds := []unix.PollFd{{Fd: pollFD, Events: events}, {Fd: pollWake, Events: unix.POLLIN}}
 		// One ping-pong channel for the watch's life: each readiness
 		// pass drains it before the loop polls again, so the buffered
 		// send never blocks and never reallocates.
@@ -176,7 +187,7 @@ func (w *fileWatch) drain() bool {
 			return changed
 		}
 		for off := 0; off+unix.SizeofInotifyEvent <= n; {
-			wd := int(int32(lenU32(w.buf[off:])))
+			wd := int(intconv.Int32Bits(lenU32(w.buf[off:])))
 			mask := lenU32(w.buf[off+4:])
 			nameLen := int(lenU32(w.buf[off+12:]))
 			name := w.buf[off+unix.SizeofInotifyEvent : min(n, off+unix.SizeofInotifyEvent+nameLen)]

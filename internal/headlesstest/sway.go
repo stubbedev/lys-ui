@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // ipcMagic fronts every i3/sway IPC message and reply.
@@ -106,8 +108,12 @@ func swayIPCCommand(dir, command string) error {
 
 	head := make([]byte, 0, 14+len(command))
 	head = append(head, ipcMagic...)
+	n, err := intconv.CheckedUint32(len(command))
+	if err != nil {
+		return fmt.Errorf("headlesstest: sway IPC command length: %w", err)
+	}
 	var sizes [8]byte
-	binary.LittleEndian.PutUint32(sizes[0:4], uint32(len(command)))
+	binary.LittleEndian.PutUint32(sizes[0:4], n)
 	binary.LittleEndian.PutUint32(sizes[4:8], ipcRunCommand)
 	head = append(head, sizes[:]...)
 	head = append(head, command...)

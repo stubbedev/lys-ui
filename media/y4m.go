@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"math"
 	"math/bits"
 	"strconv"
 	"strings"
@@ -118,9 +119,9 @@ func mulDivCeil(a, b, c int64) int64 {
 }
 
 func mulDivRem(a, b, c int64) (int64, uint64) {
-	hi, lo := bits.Mul64(uint64(a), uint64(b))
-	q, r := bits.Div64(hi, lo, uint64(c))
-	return int64(q), r
+	hi, lo := bits.Mul64(uint64(max(a, 0)), uint64(max(b, 0)))
+	q, r := bits.Div64(hi, lo, uint64(max(c, 0)))
+	return int64(min(q, math.MaxInt64)), r
 }
 
 func (h y4mHeader) pts(n int64) time.Duration {

@@ -17,6 +17,8 @@ import (
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/wlclient"
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // slot is a byte range in the arena's pool file. Buffer geometry (width,
@@ -116,7 +118,7 @@ func (a *Arena) Acquire(bufW, bufH, scale int) (*Buffer, error) {
 	a.lastFormat = Format
 	var wlBuf *wl.Buffer
 	if a.pool != nil {
-		wlBuf, err = a.pool.CreateBuffer(int32(s.offset), int32(bufW), int32(bufH), int32(stride), a.lastFormat)
+		wlBuf, err = a.pool.CreateBuffer(intconv.Int32(s.offset), intconv.Int32(bufW), intconv.Int32(bufH), intconv.Int32(stride), a.lastFormat)
 		if err != nil {
 			a.put(s)
 			return nil, fmt.Errorf("buffer: wl_shm_pool.create_buffer: %w", err)
@@ -187,8 +189,9 @@ func (a *Arena) ensure(size int) error {
 	if size <= a.size {
 		return nil
 	}
-	if size > math.MaxInt32 {
-		return fmt.Errorf("buffer: pool size %d exceeds the wayland int32 range", size)
+	wireSize, err := intconv.CheckedInt32(size)
+	if err != nil {
+		return fmt.Errorf("buffer: pool size %d exceeds the wayland int32 range: %w", size, err)
 	}
 	if a.file == nil {
 		f, err := wlos.CreateAnonymousFile(int64(size))
@@ -205,13 +208,13 @@ func (a *Arena) ensure(size int) error {
 	}
 	if a.shm != nil {
 		if a.pool == nil {
-			pool, err := a.shm.CreatePool(a.file.Fd(), int32(size))
+			pool, err := a.shm.CreatePool(a.file.Fd(), wireSize)
 			if err != nil {
 				_ = wlos.Munmap(data)
 				return fmt.Errorf("buffer: wl_shm.create_pool: %w", err)
 			}
 			a.pool = pool
-		} else if err := a.pool.Resize(int32(size)); err != nil {
+		} else if err := a.pool.Resize(wireSize); err != nil {
 			_ = wlos.Munmap(data)
 			return fmt.Errorf("buffer: wl_shm_pool.resize: %w", err)
 		}

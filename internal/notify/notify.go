@@ -217,7 +217,7 @@ func (n *Notifier) subscribe() {
 				if len(sig.Body) >= 2 {
 					id, _ := sig.Body[0].(uint32)
 					reason, _ := sig.Body[1].(uint32)
-					n.fireClosed(n.classicID(id), CloseReason(reason))
+					n.fireClosed(n.classicID(id), CloseReason(min(reason, uint32(ReasonUnspecified))))
 				}
 			}
 		}

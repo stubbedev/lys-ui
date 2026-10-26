@@ -610,7 +610,7 @@ func scaleAlpha(c Color, p float64) Color {
 		return 0
 	}
 	ch := func(shift uint) Color {
-		return Color(uint32(float64(uint8(c>>shift))*p+0.5)) << shift
+		return Color(uint32(float64(uint8(c>>shift&0xff))*p+0.5)) << shift
 	}
 	return ch(24) | ch(16) | ch(8) | ch(0)
 }

@@ -125,8 +125,7 @@ const (
 // install position and source order.
 func rank(prio int, sp spec, layer, sheet, order int, imp bool, prox int) uint64 {
 	clampTo := func(v, bits int) uint64 {
-		limit := 1<<bits - 1
-		return uint64(min(max(v, 0), limit))
+		return min(uint64(max(v, 0)), 1<<bits-1)
 	}
 	switch {
 	case layer == inlineLayer:

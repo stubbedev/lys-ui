@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/unxed/xkb-go"
 
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/sysfont"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
@@ -183,7 +184,7 @@ func (a *Application) NewDialog(parent DialogParent, cfg DialogConfig) (*Dialog,
 		return nil, err
 	}
 	if cfg.Height == 0 {
-		cfg.Height = uint32(root.Measure(widget.Constraints{Max: widget.Size{W: int(cfg.Width), H: dialogMaxHeight}}).H)
+		cfg.Height = intconv.Uint32(root.Measure(widget.Constraints{Max: widget.Size{W: int(cfg.Width), H: dialogMaxHeight}}).H)
 	}
 
 	winCfg := WindowConfig{

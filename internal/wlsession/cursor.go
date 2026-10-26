@@ -8,6 +8,8 @@ import (
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/wlcursor"
 	"github.com/stubbedev/lys-lib/debug"
+
+	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // defaultCursor is shown whenever the app has not asked for another
@@ -290,14 +292,14 @@ func (s *Session) pushCursorLocked(img *wlcursor.ImageBuffer) error {
 	if err := s.crs.surface.Attach(img.GetBuffer(), 0, 0); err != nil {
 		return fmt.Errorf("cursor attach: %w", err)
 	}
-	if err := s.crs.surface.DamageBuffer(0, 0, int32(img.GetWidth()), int32(img.GetHeight())); err != nil {
+	if err := s.crs.surface.DamageBuffer(0, 0, intconv.Int32(img.GetWidth()), intconv.Int32(img.GetHeight())); err != nil {
 		return fmt.Errorf("cursor damage: %w", err)
 	}
 	if err := s.crs.surface.Commit(); err != nil {
 		return fmt.Errorf("cursor commit: %w", err)
 	}
 	if err := s.pointer.SetCursor(s.pointerEnterSerial, s.crs.surface,
-		int32(img.GetHotspotX()), int32(img.GetHotspotY())); err != nil {
+		intconv.Int32(img.GetHotspotX()), intconv.Int32(img.GetHotspotY())); err != nil {
 		return fmt.Errorf("set cursor: %w", err)
 	}
 	return nil
@@ -353,7 +355,7 @@ func (c *cursorState) frame(now func() time.Time) (*wlcursor.ImageBuffer, time.D
 	}
 	elapsed := uint32(0)
 	if t := now(); t.After(c.start) {
-		elapsed = uint32(t.Sub(c.start).Milliseconds())
+		elapsed = intconv.Uint32(t.Sub(c.start).Milliseconds())
 	}
 	idx, rest := cursorFrame(c.totalMs, c.delays, elapsed)
 	return c.cur.GetCursorImage(idx), rest

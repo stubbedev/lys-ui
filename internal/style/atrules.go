@@ -528,14 +528,14 @@ func (s *Sheet) orderLayers() {
 		n.idx = i
 	}
 	s.layerRanks = make([]uint8, len(s.layerNames))
-	next := 0
+	var next uint8
 	var emit func(n *layerTree)
 	emit = func(n *layerTree) {
 		for _, k := range n.kids {
 			emit(k)
 		}
 		if n.idx >= 0 && next < 254 {
-			s.layerRanks[n.idx] = uint8(next)
+			s.layerRanks[n.idx] = next
 			next++
 		}
 	}

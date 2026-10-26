@@ -10,6 +10,7 @@ package style
 
 import (
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -473,26 +474,25 @@ var (
 // order: names[i] computes to T(i).
 func enumInto[T ~uint8](get func(v *Values) *T, names ...string) func([]token, *ctx, *Values) bool {
 	return func(ts []token, _ *ctx, v *Values) bool {
-		k, ok := keywordOf(components(ts), names)
+		k, ok := keywordOf[T](components(ts), names)
 		if ok {
-			*get(v) = T(k)
+			*get(v) = k
 		}
 		return ok
 	}
 }
 
 // keywordOf finds the single identifier comps holds in names.
-func keywordOf(comps [][]token, names []string) (int, bool) {
+func keywordOf[E ~uint8](comps [][]token, names []string) (E, bool) {
 	s, ok := identOf(comps)
 	if !ok {
 		return 0, false
 	}
-	for i, n := range names {
-		if s == n {
-			return i, true
-		}
+	i := slices.Index(names, s)
+	if i < 0 || i > math.MaxUint8 {
+		return 0, false
 	}
-	return 0, false
+	return E(i), true
 }
 
 // lengthPctOf evaluates one <length-percentage> component: a length
@@ -778,12 +778,12 @@ func parseFlexFlow(ts []token, _ *ctx, v *Values) bool {
 	haveDir, haveWrap := false, false
 	for _, c := range comps {
 		one := [][]token{c}
-		if k, ok := keywordOf(one, flexDirectionNames); ok && !haveDir {
-			dir, haveDir = FlexDirection(k), true
+		if k, ok := keywordOf[FlexDirection](one, flexDirectionNames); ok && !haveDir {
+			dir, haveDir = k, true
 			continue
 		}
-		if k, ok := keywordOf(one, flexWrapNames); ok && !haveWrap {
-			wrap, haveWrap = FlexWrap(k), true
+		if k, ok := keywordOf[FlexWrap](one, flexWrapNames); ok && !haveWrap {
+			wrap, haveWrap = k, true
 			continue
 		}
 		return false
@@ -848,17 +848,17 @@ func parseOverflow(ts []token, _ *ctx, v *Values) bool {
 	if len(comps) < 1 || len(comps) > 2 {
 		return false
 	}
-	x, ok := keywordOf(comps[:1], overflowNames)
+	x, ok := keywordOf[Overflow](comps[:1], overflowNames)
 	if !ok {
 		return false
 	}
 	y := x
 	if len(comps) == 2 {
-		if y, ok = keywordOf(comps[1:], overflowNames); !ok {
+		if y, ok = keywordOf[Overflow](comps[1:], overflowNames); !ok {
 			return false
 		}
 	}
-	v.Layout.OverflowX, v.Layout.OverflowY = Overflow(x), Overflow(y)
+	v.Layout.OverflowX, v.Layout.OverflowY = x, y
 	return true
 }
 

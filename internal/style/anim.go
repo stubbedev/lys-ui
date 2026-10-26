@@ -234,7 +234,7 @@ func (a *Animation) End() float64 {
 func (kf *Keyframes) Apply(dst, under *Values, progress float64, timing *Timing, before bool, comp uint8) {
 	for i, word := range kf.Props.words() {
 		for ; word != 0; word &= word - 1 {
-			p := Prop(i*propWordBits + bits.TrailingZeros64(word))
+			p := propAt(i, bits.TrailingZeros64(word))
 			kf.applyProp(dst, under, p, progress, timing, before)
 			if comp != CompReplace {
 				Compose(dst, under, p)

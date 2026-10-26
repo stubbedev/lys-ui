@@ -4,6 +4,8 @@ import (
 	"slices"
 
 	"github.com/godbus/dbus/v5"
+
+	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // The AT-SPI Cache (org.a11y.atspi.Cache at /org/a11y/atspi/cache):
@@ -59,8 +61,8 @@ func (b *Bridge) cacheItemOf(tr *tree, n *anode) cacheItem {
 		Path:       objRef{Name: b.name, Path: pathOf(n)},
 		App:        objRef{Name: b.name, Path: RootPath},
 		Parent:     b.parentRef(n),
-		Index:      int32(n.index),
-		Children:   int32(len(n.children)),
+		Index:      intconv.Int32(n.index),
+		Children:   intconv.Int32(len(n.children)),
 		Interfaces: ifacesOf(n),
 		Name:       nameOf(n),
 		Role:       role,

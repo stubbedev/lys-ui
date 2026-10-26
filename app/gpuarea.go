@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
@@ -124,7 +125,7 @@ func (s *gpuSurface) Place(r render.Rect) {
 	moved, resized := r.X != s.bounds.X || r.Y != s.bounds.Y, r.W != s.bounds.W || r.H != s.bounds.H
 	s.bounds = r
 	if moved {
-		s.check(s.sub.SetPosition(int32(r.X), int32(r.Y)))
+		s.check(s.sub.SetPosition(intconv.Int32(r.X), intconv.Int32(r.Y)))
 	}
 	if resized {
 		s.applyScale()
@@ -135,10 +136,10 @@ func (s *gpuSurface) Place(r render.Rect) {
 
 func (s *gpuSurface) applyScale() {
 	if s.vp != nil {
-		s.check(s.vp.SetDestination(int32(s.bounds.W), int32(s.bounds.H)))
+		s.check(s.vp.SetDestination(intconv.Int32(s.bounds.W), intconv.Int32(s.bounds.H)))
 		return
 	}
-	s.check(s.surf.SetBufferScale(int32(scale.IntegerScale(s.hw.frac120))))
+	s.check(s.surf.SetBufferScale(intconv.Int32(scale.IntegerScale(s.hw.frac120))))
 }
 
 func (s *gpuSurface) rescaled() {
@@ -184,7 +185,7 @@ func (s *gpuSurface) commit(b *wl.Buffer, w, h int) error {
 	if err := s.surf.Attach(b, 0, 0); err != nil {
 		return fmt.Errorf("app: GPUArea attach: %w", err)
 	}
-	if err := s.surf.DamageBuffer(0, 0, int32(w), int32(h)); err != nil {
+	if err := s.surf.DamageBuffer(0, 0, intconv.Int32(w), intconv.Int32(h)); err != nil {
 		return fmt.Errorf("app: GPUArea damage: %w", err)
 	}
 	if !s.armed {
@@ -246,7 +247,17 @@ func (s *gpuSurface) Import(d dmabuf.Buffer) (widget.GPUBuffer, error) {
 	b := &gpuBuffer{s: s, desc: d, params: params}
 	params.AddCreatedHandler(b)
 	params.AddFailedHandler(b)
-	if err := params.Create(int32(d.Width), int32(d.Height), d.Format, 0); err != nil {
+	w, err := intconv.CheckedInt32(d.Width)
+	if err != nil {
+		_ = params.Destroy()
+		return nil, fmt.Errorf("app: dmabuf width: %w", err)
+	}
+	h, err := intconv.CheckedInt32(d.Height)
+	if err != nil {
+		_ = params.Destroy()
+		return nil, fmt.Errorf("app: dmabuf height: %w", err)
+	}
+	if err := params.Create(w, h, d.Format, 0); err != nil {
 		_ = params.Destroy()
 		return nil, fmt.Errorf("app: dmabuf create: %w", err)
 	}

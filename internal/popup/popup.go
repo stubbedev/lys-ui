@@ -22,6 +22,7 @@ import (
 	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/touchinput"
@@ -175,7 +176,7 @@ func New(sess *wlsession.Session, cfg Config) (*Popup, error) {
 		return nil, fmt.Errorf("popup: create positioner: %w", err)
 	}
 	defer func() { _ = positioner.Destroy() }()
-	if err := positioner.SetSize(int32(cfg.Width), int32(cfg.Height)); err != nil {
+	if err := positioner.SetSize(intconv.Int32(cfg.Width), intconv.Int32(cfg.Height)); err != nil {
 		return nil, err
 	}
 	if err := place(positioner, cfg); err != nil {
@@ -187,7 +188,7 @@ func New(sess *wlsession.Session, cfg Config) (*Popup, error) {
 		return nil, fmt.Errorf("popup: create surface: %w", err)
 	}
 	debug.Log("input", "popup surface %d created", surf.Id())
-	p := &Popup{WLSurface: surf, w: int32(cfg.Width), h: int32(cfg.Height), sess: sess, gravity: cfg.Gravity, gutter: cfg.Gutter, cfg: cfg}
+	p := &Popup{WLSurface: surf, w: intconv.Int32(cfg.Width), h: intconv.Int32(cfg.Height), sess: sess, gravity: cfg.Gravity, gutter: cfg.Gutter, cfg: cfg}
 	p.sc = scale.New(sess, surf, nil)
 	p.fx = surfx.NewCoordinator(cfg.Kind, p, func() bool { return widget.Current().Animations })
 	// The gutter is display-only: clicks in it route to whatever is
@@ -264,8 +265,8 @@ func (p *Popup) sealGutter(w, h int) {
 		return
 	}
 	if region, err := p.sess.Compositor().CreateRegion(); err == nil {
-		g := int32(p.gutter)
-		_ = region.Add(g, g, max(0, int32(w)-2*g), max(0, int32(h)-2*g))
+		g := intconv.Int32(p.gutter)
+		_ = region.Add(g, g, max(0, intconv.Int32(w)-2*g), max(0, intconv.Int32(h)-2*g))
 		_ = p.WLSurface.SetInputRegion(region)
 		_ = region.Destroy()
 	}
@@ -295,7 +296,7 @@ func (p *Popup) reposition(cfg Config) bool {
 		return false
 	}
 	defer func() { _ = positioner.Destroy() }()
-	if positioner.SetSize(int32(cfg.Width), int32(cfg.Height)) != nil || place(positioner, cfg) != nil {
+	if positioner.SetSize(intconv.Int32(cfg.Width), intconv.Int32(cfg.Height)) != nil || place(positioner, cfg) != nil {
 		return false
 	}
 	p.repositions++

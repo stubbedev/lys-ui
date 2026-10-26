@@ -12,6 +12,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/transfer"
@@ -121,7 +122,7 @@ func renderDragIcon(sess *wlsession.Session, w widget.Widget, frac120 uint32) *w
 		return true
 	}
 	if !attach(surf.Attach(b.WL, 0, 0), "attach") ||
-		!attach(surf.DamageBuffer(0, 0, int32(b.Width), int32(b.Height)), "damage") ||
+		!attach(surf.DamageBuffer(0, 0, intconv.Int32(b.Width), intconv.Int32(b.Height)), "damage") ||
 		!attach(surf.Commit(), "commit") {
 		return nil
 	}

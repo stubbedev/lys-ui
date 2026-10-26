@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 
 	"github.com/stubbedev/lys-lib/render"
 
@@ -102,7 +103,7 @@ func run(stream *media.Stream) error {
 	w, h := stream.Size()
 	return component.Run(app.WindowConfig{
 		Title: "lys-ui video", AppID: "dev.stubbe.lys.ui.video",
-		Width: uint32(max(w, clipW) + 24), Height: uint32(max(h, clipH) + 60), Background: widget.Current().Bg,
+		Width: pixels(max(w, clipW) + 24), Height: pixels(max(h, clipH) + 60), Background: widget.Current().Bg,
 	}, func(a *app.Application) (*player, error) {
 		if err := a.AddAccel("Escape", widget.NewAction("quit", a.Quit)); err != nil {
 			return nil, err
@@ -119,4 +120,8 @@ func run(stream *media.Stream) error {
 		}
 		return newPlayer(stream)
 	})
+}
+
+func pixels(v int) uint32 {
+	return uint32(min(max(int64(v), 0), math.MaxUint32))
 }

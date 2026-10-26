@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/compose"
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
@@ -1203,7 +1205,7 @@ func (s *Session) HandleKeyboardModifiers(ev wl.KeyboardModifiersEvent) {
 	s.mods = ev.ModsDepressed
 	if s.xkbState != nil {
 		s.xkbState.UpdateMask(xkb.ModMask(ev.ModsDepressed), xkb.ModMask(ev.ModsLatched),
-			xkb.ModMask(ev.ModsLocked), xkb.Group(ev.Group), xkb.Group(0), xkb.Group(0))
+			xkb.ModMask(ev.ModsLocked), xkb.Group(min(ev.Group, math.MaxUint8)), xkb.Group(0), xkb.Group(0))
 	}
 }
 
@@ -1230,14 +1232,14 @@ func (s *Session) KeySym(code uint32) xkb.Keysym {
 // Mods returns the currently held modifiers (shift, ctrl, alt,
 // super); locks such as Caps and Num Lock are not held keys.
 func (s *Session) Mods() Mods {
-	return Mods(s.mods) & (ModShift | ModCtrl | ModAlt | ModSuper)
+	return Mods(s.mods & uint32(ModShift|ModCtrl|ModAlt|ModSuper))
 }
 
 // HandleKeyboardRepeatInfo implements wl.KeyboardRepeatInfoHandler: the
 // compositor's rate (keys per second) and delay (milliseconds).
 func (s *Session) HandleKeyboardRepeatInfo(ev wl.KeyboardRepeatInfoEvent) {
-	s.repeatRate = uint32(ev.Rate)
-	s.repeatDelay = uint32(ev.Delay)
+	s.repeatRate = intconv.Uint32(ev.Rate)
+	s.repeatDelay = intconv.Uint32(ev.Delay)
 }
 
 // RepeatInfo returns the compositor's key repeat rate in keys per second

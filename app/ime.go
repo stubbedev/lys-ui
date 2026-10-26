@@ -7,6 +7,7 @@ package app
 import (
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -75,10 +76,10 @@ func (c *imeController) sync(r *widget.Router, causeOther bool) {
 		Anchor:      next.anchor,
 		CauseOther:  causeOther,
 		CursorRect: wlsession.Rect{
-			X: int32(next.rect.X),
-			Y: int32(next.rect.Y),
-			W: int32(next.rect.W),
-			H: int32(next.rect.H),
+			X: intconv.Int32(next.rect.X),
+			Y: intconv.Int32(next.rect.Y),
+			W: intconv.Int32(next.rect.W),
+			H: intconv.Int32(next.rect.H),
 		},
 	}
 	c.sess.UpdateIME(st)

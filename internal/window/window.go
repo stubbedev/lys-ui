@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/wlr"
 
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/wlnull"
 )
 
@@ -100,7 +101,7 @@ func (s State) String() string {
 func parseStates(states []int32) State {
 	var s State
 	for _, v := range states {
-		switch uint32(v) {
+		switch intconv.Uint32(v) {
 		case xdg.ToplevelStateActivated:
 			s.Activated = true
 		case xdg.ToplevelStateMaximized:
@@ -200,12 +201,12 @@ func New(wmBase *xdg.WmBase, surf *wl.Surface, cfg Config) (*Window, error) {
 		return nil, fmt.Errorf("window: set_app_id: %w", err)
 	}
 	if cfg.MinWidth != 0 || cfg.MinHeight != 0 {
-		if err := tl.SetMinSize(int32(cfg.MinWidth), int32(cfg.MinHeight)); err != nil {
+		if err := tl.SetMinSize(intconv.Int32(cfg.MinWidth), intconv.Int32(cfg.MinHeight)); err != nil {
 			return nil, fmt.Errorf("window: set_min_size: %w", err)
 		}
 	}
 	if cfg.MaxWidth != 0 || cfg.MaxHeight != 0 {
-		if err := tl.SetMaxSize(int32(cfg.MaxWidth), int32(cfg.MaxHeight)); err != nil {
+		if err := tl.SetMaxSize(intconv.Int32(cfg.MaxWidth), intconv.Int32(cfg.MaxHeight)); err != nil {
 			return nil, fmt.Errorf("window: set_max_size: %w", err)
 		}
 	}
@@ -235,13 +236,13 @@ func (w *Window) HandleToplevelConfigure(ev xdg.ToplevelConfigureEvent) {
 	released := free && w.state.dictatesSize()
 	switch {
 	case ev.Width != 0:
-		w.width = uint32(ev.Width)
+		w.width = intconv.Uint32(ev.Width)
 	case released && w.floatW != 0:
 		w.width = w.floatW
 	}
 	switch {
 	case ev.Height != 0:
-		w.height = uint32(ev.Height)
+		w.height = intconv.Uint32(ev.Height)
 	case released && w.floatH != 0:
 		w.height = w.floatH
 	}
@@ -409,7 +410,7 @@ func (w *Window) SetMinSize(width, height uint32) error {
 	if w.Toplevel == nil {
 		return nil
 	}
-	return w.Toplevel.SetMinSize(int32(width), int32(height))
+	return w.Toplevel.SetMinSize(intconv.Int32(width), intconv.Int32(height))
 }
 
 // SetMaxSize publishes the largest size the compositor may resize the
@@ -419,7 +420,7 @@ func (w *Window) SetMaxSize(width, height uint32) error {
 	if w.Toplevel == nil {
 		return nil
 	}
-	return w.Toplevel.SetMaxSize(int32(width), int32(height))
+	return w.Toplevel.SetMaxSize(intconv.Int32(width), intconv.Int32(height))
 }
 
 // SizeLimits returns the current min/max size in surface (logical)

@@ -3,6 +3,8 @@ package popup
 import (
 	"github.com/neurlang/wayland/xdg"
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // placement is one xdg_positioner setup: the anchor rect, which point
@@ -45,7 +47,7 @@ func placementFor(cfg Config) placement {
 			adjust:  slideX | slideY | flipY,
 		}
 	}
-	g := int32(cfg.Gutter - cfg.Gap)
+	g := intconv.Int32(cfg.Gutter - cfg.Gap)
 	p := placement{rect: cfg.AnchorRect}
 	switch cfg.Gravity {
 	case GravityTop:
@@ -68,7 +70,7 @@ func placementFor(cfg Config) placement {
 func place(pos *xdg.Positioner, cfg Config) error {
 	p := placementFor(cfg)
 	r := p.rect
-	if err := pos.SetAnchorRect(int32(r.X), int32(r.Y), int32(r.W), int32(r.H)); err != nil {
+	if err := pos.SetAnchorRect(intconv.Int32(r.X), intconv.Int32(r.Y), intconv.Int32(r.W), intconv.Int32(r.H)); err != nil {
 		return err
 	}
 	if err := pos.SetAnchor(p.anchor); err != nil {

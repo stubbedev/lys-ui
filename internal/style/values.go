@@ -1,6 +1,7 @@
 package style
 
 import (
+	"fmt"
 	"math"
 	"math/bits"
 	"slices"
@@ -276,11 +277,19 @@ func (s PropSet) AndNot(o PropSet) PropSet {
 // words is the set's bit words, low first.
 func (s PropSet) words() [3]uint64 { return [3]uint64{s.lo, s.mid, s.hi} }
 
+func propAt(word, bit int) Prop {
+	p := word*propWordBits + bit
+	if p < 0 || p >= int(numProps) {
+		panic(fmt.Sprintf("style: prop set bit %d outside the %d longhands", p, numProps))
+	}
+	return Prop(p)
+}
+
 // Each calls fn for every member, in Prop order.
 func (s PropSet) Each(fn func(Prop)) {
 	for i, word := range s.words() {
 		for word != 0 {
-			fn(Prop(i*propWordBits + bits.TrailingZeros64(word)))
+			fn(propAt(i, bits.TrailingZeros64(word)))
 			word &= word - 1
 		}
 	}

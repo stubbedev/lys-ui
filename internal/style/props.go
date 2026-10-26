@@ -423,19 +423,19 @@ func borderStyleInto(side int) func([]token, *ctx, *Values) bool {
 }
 
 func parseBorderStyles(ts []token, _ *ctx, v *Values) bool {
-	var vals []int
+	var styles []BorderStyle
 	for _, c := range components(ts) {
 		st, ok := borderStyleOf(c)
 		if !ok {
 			return false
 		}
-		vals = append(vals, int(st))
+		styles = append(styles, st)
 	}
-	s, ok := expandSides(vals)
+	s, ok := expand4(styles)
 	if !ok {
 		return false
 	}
-	v.BorderStyle = [4]BorderStyle{BorderStyle(s.Top), BorderStyle(s.Right), BorderStyle(s.Bottom), BorderStyle(s.Left)}
+	v.BorderStyle = s
 	return true
 }
 

@@ -168,16 +168,20 @@ type offerMimes struct {
 	action  transfer.Action
 }
 
+func actionOf(wire uint32) transfer.Action {
+	return transfer.Action(wire & uint32(transfer.ActionCopy|transfer.ActionMove|transfer.ActionAsk))
+}
+
 // HandleDataOfferSourceActions implements
 // wl.DataOfferSourceActionsHandler: the actions the source offers.
 func (o *offerMimes) HandleDataOfferSourceActions(ev wl.DataOfferSourceActionsEvent) {
-	o.actions = transfer.Action(ev.SourceActions)
+	o.actions = actionOf(ev.SourceActions)
 }
 
 // HandleDataOfferAction implements wl.DataOfferActionHandler: the
 // action the compositor negotiated.
 func (o *offerMimes) HandleDataOfferAction(ev wl.DataOfferActionEvent) {
-	o.action = transfer.Action(ev.DndAction)
+	o.action = actionOf(ev.DndAction)
 }
 
 // HandleDataOfferOffer implements wl.DataOfferOfferHandler: one
@@ -613,7 +617,7 @@ func (c *Controller) HandleDataSourceTarget(ev wl.DataSourceTargetEvent) {
 // HandleDataSourceAction implements wl.DataSourceActionHandler: the
 // compositor negotiated an action with the destination.
 func (c *Controller) HandleDataSourceAction(ev wl.DataSourceActionEvent) {
-	c.setFeedback(transfer.Feedback{Mime: c.feedback.Mime, Action: transfer.Action(ev.DndAction)})
+	c.setFeedback(transfer.Feedback{Mime: c.feedback.Mime, Action: actionOf(ev.DndAction)})
 }
 
 // setFeedback records and announces a change of what the source hears.

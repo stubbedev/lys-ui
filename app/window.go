@@ -35,6 +35,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
 	"github.com/stubbedev/lys-ui/internal/inspect"
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/touchinput"
@@ -397,7 +398,7 @@ func (w *hostWindow) applyInputRegion() {
 		rects = []render.Rect{{W: math.MaxInt32 / 2, H: math.MaxInt32 / 2}}
 	}
 	for _, r := range rects {
-		if err := region.Add(int32(r.X), int32(r.Y), int32(r.W), int32(r.H)); err != nil {
+		if err := region.Add(intconv.Int32(r.X), intconv.Int32(r.Y), intconv.Int32(r.W), intconv.Int32(r.H)); err != nil {
 			debug.Log("input", "input region: %v", err)
 			return
 		}
@@ -631,7 +632,7 @@ func (s wireSurface) Attach(b *buffer.Buffer) error { return s.wl.Attach(b.WL, 0
 // buffer pixels.
 func (s wireSurface) Damage(rects []render.Rect) error {
 	for _, r := range rects {
-		if err := s.wl.DamageBuffer(int32(r.X), int32(r.Y), int32(r.W), int32(r.H)); err != nil {
+		if err := s.wl.DamageBuffer(intconv.Int32(r.X), intconv.Int32(r.Y), intconv.Int32(r.W), intconv.Int32(r.H)); err != nil {
 			return err
 		}
 	}
@@ -660,12 +661,12 @@ func (s wireSurface) SetOpaqueRegion(w, h int, holes []render.Rect) error {
 	if err != nil {
 		return fmt.Errorf("app: create region: %w", err)
 	}
-	if err := region.Add(0, 0, int32(w), int32(h)); err != nil {
+	if err := region.Add(0, 0, intconv.Int32(w), intconv.Int32(h)); err != nil {
 		_ = region.Destroy()
 		return fmt.Errorf("app: region add: %w", err)
 	}
 	for _, r := range holes {
-		if err := region.Subtract(int32(r.X), int32(r.Y), int32(r.W), int32(r.H)); err != nil {
+		if err := region.Subtract(intconv.Int32(r.X), intconv.Int32(r.Y), intconv.Int32(r.W), intconv.Int32(r.H)); err != nil {
 			_ = region.Destroy()
 			return fmt.Errorf("app: region subtract: %w", err)
 		}

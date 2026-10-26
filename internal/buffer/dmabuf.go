@@ -8,6 +8,8 @@ import (
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/wlr"
+
+	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // NewDmabuf allocates a bufW x bufH buffer the GPU renders into: a
@@ -24,7 +26,19 @@ func NewDmabuf(dev *gpu.Device, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, mod
 		t.Close()
 		return nil, fmt.Errorf("buffer: dmabuf %dx%d: %w", bufW, bufH, err)
 	}
-	wlb, err := params.CreateImmed(int32(bufW), int32(bufH), dmabuf.FormatARGB8888, 0)
+	w, err := intconv.CheckedInt32(bufW)
+	if err != nil {
+		_ = params.Destroy()
+		t.Close()
+		return nil, fmt.Errorf("buffer: dmabuf width: %w", err)
+	}
+	h, err := intconv.CheckedInt32(bufH)
+	if err != nil {
+		_ = params.Destroy()
+		t.Close()
+		return nil, fmt.Errorf("buffer: dmabuf height: %w", err)
+	}
+	wlb, err := params.CreateImmed(w, h, dmabuf.FormatARGB8888, 0)
 	_ = params.Destroy()
 	if err != nil {
 		t.Close()

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/wltest"
+
+	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // WireFrame is one request as it hit a WireServer: object id, opcode,
@@ -19,7 +21,7 @@ type WireFrame struct {
 
 // Word reads payload word i as int32.
 func (f WireFrame) Word(i int) int32 {
-	return int32(binary.NativeEndian.Uint32(f.Body[4*i : 4*i+4]))
+	return intconv.Int32Bits(binary.NativeEndian.Uint32(f.Body[4*i : 4*i+4]))
 }
 
 // WireServer listens on a LoopbackDisplay and drains every request the

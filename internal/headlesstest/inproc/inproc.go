@@ -68,5 +68,5 @@ func Capture(t *testing.T) *capture.Client {
 // WantColor checks one pixel of a captured frame against a render
 // color, opaque.
 func WantColor(img *image.RGBA, x, y int, want render.Color) error {
-	return wltest.WantColor(img, x, y, color.RGBA{R: uint8(want >> 16), G: uint8(want >> 8), B: uint8(want), A: 0xff})
+	return wltest.WantColor(img, x, y, color.RGBA{R: want.R(), G: want.G(), B: want.B(), A: 0xff})
 }

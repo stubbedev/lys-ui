@@ -14,6 +14,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/debug"
 
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/mailbox"
 )
 
@@ -285,8 +286,12 @@ func writeInvocation(conn net.Conn, inv Invocation) error {
 	if err != nil {
 		return err
 	}
+	n, err := intconv.CheckedUint32(len(payload))
+	if err != nil {
+		return fmt.Errorf("app: invocation frame length: %w", err)
+	}
 	var header [4]byte
-	binary.BigEndian.PutUint32(header[:], uint32(len(payload)))
+	binary.BigEndian.PutUint32(header[:], n)
 	if _, err := conn.Write(header[:]); err != nil {
 		return err
 	}

@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -73,7 +74,7 @@ func (w *BarWindow) reserve(width, height int) {
 	if w.cfg.Bar.Edge().Vertical() {
 		thick = width
 	}
-	if err := w.SetExclusiveZone(int32(thick)); err != nil {
+	if err := w.SetExclusiveZone(intconv.Int32(thick)); err != nil {
 		logutil.L().Warn("app: bar: reserve its exclusive zone", "thickness", thick, "err", err)
 	}
 }

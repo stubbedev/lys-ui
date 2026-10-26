@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/wlr"
 
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/wlnull"
 )
 
@@ -148,7 +149,7 @@ func (s *Session) SetBlurRegion(surf *wl.Surface, rects []render.Rect) error {
 		return fmt.Errorf("wlsession: blur region: %w", err)
 	}
 	for _, r := range rects {
-		if err := region.Add(int32(r.X), int32(r.Y), int32(r.W), int32(r.H)); err != nil {
+		if err := region.Add(intconv.Int32(r.X), intconv.Int32(r.Y), intconv.Int32(r.W), intconv.Int32(r.H)); err != nil {
 			_ = region.Destroy()
 			return fmt.Errorf("wlsession: blur region add: %w", err)
 		}

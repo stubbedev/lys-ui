@@ -174,7 +174,7 @@ func overWhite(dst []byte, img image.Image, y int) {
 	for x := range b.Dx() {
 		r, g, bl, a := img.At(b.Min.X+x, y).RGBA()
 		inv := 0xffff - a
-		dst[3*x], dst[3*x+1], dst[3*x+2] = byte((r+inv)>>8), byte((g+inv)>>8), byte((bl+inv)>>8)
+		dst[3*x], dst[3*x+1], dst[3*x+2] = byte(min((r+inv)>>8, 0xff)), byte(min((g+inv)>>8, 0xff)), byte(min((bl+inv)>>8, 0xff))
 	}
 }
 

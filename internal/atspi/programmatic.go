@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -115,13 +116,13 @@ func (o *textIface) geometry() widget.TextGeometry {
 // every Component coordinate.
 func (o *textIface) GetCharacterExtents(offset int32, coordType uint32) (int32, int32, int32, int32) {
 	r := o.rangeExtents(offset, offset+1)
-	return int32(r.X), int32(r.Y), int32(r.W), int32(r.H)
+	return intconv.Int32(r.X), intconv.Int32(r.Y), intconv.Int32(r.W), intconv.Int32(r.H)
 }
 
 // GetRangeExtents is the union of the range's character boxes.
 func (o *textIface) GetRangeExtents(start, end int32, coordType uint32) (int32, int32, int32, int32) {
 	r := o.rangeExtents(start, end)
-	return int32(r.X), int32(r.Y), int32(r.W), int32(r.H)
+	return intconv.Int32(r.X), intconv.Int32(r.Y), intconv.Int32(r.W), intconv.Int32(r.H)
 }
 
 // rangeExtents unions the boxes of start..end on the loop.

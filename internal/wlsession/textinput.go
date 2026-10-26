@@ -7,6 +7,8 @@ import (
 	text "github.com/neurlang/wayland/unstable/text-input-v3"
 	"github.com/neurlang/wayland/wl"
 	"github.com/stubbedev/lys-lib/debug"
+
+	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // maxIMESurrounding is the wayland message size cap the protocol puts
@@ -132,7 +134,7 @@ func (s *Session) UpdateIME(st IMEState) {
 		}
 		_ = ti.SetContentType(hint, text.ZwpInputV3ContentPurposeNormal)
 		if len(st.Surrounding) <= maxIMESurrounding {
-			_ = ti.SetSurroundingText(st.Surrounding, int32(st.Cursor), int32(st.Anchor))
+			_ = ti.SetSurroundingText(st.Surrounding, intconv.Int32(st.Cursor), intconv.Int32(st.Anchor))
 		}
 		_ = ti.SetCursorRectangle(st.CursorRect.X, st.CursorRect.Y, st.CursorRect.W, st.CursorRect.H)
 	} else {

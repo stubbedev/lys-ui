@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
@@ -189,7 +190,7 @@ func (pc *Painter) Pass() (bool, error) {
 		p.mu.Unlock()
 		return false, err
 	}
-	if err := pc.surf.DamageBuffer(0, 0, int32(b.Width), int32(b.Height)); err != nil {
+	if err := pc.surf.DamageBuffer(0, 0, intconv.Int32(b.Width), intconv.Int32(b.Height)); err != nil {
 		p.mu.Unlock()
 		return false, err
 	}
@@ -211,7 +212,7 @@ func (pc *Painter) Pass() (bool, error) {
 	pc.framePending = true
 	if !pc.mapped {
 		pc.mapped = true
-		p.checkSide(int32(h))
+		p.checkSide(intconv.Int32(h))
 	}
 	debug.Log("frame", "popup %d frame %dx%d", pc.surf.Id(), b.Width, b.Height)
 	return true, nil

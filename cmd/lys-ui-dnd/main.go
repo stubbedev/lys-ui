@@ -137,7 +137,7 @@ func parseHex(s string) (render.Color, bool) {
 	s = strings.TrimSpace(s)
 	if len(s) == 7 && s[0] == '#' {
 		if v, err := strconv.ParseUint(s[1:], 16, 32); err == nil {
-			return render.RGB(uint8(v>>16), uint8(v>>8), uint8(v)), true
+			return render.RGB(uint8(v>>16&0xff), uint8(v>>8&0xff), uint8(v&0xff)), true
 		}
 	}
 	return 0, false

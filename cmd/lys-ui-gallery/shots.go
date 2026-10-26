@@ -10,6 +10,7 @@ import (
 	"image/draw"
 	"image/png"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -230,7 +231,7 @@ func (s *shooter) one(i int, theme func() *widget.Theme, suffix string) (size sh
 		window = d.windowSize(root)
 		win, err = s.app.NewWindow(app.WindowConfig{
 			Title: d.title, AppID: shotsAppID,
-			Width: uint32(window.W), Height: uint32(window.H),
+			Width: pixels(window.W), Height: pixels(window.H),
 			Root: root, Background: widget.Current().Bg, Opaque: true,
 		})
 		g.win = win
@@ -306,7 +307,7 @@ func (s *shooter) open(d demo) error {
 // motion's extents are the output's mode, in hardware pixels.
 func (s *shooter) move(p image.Point) error {
 	sc := int(s.out.Scale)
-	if err := s.pointer.MotionAbsolute(uint32(p.X*sc), uint32(p.Y*sc), uint32(s.out.Width), uint32(s.out.Height)); err != nil {
+	if err := s.pointer.MotionAbsolute(pixels(p.X*sc), pixels(p.Y*sc), pixels(int(s.out.Width)), pixels(int(s.out.Height))); err != nil {
 		return fmt.Errorf("shots: pointer motion: %w", err)
 	}
 	return s.pointer.Roundtrip()
@@ -462,4 +463,8 @@ func writeAtomic(path string, write func(io.Writer) error) error {
 		return fmt.Errorf("shots: %w", err)
 	}
 	return nil
+}
+
+func pixels(v int) uint32 {
+	return uint32(min(max(int64(v), 0), math.MaxUint32))
 }

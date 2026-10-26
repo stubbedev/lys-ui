@@ -12,7 +12,9 @@ package atspi
 
 import (
 	"github.com/godbus/dbus/v5"
+	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -25,6 +27,10 @@ type objRef struct {
 // atspiRect is the (iiii) extents tuple.
 type atspiRect struct {
 	X, Y, W, H int32
+}
+
+func rectOf(r render.Rect) atspiRect {
+	return atspiRect{X: intconv.Int32(r.X), Y: intconv.Int32(r.Y), W: intconv.Int32(r.W), H: intconv.Int32(r.H)}
 }
 
 // Interface names.
@@ -124,22 +130,21 @@ func (o *componentIface) GetAccessibleAtPoint(x, y int32, coordType uint32) objR
 
 func (o *componentIface) GetExtents(coordType uint32) atspiRect {
 	if n := o.b.node(o.id); n != nil {
-		r := n.st.Bounds
-		return atspiRect{X: int32(r.X), Y: int32(r.Y), W: int32(r.W), H: int32(r.H)}
+		return rectOf(n.st.Bounds)
 	}
 	return atspiRect{}
 }
 
 func (o *componentIface) GetPosition(coordType uint32) (int32, int32) {
 	if n := o.b.node(o.id); n != nil {
-		return int32(n.st.Bounds.X), int32(n.st.Bounds.Y)
+		return intconv.Int32(n.st.Bounds.X), intconv.Int32(n.st.Bounds.Y)
 	}
 	return 0, 0
 }
 
 func (o *componentIface) GetSize() (int32, int32) {
 	if n := o.b.node(o.id); n != nil {
-		return int32(n.st.Bounds.W), int32(n.st.Bounds.H)
+		return intconv.Int32(n.st.Bounds.W), intconv.Int32(n.st.Bounds.H)
 	}
 	return 0, 0
 }
@@ -182,11 +187,11 @@ func (o *textIface) bound(offset, kind int32) (string, int32, int32) {
 
 func (o *textIface) GetCaretOffset() int32 {
 	_, st := o.snapshot()
-	return int32(st.Caret)
+	return intconv.Int32(st.Caret)
 }
 
 func (o *textIface) GetCharacterCount() int32 {
-	return int32(len(o.runes()))
+	return intconv.Int32(len(o.runes()))
 }
 
 // GetText is start..end; an end of -1 reads to the end (the AT-SPI
@@ -194,16 +199,16 @@ func (o *textIface) GetCharacterCount() int32 {
 func (o *textIface) GetText(start, end int32) string {
 	r := o.runes()
 	if end < 0 {
-		end = int32(len(r))
+		end = intconv.Int32(len(r))
 	}
-	start = max32(0, min32(start, int32(len(r))))
-	end = max32(start, min32(end, int32(len(r))))
+	start = max32(0, min32(start, intconv.Int32(len(r))))
+	end = max32(start, min32(end, intconv.Int32(len(r))))
 	return string(r[start:end])
 }
 
 func (o *textIface) GetCharacterAtOffset(offset int32) int32 {
 	r := o.runes()
-	if offset < 0 || offset >= int32(len(r)) {
+	if offset < 0 || offset >= intconv.Int32(len(r)) {
 		return -1
 	}
 	return r[offset]
@@ -222,15 +227,15 @@ func (o *textIface) GetSelection(num int32) (int32, int32) {
 	if num != 0 || !st.HasSelection {
 		return -1, -1
 	}
-	return int32(st.SelStart), int32(st.SelEnd)
+	return intconv.Int32(st.SelStart), intconv.Int32(st.SelEnd)
 }
 
 func (o *textIface) GetStringAtOffset(offset, granularity uint32) (string, int32, int32) {
-	off := int32(offset)
+	off := intconv.Int32(offset)
 	r := o.runes()
 	switch granularity {
 	case 0: // CHAR
-		if off < 0 || off >= int32(len(r)) {
+		if off < 0 || off >= intconv.Int32(len(r)) {
 			return "", off, off
 		}
 		return string(r[off]), off, off + 1
@@ -241,38 +246,40 @@ func (o *textIface) GetStringAtOffset(offset, granularity uint32) (string, int32
 	case 3: // LINE
 		return lineAt(r, off)
 	default: // PARAGRAPH: lys-ui text is a single paragraph
-		return string(r), 0, int32(len(r))
+		return string(r), 0, intconv.Int32(len(r))
 	}
 }
 
 func (o *textIface) GetTextBeforeOffset(offset, kind uint32) (string, int32, int32) {
-	s, start, end := o.bound(int32(offset), int32(kind))
-	if start >= int32(offset) {
-		return "", int32(offset), int32(offset)
+	off := intconv.Int32(offset)
+	s, start, end := o.bound(off, intconv.Int32(kind))
+	if start >= off {
+		return "", off, off
 	}
-	return s, start, min32(end, int32(offset))
+	return s, start, min32(end, off)
 }
 
 func (o *textIface) GetTextAtOffset(offset, kind uint32) (string, int32, int32) {
-	return o.bound(int32(offset), int32(kind))
+	return o.bound(intconv.Int32(offset), intconv.Int32(kind))
 }
 
 func (o *textIface) GetTextAfterOffset(offset, kind uint32) (string, int32, int32) {
-	s, start, end := o.bound(int32(offset), int32(kind))
-	if end <= int32(offset) {
-		return "", int32(offset), int32(offset)
+	off := intconv.Int32(offset)
+	s, start, end := o.bound(off, intconv.Int32(kind))
+	if end <= off {
+		return "", off, off
 	}
-	return s, max32(start, int32(offset)), end
+	return s, max32(start, off), end
 }
 
 func (o *textIface) GetAttributeValue(offset int32, name string) string { return "" }
 
 func (o *textIface) GetAttributes(offset int32) (map[string]string, int32, int32) {
-	return map[string]string{}, offset, int32(len(o.runes()))
+	return map[string]string{}, offset, intconv.Int32(len(o.runes()))
 }
 
 func (o *textIface) GetAttributeRun(offset int32, includeDefaults bool) (map[string]string, int32, int32) {
-	return map[string]string{}, 0, int32(len(o.runes()))
+	return map[string]string{}, 0, intconv.Int32(len(o.runes()))
 }
 
 func (o *textIface) GetDefaultAttributes() map[string]string   { return map[string]string{} }

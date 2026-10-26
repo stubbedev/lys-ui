@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/atomicfile"
+	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/pdf"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -300,7 +301,11 @@ func (d *desktopPortals) preparePrint(window, title string, settings map[string]
 }
 
 func (d *desktopPortals) print(window, title string, f *os.File, token uint32) error {
-	resp, _, err := d.request(portalPrint, map[string]dbus.Variant{"modal": dbus.MakeVariant(true), "token": dbus.MakeVariant(token)}, window, title, dbus.UnixFD(f.Fd()))
+	fd, err := intconv.CheckedInt32(f.Fd())
+	if err != nil {
+		return fmt.Errorf("app: print %s: fd: %w", f.Name(), err)
+	}
+	resp, _, err := d.request(portalPrint, map[string]dbus.Variant{"modal": dbus.MakeVariant(true), "token": dbus.MakeVariant(token)}, window, title, dbus.UnixFD(fd))
 	if err != nil {
 		return err
 	}
