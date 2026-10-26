@@ -3,7 +3,7 @@ package widget
 import (
 	"slices"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // Align says how a grid child sits inside its cell along one axis when

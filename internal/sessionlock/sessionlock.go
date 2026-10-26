@@ -23,9 +23,8 @@ import (
 	"fmt"
 
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // ErrNotLocked reports an unlock attempted before the compositor sent

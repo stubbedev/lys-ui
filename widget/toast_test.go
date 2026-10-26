@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/animclock"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // fixedWidget is a leaf of constant natural size, the test child for

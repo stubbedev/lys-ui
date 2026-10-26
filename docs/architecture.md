@@ -145,7 +145,7 @@ loop-driving calls out of the public API.
 The widget tree — input routing, hit tests, caret rects, popup
 anchoring — lives in logical surface pixels. The device scale appears
 where the hardware needs it and nowhere else (internal/scale,
-render/canvas.go):
+lys-lib/render/canvas.go):
 
 - scales are rational and 120-based (`scale.Denom` = 120; 1.25 is
   150/120), matching `wp_fractional_scale_v1`'s wire unit;
@@ -167,9 +167,9 @@ source-over, and straight alpha exists only at the PNG boundary.
 Anti-aliased primitives (signed-distance RoundedRect and Line)
 multiply the *coverage into all premultiplied channels*, not just
 alpha — scaling alpha alone leaves full-strength source color on edge
-pixels and halos around every rounded control (render/canvas.go, pinned
+pixels and halos around every rounded control (lys-lib/render/canvas.go, pinned
 by TestRoundedRectEdgeBlending and TestLine). Every primitive is held
-to a shared source-over conformance table in render/blend_test.go:
+to a shared source-over conformance table in lys-lib/render/blend_test.go:
 when you add a primitive, add a row there — paint, probe points, and a
 tolerance rationale — so its blending stays pinned against the suite's
 independent reference compositor.
@@ -180,7 +180,7 @@ Layout and painting derive from the same sources, or the widget
 measures boxes its own painter refuses to fill into: a measure that
 rounds a line height while the painter's fit check compares the exact
 float lays out a label that paints nothing. `Label.Measure` and
-`DrawAligned` share `ShapedText.LineHeight` (render/text.go), pinned by
+`DrawAligned` share `ShapedText.LineHeight` (lys-lib/render/text.go), pinned by
 TestLabelNaturalHeightPaints. When adding a widget, compute shared
 geometry once and measure the thing you paint.
 

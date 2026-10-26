@@ -10,7 +10,7 @@ package style
 import (
 	"slices"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // NumVal is one length-or-percentage argument: the value and whether

@@ -30,43 +30,29 @@ hyprland-vm:
 atspi:
     go test ./internal/atspi/
 
-# The GPU renderer's tests on lavapipe, Mesa's CPU Vulkan driver, so
-# they gate without a GPU: its own, and every widget golden rendered on
-# the GPU against the CPU's pixels, and the app's GPU frame tests.
-# `go test ./gpu/...` alone runs its own on the host's device, or skips
-# them without one.
-# The gpu package runs verbose: a driver crash kills the test binary
-# without a Go trace, and the last test it started is the only name
-# the log then has (#352).
+# The GPU renderer's lys-ui tests on lavapipe, Mesa's CPU Vulkan
+# driver, so they gate without a GPU: every widget golden rendered on
+# the GPU against the CPU's pixels, and the app's GPU frame tests. The
+# renderer's own tests run in lys-lib.
 gpu:
-    LYS_UI_TEST_GPU=lavapipe go test -count=1 -v ./gpu/...
-    LYS_UI_TEST_GPU=lavapipe go test -count=1 ./widget
-    LYS_UI_TEST_GPU=lavapipe go test -count=1 -run GPU ./app
+    LYS_TEST_GPU=lavapipe go test -count=1 ./widget
+    LYS_TEST_GPU=lavapipe go test -count=1 -run GPU ./app
 
-# The GPU paths on this host's own GPU, under the validation layer:
-# the renderer, dmabuf export and the video encoder, the widget goldens
-# drawn on the GPU and the app's GPU frames, then the dmabuf capture
-# tests against a headless sway rendering on the same GPU. For AMD and
-# Intel machines, which CI's lavapipe cannot stand in for: lavapipe
-# has no video encoder and no compositor-side dmabuf import.
+# The same on this host's own GPU, under the validation layer, after a
+# preflight that opens one device through lys-lib's own test: for AMD
+# and Intel machines, which CI's lavapipe cannot stand in for. lys-lib's
+# gpu-host covers the renderer, encoder and capture paths.
 gpu-host:
     #!/bin/sh
-    if ! out=$(LYS_UI_TEST_GPU=host go test -count=1 -run '^TestDeviceCloseClosesTargets$' ./gpu 2>&1); then
+    if ! out=$(LYS_TEST_GPU=host go test -count=1 -run '^TestDeviceCloseClosesTargets$' github.com/stubbedev/lys-lib/gpu 2>&1); then
         printf '%s\n' "$out" | grep -E 'GPU device|vkCreate|Vulkan' | head -n 3
         echo "gpu-host: Vulkan opens no device that exports dmabufs here (VK_DRIVER_FILES=${VK_DRIVER_FILES:-unset})."
         echo "Off NixOS the dev shell points the loader at nixpkgs' Mesa (AMD, Intel); NVIDIA's driver needs nixGL."
         exit 1
     fi
     rc=0
-    LYS_UI_TEST_GPU=host go test -count=1 -v ./gpu/... 2>&1 | grep -vE '^=== (RUN|PAUSE|CONT)' || rc=1
-    LYS_UI_TEST_GPU=host go test -count=1 ./widget || rc=1
-    LYS_UI_TEST_GPU=host go test -count=1 -run GPU ./app || rc=1
-    dir=$(mktemp -d /tmp/lys-ui-gpu-host.XXXXXX)
-    LYS_UI_TEST_WLR_RENDERER=vulkan just test-env "$dir" || exit 1
-    trap 'just test-env-stop "$dir"' EXIT INT TERM
-    . "$dir/client.env"
-    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$dir" LYS_UI_HEADLESS=1
-    go test -count=1 -v -run Dmabuf ./capture 2>&1 | grep -vE '^=== (RUN|PAUSE|CONT)' || rc=1
+    LYS_TEST_GPU=host go test -count=1 ./widget || rc=1
+    LYS_TEST_GPU=host go test -count=1 -run GPU ./app || rc=1
     exit $rc
 
 # Run the suite under the race detector. It needs cgo, so only this
@@ -87,7 +73,7 @@ atspi-verify:
 
 # Run the compositor-in-the-loop input tests (internal/headlesstest):
 # boots a private headless sway with the test-env recipe, then runs
-# the suite against it with LYS_UI_HEADLESS=1 - the tests attach to the
+# the suite against it with LYS_TEST_HEADLESS=1 - the tests attach to the
 # running compositor, launch the showcase, and drive a synthetic seat
 # through pointer and keyboard while asserting on the client's trace
 # log. The env is always torn down, pass or fail. Runs inside the dev
@@ -99,7 +85,7 @@ headless:
     just test-env "$dir" || exit 1
     trap 'just test-env-stop "$dir"' EXIT INT TERM
     . "$dir/client.env"
-    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$dir" LYS_UI_HEADLESS=1
+    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$dir" LYS_TEST_HEADLESS=1
     # The client-side cursor path needs a theme; the dev shell supplies
     # one (LYS_UI_TEST_XCURSOR_PATH) so the run does not depend on the host.
     if [ -n "$LYS_UI_TEST_XCURSOR_PATH" ]; then
@@ -107,10 +93,10 @@ headless:
     fi
     # The packages share one compositor: run them one at a time, so no
     # package's surfaces show in another's captures.
-    go test -p 1 ./internal/headlesstest ./capture ./vinput ./app -count=1
+    go test -p 1 ./internal/headlesstest ./app -count=1
 
 # `check` plus the headless input gate - what CI runs. The gate is
-# required there: LYS_UI_HEADLESS=1 turns every skip into a failure.
+# required there: LYS_TEST_HEADLESS=1 turns every skip into a failure.
 check-headless: check headless
 
 # Static analysis of every package with go vet.
@@ -131,30 +117,19 @@ test:
 bench:
     go test -bench . -run '^$' -benchmem ./...
 
-# Regenerate the golden-image snapshots after a deliberate visual
-# change: render and widget goldens are rewritten, so review the diff
-# (git diff -- '*testdata/golden*') before committing. See
-# internal/golden for the comparison policy.
+# Regenerate the widget golden-image snapshots after a deliberate
+# visual change, then review the diff (git diff -- '*testdata/golden*')
+# before committing. See lys-lib's golden package for the comparison
+# policy; render's goldens live in lys-lib.
 goldens:
-    UPDATE_GOLDEN=1 go test ./render ./widget
-
-# Rasterize the SVG references (render/testdata/svgref) with
-# rsvg-convert, the independent renderer render.LoadSVG is held to; the
-# PNG's size is the size the test renders at.
-svg-refs:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    for svg in render/testdata/svgref/*.svg; do
-        rsvg-convert -w 64 -h 64 "$svg" -o "${svg%.svg}.png"
-    done
+    UPDATE_GOLDEN=1 go test ./widget
 
 # Compile-check the bar binary; the output is discarded.
 build:
     go build -o /dev/null ./cmd/lys-ui-bar
 
 # Format every Go source in place: gofumpt and gci as configured in
-# .golangci.yml, which also excludes third_party/ (upstream code carried
-# verbatim) and generated files.
+# .golangci.yml, which also excludes generated files.
 fmt:
     golangci-lint fmt ./...
 
@@ -169,15 +144,15 @@ demo:
 
 # Run the widget showcase inside the headless test compositor with
 # input traces on; pair with the move/click/sweep recipes to drive it.
-# LYS_UI_DEBUG picks trace categories (see internal/debug).
-demo-headless LYS_UI_DEBUG="input,frame": test-env test-build
+# LYS_DEBUG picks trace categories (see lys-lib's debug package).
+demo-headless LYS_DEBUG="input,frame": test-env test-build
     #!/bin/sh
     dir="{{test_dir}}"
     if [ ! -f "$dir/client.env" ]; then
         echo "test compositor env missing; run just test-env"; exit 1
     fi
     . "$dir/client.env"
-    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$dir" LYS_UI_DEBUG="{{LYS_UI_DEBUG}}"
+    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$dir" LYS_DEBUG="{{LYS_DEBUG}}"
     "$dir/lys-ui-hello" >"$dir/demo.log" 2>&1 &
     echo $! >"$dir/demo.pid"
     sleep 1
@@ -219,15 +194,15 @@ multi:
     go run ./cmd/lys-ui-multi
 
 # Run the application-model demo inside the headless test compositor.
-multi-headless LYS_UI_DEBUG="input,frame": test-env test-build
+multi-headless LYS_DEBUG="input,frame": test-env test-build
     #!/bin/sh
     dir="{{test_dir}}"
     if [ ! -f "$dir/client.env" ]; then
         echo "test compositor env missing; run just test-env"; exit 1
     fi
     . "$dir/client.env"
-    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$dir" LYS_UI_DEBUG="{{LYS_UI_DEBUG}}"
-    go build -tags lysuidebug -o "$dir/lys-ui-multi" ./cmd/lys-ui-multi || exit 1
+    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$dir" LYS_DEBUG="{{LYS_DEBUG}}"
+    go build -tags lysdebug -o "$dir/lys-ui-multi" ./cmd/lys-ui-multi || exit 1
     "$dir/lys-ui-multi" >"$dir/demo.log" 2>&1 &
     echo $! >"$dir/demo.pid"
     sleep 1
@@ -239,7 +214,7 @@ multi-headless LYS_UI_DEBUG="input,frame": test-env test-build
 
 # Build the headless test binaries: the traced showcase and wlpointer.
 test-build dir=test_dir:
-    go build -tags lysuidebug -o {{dir}}/lys-ui-hello ./cmd/lys-ui-hello
+    go build -tags lysdebug -o {{dir}}/lys-ui-hello ./cmd/lys-ui-hello
     go build -o {{dir}}/wlpointer ./cmd/wlpointer
 
 # Start the headless test compositor: sway on wlroots' headless backend
@@ -301,15 +276,12 @@ test-env dir=test_dir:
     # Inside the dev shell (CI runs `nix develop -c just headless`)
     # sway is already on PATH, so the dev shell is only the fallback
     # for a host shell.
-    # LYS_UI_TEST_WLR_RENDERER picks sway's renderer: pixman (the
-    # default, no GPU) or gles2 / vulkan on the host's GPU, which the
-    # dmabuf capture tests need (gpu-host).
-    boot="exec sway --unsupported-gpu -c '$dir/sway.cfg'"
+    boot="exec sway -c '$dir/sway.cfg'"
     if ! command -v sway >/dev/null 2>&1; then
-        boot="exec nix develop -c sway --unsupported-gpu -c '$dir/sway.cfg'"
+        boot="exec nix develop -c sway -c '$dir/sway.cfg'"
     fi
     DBUS_SESSION_BUS_ADDRESS="$bus" XDG_RUNTIME_DIR="$dir" WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
-        WLR_RENDERER="${LYS_UI_TEST_WLR_RENDERER:-pixman}" sh -c "echo \$\$ > '$dir/sway.pid'; $boot" \
+        WLR_RENDERER=pixman sh -c "echo \$\$ > '$dir/sway.pid'; $boot" \
         >"$dir/sway.log" 2>&1 &
     sock=""
     for i in $(seq 1 50); do

@@ -9,8 +9,7 @@ import (
 
 	"github.com/neurlang/wayland/wlcursor"
 	"github.com/neurlang/wayland/wlcursor/xcursor"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
+	"github.com/stubbedev/lys-lib/debug"
 )
 
 // File cursors (CSS cursor: url()): the stylesheet names an xcursor

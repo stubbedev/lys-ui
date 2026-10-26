@@ -3,7 +3,7 @@ package widget
 import (
 	"fmt"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // SurfaceHost is what a widget tree's surface does for its widgets:

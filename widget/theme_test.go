@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/logutil"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 func paintSwitchTrack(t *testing.T) render.Color {

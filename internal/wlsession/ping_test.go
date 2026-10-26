@@ -9,8 +9,7 @@ import (
 
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/xdg"
-
-	"github.com/stubbedev/lys-ui/internal/headlesstest"
+	"github.com/stubbedev/lys-lib/wltest"
 )
 
 // TestPingIsAnsweredWithPong plays the compositor on a loopback socket:
@@ -18,7 +17,7 @@ import (
 // serial, unprompted by any application hook. A client that never
 // pongs gets Hyprland's not-responding dialog mapped over it.
 func TestPingIsAnsweredWithPong(t *testing.T) {
-	ln, _ := headlesstest.LoopbackDisplay(t, "wayland-ping")
+	ln, _ := wltest.LoopbackDisplay(t, "wayland-ping")
 	defer ln.Close()
 	d, err := wl.Connect("")
 	if err != nil {

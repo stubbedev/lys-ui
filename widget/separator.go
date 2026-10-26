@@ -1,6 +1,6 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/render"
+import "github.com/stubbedev/lys-lib/render"
 
 // Orientation is the main direction an oriented widget runs along.
 type Orientation uint8

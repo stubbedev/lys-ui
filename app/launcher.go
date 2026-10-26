@@ -9,8 +9,8 @@ import (
 
 	"github.com/godbus/dbus/v5"
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/debug"
 
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/transfer"
 )

@@ -21,7 +21,7 @@
             );
           };
           env.CGO_ENABLED = "0";
-          vendorHash = "sha256-APrFypdny1gx/IN6sEoEBO8iry/rSGHcwJqda97ls74=";
+          vendorHash = "sha256-QEx06iY+AJ4iU6PhWLYZQdUG1OwDE1/0b0VhOjd0BFc=";
           doCheck = false;
           # The GPU renderer loads the Vulkan loader at run time (no
           # cgo, so no rpath): the binaries find it through the
@@ -32,9 +32,6 @@
               wrapProgram "$bin" --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.vulkan-loader ]}
             done
           '';
-          # third_party/ holds patched upstream packages lys-ui imports;
-          # they build as dependencies, not as targets of their own.
-          excludedPackages = [ "third_party" ];
 
           meta = with lib; {
             license = licenses.mit;

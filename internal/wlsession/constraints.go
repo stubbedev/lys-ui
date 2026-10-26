@@ -5,10 +5,10 @@ import (
 	"image"
 
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/wlr"
 
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/internal/wlnull"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // Pointer constraints (zwp_pointer_constraints_v1) and relative motion

@@ -14,9 +14,8 @@ import (
 	"slices"
 
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // maxActivationVersion is the xdg_activation_v1 version we bind: the

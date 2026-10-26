@@ -3,8 +3,9 @@ package widget
 import (
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // calendarCols and calendarRows are a month's fixed grid: seven

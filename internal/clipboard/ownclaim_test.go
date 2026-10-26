@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/transfer"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // TestOwnClaimIsReadInProcess pins the self-paste path: while this

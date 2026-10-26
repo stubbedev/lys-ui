@@ -13,7 +13,8 @@ package app
 import (
 	"errors"
 
-	"github.com/stubbedev/lys-ui/internal/debug"
+	"github.com/stubbedev/lys-lib/debug"
+
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 )
 

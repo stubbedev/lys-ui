@@ -8,8 +8,9 @@ package widget
 import (
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // cssShot pins the palette, loads css for the shot, and hands the

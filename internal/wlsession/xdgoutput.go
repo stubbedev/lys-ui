@@ -9,9 +9,8 @@ package wlsession
 
 import (
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // maxXdgOutputVersion is the xdg_output_unstable_v1 version we bind.

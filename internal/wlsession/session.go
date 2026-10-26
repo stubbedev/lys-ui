@@ -17,14 +17,14 @@ import (
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/wlclient"
 	"github.com/neurlang/wayland/xdg"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/keymapfd"
+	"github.com/stubbedev/lys-lib/wlr"
 	"github.com/unxed/xkb-go"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/compose"
-	"github.com/stubbedev/lys-ui/internal/debug"
-	"github.com/stubbedev/lys-ui/internal/keymapfd"
 	"github.com/stubbedev/lys-ui/internal/logutil"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // requiredGlobals are the interfaces lys-ui cannot run without, in the order

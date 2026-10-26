@@ -3,7 +3,7 @@ package widget
 import (
 	"time"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // ActionRow is the preferences vocabulary's row (#93): a title with

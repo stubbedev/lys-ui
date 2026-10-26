@@ -13,12 +13,12 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/stubbedev/lys-lib/capture"
+	"github.com/stubbedev/lys-lib/render"
 	"github.com/unxed/xkb-go"
 	"golang.org/x/image/draw"
 
 	"github.com/stubbedev/lys-ui/app"
-	"github.com/stubbedev/lys-ui/capture"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

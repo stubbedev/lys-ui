@@ -1,6 +1,6 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/render"
+import "github.com/stubbedev/lys-lib/render"
 
 // Base is the embeddable shared state for widgets defined outside the
 // kit: it carries the arranged bounds, parent link, invalidation flags,

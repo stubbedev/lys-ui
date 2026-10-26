@@ -7,7 +7,7 @@ package widget
 import (
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // warmDamage drains a fresh tree's theme stamps, mirroring the first

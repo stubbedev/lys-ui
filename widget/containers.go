@@ -5,9 +5,10 @@ import (
 	"slices"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // StackTransition is how a Stack moves between pages.

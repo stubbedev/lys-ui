@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/stubbedev/lys-ui/internal/icons"
 	"github.com/stubbedev/lys-ui/internal/surfx"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

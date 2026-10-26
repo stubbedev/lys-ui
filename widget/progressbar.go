@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 const (

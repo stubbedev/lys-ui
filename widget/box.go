@@ -3,8 +3,9 @@ package widget
 import (
 	"slices"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // Axis is the main axis a Box lays its children along.

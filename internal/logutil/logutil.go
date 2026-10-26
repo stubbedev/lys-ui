@@ -23,7 +23,7 @@
 // Error — terminal conditions only: the compositor raised a fatal
 // protocol error against this client.
 //
-// The lysuidebug build-tag trace facility (internal/debug) is a
+// The lysdebug build-tag trace facility (internal/debug) is a
 // different concern — compile-out traces, not runtime logging — and
 // stays independent of this package.
 package logutil

@@ -4,7 +4,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // numKind is the type of a numeric value after unit resolution.

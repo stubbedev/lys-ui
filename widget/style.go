@@ -28,9 +28,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/internal/sysfont"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // Style priorities, GTK's provider priorities: a higher priority wins

@@ -4,6 +4,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/lys-lib/wltest"
 )
 
 // The single-instance gate (#79) under a real compositor: two
@@ -12,8 +14,8 @@ import (
 // the forwarded invocation. Everything rides on the same
 // compositor/wire/loop path a desktop launch would.
 func TestSingleInstanceForwardsToPrimary(t *testing.T) {
-	if os.Getenv("LYS_UI_HEADLESS") == "" {
-		t.Skip("LYS_UI_HEADLESS is not set; compositor input tests run under just check-headless")
+	if os.Getenv(wltest.HeadlessEnv) == "" {
+		t.Skip("LYS_TEST_HEADLESS is not set; compositor input tests run under just check-headless")
 	}
 	bin, err := BuildClient(testEnv.Dir, "./cmd/lys-ui-messages", "lys-ui-messages")
 	if err != nil {

@@ -5,12 +5,13 @@ import (
 	"image/color"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/gpu"
+	"github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/gputest"
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/buffer"
-	"github.com/stubbedev/lys-ui/internal/gputest"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // gpuFrames is a Renderer over a real device, or one whose frames fail.

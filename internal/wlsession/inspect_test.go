@@ -5,8 +5,7 @@ import (
 
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/wlcursor"
-
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // TestGlobalsRecordsVersions drives the registry handler with a fake

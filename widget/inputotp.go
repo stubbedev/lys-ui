@@ -5,7 +5,7 @@ import (
 	"slices"
 	"unicode"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // OTPCharset is what an InputOTP accepts.

@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/transfer"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 func TestPrimaryUnavailableWithoutOffer(t *testing.T) {

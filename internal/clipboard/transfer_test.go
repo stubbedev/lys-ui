@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/xfer"
 	"github.com/stubbedev/lys-ui/transfer"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // fakePeer plays the foreign client at the far end of a transfer pipe:

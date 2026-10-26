@@ -7,7 +7,7 @@ package widget
 import (
 	"unicode/utf8"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // IMEClient is the widget side of an input method: an editable widget

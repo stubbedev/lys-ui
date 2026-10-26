@@ -12,7 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stubbedev/lys-ui/internal/debug"
+	"github.com/stubbedev/lys-lib/debug"
+
 	"github.com/stubbedev/lys-ui/internal/mailbox"
 )
 

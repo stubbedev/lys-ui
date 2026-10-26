@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/sysfont"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget/css"
 )
 

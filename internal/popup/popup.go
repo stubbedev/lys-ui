@@ -17,17 +17,17 @@ import (
 
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/xdg"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/touchinput"
 	"github.com/stubbedev/lys-ui/internal/wlnull"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // Gravity picks which side of the anchor rect the popup opens on.

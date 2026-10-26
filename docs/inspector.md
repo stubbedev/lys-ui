@@ -8,13 +8,13 @@ test pins the overlay's paint as side-effect free).
 
 ## Prod visibility: always compiled in, inert until asked for
 
-The inspector is deliberately NOT behind the `lysuidebug` build tag.
+The inspector is deliberately NOT behind the `lysdebug` build tag.
 Its whole purpose is diagnosing layout bugs in the field, where
 tagged builds do not exist. The cost when it is off is one
 passthrough call per frame operation (measure, arrange, paint, hit
 test) and one bool check per key press — nothing traces, draws, or
 allocates. Real trace instrumentation stays behind the tag
-(`internal/debug`, `LYS_UI_DEBUG`), so prod binaries carry no trace
+(lys-lib's `debug`, `LYS_DEBUG`), so prod binaries carry no trace
 output.
 
 The tree dump is a plain function call (`widget.DumpTree`,

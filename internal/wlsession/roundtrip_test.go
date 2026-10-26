@@ -7,8 +7,7 @@ import (
 	"time"
 
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/headlesstest"
+	"github.com/stubbedev/lys-lib/wltest"
 )
 
 type roundtripOnDone struct {
@@ -39,7 +38,7 @@ func readSync(t *testing.T, c net.Conn) uint32 {
 }
 
 func TestRoundtripSurvivesARoundtripInsideItsDispatch(t *testing.T) {
-	ln, _ := headlesstest.LoopbackDisplay(t, "wayland-nested")
+	ln, _ := wltest.LoopbackDisplay(t, "wayland-nested")
 	defer ln.Close()
 	d, err := wl.Connect("")
 	if err != nil {

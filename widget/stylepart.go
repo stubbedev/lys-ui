@@ -1,6 +1,6 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/render"
+import "github.com/stubbedev/lys-lib/render"
 
 // stylePart is a style-only node of a widget: matched and painted by
 // its owning widget, never laid out or hit on its own. Every sub-node

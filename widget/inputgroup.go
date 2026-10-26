@@ -1,6 +1,6 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/render"
+import "github.com/stubbedev/lys-lib/render"
 
 // InputGroup is an entry with addons before and after it - icons, text,
 // buttons - inside one shared border and one focus ring: the group

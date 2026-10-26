@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/stubbedev/lys-ui/vinput"
+	"github.com/stubbedev/lys-lib/vinput"
 )
 
 // usKeymap is a flattened US xkb keymap (see testdata/us.xkb), the

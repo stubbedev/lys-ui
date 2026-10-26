@@ -1,6 +1,6 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/render"
+import "github.com/stubbedev/lys-lib/render"
 
 // Fader modulates one child's whole subtree: every color the child and
 // its descendants paint is scaled by the fader's opacity — fills,

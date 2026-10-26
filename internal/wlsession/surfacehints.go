@@ -6,11 +6,11 @@ import (
 	"math"
 
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wlr"
 
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/internal/wlnull"
-	"github.com/stubbedev/lys-ui/render"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // Small per-surface protocols: the content-type hint (the compositor

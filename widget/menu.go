@@ -4,12 +4,12 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/text"
 	"github.com/unxed/xkb-go"
 
 	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/internal/text"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // ItemKind distinguishes the menu row styles.

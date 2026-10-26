@@ -136,14 +136,14 @@ func TestBuildAliasIndexSkipsUnreadableFaces(t *testing.T) {
 }
 
 func TestFileFamilyNamesReadsAFontFile(t *testing.T) {
-	names, err := fileFamilyNames(fontscan.Location{File: "../../render/testdata/Cantarell-Regular.ttf"})
+	names, err := fileFamilyNames(fontscan.Location{File: "testdata/Cantarell-Regular.ttf"})
 	if err != nil {
 		t.Fatalf("fileFamilyNames: %v", err)
 	}
 	if !slices.Contains(names, "cantarell") {
 		t.Errorf("names = %q, want cantarell among them", names)
 	}
-	if _, err := fileFamilyNames(fontscan.Location{File: "../../render/testdata/Cantarell-Regular.ttf", Index: 3}); err == nil {
+	if _, err := fileFamilyNames(fontscan.Location{File: "testdata/Cantarell-Regular.ttf", Index: 3}); err == nil {
 		t.Error("an out-of-range face index read names")
 	}
 }
@@ -158,7 +158,7 @@ func TestWeightedResolvesAFamilyByAnotherOfItsNames(t *testing.T) {
 	aliasIndex = map[string][]aliasFace{
 		"lystestaliasfamily": faces(aspect(400, font.StyleNormal)),
 	}
-	aliasIndex["lystestaliasfamily"][0].loc = fontscan.Location{File: "../../render/testdata/Cantarell-Regular.ttf"}
+	aliasIndex["lystestaliasfamily"][0].loc = fontscan.Location{File: "testdata/Cantarell-Regular.ttf"}
 	aliasIndexBuilt = true
 	storeMu.Unlock()
 	t.Cleanup(func() {

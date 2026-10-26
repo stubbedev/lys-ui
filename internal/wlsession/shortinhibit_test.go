@@ -5,8 +5,7 @@ import (
 	"testing"
 
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // fakeShortcutsInhibitor records one inhibitor's requests and keeps

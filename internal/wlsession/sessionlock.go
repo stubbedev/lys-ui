@@ -10,9 +10,8 @@ package wlsession
 
 import (
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // maxSessionLockVersion is the ext_session_lock_manager_v1 version we

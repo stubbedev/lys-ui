@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stubbedev/lys-ui/capture"
+	"github.com/stubbedev/lys-lib/capture"
 )
 
 func main() {

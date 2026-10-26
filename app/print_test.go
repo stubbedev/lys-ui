@@ -12,9 +12,9 @@ import (
 	"testing"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/dbustest"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

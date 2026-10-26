@@ -8,9 +8,9 @@ import (
 	"fmt"
 
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/wlnull"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // ErrNotConfigured reports a draw attempt before the first configure

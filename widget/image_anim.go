@@ -3,8 +3,9 @@ package widget
 import (
 	"image"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // imagePlayback steps an animated source (a GIF or APNG decoded to a

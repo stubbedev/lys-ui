@@ -1,8 +1,9 @@
 package widget
 
 import (
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // panedHandleW is the divider's width along the paned's axis, a

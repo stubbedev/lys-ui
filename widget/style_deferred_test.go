@@ -5,8 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 func TestPerWindowMediaViewport(t *testing.T) {
@@ -143,7 +144,7 @@ func TestContentURLPseudo(t *testing.T) {
 
 func TestFontFaceRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	data, err := os.ReadFile("../render/testdata/Cantarell-Regular.ttf")
+	data, err := os.ReadFile("testdata/Cantarell-Regular.ttf")
 	if err != nil {
 		t.Fatalf("fixture font: %v", err)
 	}

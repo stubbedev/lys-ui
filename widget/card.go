@@ -1,6 +1,6 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/render"
+import "github.com/stubbedev/lys-lib/render"
 
 // Card is the card anatomy as one widget: a header with the title, an
 // optional muted description and an optional trailing action, then the

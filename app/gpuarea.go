@@ -7,16 +7,16 @@ import (
 	"slices"
 
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/dmabuf"
+	"github.com/stubbedev/lys-lib/dmabufwl"
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wlr"
 
-	"github.com/stubbedev/lys-ui/dmabuf"
 	"github.com/stubbedev/lys-ui/internal/buffer"
-	"github.com/stubbedev/lys-ui/internal/debug"
-	"github.com/stubbedev/lys-ui/internal/dmabufwl"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 var (

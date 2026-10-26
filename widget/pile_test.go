@@ -3,8 +3,9 @@ package widget
 import (
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // pileOf is a pile of n cards, each a stub h tall, the pile 200 wide.

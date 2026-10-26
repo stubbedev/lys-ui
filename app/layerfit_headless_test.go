@@ -5,10 +5,12 @@ import (
 	"image"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/capture"
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wltest"
+
 	"github.com/stubbedev/lys-ui/app"
-	"github.com/stubbedev/lys-ui/capture"
 	"github.com/stubbedev/lys-ui/internal/headlesstest/inproc"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -19,7 +21,7 @@ var fitInk = render.Color(0xff30a050)
 // when it grows (gtk4-layer-shell's sizing). Before, the surface was
 // refused for its half-anchored automatic axes.
 func TestHeadlessLayerSizesToItsContent(t *testing.T) {
-	inproc.Require(t)
+	wltest.Require(t)
 	content := widget.NewDrawingArea(200, 60)
 	content.OnDraw = func(cv *render.Canvas, r render.Rect) { cv.FillRect(r, fitInk) }
 	var win *app.LayerWindow
@@ -50,7 +52,7 @@ func TestHeadlessLayerSizesToItsContent(t *testing.T) {
 			return check(img)
 		}
 	}
-	inproc.Eventually(t, "the 200x60 content at the bottom center", screen(func(img *image.RGBA) error {
+	wltest.Eventually(t, "the 200x60 content at the bottom center", screen(func(img *image.RGBA) error {
 		b := img.Bounds()
 		cx := b.Dx() / 2
 		return errors.Join(
@@ -61,7 +63,7 @@ func TestHeadlessLayerSizesToItsContent(t *testing.T) {
 		)
 	}))
 	application.Invoke(func() { content.SetContentSize(300, 120) })
-	inproc.Eventually(t, "the surface grown to the 300x120 content", screen(func(img *image.RGBA) error {
+	wltest.Eventually(t, "the surface grown to the 300x120 content", screen(func(img *image.RGBA) error {
 		b := img.Bounds()
 		cx := b.Dx() / 2
 		return errors.Join(
@@ -85,7 +87,7 @@ func wantNot(img *image.RGBA, x, y int, c render.Color) error {
 // is 0x0: the window answers with its content's natural size instead of
 // waiting forever with nothing to draw.
 func TestHeadlessUnsizedWindowMaps(t *testing.T) {
-	inproc.Require(t)
+	wltest.Require(t)
 	ink := render.Color(0xff2060d0)
 	content := widget.NewDrawingArea(240, 160)
 	content.OnDraw = func(cv *render.Canvas, r render.Rect) { cv.FillRect(r, ink) }
@@ -94,7 +96,7 @@ func TestHeadlessUnsizedWindowMaps(t *testing.T) {
 		return err
 	})
 	c := inproc.Capture(t)
-	inproc.Eventually(t, "the unsized window on screen", func() error {
+	wltest.Eventually(t, "the unsized window on screen", func() error {
 		f, err := c.CaptureOutput(c.Outputs()[0], capture.Options{})
 		if err != nil {
 			return err

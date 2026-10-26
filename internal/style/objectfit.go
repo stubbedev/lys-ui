@@ -1,6 +1,6 @@
 package style
 
-import "github.com/stubbedev/lys-ui/render"
+import "github.com/stubbedev/lys-lib/render"
 
 // The replaced-content properties (docs/css.md): object-fit picks how
 // an image fills its widget's box and object-position where the

@@ -8,12 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/capture"
+	"github.com/stubbedev/lys-lib/dmabuf"
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/udmabuf"
+	"github.com/stubbedev/lys-lib/wltest"
+
 	"github.com/stubbedev/lys-ui/app"
-	"github.com/stubbedev/lys-ui/capture"
-	"github.com/stubbedev/lys-ui/dmabuf"
 	"github.com/stubbedev/lys-ui/internal/headlesstest/inproc"
-	"github.com/stubbedev/lys-ui/internal/udmabuf"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -60,7 +62,7 @@ func showGPUArea(t *testing.T, onFrame func(area *widget.GPUArea, f widget.GPUFr
 func wantScreen(t *testing.T, inside render.Color) {
 	t.Helper()
 	c := inproc.Capture(t)
-	inproc.Eventually(t, "the GPUArea on screen", func() error {
+	wltest.Eventually(t, "the GPUArea on screen", func() error {
 		f, err := c.CaptureOutput(c.Outputs()[0], capture.Options{})
 		if err != nil {
 			return err
@@ -74,7 +76,7 @@ func wantScreen(t *testing.T, inside render.Color) {
 }
 
 func TestHeadlessGPUAreaShowsImagesBelowTheWindow(t *testing.T) {
-	inproc.Require(t)
+	wltest.Require(t)
 	var frames atomic.Int32
 	showGPUArea(t, func(area *widget.GPUArea, f widget.GPUFrame) {
 		frames.Add(1)
@@ -92,7 +94,7 @@ func TestHeadlessGPUAreaShowsImagesBelowTheWindow(t *testing.T) {
 }
 
 func TestHeadlessGPUAreaPresentsDmabufs(t *testing.T) {
-	inproc.Require(t)
+	wltest.Require(t)
 	const w, h = 64, 64
 	mem, err := udmabuf.New(w * h * 4)
 	if err != nil {

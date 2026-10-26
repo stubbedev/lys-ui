@@ -15,16 +15,16 @@ import (
 	"unicode/utf8"
 
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/render"
 	"github.com/unxed/xkb-go"
 
 	"github.com/stubbedev/lys-ui/internal/clipboard"
 	"github.com/stubbedev/lys-ui/internal/compose"
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/touchinput"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

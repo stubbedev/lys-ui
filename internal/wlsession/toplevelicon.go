@@ -11,9 +11,8 @@ import (
 	"slices"
 
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // maxToplevelIconManagerVersion is the xdg_toplevel_icon_manager_v1

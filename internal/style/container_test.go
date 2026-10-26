@@ -3,7 +3,7 @@ package style
 import (
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // computeContainer computes n's chain like computeTree, with the

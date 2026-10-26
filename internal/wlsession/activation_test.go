@@ -5,8 +5,7 @@ import (
 	"testing"
 
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // fakeActivationToken records one token object's requests and keeps

@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/icons"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 const (

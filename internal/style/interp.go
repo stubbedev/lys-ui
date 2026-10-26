@@ -3,7 +3,7 @@ package style
 import (
 	"math"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // Interpolation and composition of computed values (css-values-4 §3,

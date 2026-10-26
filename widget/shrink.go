@@ -1,8 +1,9 @@
 package widget
 
 import (
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // Shrinker is a widget that can be arranged shorter than its natural

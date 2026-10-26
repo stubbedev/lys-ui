@@ -4,8 +4,9 @@ import (
 	"math"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // The values group reads lengths through letter-spacing (a float px

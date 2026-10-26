@@ -30,12 +30,6 @@
           # the accessibility bus and skip when it is missing; shipping it
           # keeps that gate honest wherever the dev shell runs.
           pkgs.dbus
-          # `just svg-refs` rasterizes the SVG references render.LoadSVG
-          # is compared against with rsvg-convert.
-          pkgs.librsvg
-          # `just shaders` compiles the GPU renderer's GLSL to the
-          # SPIR-V package gpu embeds.
-          pkgs.glslang
         ]
         # Editor tooling (gopls, delve, and the tools vscode-go and
         # vim-go install), built against the pinned Go: vscode-go
@@ -81,10 +75,10 @@
         LD_LIBRARY_PATH = "${pkgs.vulkan-loader}/lib";
         # Mesa's lavapipe, a CPU Vulkan driver: the GPU tests force it
         # (VK_DRIVER_FILES) to run without a GPU, as CI does.
-        LYS_UI_TEST_LAVAPIPE = "${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json";
+        LYS_TEST_LAVAPIPE = "${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json";
         # The Khronos validation layer: the GPU tests run under it, and
         # any error it finds stops the test.
-        LYS_UI_TEST_VULKAN_LAYERS = "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d";
+        LYS_TEST_VULKAN_LAYERS = "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d";
         # Off NixOS there are no drivers in /run/opengl-driver, and the host's own
         # Mesa cannot load into processes linked against nixpkgs' glibc:
         # the Vulkan loader, and sway's EGL and GBM, would find no

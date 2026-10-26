@@ -1,7 +1,7 @@
 package widget
 
 import (
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // The control rows of #93 - libadwaita's settings vocabulary over

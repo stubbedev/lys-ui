@@ -6,9 +6,8 @@ import (
 
 	"github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/language"
+	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/goregular"
-
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // mustSans resolves the default sans face, skipping the test when the

@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/animclock"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // A tagged widget that takes over from another with its tag morphs out

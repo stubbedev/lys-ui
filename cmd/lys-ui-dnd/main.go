@@ -15,10 +15,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/stubbedev/lys-lib/render"
 	"github.com/unxed/xkb-go"
 
 	"github.com/stubbedev/lys-ui/app"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/transfer"
 	"github.com/stubbedev/lys-ui/widget"
 )

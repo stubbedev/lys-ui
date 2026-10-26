@@ -3,8 +3,9 @@ package widget
 import (
 	"slices"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // departurePrecision settles a departure's 0-to-1 progress.

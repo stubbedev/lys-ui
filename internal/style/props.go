@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // propDef describes one property name: the longhands it sets and the

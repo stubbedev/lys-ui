@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 func newTestBuffer(w, h int) *Buffer {

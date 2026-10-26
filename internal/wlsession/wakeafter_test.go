@@ -9,8 +9,7 @@ import (
 	"time"
 
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/headlesstest"
+	"github.com/stubbedev/lys-lib/wltest"
 )
 
 // syncCompositor plays the compositor's half of wl_display.sync on c:
@@ -51,7 +50,7 @@ func syncCompositor(c net.Conn, answered *atomic.Int32) {
 // answers syncs.
 func newSyncSession(t *testing.T) (*Session, net.Conn, *atomic.Int32) {
 	t.Helper()
-	ln, _ := headlesstest.LoopbackDisplay(t, "wayland-wake")
+	ln, _ := wltest.LoopbackDisplay(t, "wayland-wake")
 	t.Cleanup(func() { _ = ln.Close() })
 	d, err := wl.Connect("")
 	if err != nil {

@@ -91,7 +91,7 @@ func (c *capturedOutput) Stdout() string {
 // error, and teardown. No compositor and no wire objects: every step
 // is the same code path a live connection runs (bindFailed is the
 // funnel of every optional bind site; Close is nil-safe on a session
-// that never fully connected). In a prod build (no lysuidebug tag) the
+// that never fully connected). In a prod build (no lysdebug tag) the
 // trace facility at these sites is compiled out, so only the injected
 // logger can produce output.
 func driveLifecycle(t *testing.T) {

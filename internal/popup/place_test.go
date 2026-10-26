@@ -4,8 +4,7 @@ import (
 	"testing"
 
 	"github.com/neurlang/wayland/xdg"
-
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // A point anchors as a 1x1 rect the popup grows down-right of, free to

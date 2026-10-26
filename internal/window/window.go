@@ -12,10 +12,10 @@ import (
 	xdeco "github.com/neurlang/wayland/unstable/xdg-decoration-v1"
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/xdg"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/wlr"
 
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/internal/wlnull"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // ErrNotConfigured reports a draw attempt before the first configure

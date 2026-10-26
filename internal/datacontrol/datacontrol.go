@@ -21,7 +21,8 @@ import (
 	"os"
 	"slices"
 
-	"github.com/stubbedev/lys-ui/internal/debug"
+	"github.com/stubbedev/lys-lib/debug"
+
 	"github.com/stubbedev/lys-ui/internal/xfer"
 )
 

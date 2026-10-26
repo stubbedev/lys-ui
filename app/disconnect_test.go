@@ -16,10 +16,10 @@ import (
 	"time"
 
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/wltest"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/buffer"
-	"github.com/stubbedev/lys-ui/internal/headlesstest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -29,7 +29,7 @@ import (
 // state a SIGKILLed compositor leaves. The caller must Close it.
 func deadPeerSession(t *testing.T) (*wlsession.Session, string) {
 	t.Helper()
-	ln, sock := headlesstest.LoopbackDisplay(t, "wayland-dead")
+	ln, sock := wltest.LoopbackDisplay(t, "wayland-dead")
 	d, err := wl.Connect("")
 	if err != nil {
 		ln.Close()
@@ -220,7 +220,7 @@ func TestDisconnectedEventCarriesUnderlyingError(t *testing.T) {
 // with its send lock held. Here the peer never answers, so a settle
 // would block on the roundtrip forever (#277).
 func TestRunPanicSkipsTheWireSettle(t *testing.T) {
-	ln, _ := headlesstest.LoopbackDisplay(t, "wayland-panic")
+	ln, _ := wltest.LoopbackDisplay(t, "wayland-panic")
 	t.Cleanup(func() { _ = ln.Close() })
 	d, err := wl.Connect("")
 	if err != nil {

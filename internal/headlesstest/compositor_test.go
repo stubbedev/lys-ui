@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/lys-lib/wltest"
 )
 
 func TestDriverForPicksAndDefaults(t *testing.T) {
@@ -99,7 +101,7 @@ func TestHyprInstanceDirPrefersTheEnvAndThenTheOnlyLiveOne(t *testing.T) {
 func TestHyprControlCommandRoundTripsOneRequest(t *testing.T) {
 	// The control socket is a real unix socket; LoopbackDisplay keeps
 	// its path inside the kernel's 107-byte sun_path limit on CI.
-	ln, sock := LoopbackDisplay(t, "ctl-sock")
+	ln, sock := wltest.LoopbackDisplay(t, "ctl-sock")
 	requests := make(chan string, 1)
 	go func() {
 		conn, err := ln.AcceptUnix()

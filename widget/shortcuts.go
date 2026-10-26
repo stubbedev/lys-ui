@@ -3,7 +3,7 @@ package widget
 import (
 	"strings"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // ShortcutSection is one titled group of a shortcuts overview.

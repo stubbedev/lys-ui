@@ -4,13 +4,13 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // loadVF loads the Quicksand variable test face (wght 300-700).
 func loadVF(t *testing.T) *render.Typeface {
 	t.Helper()
-	data, err := os.ReadFile("../render/testdata/Quicksand-VF.ttf")
+	data, err := os.ReadFile("testdata/Quicksand-VF.ttf")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // The fixture tree, laid out per the icon theme spec. Every flag glyph

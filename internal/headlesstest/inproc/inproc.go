@@ -5,25 +5,17 @@
 package inproc
 
 import (
-	"fmt"
 	"image"
 	"image/color"
-	"os"
 	"testing"
 	"time"
 
-	"github.com/stubbedev/lys-ui/app"
-	"github.com/stubbedev/lys-ui/capture"
-	"github.com/stubbedev/lys-ui/render"
-)
+	"github.com/stubbedev/lys-lib/capture"
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wltest"
 
-// Require skips unless the test runs under just headless.
-func Require(t *testing.T) {
-	t.Helper()
-	if os.Getenv("LYS_UI_HEADLESS") == "" {
-		t.Skip("LYS_UI_HEADLESS is not set; in-process compositor tests run under just headless")
-	}
-}
+	"github.com/stubbedev/lys-ui/app"
+)
 
 // Show runs a lys-ui application on its own goroutine with build adding
 // its surfaces, and stops it at test cleanup.
@@ -73,26 +65,8 @@ func Capture(t *testing.T) *capture.Client {
 	return c
 }
 
-// Eventually retries fn until it succeeds or the deadline passes.
-func Eventually(t *testing.T, what string, fn func() error) {
-	t.Helper()
-	deadline := time.Now().Add(8 * time.Second)
-	var err error
-	for time.Now().Before(deadline) {
-		if err = fn(); err == nil {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatalf("%s: %v", what, err)
-}
-
-// WantColor checks one pixel of a captured frame.
+// WantColor checks one pixel of a captured frame against a render
+// color, opaque.
 func WantColor(img *image.RGBA, x, y int, want render.Color) error {
-	got := img.RGBAAt(x, y)
-	w := color.RGBA{R: uint8(want >> 16), G: uint8(want >> 8), B: uint8(want), A: 0xff}
-	if got != w {
-		return fmt.Errorf("pixel (%d,%d) = %v, want %v", x, y, got, w)
-	}
-	return nil
+	return wltest.WantColor(img, x, y, color.RGBA{R: uint8(want >> 16), G: uint8(want >> 8), B: uint8(want), A: 0xff})
 }

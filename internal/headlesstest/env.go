@@ -99,7 +99,7 @@ var strippedEnv = []string{
 	"WLR_BACKENDS",
 	"WLR_LIBINPUT_NO_DEVICES",
 	"WLR_RENDERER",
-	"LYS_UI_DEBUG",
+	"LYS_DEBUG",
 }
 
 // privateEnv returns os.Environ() with every strippedEnv entry removed

@@ -5,8 +5,8 @@ import (
 	"image"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/dmabuf"
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/dmabuf"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 type fakeGPUSurface struct {

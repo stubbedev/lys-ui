@@ -11,8 +11,7 @@ import (
 	"time"
 
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/headlesstest"
+	"github.com/stubbedev/lys-lib/wltest"
 )
 
 // deadSocketSession returns a Session wired to a real unix socket whose
@@ -20,7 +19,7 @@ import (
 // compositor needed. The caller must Close the session.
 func deadSocketSession(t *testing.T) *Session {
 	t.Helper()
-	ln, _ := headlesstest.LoopbackDisplay(t, "wayland-dead")
+	ln, _ := wltest.LoopbackDisplay(t, "wayland-dead")
 	d, err := wl.Connect("")
 	if err != nil {
 		ln.Close()
@@ -230,7 +229,7 @@ func TestCloseIsIdempotent(t *testing.T) {
 // verdict was read. It returns the session and that write's error.
 func closedAfterVerdict(t *testing.T, verdict bool) (*Session, error) {
 	t.Helper()
-	ln, _ := headlesstest.LoopbackDisplay(t, "wayland-verdict")
+	ln, _ := wltest.LoopbackDisplay(t, "wayland-verdict")
 	d, err := wl.Connect("")
 	if err != nil {
 		ln.Close()

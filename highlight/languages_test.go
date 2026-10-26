@@ -5,8 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/internal/golden"
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/golden"
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/widget"
 )
 

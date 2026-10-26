@@ -1,7 +1,7 @@
 package widget
 
 import (
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // MenuBar is the in-window primary navigation (#91): a bordered,

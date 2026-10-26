@@ -16,8 +16,7 @@ import (
 	wlos "github.com/neurlang/wayland/os"
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/wlclient"
-
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // slot is a byte range in the arena's pool file. Buffer geometry (width,

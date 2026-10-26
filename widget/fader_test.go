@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // pxColorAt reads one ARGB8888 pixel from a canvas buffer.

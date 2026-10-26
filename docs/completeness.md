@@ -57,7 +57,7 @@ live in [architecture.md](architecture.md#non-goals).
 | ShortcutsWindow | `ShortcutsView` + `Application.ShortcutsDialog` from the accelerator registry | widget/shortcuts.go, app/accel.go |
 | adw Toast | `Toast` + `Application.ShowToast` (stacking, action, hover pause) | widget/toast.go, app/toast.go |
 | Tooltip | `SetTooltip`, `SetTooltipMarkup`, `SetTooltipOptions` on any widget | widget/widget.go, app/tooltip.go |
-| GLArea | `widget.GPUArea`: application-rendered dmabufs (zero copy, async import checked against the advertised formats) or CPU images, on a subsurface below the window, paced by `OnFrame` | widget/gpuarea.go, app/gpuarea.go, dmabuf/ |
+| GLArea | `widget.GPUArea`: application-rendered dmabufs (zero copy, async import checked against the advertised formats) or CPU images, on a subsurface below the window, paced by `OnFrame` | widget/gpuarea.go, app/gpuarea.go, lys-lib/dmabuf/ |
 | Video, MediaControls, MediaStream, MediaFile | `widget.Video` (fit policies, controls on hover or pause, autoplay), `widget.MediaControls`, `media.Stream` (play, pause, seek, loop, volume, mute, audio-clocked sync); sources: animated images, YUV4MPEG2 in pure Go, any file through an ffmpeg subprocess; sound through the PulseAudio protocol | media/, widget/video.go, widget/mediacontrols.go |
 | Spinner, Separator, Image, Icon | `Spinner`, `NewSeparator`, `Image` (fit/cover, async decode, PNG/JPEG/GIF/WebP, animated GIF/APNG), `Icon` (theme, file, SVG, symbolic tint, bundled Lucide fallback) | widget/spinner.go, widget/image.go, widget/icon.go |
 | DrawingArea, GestureStylus | `DrawingArea` (`OnDraw`, `OnStylus`); relm4 DrawHandler as `DrawSurface`: a retained backing canvas (incremental `Draw`, damage limited to the touched rect, resize keeps content, rescale reallocates and calls `OnResize`) | widget/drawingarea.go, widget/drawsurface.go |
@@ -68,14 +68,14 @@ live in [architecture.md](architecture.md#non-goals).
 | drag and drop | `DragSource`/`DragEnterer` per widget, action negotiation, cross-window | widget/input.go, app/dragdrop.go |
 | GestureClick, EventControllerScroll | `SetOnPointer` (any button, click count, modifiers) and `SetOnScroll` (steps, modifiers) on every widget; `List.OnPointer`/`OnScroll` with the row | widget/pointerhook.go, widget/list.go |
 | shell parts (no GTK counterpart) | `Bar` (start, center and end zones along an edge, turning with `SetEdge`), `BarButton`, `BarSeparator`, `SegmentIndicator`, `app.NewBar`; `FloatingPanel` (drag, resize, confinement, input-region pass-through via `InputRegioner`); `Card`; `Chip` and the drag-reorderable `ChipBox` | widget/bar.go, app/bar.go, widget/floatingpanel.go, widget/card.go, widget/chip.go |
-| RTL/bidi | UAX #9 in every text path; `Direction` on text widgets, menus, dropdowns and Box | internal/text, widget/direction.go |
+| RTL/bidi | UAX #9 in every text path; `Direction` on text widgets, menus, dropdowns and Box | lys-lib's text, widget/direction.go |
 
 ## Text, rendering and theming
 
 | Area | lys-ui | Where |
 | --- | --- | --- |
-| rendering | premultiplied ARGB8888, signed-distance AA, damage-clipped repaint, gradients (linear, radial, conic, repeating) | render/ |
-| fonts | system lookup (`app.Font`, `FontWeighted`, `FontFamilies`), per-rune fallback chains, color emoji (CBDT/sbix, COLRv0/v1, OT-SVG), variable fonts | app/fonts.go, render/, internal/sysfont |
+| rendering | premultiplied ARGB8888, signed-distance AA, damage-clipped repaint, gradients (linear, radial, conic, repeating) | lys-lib/render/ |
+| fonts | system lookup (`app.Font`, `FontWeighted`, `FontFamilies`), per-rune fallback chains, color emoji (CBDT/sbix, COLRv0/v1, OT-SVG), variable fonts | app/fonts.go, lys-lib/render/, internal/sysfont |
 | theming | typed `Theme` palette with copying `With*`, dark/light/high-contrast presets, WCAG guard | widget/theme.go |
 | CSS | GTK-flavored stylesheets above the palette: selectors, `@define-color`, transitions, `@keyframes`, hot reload; stylesheet files loadable at chosen priorities (`AddStylesheetFile`) with one shared poller | internal/style, widget/style.go, [css.md](css.md) |
 | icon themes | freedesktop spec in pure Go, live icon-theme following | internal/icons, [icons.md](icons.md) |
@@ -104,7 +104,7 @@ live in [architecture.md](architecture.md#non-goals).
 | session, background | Inhibit portal (`Inhibit`, `OnSessionStateChange` with query-end), Background portal (`RequestBackground`, `SetBackgroundStatus`) | app/portals.go |
 | lock screens | ext-session-lock-v1 (`LockSession`, every output, hotplug) | app/sessionlock.go |
 | notifications | `Application.Notify` with actions | app/notification.go |
-| screen capture | `capture`: wlr-screencopy, ext-image-copy-capture, Hyprland toplevel export, dmabuf import | capture/ |
+| screen capture | `capture`: wlr-screencopy, ext-image-copy-capture, Hyprland toplevel export, dmabuf import | lys-lib/capture/ |
 | file and fd watching | `WatchFiles`, `WatchFD` on the loop | app/watch.go |
 | compositor restarts | typed disconnect, clean exit code 75, optional reconnect with rebuild | app/disconnect.go, app/reconnect.go |
 | system appearance (`adw::StyleManager`) | `Application.ColorScheme`, `Accent`, `Contrast` with loop-delivered `On*Change` hooks; types in `appearance` | app/appearance.go, appearance/, [appearance.md](appearance.md) |

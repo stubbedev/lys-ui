@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stubbedev/lys-ui/internal/headlesstest"
+	"github.com/stubbedev/lys-lib/wltest"
 )
 
 // feedForward hands the primary a forwarded invocation the way a
@@ -47,7 +47,7 @@ func readFullDeadline(conn net.Conn, buf []byte) (int, error) {
 // same AppID, forwards its invocation, and exits as the secondary; the
 // parent's hooks receive exactly what the child sent.
 func TestClaimTwoProcessesOneWins(t *testing.T) {
-	headlesstest.RuntimeDir(t)
+	wltest.RuntimeDir(t)
 	appID := "dev.stubbe.test.claim"
 	var lines []string
 	var opens []string
@@ -123,7 +123,7 @@ func TestInstanceChildProcess(t *testing.T) {
 // the AppID forever - the next claim dials, gets no answer, and takes
 // over.
 func TestClaimReclaimsStaleSocket(t *testing.T) {
-	headlesstest.RuntimeDir(t)
+	wltest.RuntimeDir(t)
 	appID := "dev.stubbe.test.stale"
 	path, err := instanceSocketPath(appID)
 	if err != nil {
@@ -150,7 +150,7 @@ func TestClaimReclaimsStaleSocket(t *testing.T) {
 // through the first pump afterwards, so no secondary is ever dropped
 // for wiring slowly.
 func TestInstanceBuffersUntilBind(t *testing.T) {
-	headlesstest.RuntimeDir(t)
+	wltest.RuntimeDir(t)
 	var got []string
 	ins, primary, err := ClaimInstance(InstanceConfig{
 		AppID:         "dev.stubbe.test.buffer",
@@ -179,7 +179,7 @@ func TestInstanceBuffersUntilBind(t *testing.T) {
 // invocation carrying open paths fires OnOpen alone; the plain argv
 // path and the empty-activate path fire OnCommandLine.
 func TestOpenReplacesCommandLine(t *testing.T) {
-	headlesstest.RuntimeDir(t)
+	wltest.RuntimeDir(t)
 	var lines, opens int
 	ins, primary, err := ClaimInstance(InstanceConfig{
 		AppID:         "dev.stubbe.test.open",
@@ -206,7 +206,7 @@ func TestOpenReplacesCommandLine(t *testing.T) {
 // AllowMultipleInstances every process is its own primary and no socket
 // guards the AppID.
 func TestMultipleInstancesAllowed(t *testing.T) {
-	headlesstest.RuntimeDir(t)
+	wltest.RuntimeDir(t)
 	cfg := InstanceConfig{AppID: "dev.stubbe.test.multi", AllowMultipleInstances: true}
 	first, primary, err := ClaimInstance(cfg, Invocation{})
 	if err != nil || !primary {
@@ -224,7 +224,7 @@ func TestMultipleInstancesAllowed(t *testing.T) {
 // exit does unlinks the socket, so a killed application leaves the
 // AppID claimable again.
 func TestInstanceDiesWithLoop(t *testing.T) {
-	headlesstest.RuntimeDir(t)
+	wltest.RuntimeDir(t)
 	ins, primary, err := ClaimInstance(InstanceConfig{AppID: "dev.stubbe.test.dies"}, Invocation{})
 	if err != nil || !primary {
 		t.Fatalf("claim: primary=%v err=%v", primary, err)

@@ -19,9 +19,9 @@ import (
 	"github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/fontscan"
 	"github.com/go-text/typesetting/language"
+	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/uifont"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // quietLogger discards fontscan warnings.

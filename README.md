@@ -55,19 +55,19 @@ implementation.
 | `app` | the session, windows and layer surfaces, the loop, dialogs, popovers, desktop services |
 | `widget` | the widget tree, theme, CSS, actions, bindings |
 | `widget/css` | libadwaita's style classes and named colors as constants |
-| `render` | the premultiplied canvas, shaped text, icons |
 | `anim` | tweens, easing, springs and timelines |
 | `appearance` | the desktop's color scheme, accent and contrast preferences |
 | `i18n` | gettext catalogs (`.mo`, `.po`) |
 | `highlight` | syntax highlighters for the code view |
 | `media` | video and sound playback |
-| `media/mux` | MP4 and Matroska muxing of H.264, H.265 and Opus |
 | `pdf` | PDF writing |
 | `transfer` | the shared shape of clipboard and drag-and-drop content |
-| `dmabuf` | dma-buf frame descriptions |
-| `capture` | screen and window capture |
-| `vinput` | virtual pointer and keyboard injection |
-| `wlr` | generated Wayland protocol bindings |
+
+The canvas widgets paint on (`render`), the GPU renderer (`gpu`),
+screen capture (`capture`), virtual input (`vinput`), the Wayland
+protocol bindings (`wlr`), dmabufs, MP4/Matroska muxing and the Opus
+encoder live in [lys-lib](https://github.com/stubbedev/lys-lib), which
+lys-ui imports.
 
 ## A minimal app
 

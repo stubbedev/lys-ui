@@ -14,8 +14,7 @@ import (
 	"time"
 
 	"github.com/jfreymuth/pulse"
-
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 func solid(c color.RGBA) *image.RGBA {

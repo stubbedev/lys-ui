@@ -2,8 +2,7 @@ package popup
 
 import (
 	"github.com/neurlang/wayland/xdg"
-
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // placement is one xdg_positioner setup: the anchor rect, which point

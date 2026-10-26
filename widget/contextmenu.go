@@ -3,7 +3,7 @@ package widget
 import (
 	"slices"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // ContextMenu gives a region a context menu: a right click anywhere on

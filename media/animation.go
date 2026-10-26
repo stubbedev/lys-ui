@@ -7,7 +7,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 type animationSource struct {

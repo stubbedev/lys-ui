@@ -6,8 +6,9 @@ import (
 	"os"
 	"sync"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/icons"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // bgImages caches background-image files decoded at their natural

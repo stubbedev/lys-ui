@@ -11,9 +11,9 @@ import (
 
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/xdg"
+	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/headlesstest"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // xdg_toplevel request opcodes the tests match on.

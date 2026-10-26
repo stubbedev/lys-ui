@@ -5,9 +5,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/text"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/internal/text"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // VariantFunc returns the face a bold or italic run shapes with. It

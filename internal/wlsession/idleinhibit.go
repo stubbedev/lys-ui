@@ -11,9 +11,8 @@ import (
 	"errors"
 
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // maxIdleInhibitVersion is the zwp_idle_inhibit_manager_v1 version we

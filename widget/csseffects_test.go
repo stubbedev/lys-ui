@@ -10,7 +10,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // A rotate transition turns the box's subtree: mid-flight the

@@ -8,15 +8,15 @@ import (
 
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/xdg"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wlr"
 	"github.com/unxed/xkb-go"
 
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/internal/popup"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // Gravity is the side of its anchor a popover opens on.

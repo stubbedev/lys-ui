@@ -1,8 +1,9 @@
 package widget
 
 import (
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // Button is a clickable region with a rounded background and one child,

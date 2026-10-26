@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Trace is one line of the client's LYS_UI_DEBUG output: "<secs>s
+// Trace is one line of the client's LYS_DEBUG output: "<secs>s
 // <category>: <message>" (see internal/debug). Lines that do not parse
 // as traces (plain log.Fatal output, Go panics) keep Category empty
 // and carry the whole line as Message, so the watcher can also wait

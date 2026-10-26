@@ -5,10 +5,10 @@ import (
 
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/wlclient"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/wlr"
 
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/internal/logutil"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // Touch and pointer gestures. The session binds wl_touch when the seat

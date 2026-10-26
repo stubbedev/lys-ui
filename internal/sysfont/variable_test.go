@@ -5,16 +5,16 @@ import (
 	"testing"
 
 	"github.com/go-text/typesetting/font"
+	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/uifont"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // A variable face the store matched at its default instance serves a
 // requested weight through its wght axis; an already-matching weight
 // and a static face come back unchanged.
 func TestInstantiateVariable(t *testing.T) {
-	data, err := os.ReadFile("../../render/testdata/Quicksand-VF.ttf")
+	data, err := os.ReadFile("testdata/Quicksand-VF.ttf")
 	if err != nil {
 		t.Fatal(err)
 	}

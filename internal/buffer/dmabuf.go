@@ -3,11 +3,11 @@ package buffer
 import (
 	"fmt"
 
-	"github.com/stubbedev/lys-ui/dmabuf"
-	"github.com/stubbedev/lys-ui/gpu"
-	"github.com/stubbedev/lys-ui/internal/dmabufwl"
-	"github.com/stubbedev/lys-ui/render"
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/dmabuf"
+	"github.com/stubbedev/lys-lib/dmabufwl"
+	"github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // NewDmabuf allocates a bufW x bufH buffer the GPU renders into: a

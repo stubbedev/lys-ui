@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // TestGoldenDrawingArea pins a pressure-sensitive stroke: stylus

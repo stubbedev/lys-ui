@@ -3,8 +3,9 @@ package widget
 import (
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // countingModel is a spy model: it records every Row request so tests

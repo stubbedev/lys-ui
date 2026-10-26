@@ -6,20 +6,20 @@
 // driver), launches a lys-ui client under test inside it, drives a
 // synthetic seat through zwlr_virtual_pointer_v1 and
 // zwp_virtual_keyboard_v1, and asserts on the client's observable
-// behavior through its LYS_UI_DEBUG trace log.
+// behavior through its LYS_DEBUG trace log.
 //
 // The package has two kinds of users. The unit-testable pieces (trace
 // parsing, keymap table, compositor drivers) are plain exported
 // functions and run everywhere. The compositor-in-the-loop tests live
-// in this package's _test files and are gated by the LYS_UI_HEADLESS
+// in this package's _test files and are gated by the LYS_TEST_HEADLESS
 // environment variable:
 //
-//   - LYS_UI_HEADLESS unset or empty: the integration tests skip, so a
+//   - LYS_TEST_HEADLESS unset or empty: the integration tests skip, so a
 //     plain `go test ./...` on a machine with no compositor passes.
-//   - LYS_UI_HEADLESS set (CI, or `just headless`): the tests are
+//   - LYS_TEST_HEADLESS set (CI, or `just headless`): the tests are
 //     required. The harness attaches to the running compositor via
 //     WAYLAND_DISPLAY/XDG_RUNTIME_DIR; if the env is not there, the
-//     run fails - a skip under LYS_UI_HEADLESS would be a silent hole.
+//     run fails - a skip under LYS_TEST_HEADLESS would be a silent hole.
 //
 // The session is isolated from the developer's desktop: the
 // compositor runs against its own runtime dir, and the recipe's

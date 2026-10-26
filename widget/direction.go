@@ -1,6 +1,6 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/internal/text"
+import "github.com/stubbedev/lys-lib/text"
 
 // Direction names the base paragraph direction a text widget resolves
 // and lays out with. It is text.Direction — the one resolution every

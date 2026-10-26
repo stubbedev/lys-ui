@@ -13,8 +13,9 @@ package widget
 import (
 	"math"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // effects is the pushed effect state: the canvas to paint into (the

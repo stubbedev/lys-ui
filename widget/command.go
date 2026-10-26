@@ -3,7 +3,7 @@ package widget
 import (
 	"slices"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // CommandItem is one entry of a Command.

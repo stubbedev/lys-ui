@@ -1,6 +1,6 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/render"
+import "github.com/stubbedev/lys-lib/render"
 
 // AccordionMode is how many of an accordion's items may be open.
 type AccordionMode uint8

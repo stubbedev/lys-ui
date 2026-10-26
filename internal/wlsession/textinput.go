@@ -6,8 +6,7 @@ package wlsession
 import (
 	text "github.com/neurlang/wayland/unstable/text-input-v3"
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
+	"github.com/stubbedev/lys-lib/debug"
 )
 
 // maxIMESurrounding is the wayland message size cap the protocol puts

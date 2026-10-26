@@ -6,9 +6,8 @@ package wlsession
 
 import (
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
-	"github.com/stubbedev/lys-ui/wlr"
+	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/wlr"
 )
 
 // maxPrimarySelectionVersion is the zwp_primary_selection_unstable_v1

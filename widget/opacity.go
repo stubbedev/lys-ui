@@ -6,7 +6,7 @@
 // modulated in one place, and nested carriers multiply.
 package widget
 
-import "github.com/stubbedev/lys-ui/render"
+import "github.com/stubbedev/lys-lib/render"
 
 // Opacity carries a widget's subtree opacity: a factor in [0, 1] the
 // widget applies around its children's paint. Widgets that wrap children

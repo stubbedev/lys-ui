@@ -44,7 +44,7 @@ func UnmarkLoop() { loopGuard.armed.Store(false) }
 // SetOffLoopHook installs the debug hook fired with the sampled entry
 // point's name when a widget mutation runs off the loop goroutine; nil
 // disables. The hook runs on the offending goroutine and must not
-// touch widgets. Production code leaves it nil; tests and lysuidebug
+// touch widgets. Production code leaves it nil; tests and lysdebug
 // builds use it to enforce the threading contract.
 func SetOffLoopHook(hook func(what string)) {
 	loopGuard.mu.Lock()

@@ -3,7 +3,7 @@ package widget
 import (
 	"slices"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // The default level bar offsets, GTK's names and thresholds; the

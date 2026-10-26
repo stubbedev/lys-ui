@@ -3,8 +3,9 @@ package widget
 import (
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // The computed values the cascade cases read beside the shared ones.
@@ -392,7 +393,7 @@ var confCascade = []confCase{
 		wpt:  "css/css-fonts/font-face-unicode-range.html",
 		spec: "css-fonts-4 §4",
 		css: `@font-face { font-family: "Conformance Face";
-			src: url("missing.woff2") format("woff2"), url("../render/testdata/Cantarell-Regular.ttf") format("truetype"); }`,
+			src: url("missing.woff2") format("woff2"), url("testdata/Cantarell-Regular.ttf") format("truetype"); }`,
 		tree: nCol("#c", nLeaf("#t", 1, 1)),
 		want: []confCheck{
 			wantProbe("Conformance Face resolves", casFace("Conformance Face"), true),

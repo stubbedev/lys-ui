@@ -35,14 +35,14 @@ func ModuleDir() (string, error) {
 	}
 }
 
-// BuildShowcase compiles the widget showcase with the lysuidebug tag
+// BuildShowcase compiles the widget showcase with the lysdebug tag
 // (its trace calls are compiled out otherwise) into dir/lys-ui-hello and
 // returns the binary path.
 func BuildShowcase(dir string) (string, error) {
 	return BuildClient(dir, "./cmd/lys-ui-hello", "lys-ui-hello")
 }
 
-// BuildClient compiles one lys-ui command package with the lysuidebug tag
+// BuildClient compiles one lys-ui command package with the lysdebug tag
 // (trace calls are compiled out otherwise) into dir/bin and returns the
 // binary path.
 func BuildClient(dir, pkg, bin string) (string, error) {
@@ -52,7 +52,7 @@ func BuildClient(dir, pkg, bin string) (string, error) {
 	}
 	// goTool and dir come from the module tree this test binary runs in,
 	// not from any untrusted source.
-	cmd := exec.Command(goTool(), "build", "-tags", "lysuidebug", "-o", filepath.Join(dir, bin), pkg) //nolint:gosec // fixed subcommand, module-local paths
+	cmd := exec.Command(goTool(), "build", "-tags", "lysdebug", "-o", filepath.Join(dir, bin), pkg) //nolint:gosec // fixed subcommand, module-local paths
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 	out, err := runWithTimeout(cmd, buildTimeout)
@@ -94,7 +94,7 @@ func (e *Env) StartShowcase(bin, name string) (*Client, error) {
 }
 
 // StartClient runs a built client binary inside the env with the given
-// LYS_UI_DEBUG categories and extra arguments, its stdout and stderr
+// LYS_DEBUG categories and extra arguments, its stdout and stderr
 // going to a log file a LogWatcher can follow. The caller must Stop it
 // (or Wait it after a close request).
 func (e *Env) StartClient(bin, name, categories string, args ...string) (*Client, error) {
@@ -117,7 +117,7 @@ func (e *Env) StartClientEnv(bin, name, categories string, env []string, args ..
 	cmd.Env = append(privateEnv(
 		"WAYLAND_DISPLAY="+e.Display,
 		"XDG_RUNTIME_DIR="+e.Dir,
-		"LYS_UI_DEBUG="+categories,
+		"LYS_DEBUG="+categories,
 	), env...)
 	if err := cmd.Start(); err != nil {
 		_ = log.Close()

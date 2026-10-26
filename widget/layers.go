@@ -8,8 +8,9 @@ package widget
 import (
 	"math"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // layerBoxes are a box's three layer boxes and their rounded corners.

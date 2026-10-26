@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // loadCSS installs css for one test and removes it afterwards, so no

@@ -6,8 +6,9 @@ package widget
 import (
 	"strconv"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // cursorFilePrefix marks a cursor request that asks for a file cursor

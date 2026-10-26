@@ -7,11 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/capture"
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/vinput"
+	"github.com/stubbedev/lys-lib/wltest"
+
 	"github.com/stubbedev/lys-ui/app"
-	"github.com/stubbedev/lys-ui/capture"
 	"github.com/stubbedev/lys-ui/internal/headlesstest/inproc"
-	"github.com/stubbedev/lys-ui/render"
-	"github.com/stubbedev/lys-ui/vinput"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -25,7 +27,7 @@ var (
 // does not. Each click goes out once both surfaces are on screen, so a
 // retried click never lands late.
 func TestHeadlessFloatingPanelPassesClicksThrough(t *testing.T) {
-	inproc.Require(t)
+	wltest.Require(t)
 	var below, panel atomic.Int32
 	inproc.Show(t, func(a *app.Application, out *app.Output) error {
 		all := app.AnchorTop | app.AnchorBottom | app.AnchorLeft | app.AnchorRight
@@ -48,7 +50,7 @@ func TestHeadlessFloatingPanelPassesClicksThrough(t *testing.T) {
 	defer d.Close()
 	w, h := d.OutputSize()
 	c := inproc.Capture(t)
-	inproc.Eventually(t, "the panel over the layer beneath on screen", func() error {
+	wltest.Eventually(t, "the panel over the layer beneath on screen", func() error {
 		f, err := c.CaptureOutput(c.Outputs()[0], capture.Options{})
 		if err != nil {
 			return err
@@ -69,7 +71,7 @@ func TestHeadlessFloatingPanelPassesClicksThrough(t *testing.T) {
 	}
 	reach := func(what string, n *atomic.Int32, want int32) {
 		t.Helper()
-		inproc.Eventually(t, what, func() error {
+		wltest.Eventually(t, what, func() error {
 			if got := n.Load(); got != want {
 				return fmt.Errorf("%d presses, want %d", got, want)
 			}

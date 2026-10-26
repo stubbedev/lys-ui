@@ -6,23 +6,25 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/lys-lib/wltest"
 )
 
 // The compositor-in-the-loop suite: attaches to the private headless
 // sway session the just headless recipe booted (TestMain, only when
-// LYS_UI_HEADLESS is set), runs the widget showcase inside it, and drives
+// LYS_TEST_HEADLESS is set), runs the widget showcase inside it, and drives
 // a synthetic seat against it. Every
 // assertion lands on the client's own trace log - the input must have
 // traversed compositor, wire, session and widget tree for a trace to
 // appear, which is what makes this a regression net for live-input
 // bugs (#1) that widget-tree unit tests cannot see.
 
-// run gates the suite: without LYS_UI_HEADLESS the integration tests
+// run gates the suite: without LYS_TEST_HEADLESS the integration tests
 // skip (local dev has no compositor), with it set the env is required
 // and a missing compositor fails the package - a skip behind
-// LYS_UI_HEADLESS would be a silent hole in CI.
+// LYS_TEST_HEADLESS would be a silent hole in CI.
 func run(m *testing.M) int {
-	if os.Getenv("LYS_UI_HEADLESS") == "" {
+	if os.Getenv(wltest.HeadlessEnv) == "" {
 		return m.Run()
 	}
 	env, err := Attach()
@@ -72,8 +74,8 @@ const attemptTimeout = 3 * time.Second
 
 func requireEnv(t *testing.T) {
 	t.Helper()
-	if os.Getenv("LYS_UI_HEADLESS") == "" {
-		t.Skip("LYS_UI_HEADLESS is not set; compositor input tests run under just check-headless")
+	if os.Getenv(wltest.HeadlessEnv) == "" {
+		t.Skip("LYS_TEST_HEADLESS is not set; compositor input tests run under just check-headless")
 	}
 }
 

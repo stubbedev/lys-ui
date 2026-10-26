@@ -4,7 +4,7 @@ import (
 	"image"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // accelApp-built fixtures skip NewApplication's map init, so the icon

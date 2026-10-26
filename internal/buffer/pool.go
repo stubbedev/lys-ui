@@ -8,9 +8,8 @@ import (
 	"errors"
 
 	"github.com/neurlang/wayland/wl"
-
-	"github.com/stubbedev/lys-ui/gpu"
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // ErrBusy reports that every buffer in the pool is held by the compositor.

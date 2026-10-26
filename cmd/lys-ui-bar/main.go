@@ -1,8 +1,8 @@
 // Command lys-ui-bar is a layer-shell top bar component: a logo pill, the
 // clock, and a seconds gauge, ticked once a second by Application.Every.
 // Damage tracking repaints only what changed each second (the gauge,
-// and the clock once a minute); build with -tags lysuidebug and run with
-// LYS_UI_DEBUG=frame to watch the damage rects. -dump renders one frame
+// and the clock once a minute); build with -tags lysdebug and run with
+// LYS_DEBUG=frame to watch the damage rects. -dump renders one frame
 // to a PNG instead.
 package main
 
@@ -15,9 +15,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/app"
 	"github.com/stubbedev/lys-ui/component"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/ui"
 	"github.com/stubbedev/lys-ui/widget"
 )

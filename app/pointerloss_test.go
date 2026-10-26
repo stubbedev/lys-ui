@@ -3,9 +3,9 @@ package app
 import (
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

@@ -4,7 +4,7 @@ package widget
 // Measures, Arranges, and Paints a widget into a canonical buffer and
 // compares the pixels byte-exactly against a committed PNG under
 // testdata/golden (see internal/golden for the tolerance and update
-// policy, render/testdata/README.md for the fixture font). Every shot
+// policy, lys-lib's render/testdata/README.md for the fixture font). Every shot
 // shapes text with the bundled Cantarell face and pins its theme, so
 // the same pixels come out on any machine and there is no skip path.
 //
@@ -23,11 +23,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/golden"
+	"github.com/stubbedev/lys-lib/gputest"
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/internal/golden"
-	"github.com/stubbedev/lys-ui/internal/gputest"
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // goldenPad is the margin between the widget and its shot's edge, so

@@ -13,8 +13,7 @@ import (
 	"errors"
 
 	"github.com/godbus/dbus/v5"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
+	"github.com/stubbedev/lys-lib/debug"
 )
 
 // ErrGlobalShortcutDenied reports the user refusing the portal's bind

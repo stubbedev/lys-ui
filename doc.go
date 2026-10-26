@@ -15,19 +15,17 @@
 //	           dialogs, popovers, desktop services
 //	widget     the widget tree, theme, CSS, actions, bindings
 //	           (libadwaita style classes in widget/css)
-//	render     the premultiplied canvas, shaped text, icons
 //	anim       tweens, easing, springs and timelines
 //	appearance the desktop's color scheme, accent and contrast
 //	i18n       gettext catalogs
 //	highlight  syntax highlighters for the code view
 //	media      video and sound playback
-//	media/mux  MP4 and Matroska muxing of H.264, H.265 and Opus
 //	pdf        PDF writing
 //	transfer   clipboard and drag-and-drop content
-//	dmabuf     dma-buf frame descriptions
-//	capture    screen and window capture
-//	vinput     virtual pointer and keyboard injection
-//	wlr        generated Wayland protocol bindings
+//
+// The canvas widgets paint on (render), the GPU renderer, screen
+// capture, virtual input, the Wayland protocol bindings, media muxing
+// and the Opus encoder live in github.com/stubbedev/lys-lib.
 //
 // Everything under internal/ is implementation. The docs/ directory
 // holds the reference: architecture, components, the application,

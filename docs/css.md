@@ -593,7 +593,7 @@ and the pseudo content. Within them:
   profile, so auto, normal and strict read the same; loose and
   anywhere differ from them.
 - `unicode-bidi`'s embed and isolate embeddings are not supported:
-  internal/text resolves one paragraph per widget, so there is no
+  lys-lib's text resolves one paragraph per widget, so there is no
   embedding level to open.
 - On a text surface, `vertical-align`'s top, middle, bottom, text-top
   and text-bottom have no effect: they need an inline formatting

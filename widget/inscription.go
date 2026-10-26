@@ -4,8 +4,9 @@ import (
 	"math"
 	"strings"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // Inscription is GTK's Inscription: text sized by character and line

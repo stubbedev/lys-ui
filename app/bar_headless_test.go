@@ -4,17 +4,19 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/capture"
+	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wltest"
+
 	"github.com/stubbedev/lys-ui/app"
-	"github.com/stubbedev/lys-ui/capture"
 	"github.com/stubbedev/lys-ui/internal/headlesstest/inproc"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
 // A bar shows along its edge, as thick as its content, and moves to
 // another edge whole.
 func TestHeadlessBarMovesEdges(t *testing.T) {
-	inproc.Require(t)
+	wltest.Require(t)
 	ink := render.RGB(0xd0, 0x30, 0x20)
 	type shown struct {
 		a *app.Application
@@ -33,7 +35,7 @@ func TestHeadlessBarMovesEdges(t *testing.T) {
 	c := inproc.Capture(t)
 	at := func(what string, x, y int, want render.Color) {
 		t.Helper()
-		inproc.Eventually(t, what, func() error {
+		wltest.Eventually(t, what, func() error {
 			f, err := c.CaptureOutput(c.Outputs()[0], capture.Options{})
 			if err != nil {
 				return err
@@ -52,7 +54,7 @@ func TestHeadlessBarMovesEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	at("the bar along the left", 4, 600, ink)
-	inproc.Eventually(t, "the top clear of the bar", func() error {
+	wltest.Eventually(t, "the top clear of the bar", func() error {
 		f, err := c.CaptureOutput(c.Outputs()[0], capture.Options{})
 		if err != nil {
 			return err

@@ -13,9 +13,9 @@ package scale
 
 import (
 	"github.com/neurlang/wayland/wl"
+	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/wlsession"
-	"github.com/stubbedev/lys-ui/wlr"
 )
 
 // Denom is the fixed denominator of the 120-based fractional-scale wire

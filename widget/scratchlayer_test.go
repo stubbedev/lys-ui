@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // Widgets with a subtree effect share pooled scratch layers: the first

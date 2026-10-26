@@ -1,7 +1,7 @@
 package widget
 
 import (
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // requireFace enforces the toolkit-wide nil-face contract for

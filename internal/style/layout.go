@@ -12,7 +12,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // Length is a computed <length-percentage>: Px logical pixels plus Pct

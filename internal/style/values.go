@@ -5,7 +5,7 @@ import (
 	"math/bits"
 	"slices"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // Prop names one longhand property of the docs/css.md table. Shorthands

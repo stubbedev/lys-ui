@@ -6,13 +6,13 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/gpu"
-	"github.com/stubbedev/lys-ui/internal/gputest"
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/gputest"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // goldenDevice is the GPU the goldens also render on when
-// LYS_UI_TEST_GPU asks for it, opened once for the run.
+// LYS_TEST_GPU asks for it, opened once for the run.
 var goldenDevice = sync.OnceValues(func() (*gpu.Device, error) {
 	if _, err := gputest.Setup(os.Setenv); err != nil {
 		return nil, err
@@ -27,7 +27,7 @@ func checkGoldenGPU(t *testing.T, name string, l *render.List, want []byte, w, h
 	t.Helper()
 	d, err := goldenDevice()
 	if err != nil {
-		t.Fatalf("%s: GPU for LYS_UI_TEST_GPU=%s: %v", name, os.Getenv("LYS_UI_TEST_GPU"), err)
+		t.Fatalf("%s: GPU for LYS_TEST_GPU=%s: %v", name, os.Getenv("LYS_TEST_GPU"), err)
 	}
 	tg, err := d.NewOffscreen(w, h)
 	if err != nil {

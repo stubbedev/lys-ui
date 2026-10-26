@@ -4,8 +4,9 @@ import (
 	"math"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // RevealTransition is how a Revealer brings its child in and out.

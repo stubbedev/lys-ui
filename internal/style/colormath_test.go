@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // approx reports whether got is within tol of want.

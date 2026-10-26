@@ -3,9 +3,8 @@ package widget
 import (
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
 	"github.com/unxed/xkb-go"
-
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // solidIcon is a static w x w icon of one opaque color.

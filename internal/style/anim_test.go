@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // affineNear compares two transforms' matrices entrywise within tol.

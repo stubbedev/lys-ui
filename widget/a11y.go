@@ -5,7 +5,7 @@
 package widget
 
 import (
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // Role classifies a widget for assistive technology. The names follow

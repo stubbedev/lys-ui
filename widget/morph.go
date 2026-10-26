@@ -3,7 +3,7 @@ package widget
 import (
 	"math"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // Morph is a transient surface's enter and exit visual: it grows its

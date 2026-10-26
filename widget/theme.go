@@ -6,9 +6,10 @@ import (
 	"math"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/logutil"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // Theme holds the palette and metrics widgets paint with. Colors left at

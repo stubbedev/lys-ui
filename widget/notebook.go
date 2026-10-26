@@ -4,8 +4,9 @@ import (
 	"math"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // Notebook is a tabbed container: a tab bar on top and exactly one

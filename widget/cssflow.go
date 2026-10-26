@@ -19,8 +19,9 @@ package widget
 // a parent.
 
 import (
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/style"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // layoutMode is how a Box lays out its children.

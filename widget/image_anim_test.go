@@ -8,8 +8,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // animatedGIF encodes a 3-frame 8x8 GIF, 100ms per frame, playing
@@ -87,7 +88,7 @@ func TestImagePlayback(t *testing.T) {
 // TestGoldenDecodedImages pins a still WebP beside an animated GIF's
 // first frame (goldens run under reduced motion).
 func TestGoldenDecodedImages(t *testing.T) {
-	webp, err := os.ReadFile("../render/testdata/images/blue-purple-pink.lossy.webp")
+	webp, err := os.ReadFile("testdata/images/blue-purple-pink.lossy.webp")
 	if err != nil {
 		t.Fatal(err)
 	}

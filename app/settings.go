@@ -8,8 +8,9 @@ import (
 	"reflect"
 	"sync"
 
+	"github.com/stubbedev/lys-lib/debug"
+
 	"github.com/stubbedev/lys-ui/internal/atomicfile"
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

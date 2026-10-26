@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // maxEntries caps the raster cache; the oldest entries evict FIFO. A

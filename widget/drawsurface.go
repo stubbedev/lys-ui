@@ -1,7 +1,7 @@
 package widget
 
 import (
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // DrawSurface is DrawingArea's retained counterpart (relm4's

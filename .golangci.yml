@@ -46,9 +46,6 @@ linters:
         - name: exported
   exclusions:
     generated: lax
-    # Upstream code carried verbatim (third_party/*/README.lys-ui.md).
-    paths:
-      - third_party/
     rules:
       - path: _test\.go
         linters:
@@ -78,5 +75,3 @@ formatters:
         - prefix(github.com/stubbedev/lys-ui)
   exclusions:
     generated: lax
-    paths:
-      - third_party/

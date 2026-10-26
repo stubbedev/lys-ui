@@ -12,9 +12,10 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/app"
 	"github.com/stubbedev/lys-ui/component"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/ui"
 	"github.com/stubbedev/lys-ui/widget"
 )

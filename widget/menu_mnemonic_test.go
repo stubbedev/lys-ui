@@ -4,9 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/render"
 	"github.com/unxed/xkb-go"
-
-	"github.com/stubbedev/lys-ui/render"
 )
 
 // captureMenuDebug swaps the mnemonic-conflict sink for the test's run

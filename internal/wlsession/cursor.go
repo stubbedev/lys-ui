@@ -7,8 +7,7 @@ import (
 
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/wlcursor"
-
-	"github.com/stubbedev/lys-ui/internal/debug"
+	"github.com/stubbedev/lys-lib/debug"
 )
 
 // defaultCursor is shown whenever the app has not asked for another

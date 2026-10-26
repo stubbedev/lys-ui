@@ -14,9 +14,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/stubbedev/lys-lib/debug"
 	"github.com/unxed/xkb-go"
 
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
 	"github.com/stubbedev/lys-ui/internal/window"
 	"github.com/stubbedev/lys-ui/internal/wlsession"

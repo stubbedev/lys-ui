@@ -3,7 +3,7 @@ package widget
 import (
 	"strings"
 
-	"github.com/stubbedev/lys-ui/render"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // colorStep is the keyboard step for saturation, value, and hue: one

@@ -1,5 +1,5 @@
 # lys-ui CI: the release gates plus the compositor-in-the-loop input
-# suite. The headless tests are required here - LYS_UI_HEADLESS=1 makes
+# suite. The headless tests are required here - LYS_TEST_HEADLESS=1 makes
 # any skip a failure - so a change that breaks live input/protocol
 # behavior breaks CI before it can break a real desktop.
 #

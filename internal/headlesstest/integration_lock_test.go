@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/app"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -235,10 +236,10 @@ func runLockHelper(t *testing.T, mode string) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*lockTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSessionLockRivalHelper$", "-test.v")
-	cmd.Env = append(privateEnv("LYS_UI_HEADLESS=", "WAYLAND_DISPLAY="+testEnv.Display, "XDG_RUNTIME_DIR="+testEnv.Dir), rivalEnv+"="+mode,
+	cmd.Env = append(privateEnv("LYS_TEST_HEADLESS=", "WAYLAND_DISPLAY="+testEnv.Display, "XDG_RUNTIME_DIR="+testEnv.Dir), rivalEnv+"="+mode,
 		// The helper's lock lifecycle, when the suite is built with the
-		// lysuidebug tag (a no-op otherwise).
-		"LYS_UI_DEBUG=shell,wire")
+		// lysdebug tag (a no-op otherwise).
+		"LYS_DEBUG=shell,wire")
 	out, err := cmd.CombinedOutput()
 	t.Logf("lock helper (%s):\n%s", mode, out)
 	if err != nil {

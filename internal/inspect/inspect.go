@@ -7,7 +7,7 @@
 // Application.SetInspect/ToggleInspect call, or (for the dump and
 // doctor) an explicit call. With the inspector off, an app pays one
 // passthrough call per frame operation and one bool check per key
-// press; nothing traces, draws, or allocates. The lysuidebug build tag
+// press; nothing traces, draws, or allocates. The lysdebug build tag
 // was deliberately NOT used: the inspector exists to debug prod
 // binaries in the field, where tagged builds do not exist. Real
 // trace instrumentation stays behind the tag (internal/debug).
@@ -19,8 +19,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/stubbedev/lys-lib/render"
+
 	"github.com/stubbedev/lys-ui/internal/sysfont"
-	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

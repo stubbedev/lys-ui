@@ -237,7 +237,7 @@ pkgs.testers.nixosTest {
         + wayland_display
         + " HYPRLAND_INSTANCE_SIGNATURE="
         + hypr_sig
-        + " LYS_UI_HEADLESS=1 LYS_UI_TEST_COMPOSITOR=hyprland "
+        + " LYS_TEST_HEADLESS=1 LYS_UI_TEST_COMPOSITOR=hyprland "
         "XCURSOR_PATH=${pkgs.vanilla-dmz}/share/icons XCURSOR_THEME=Vanilla-DMZ "
         "GOFLAGS=-mod=vendor GOPROXY=off GOSUMDB=off "
         "GOCACHE=/tmp/gocache GOPATH=/tmp/gopath CGO_ENABLED=0 "

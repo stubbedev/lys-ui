@@ -10,8 +10,9 @@ import (
 	"os"
 	"slices"
 
+	"github.com/stubbedev/lys-lib/debug"
+
 	"github.com/stubbedev/lys-ui/internal/atspi"
-	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
