@@ -3,6 +3,7 @@ package widget
 import (
 	"slices"
 
+	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/render"
 )
 
@@ -22,8 +23,10 @@ const (
 
 // Pile stacks its children as cards: collapsed, the front card (index
 // 0) shows whole and the next few peek out past one edge of it, each a
-// step further and narrower, showing only their own box (background,
-// border, shadow) and never their content; expanded, the cards lay out
+// step further and narrower, showing only their box (background,
+// border, shadow; through a box-less single-child wrapper such as a
+// SwipeDismiss or Revealer, the box inside it) and never their
+// content; expanded, the cards lay out
 // as a column with a gap. The change between the two moves the cards
 // on their layout motion, which a pile opts its children into
 // (smooth) unless the stylesheet's -lys-layout-motion says otherwise.
@@ -280,11 +283,38 @@ func (p *Pile) Paint(cv *render.Canvas) {
 		// The card's spring keeps moving while it peeks, so expanding
 		// sets out from where it shows.
 		n.moving(w)
-		paintCSSBox(cv, n.style(w), ShownRect(w))
+		shown := ShownRect(w)
+		if box, bn := peekBox(w); bn != nil {
+			r := ShownRect(box)
+			r.X, r.Y = r.X+shown.X-n.bounds.X, r.Y+shown.Y-n.bounds.Y
+			paintCSSBox(cv, bn.style(box), r)
+		}
 	}
 	if len(vis) > 0 {
 		PaintChild(cv, vis[0])
 	}
+}
+
+// peekBox is the widget whose box a peeking card w shows: w when it
+// paints a box of its own, else, through wrappers that paint none and
+// hold one child (a SwipeDismiss, a Revealer), the first descendant
+// that does; nil when none does.
+func peekBox(w Widget) (Widget, *node) {
+	for w != nil {
+		n := nodeOf(w)
+		if n == nil {
+			return nil, nil
+		}
+		if v := n.style(w); pickc(0, v, style.PropBackgroundColor, 0) != 0 || hasBoxLayers(v) {
+			return w, n
+		}
+		kids := styleKids(w)
+		if len(kids) != 1 {
+			return nil, nil
+		}
+		w = kids[0]
+	}
+	return nil, nil
 }
 
 // HitTest is the front card collapsed, any card expanded, else the

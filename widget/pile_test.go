@@ -112,6 +112,27 @@ func TestPilePeeksPaintTheirBoxOnly(t *testing.T) {
 	}
 }
 
+// A peek wrapped in box-less single-child wrappers (#332: a SwipeDismiss
+// around a Revealer around the card) shows the card's box inside them.
+func TestPilePeekShowsTheBoxInsideWrappers(t *testing.T) {
+	loadCSS(t, `.card { background-color: #0000ff; }`)
+	t.Cleanup(anim.SetInstant(true))
+	p := NewPile()
+	for range 2 {
+		card := NewBox(Column, 0, 0)
+		card.AddClass("card")
+		card.Append(&solidLeaf{sz: Size{W: 200, H: 40}, col: render.RGB(255, 0, 0)}, false)
+		rv := NewRevealer(card)
+		rv.SetRevealed(true)
+		p.Append(NewSwipeDismiss(rv))
+	}
+	settle(t, p, 200, 60)
+	data := paintTree(p, 200, 60)
+	if got := render.ColorFromBytes(data[44*render.Stride(200)+100*4:]); got != render.RGB(0, 0, 0xff) {
+		t.Errorf("past the front, the wrapped peek shows %#08x, want the card's blue box", uint32(got))
+	}
+}
+
 // Expanding moves the cards on their layout spring: mid-flight a card
 // shows between its stacked and its column place.
 func TestPileExpandAnimates(t *testing.T) {
