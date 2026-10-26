@@ -143,7 +143,7 @@ var classRules = [][2]string{
 	{css.Glass, "background-color: alpha(@card_bg_color, 0.55); backdrop-filter: blur(16px) saturate(1.5); border: 1px solid alpha(@window_fg_color, 0.12); border-radius: {r+4}; box-shadow: 0px 8px 24px alpha(black, 0.18);"},
 	{css.LiquidGlass, "background-color: alpha(@card_bg_color, 0.18); backdrop-filter: -lys-refract(18px 10px) blur(2px) saturate(1.8); border: 1px solid alpha(white, 0.3); border-radius: {r+16}; box-shadow: inset 0px 1px 0px alpha(white, 0.5), inset 0px -1px 0px alpha(black, 0.12), 0px 10px 30px alpha(black, 0.22);"},
 	{css.Frosted, "background-color: alpha(mix(@card_bg_color, white, 0.08), 0.62); background-image: -lys-grain(0.05); backdrop-filter: blur(24px) saturate(1.4); border: 1px solid alpha(@window_fg_color, 0.12); border-radius: {r+4}; box-shadow: 0px 8px 24px alpha(black, 0.18);"},
-	{css.Glass + "." + css.BlurUnavailable + ", ." + css.Frosted + "." + css.BlurUnavailable, "background-color: @card_bg_color;"},
+	{css.Glass + "." + css.BlurUnavailable + ", ." + css.Frosted + "." + css.BlurUnavailable + ", ." + css.BlurUnavailable + " ." + css.Glass + ", ." + css.BlurUnavailable + " ." + css.Frosted, "background-color: @card_bg_color;"},
 	{css.Card, cardSurface},
 	{"card-title", "font-weight: 600;"},
 	{"card-description", "color: @muted_fg_color;"},

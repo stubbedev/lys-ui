@@ -723,8 +723,8 @@ func (w *hostWindow) syncOpaque(bw, bh int) {
 	debug.Log("frame", "opaque region %dx%d less %d holes", bw, bh, len(holes))
 }
 
-// syncBlur publishes the compositor blur region: the style root's
-// border box in its rounded shape (render.RoundedRectRegion), while the
+// syncBlur publishes the compositor blur region (widget.BackdropRegion:
+// the glass widgets' rounded boxes, or the style root's) while the
 // window asks for blur and the compositor offers it; nothing
 // otherwise. It goes out only when the shape changes. While blur is
 // asked for but not in effect the root carries css.BlurUnavailable,
@@ -741,9 +741,7 @@ func (w *hostWindow) syncBlur() {
 	var shape []render.Rect
 	active := w.cfg.blur && w.surf.BlurAvailable()
 	if active {
-		if bs, ok := root.(widget.Boundser); ok {
-			shape = render.RoundedRectRegion(bs.Bounds(), widget.CornerRadii(root))
-		}
+		shape = widget.BackdropRegion(root)
 	}
 	if fallback := w.cfg.blur && !active; fallback != w.blurFallback {
 		if c, ok := root.(interface {

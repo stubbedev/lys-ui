@@ -49,8 +49,9 @@ const (
 	// a fine grain, so the surface reads as etched.
 	Frosted = "frosted"
 	// BlurUnavailable marks a window's root that asked the compositor
-	// to blur behind it while no blur is in effect, so its style can
-	// turn opaque instead of showing the unblurred desktop.
+	// to blur behind it while no blur is in effect, so its style, and
+	// the glass inside it, can turn opaque instead of showing the
+	// unblurred desktop.
 	BlurUnavailable = "blur-unavailable"
 	// LiquidGlass is liquid glass: a nearly clear surface whose rim
 	// bends the backdrop like a lens, under a specular edge.

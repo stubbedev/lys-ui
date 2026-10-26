@@ -260,3 +260,27 @@ func TestGoldenAlertEmpty(t *testing.T) {
 		})
 	}
 }
+
+// Glass and frosted cards inside a root whose blur is not in effect
+// turn opaque too, not only a glass root itself (#331).
+func TestGlassInsideABlurUnavailableRootIsOpaque(t *testing.T) {
+	SetTheme(DarkTheme())
+	defer SetTheme(nil)
+	root := NewBox(Column, 0, 0)
+	glass, frosted := NewBox(Column, 0, 0), NewBox(Column, 0, 0)
+	glass.AddClass(css.Glass)
+	frosted.AddClass(css.Frosted)
+	root.Append(glass, false)
+	root.Append(frosted, false)
+	arrangeTree(t, root, 100, 100)
+	if v := glass.style(glass); v.Background == Current().CardColor() {
+		t.Fatal("plain .glass is already opaque; the test proves nothing")
+	}
+	root.AddClass(css.BlurUnavailable)
+	arrangeTree(t, root, 100, 100)
+	for _, w := range []*Box{glass, frosted} {
+		if v := w.style(w); v.Background != Current().CardColor() {
+			t.Errorf("%v under a blur-unavailable root: background %08x, want the opaque card color", w.Classes(), uint32(v.Background))
+		}
+	}
+}

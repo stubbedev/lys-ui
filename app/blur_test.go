@@ -73,3 +73,33 @@ func TestBlurFallbackClass(t *testing.T) {
 		t.Errorf("offered blur: %d sends, fallback class %v; want the region and no class", len(h.surf.blur), widget.HasClass(root, css.BlurUnavailable))
 	}
 }
+
+// A transparent root holding glass cards blurs behind the cards alone,
+// each in its rounded shape at the rect it shows at, following a card
+// that moves; a hidden card is no part of it (#331).
+func TestBlurRegionFollowsGlassCards(t *testing.T) {
+	root := widget.NewBox(widget.Column, 10, 0)
+	var cards []*widget.Box
+	for range 3 {
+		c := widget.NewBox(widget.Column, 0, 0)
+		c.AddClass(css.Glass)
+		c.Append(widget.NewSpacer(100, 30), false)
+		root.Append(c, false)
+		cards = append(cards, c)
+	}
+	cards[2].SetVisible(false)
+	h := newPaintHarness(root, 120, 80)
+	h.surf.blurOffered = true
+	h.wnd.cfg.blur = true
+	h.frame()
+	var want []render.Rect
+	for _, c := range cards[:2] {
+		want = append(want, render.RoundedRectRegion(widget.ShownRect(c), widget.CornerRadii(c))...)
+	}
+	if len(h.surf.blur) != 1 || !slices.Equal(h.surf.blur[0], want) {
+		t.Fatalf("blur regions %v, want the two shown cards' rounded boxes", h.surf.blur)
+	}
+	if widget.CornerRadii(cards[0]) == (render.Corners{}) {
+		t.Error("the glass card has square corners; the test proves no rounding")
+	}
+}

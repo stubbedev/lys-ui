@@ -201,6 +201,33 @@ func CornerRadii(w Widget) render.Corners {
 	return render.Corners{}
 }
 
+// BackdropRegion is the region behind root's tree a compositor blurs:
+// the rounded border boxes, at the rects they show at, of the shown
+// widgets whose style blurs their backdrop (backdrop-filter, the glass
+// family). A glass root is the whole region. A tree without any is the
+// root's own box, a window blurred behind as a whole.
+func BackdropRegion(root Widget) []render.Rect {
+	var shape []render.Rect
+	walkWidgets(root, func(w Widget) bool {
+		n := nodeOf(w)
+		if n == nil || !IsVisible(w) || !shown(w) {
+			return n == nil
+		}
+		if v := n.style(w); !v.Has(style.PropBackdropFilter) || v.Backdrop.Empty() {
+			return true
+		}
+		shape = append(shape, render.RoundedRectRegion(ShownRect(w), CornerRadii(w))...)
+		return false
+	})
+	if shape != nil {
+		return shape
+	}
+	if bs, ok := root.(Boundser); ok {
+		return render.RoundedRectRegion(bs.Bounds(), CornerRadii(root))
+	}
+	return nil
+}
+
 // PaintFocusRing draws the keyboard focus ring of a focused w around
 // its FocusRingOwner: FocusRingWidth wide outside the border box, following its corner radii, in the
 // theme's ring color at focusRingAlpha.
