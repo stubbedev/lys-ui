@@ -765,6 +765,11 @@ func TestHoverChainKeepsTheRootOverAGap(t *testing.T) {
 	if rects, _ := CollectDamage(root); len(rects) > 0 && rects[0] == root.Bounds() {
 		t.Errorf("crossing a gap repainted the root's whole box: %v", rects)
 	}
+	r.Move(Point{X: 500, Y: 500})
+	if root.hoverChain {
+		t.Error("the pointer outside the root's bounds kept it hovered")
+	}
+	r.Move(gap)
 	gen = styleGen
 	r.Leave()
 	if root.hoverChain {

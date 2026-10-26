@@ -536,11 +536,12 @@ func (r *Router) Move(p Point) {
 }
 
 // rechain moves the :hover chain to w's ancestry; with w nil while the
-// pointer is over the surface, to the root's, which the pointer still
-// hovers: a gap between widgets leaves the root's chain as it was
-// instead of flipping the whole tree's :hover off and back.
+// pointer is inside the root's bounds, to the root's, which the pointer
+// still hovers: a gap between widgets leaves the root's chain as it was
+// instead of flipping the whole tree's :hover off and back. Outside the
+// root (a popover's shadow gutter) nothing is hovered.
 func (r *Router) rechain(w Widget) {
-	if w == nil && r.pointerIn {
+	if w == nil && r.pointerIn && boundsOf(r.Root).Contains(r.pointer.X, r.pointer.Y) {
 		w = r.Root
 	}
 	setHoverChain(r.chained, w)
