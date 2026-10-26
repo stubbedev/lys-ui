@@ -5,6 +5,7 @@ import (
 
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/render"
 )
 
@@ -206,6 +207,40 @@ func TestSliderValueModel(t *testing.T) {
 			t.Errorf("value = %v, want 5", got)
 		}
 	})
+}
+
+// A flip slides the knob and blends the track toward the new state
+// over the theme's medium motion, landing exactly; under reduced motion
+// it lands at once (#320).
+func TestSwitchSlidesItsKnob(t *testing.T) {
+	c := pinAnimClock(t)
+	s := NewSwitch(false)
+	s.Arrange(render.Rect{W: 40, H: 22})
+	offX := s.knob.Bounds().X
+	offTrack := render.ColorFromBytes(paintTree(s, 40, 22)[2*render.Stride(40)+16*4:])
+	s.SetOn(true)
+	c.step()
+	c.step()
+	if x := s.knob.Bounds().X; x <= offX || s.progress <= 0 || s.progress >= 1 {
+		t.Fatalf("two frames in: knob at %d (off at %d), progress %v; want it on its way", x, offX, s.progress)
+	}
+	trackAt := func() render.Color { return render.ColorFromBytes(paintTree(s, 40, 22)[2*render.Stride(40)+16*4:]) }
+	mid := trackAt()
+	for c.step() {
+	}
+	if on := trackAt(); mid == on || mid == offTrack {
+		t.Errorf("mid-flip track %#08x, want between the off %#08x and on %#08x colors", uint32(mid), uint32(offTrack), uint32(on))
+	}
+	onX := s.knob.Bounds().X
+	if s.progress != 1 || onX <= offX {
+		t.Fatalf("landed at progress %v, knob %d; want 1 at the end", s.progress, onX)
+	}
+	t.Cleanup(anim.SetInstant(true))
+	s.SetOn(false)
+	c.step()
+	if s.progress != 0 || s.knob.Bounds().X != offX {
+		t.Errorf("reduced motion: progress %v, knob %d; want it back at %d at once", s.progress, s.knob.Bounds().X, offX)
+	}
 }
 
 func TestSwitchAndCheck(t *testing.T) {

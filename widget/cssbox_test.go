@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/render"
 )
@@ -664,6 +665,7 @@ switch slider { background-color: #0000ff; min-width: 10px; min-height: 10px; ma
 switch:checked slider { background-color: #ffffff; }
 switch.hot { --knob: #ffff00; }
 switch slider { background-color: var(--knob, #0000ff); }`)
+	t.Cleanup(anim.SetInstant(true))
 	s := NewSwitch(false)
 	if sz := s.Measure(Constraints{Max: Size{W: 200, H: 200}}); sz != (Size{W: 50, H: 30}) {
 		t.Fatalf("measure = %v, want the 50x30 min size", sz)

@@ -1,6 +1,9 @@
 package widget
 
 import (
+	"math"
+
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/render"
 )
@@ -9,11 +12,16 @@ import (
 // stylesheet restyles it the GTK way: `switch` is the track (background,
 // border-radius, min-width/min-height, the box layers; `:checked` while
 // on) and `switch slider` the knob (min size, margin, background,
-// radius, shadow). Unstyled, it is the theme's 40x22 pill.
+// radius, shadow). Unstyled, it is the theme's 40x22 pill. A flip
+// slides the knob and blends the colors over the theme's medium motion.
 type Switch struct {
 	node
 	on   bool
 	knob stylePart
+	// progress is the knob's travel: 0 off, 1 on, animated between on
+	// a flip. The knob's place and the theme colors hang off it.
+	progress float64
+	cancel   anim.Cancel
 
 	// OnChanged fires after every state change, including programmatic
 	// ones.
@@ -23,7 +31,7 @@ type Switch struct {
 // NewSwitch returns a switch in the given state. The pointer turns to
 // the hand over it, the way wayle's switch primitive asks.
 func NewSwitch(on bool) *Switch {
-	s := &Switch{on: on}
+	s := &Switch{on: on, progress: switchTarget(on)}
 	s.cursorName = "pointer"
 	s.knob.SetElement("slider")
 	s.SetState(StateChecked, on)
@@ -40,11 +48,44 @@ func (s *Switch) SetOn(on bool) {
 	}
 	s.on = on
 	s.SetState(StateChecked, on)
-	s.placeKnob()
-	s.Invalidate()
+	s.animate()
 	if s.OnChanged != nil {
 		s.OnChanged(on)
 	}
+}
+
+// switchTarget is the progress a state rests at.
+func switchTarget(on bool) float64 {
+	if on {
+		return 1
+	}
+	return 0
+}
+
+// animate moves progress toward the state over the theme's medium
+// motion. A switch not yet arranged lands at once: nothing animates
+// while hidden.
+func (s *Switch) animate() {
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
+	}
+	to := switchTarget(s.on)
+	if s.bounds.Empty() {
+		s.progress = to
+		s.Invalidate()
+		return
+	}
+	from := s.progress
+	_, medium, _ := Current().MotionDurations()
+	s.cancel = anim.Play(anim.Animate(medium, func(t float64) {
+		s.progress = from + (to-from)*t
+		if t >= 1 {
+			s.progress = to
+		}
+		s.placeKnob()
+		s.Invalidate()
+	}))
 }
 
 // Toggle flips the state and fires OnChanged.
@@ -98,8 +139,9 @@ func (s *Switch) Arrange(r render.Rect) {
 	s.placeKnob()
 }
 
-// placeKnob arranges the knob at the track's start, or its end when
-// on, inset by the knob's margins (1px unstyled).
+// placeKnob arranges the knob at the track's start, its end when on,
+// and progress of the way between while a flip slides it, inset by the
+// knob's margins (1px unstyled).
 func (s *Switch) placeKnob() {
 	v := s.style(s)
 	content := boxOf(v, render.Insets{}).padding.Shrink(borderOf(v).Shrink(s.bounds))
@@ -110,35 +152,31 @@ func (s *Switch) placeKnob() {
 	}
 	d := max(0, content.H-m.Top-m.Bottom)
 	kw, kh := picki(kv, style.PropMinWidth, d), picki(kv, style.PropMinHeight, d)
-	kx := content.X + m.Left
-	if s.on {
-		kx = content.X + content.W - m.Right - kw
-	}
+	off, on := content.X+m.Left, content.X+content.W-m.Right-kw
+	kx := off + int(math.Round(float64(on-off)*s.progress))
 	s.knob.Arrange(render.Rect{X: kx, Y: content.Y + m.Top + (d-kh)/2, W: kw, H: kh})
 }
 
 // Paint draws the track and knob. The knob sits at the right when on,
 // in the accent's foreground over the accent track; off, the track is
 // the input color under a knob that contrasts it (the window background
-// on a light palette, the text color on a dark one).
+// on a light palette, the text color on a dark one). A flip blends the
+// two by progress.
 // Disabled, the theme's on-track and knob fade through the derived
 // disabled colors (a stylesheet fades with its own :disabled rules).
 func (s *Switch) Paint(cv *render.Canvas) {
 	t := Current()
-	track, knob := t.InputColor(), t.Bg
-	if t.IsDark() {
-		knob = t.Text
-	}
 	v := s.style(s)
-	if s.on {
-		track, knob = accentOf(v, t.Accent), t.OnAccent
+	offTrack, offKnob := t.InputColor(), t.Bg
+	if t.IsDark() {
+		offKnob = t.Text
 	}
+	onTrack, onKnob := accentOf(v, t.Accent), t.OnAccent
 	if !IsEnabled(s) {
-		track, knob = t.DisabledSurface(), t.DisabledText()
-		if s.on {
-			track = accentOf(v, t.DisabledAccent())
-		}
+		offTrack, offKnob = t.DisabledSurface(), t.DisabledText()
+		onTrack, onKnob = accentOf(v, t.DisabledAccent()), t.DisabledText()
 	}
+	track, knob := mix(offTrack, onTrack, s.progress), mix(offKnob, onKnob, s.progress)
 	radii := radiusOr(v, s.bounds.H/2)
 	fx := pushEffects(cv, v, s.bounds, radii)
 	cv = fx.cv
