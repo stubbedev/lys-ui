@@ -90,8 +90,21 @@ func (f *FlowBox) selectionNotify() {
 // covers it.
 func (f *FlowBox) selectionSingle(int) {}
 
-// reveal implements selectionHost; a flow box shows every child.
-func (f *FlowBox) reveal(int) {}
+// reveal implements selectionHost: child i scrolls into view in the
+// Scrolls above the box.
+func (f *FlowBox) reveal(i int) {
+	if c := f.ChildAt(i); c != nil {
+		f.revealItem(i, c)
+	}
+}
+
+// item is child i as a Widget, nil when there is none.
+func (f *FlowBox) item(i int) Widget {
+	if c := f.ChildAt(i); c != nil {
+		return c
+	}
+	return nil
+}
 
 // activate implements selectionHost: OnActivate.
 func (f *FlowBox) activate(i int) {
@@ -366,6 +379,7 @@ func (f *FlowBox) Arrange(r render.Rect) {
 		}
 		y += h + f.rowSpacing
 	}
+	f.revealArranged(f.item)
 }
 
 // Paint draws the box's own CSS layers and its children.

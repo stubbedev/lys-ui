@@ -310,3 +310,71 @@ func TestElementReportsTheTypeName(t *testing.T) {
 		t.Errorf("the override reports %q", icon.Element())
 	}
 }
+
+// iconGrid is a flow box of n 20x20 cells, eight a line, in a
+// vertical scroll capped at three lines.
+func iconGrid(n int) (*Scroll, *FlowBox) {
+	f := NewFlowBox(0, 0)
+	f.SetMaxChildrenPerLine(8)
+	for range n {
+		f.Append(NewSpacer(20, 20))
+	}
+	s := NewScroll(f)
+	s.VerticalOnly = true
+	s.SetMaxContentHeight(60)
+	return s, f
+}
+
+// shownIn reports whether w lies inside s's viewport.
+func shownIn(s *Scroll, w Widget) bool {
+	b := boundsOf(w)
+	return b.Y >= s.view.Y && b.Y+b.H <= s.view.Y+s.viewH
+}
+
+// A flow box selection scrolls into view in the Scrolls above it: one
+// made before the first layout once it has a place, a keyboard move
+// past the viewport at once; a visible one moves nothing, and a later
+// scroll of the user's own stands through the next layout (#326).
+func TestFlowBoxRevealsItsSelection(t *testing.T) {
+	s, f := iconGrid(80)
+	f.Select(50)
+	settle(t, s, 160, 60)
+	if !shownIn(s, f.ChildAt(50)) {
+		t.Fatalf("child 50 at %v outside the viewport after the first layout", f.ChildAt(50).Bounds())
+	}
+	s.SetOffset(0, 0)
+	settle(t, s, 160, 60)
+	if _, y := s.Offset(); y != 0 {
+		t.Errorf("a later layout scrolled to %d, undoing the user's scroll to 0", y)
+	}
+	f.Select(10)
+	f.KeyAction(KeyDown, 0)
+	f.KeyAction(KeyDown, 0)
+	settle(t, s, 160, 60)
+	if !shownIn(s, f.ChildAt(f.Selected())) {
+		t.Errorf("Down to child %d left it outside the viewport", f.Selected())
+	}
+	visible, g := iconGrid(80)
+	g.Select(9)
+	settle(t, visible, 160, 60)
+	if _, y := visible.Offset(); y != 0 {
+		t.Errorf("a visible selection scrolled the box to %d", y)
+	}
+}
+
+// A list box selection made before the first layout scrolls into view
+// once the rows have a place.
+func TestListBoxRevealsASelectionMadeBeforeLayout(t *testing.T) {
+	l := NewListBox()
+	for range 30 {
+		l.Append(NewSpacer(100, 20))
+	}
+	s := NewScroll(l)
+	s.VerticalOnly = true
+	s.SetMaxContentHeight(60)
+	l.Select(25)
+	settle(t, s, 100, 60)
+	if !shownIn(s, l.RowAt(25)) {
+		t.Errorf("row 25 at %v outside the viewport after the first layout", l.RowAt(25).Bounds())
+	}
+}

@@ -35,6 +35,36 @@ type selection struct {
 	// held defers notifications while a pointer gesture is in flight;
 	// pending records one was owed.
 	held, pending bool
+	// revealAt is item revealAt-1, asked to be revealed before it had a
+	// place, for the host's next Arrange; 0 for none.
+	revealAt int
+}
+
+// revealItem scrolls item i, w, into view in every Scroll above it: now,
+// or once the host's next Arrange (revealArranged) gives it a place.
+func (s *selection) revealItem(i int, w Widget) {
+	s.revealAt = 0
+	if b := boundsOf(w); !b.Empty() {
+		RevealRect(w, b)
+		return
+	}
+	s.revealAt = i + 1
+}
+
+// revealArranged runs a reveal asked for before layout, once, with
+// item(i) the host's item i (nil when gone): a later scroll of the
+// user's own stands.
+func (s *selection) revealArranged(item func(i int) Widget) {
+	if s.revealAt == 0 {
+		return
+	}
+	i := s.revealAt - 1
+	s.revealAt = 0
+	if w := item(i); w != nil {
+		if b := boundsOf(w); !b.Empty() {
+			RevealRect(w, b)
+		}
+	}
 }
 
 // initSelection binds the model to its host, empty, in mode.

@@ -78,8 +78,16 @@ func (l *ListBox) selectionSingle(int) {}
 
 func (l *ListBox) reveal(i int) {
 	if r := l.RowAt(i); r != nil {
-		RevealRect(r, r.bounds)
+		l.revealItem(i, r)
 	}
+}
+
+// item is row i as a Widget, nil when there is none.
+func (l *ListBox) item(i int) Widget {
+	if r := l.RowAt(i); r != nil {
+		return r
+	}
+	return nil
 }
 
 func (l *ListBox) activate(i int) {
@@ -416,6 +424,7 @@ func (l *ListBox) Arrange(r render.Rect) {
 	if l.placeholderShown() {
 		arrangeChild(l.ph, inner)
 	}
+	l.revealArranged(l.item)
 }
 
 // Paint draws the box background, the row separators, and the
