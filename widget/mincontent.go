@@ -195,3 +195,59 @@ func (c *composite) queryWidth(q widthQuery) int {
 	o := c.insets().outer()
 	return widthAsChild(c.root, q) + o.Left + o.Right
 }
+
+// childWidth is a single-child wrapper's child answer, 0 without one.
+func childWidth(child Widget, q widthQuery) int {
+	if child == nil {
+		return 0
+	}
+	return widthAsChild(child, q)
+}
+
+// queryWidth is the child's answer inside the button's box.
+func (b *Button) queryWidth(q widthQuery) int {
+	v := b.style(b)
+	return boxMinWidth(v, b.box(v), childWidth(b.child, q))
+}
+
+// queryWidth is the child's answer inside the box, beside the
+// indicator.
+func (c *CheckButton) queryWidth(q widthQuery) int {
+	v := c.style(c)
+	content := c.indicatorSize().W
+	if c.child != nil {
+		content += widthAsChild(c.child, q)
+	}
+	return boxMinWidth(v, boxOf(v, render.Insets{}), content)
+}
+
+// queryWidth is the child's answer inside the box.
+func (c *FlowBoxChild) queryWidth(q widthQuery) int {
+	v := c.style(c)
+	return boxMinWidth(v, boxOf(v, render.Insets{}), childWidth(c.child, q))
+}
+
+// queryWidth is the child's answer inside the plate inset.
+func (m *Morph) queryWidth(q widthQuery) int { return childWidth(m.child, q) + 2*m.inset }
+
+// queryWidth is the child's.
+func (f *Fader) queryWidth(q widthQuery) int { return childWidth(f.child, q) }
+
+// queryWidth is the child's.
+func (e *Elevation) queryWidth(q widthQuery) int { return childWidth(e.child, q) }
+
+// queryWidth is the child's.
+func (s *SwipeDismiss) queryWidth(q widthQuery) int { return childWidth(s.child, q) }
+
+// queryWidth is nothing while hidden, the child's answer where the
+// child takes the revealer's width, and the measured width of a
+// sideways slide, whose child keeps its natural width.
+func (r *Revealer) queryWidth(q widthQuery) int {
+	switch {
+	case r.child == nil || (r.transition == RevealNone && !r.reveal):
+		return 0
+	case r.collapses() && !r.vertical():
+		return r.Measure(unbounded).W
+	}
+	return widthAsChild(r.child, q)
+}

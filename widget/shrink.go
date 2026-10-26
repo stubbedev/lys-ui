@@ -137,6 +137,45 @@ func (b *Box) ShrinkableWidth() int {
 	return widest - floor
 }
 
+// childShrinkableWidth is a single-child wrapper's child capacity, 0
+// without one.
+func childShrinkableWidth(child Widget) int {
+	if child == nil {
+		return 0
+	}
+	return shrinkableWidthOf(child)
+}
+
+// ShrinkableWidth implements WidthShrinker: the child's.
+func (b *Button) ShrinkableWidth() int { return childShrinkableWidth(b.child) }
+
+// ShrinkableWidth implements WidthShrinker: the child's.
+func (c *CheckButton) ShrinkableWidth() int { return childShrinkableWidth(c.child) }
+
+// ShrinkableWidth implements WidthShrinker: the child's.
+func (c *FlowBoxChild) ShrinkableWidth() int { return childShrinkableWidth(c.child) }
+
+// ShrinkableWidth implements WidthShrinker: the child's.
+func (m *Morph) ShrinkableWidth() int { return childShrinkableWidth(m.child) }
+
+// ShrinkableWidth implements WidthShrinker: the child's.
+func (f *Fader) ShrinkableWidth() int { return childShrinkableWidth(f.child) }
+
+// ShrinkableWidth implements WidthShrinker: the child's.
+func (e *Elevation) ShrinkableWidth() int { return childShrinkableWidth(e.child) }
+
+// ShrinkableWidth implements WidthShrinker: the child's.
+func (s *SwipeDismiss) ShrinkableWidth() int { return childShrinkableWidth(s.child) }
+
+// ShrinkableWidth implements WidthShrinker: the child's, except in a
+// sideways slide, whose child keeps its natural width.
+func (r *Revealer) ShrinkableWidth() int {
+	if r.collapses() && !r.vertical() {
+		return 0
+	}
+	return childShrinkableWidth(r.child)
+}
+
 // lineShrinkable is ShrinkableWidth for a CSS layout whose min-content
 // width is its widest item's min-content contribution: normal flow,
 // whose lines break between inline items, a multi-line flex row and a
