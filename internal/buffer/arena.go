@@ -17,6 +17,7 @@ import (
 	"github.com/neurlang/wayland/wl"
 	"github.com/neurlang/wayland/wlclient"
 	"github.com/stubbedev/lys-lib/render"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/intconv"
 )
@@ -194,11 +195,14 @@ func (a *Arena) ensure(size int) error {
 		return fmt.Errorf("buffer: pool size %d exceeds the wayland int32 range: %w", size, err)
 	}
 	if a.file == nil {
-		f, err := wlos.CreateAnonymousFile(int64(size))
+		fd, err := unix.MemfdCreate("lys-ui-shm", unix.MFD_CLOEXEC|unix.MFD_ALLOW_SEALING)
 		if err != nil {
 			return fmt.Errorf("buffer: memfd: %w", err)
 		}
-		a.file = f
+		a.file = os.NewFile(uintptr(fd), "lys-ui-shm")
+		if err := a.file.Truncate(int64(size)); err != nil {
+			return fmt.Errorf("buffer: size the memfd to %d bytes: %w", size, err)
+		}
 	} else if err := a.file.Truncate(int64(size)); err != nil {
 		return fmt.Errorf("buffer: truncate: %w", err)
 	}
