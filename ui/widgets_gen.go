@@ -4364,6 +4364,18 @@ func GridView[W widget.Widget](model widget.ListModel[W], cellWidth int, cellHei
 	return b
 }
 
+// ColumnSpacing calls (*widget.GridView).SetColumnSpacing.
+func (b *GridViewBuilder) ColumnSpacing(n int) *GridViewBuilder {
+	b.do(func(s *Scope, w *widget.GridView) { w.SetColumnSpacing(n) })
+	return b
+}
+
+// WatchColumnSpacing re-applies SetColumnSpacing with get's value after every update.
+func (b *GridViewBuilder) WatchColumnSpacing(get func() int) *GridViewBuilder {
+	b.watch(func(w *widget.GridView) { w.SetColumnSpacing(get()) })
+	return b
+}
+
 // MaxColumns calls (*widget.GridView).SetMaxColumns.
 func (b *GridViewBuilder) MaxColumns(n int) *GridViewBuilder {
 	b.do(func(s *Scope, w *widget.GridView) { w.SetMaxColumns(n) })
@@ -4385,6 +4397,18 @@ func (b *GridViewBuilder) MinColumns(n int) *GridViewBuilder {
 // WatchMinColumns re-applies SetMinColumns with get's value after every update.
 func (b *GridViewBuilder) WatchMinColumns(get func() int) *GridViewBuilder {
 	b.watch(func(w *widget.GridView) { w.SetMinColumns(get()) })
+	return b
+}
+
+// RowSpacing calls (*widget.GridView).SetRowSpacing.
+func (b *GridViewBuilder) RowSpacing(n int) *GridViewBuilder {
+	b.do(func(s *Scope, w *widget.GridView) { w.SetRowSpacing(n) })
+	return b
+}
+
+// WatchRowSpacing re-applies SetRowSpacing with get's value after every update.
+func (b *GridViewBuilder) WatchRowSpacing(get func() int) *GridViewBuilder {
+	b.watch(func(w *widget.GridView) { w.SetRowSpacing(get()) })
 	return b
 }
 

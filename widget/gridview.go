@@ -41,6 +41,30 @@ func (g *GridView) SetMaxColumns(n int) {
 	}
 }
 
+// SetColumnSpacing sets the gap between columns; the stylesheet's
+// horizontal border-spacing adds to it. A point in a gap hits no cell.
+func (g *GridView) SetColumnSpacing(n int) {
+	if n != g.colSpacing {
+		g.colSpacing = max(0, n)
+		g.InvalidateLayout()
+	}
+}
+
+// SetRowSpacing sets the gap between lines; the stylesheet's vertical
+// border-spacing adds to it.
+func (g *GridView) SetRowSpacing(n int) {
+	if n != g.rowSpacing {
+		g.rowSpacing = max(0, n)
+		g.InvalidateLayout()
+	}
+}
+
+// ColumnSpacing returns the programmatic gap between columns.
+func (g *GridView) ColumnSpacing() int { return g.colSpacing }
+
+// RowSpacing returns the programmatic gap between lines.
+func (g *GridView) RowSpacing() int { return g.rowSpacing }
+
 // MinColumns returns the column floor.
 func (g *GridView) MinColumns() int { return g.minCols }
 

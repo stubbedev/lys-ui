@@ -65,3 +65,49 @@ func TestGridViewStylesAsGridviewWithChildCells(t *testing.T) {
 		}
 	}
 }
+
+// Spacing opens gaps between columns and lines that count toward the
+// fit and the content height, and hit no cell (#372).
+func TestGridViewSpacing(t *testing.T) {
+	g := NewGridView[Widget](newCountingModel(10), 50, 20)
+	g.SetColumnSpacing(5)
+	g.SetRowSpacing(4)
+	if got := g.Measure(Constraints{Max: Size{W: 160, H: 1 << 20}}); got.H != 4*20+3*4 {
+		t.Errorf("content height %d, want 4 lines of 20 and 3 gaps of 4", got.H)
+	}
+	frame(t, g, 160, 100)
+	if g.Columns() != 3 {
+		t.Fatalf("columns = %d, want 3: three 50px cells and two 5px gaps fit 160", g.Columns())
+	}
+	for i, want := range []render.Rect{
+		{X: 0, Y: 0, W: 50, H: 20},
+		{X: 55, Y: 0, W: 50, H: 20},
+		{X: 110, Y: 0, W: 50, H: 20},
+		{X: 0, Y: 24, W: 50, H: 20},
+	} {
+		if got := g.cellRect(i); got != want {
+			t.Errorf("cell %d = %+v, want %+v", i, got, want)
+		}
+	}
+	for _, p := range []Point{{X: 52, Y: 10}, {X: 10, Y: 22}} {
+		if got := g.HitTest(p); got != Widget(&g.List) {
+			t.Errorf("gap point %v hit %T, want the grid", p, got)
+		}
+	}
+	if got, ok := g.HitTest(Point{X: 60, Y: 30}).(*listRow); !ok || got.idx != 4 {
+		t.Errorf("a point in cell 4 hit %v, want its row", got)
+	}
+}
+
+// The stylesheet's border-spacing adds to the programmatic spacing.
+func TestGridViewBorderSpacing(t *testing.T) {
+	loadCSS(t, `gridview { border-spacing: 6px 2px; }`)
+	g := NewGridView[Widget](newCountingModel(10), 50, 20)
+	g.SetRowSpacing(1)
+	frame(t, g, 200, 100)
+	// Three columns of (200-2*6)/3 = 62px fit; cell 4 opens line 1's
+	// second column.
+	if got := g.cellRect(4); got.X != 62+6 || got.Y != 20+3 {
+		t.Errorf("cell 4 at (%d, %d), want (68, 23) with 6px columns and 3px lines", got.X, got.Y)
+	}
+}
