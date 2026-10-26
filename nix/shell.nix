@@ -85,6 +85,21 @@
         # The Khronos validation layer: the GPU tests run under it, and
         # any error it finds stops the test.
         LYS_UI_TEST_VULKAN_LAYERS = "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d";
+        # Off NixOS there are no drivers in /run/opengl-driver, and the host's own
+        # Mesa cannot load into processes linked against nixpkgs' glibc:
+        # the Vulkan loader, and sway's EGL and GBM, would find no
+        # driver. There the shell points them at nixpkgs' Mesa (AMD,
+        # Intel and the CPU drivers); NVIDIA's proprietary driver needs
+        # nixGL. NixOS keeps its own.
+        shellHook = ''
+          if ! ls /run/opengl-driver/share/vulkan/icd.d/*.json >/dev/null 2>&1; then
+            VK_DRIVER_FILES=$(printf '%s:' ${pkgs.mesa}/share/vulkan/icd.d/*.json)
+            export VK_DRIVER_FILES="''${VK_DRIVER_FILES%:}"
+            export __EGL_VENDOR_LIBRARY_FILENAMES=${pkgs.mesa}/share/glvnd/egl_vendor.d/50_mesa.json
+            export GBM_BACKENDS_PATH=${pkgs.mesa}/lib/gbm
+            export LIBGL_DRIVERS_PATH=${pkgs.mesa}/lib/dri
+          fi
+        '';
       });
     };
 }

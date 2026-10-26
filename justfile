@@ -51,6 +51,12 @@ gpu:
 # has no video encoder and no compositor-side dmabuf import.
 gpu-host:
     #!/bin/sh
+    if ! out=$(LYS_UI_TEST_GPU=host go test -count=1 -run '^TestDeviceCloseClosesTargets$' ./gpu 2>&1); then
+        printf '%s\n' "$out" | grep -E 'GPU device|vkCreate|Vulkan' | head -n 3
+        echo "gpu-host: Vulkan opens no device that exports dmabufs here (VK_DRIVER_FILES=${VK_DRIVER_FILES:-unset})."
+        echo "Off NixOS the dev shell points the loader at nixpkgs' Mesa (AMD, Intel); NVIDIA's driver needs nixGL."
+        exit 1
+    fi
     rc=0
     LYS_UI_TEST_GPU=host go test -count=1 -v ./gpu/... 2>&1 | grep -vE '^=== (RUN|PAUSE|CONT)' || rc=1
     LYS_UI_TEST_GPU=host go test -count=1 ./widget || rc=1
