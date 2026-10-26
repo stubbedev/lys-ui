@@ -8,9 +8,10 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 )
 
-// maxEntries caps the raster cache; the oldest entries evict FIFO. A
-// bar holds a few dozen icons at one or two sizes, so the default is
-// generous without being unbounded.
+// maxEntries caps the raster cache; the least recently used entry
+// evicts first. A bar holds a few dozen icons at one or two sizes, so
+// the default is generous without being unbounded, and a view that
+// pages through a large icon set leaves the icons still in use cached.
 var maxEntries = 256
 
 // maskMode says which sources a tint applies to.
@@ -59,7 +60,8 @@ type Cache struct {
 	resetListeners []func()
 
 	entries map[cacheKey]*cacheEntry
-	order   []cacheKey
+	// order lists the keys from least to most recently used.
+	order []cacheKey
 
 	// chain is the theme inheritance chain lookups walk, parsed once;
 	// files indexes the directories they read. A reset drops both.
@@ -244,6 +246,8 @@ func (c *Cache) load(name string, size int, frac120 uint32, tint render.Color, m
 func (c *Cache) entryLocked(name string, size int, frac120 uint32) (*cacheEntry, error) {
 	key := cacheKey{name: name, size: size, frac: frac120}
 	if e, ok := c.entries[key]; ok {
+		i := slices.Index(c.order, key)
+		c.order = append(slices.Delete(c.order, i, i+1), key)
 		return e, e.err
 	}
 	e := &cacheEntry{}
@@ -257,7 +261,7 @@ func (c *Cache) entryLocked(name string, size int, frac120 uint32) (*cacheEntry,
 	c.order = append(c.order, key)
 	if len(c.order) > maxEntries {
 		delete(c.entries, c.order[0])
-		c.order = c.order[1:]
+		c.order = slices.Delete(c.order, 0, 1)
 	}
 	return e, e.err
 }

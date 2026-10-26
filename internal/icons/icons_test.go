@@ -459,6 +459,34 @@ func TestCacheEviction(t *testing.T) {
 	}
 }
 
+func TestCacheEvictsLeastRecentlyUsed(t *testing.T) {
+	oldCap := maxEntries
+	maxEntries = 2
+	defer func() { maxEntries = oldCap }()
+
+	c := newTestCache(t, "testtheme")
+	used, err := c.Icon("onlytheme", 24, 120)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idle, err := c.Icon("hicoloronly", 16, 120)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Icon("onlytheme", 24, 120); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Icon("threshold", 22, 120); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := c.Icon("onlytheme", 24, 120); again != used {
+		t.Error("the recently used entry was evicted, though it was inserted first")
+	}
+	if again, _ := c.Icon("hicoloronly", 16, 120); again == idle {
+		t.Error("the least recently used entry survived past the cap")
+	}
+}
+
 func TestSymbolicRecoloring(t *testing.T) {
 	hc := newTestCache(t, "hicolor")
 	accent := render.RGB(0x89, 0xB4, 0xFA)
