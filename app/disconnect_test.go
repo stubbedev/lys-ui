@@ -43,9 +43,12 @@ func deadPeerSession(t *testing.T) (*wlsession.Session, string) {
 // disconnectApp builds an Application over the dead session carrying
 // one harness window at a fixed size, so the loop pass is otherwise
 // idle: nothing draws, nothing wakes, the only event is the dead
-// socket.
+// socket. It draws on the CPU whatever LYS_UI_RENDERER says: the dead
+// session offers no linux-dmabuf, which LYS_UI_RENDERER=gpu refuses
+// before the disconnect these tests are about.
 func disconnectApp(t *testing.T, sess *wlsession.Session) (*Application, *hostWindow, *paintHarness) {
 	t.Helper()
+	t.Setenv(rendererEnv, "cpu")
 	animclock.Reset()
 	root := widget.NewBox(widget.Row, 0, 0)
 	h := newPaintHarness(root, 320, 200)
