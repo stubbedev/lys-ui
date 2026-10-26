@@ -11,8 +11,6 @@ package widget
 // the clip-path mask, then the mask-image mask, then the blend mode.
 
 import (
-	"image"
-	"image/color"
 	"math"
 
 	"github.com/stubbedev/lys-ui/internal/style"
@@ -292,32 +290,4 @@ func applyMaskLayer(cv *render.Canvas, v *style.Values, layer *render.Layer, reg
 		paintLayerImage(mc, img, layerTile(img, m.Size, m.Pos, m.Repeat, bounds), bounds, render.Corners{})
 	}
 	layer.ApplyMaskLayer(mask, region, m.Luminance)
-}
-
-// iconAsImage adapts an Icon to image.Image through its At sampler.
-func iconAsImage(ic *render.Icon) image.Image {
-	w, h := ic.Size()
-	return &iconImage{ic: ic, w: w, h: h}
-}
-
-// iconImage is Icon's image.Image face.
-type iconImage struct {
-	ic   *render.Icon
-	w, h int
-}
-
-// ColorModel implements image.Image.
-func (m *iconImage) ColorModel() color.Model { return color.RGBAModel }
-
-// Bounds implements image.Image.
-func (m *iconImage) Bounds() image.Rectangle {
-	return image.Rect(0, 0, m.w, m.h)
-}
-
-// At implements image.Image.
-func (m *iconImage) At(x, y int) color.Color {
-	if x < 0 || y < 0 || x >= m.w || y >= m.h {
-		return color.RGBA{}
-	}
-	return m.ic.At(x, y)
 }

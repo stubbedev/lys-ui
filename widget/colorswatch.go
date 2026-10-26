@@ -80,10 +80,18 @@ func paintChecker(cv *render.Canvas, r render.Rect, radii render.Corners) {
 	}, r, radii)
 }
 
+// checkerboards keeps one checkerboard tile per shade pair, so a
+// swatch's paint allocates none and a GPU renderer keeps its texture.
+var checkerboards = map[[2]render.Color]render.StillImage{}
+
 // checkerboard is one tile of the transparency checkerboard, two
 // squares a side, in the theme's surface and border shades.
-func checkerboard() image.Image {
+func checkerboard() render.StillImage {
 	th := Current()
+	key := [2]render.Color{th.Surface, th.Border}
+	if img, ok := checkerboards[key]; ok {
+		return img
+	}
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
 	for y := range 2 {
 		for x := range 2 {
@@ -94,7 +102,8 @@ func checkerboard() image.Image {
 			img.Set(x, y, color.RGBA{R: c.R(), G: c.G(), B: c.B(), A: c.A()})
 		}
 	}
-	return img
+	checkerboards[key] = render.StillImage{RGBA: img}
+	return checkerboards[key]
 }
 
 // HitTest returns the swatch inside its bounds.

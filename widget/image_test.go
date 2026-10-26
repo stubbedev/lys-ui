@@ -581,6 +581,16 @@ func (c *imageCaptor) DrawImageCover(_ render.State, img image.Image, _ render.R
 	c.imgs = append(c.imgs, img)
 }
 
+func (c *imageCaptor) PaintImageTiles(_ render.State, img image.Image, _ render.Tile, _ render.Rect, _ render.Corners) {
+	c.imgs = append(c.imgs, img)
+}
+
+func (c *imageCaptor) FillRectDevice(render.State, render.Rect, render.Color)                     {}
+func (c *imageCaptor) RoundedRect(render.State, render.Rect, int, render.Color)                   {}
+func (c *imageCaptor) RoundedRectCorners(render.State, render.Rect, render.Corners, render.Color) {}
+func (c *imageCaptor) RoundedBorderSides(render.State, render.Rect, render.Corners, render.Insets, [4]render.Color) {
+}
+
 // drawnImages paints w into a recording and returns the images it
 // draws.
 func drawnImages(w Widget, width, height int) []image.Image {
@@ -630,5 +640,21 @@ func TestWidgetImagesStayTexturable(t *testing.T) {
 	}
 	if s, ok := heldImage(rgba).(render.StillImage); !ok || s.RGBA != rgba {
 		t.Error("an *image.RGBA was copied or not held still")
+	}
+}
+
+// A translucent swatch tiles one cached still checkerboard: the same
+// texture paint after paint, never a fresh raster (#314).
+func TestSwatchCheckerboardStaysOneTexture(t *testing.T) {
+	s := NewColorSwatch(render.RGBA(200, 0, 0, 128))
+	s.Measure(Constraints{Max: Size{W: 24, H: 24}})
+	s.Arrange(render.Rect{W: 24, H: 24})
+	first, second := drawnImages(s, 24, 24), drawnImages(s, 24, 24)
+	if len(first) != 1 || len(second) != 1 {
+		t.Fatalf("drew %d then %d images, want the checkerboard once each", len(first), len(second))
+	}
+	a, ok := first[0].(render.StillImage)
+	if b, okB := second[0].(render.StillImage); !ok || !okB || a.RGBA != b.RGBA {
+		t.Errorf("checkerboards %T and %T are not one still raster", first[0], second[0])
 	}
 }

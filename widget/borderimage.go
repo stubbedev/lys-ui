@@ -8,7 +8,6 @@ package widget
 
 import (
 	"image"
-	"image/color"
 	"math"
 	"sync"
 
@@ -151,7 +150,7 @@ func paintBorderImage(cv *render.Canvas, v *style.Values, border render.Rect, bw
 			clip := render.Rect{X: int(math.Round(d0x)), Y: int(math.Round(d0y))}
 			clip.W, clip.H = int(math.Round(d1x))-clip.X, int(math.Round(d1y))-clip.Y
 			t := render.Tile{X: x, Y: y, W: sx, H: sy, GapX: gx, GapY: gy, RepeatX: rx, RepeatY: ry}
-			cv.PaintImageTiles(subImage{img, sr}, t, clip, render.Corners{})
+			cv.PaintImageTiles(img.SubImage(sr), t, clip, render.Corners{})
 		}
 	}
 	return true
@@ -193,33 +192,18 @@ func borderTileAxis(k style.TileKind, start, length, natural float64) (pos, size
 	return start + (length-natural)/2, natural, 0, true, true
 }
 
-// subImage is the region r of an image.
-type subImage struct {
-	img image.Image
-	r   image.Rectangle
-}
-
-// ColorModel implements image.Image.
-func (s subImage) ColorModel() color.Model { return s.img.ColorModel() }
-
-// Bounds implements image.Image.
-func (s subImage) Bounds() image.Rectangle { return s.r }
-
-// At implements image.Image.
-func (s subImage) At(x, y int) color.Color { return s.img.At(x, y) }
-
 // borderImageSource is the border image's pixels: a file's at its
 // natural size, a gradient's rendered over the border image area.
-func borderImageSource(src style.ImageSource, area render.Rect) (image.Image, bool) {
+func borderImageSource(src style.ImageSource, area render.Rect) (render.StillImage, bool) {
 	if src.Gradient == nil {
 		ic := bgImageFor(src.URL)
 		if ic == nil {
-			return nil, false
+			return render.StillImage{}, false
 		}
-		return iconAsImage(ic), true
+		return render.StillImage{RGBA: ic.Image()}, true
 	}
 	if area.Empty() {
-		return nil, false
+		return render.StillImage{}, false
 	}
 	return gradientImages.get(src.Gradient, area.W, area.H), true
 }
@@ -234,7 +218,7 @@ type gradientImageKey struct {
 // steady frame re-renders none; it forgets everything when full.
 type gradientImageCache struct {
 	mu   sync.Mutex
-	imgs map[gradientImageKey]image.Image
+	imgs map[gradientImageKey]render.StillImage
 }
 
 // gradientImageCap bounds the cache.
@@ -243,7 +227,7 @@ const gradientImageCap = 64
 var gradientImages gradientImageCache
 
 // get returns g rendered at w x h, rendering it on a miss.
-func (c *gradientImageCache) get(g *style.Gradient, w, h int) image.Image {
+func (c *gradientImageCache) get(g *style.Gradient, w, h int) render.StillImage {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	k := gradientImageKey{g, w, h}
@@ -251,14 +235,14 @@ func (c *gradientImageCache) get(g *style.Gradient, w, h int) image.Image {
 		return img
 	}
 	if c.imgs == nil || len(c.imgs) >= gradientImageCap {
-		c.imgs = map[gradientImageKey]image.Image{}
+		c.imgs = map[gradientImageKey]render.StillImage{}
 	}
 	stride := render.Stride(w)
 	data := make([]byte, stride*h)
 	var buf [style.MaxResolvedStops]render.GradientStop
 	box := render.Rect{W: w, H: h}
 	render.New(data, stride, w, h).PaintGradient(box, render.Corners{}, cssGradient(g, box, &buf))
-	img := render.NRGBA(data, stride, w, h)
+	img := render.Still(render.NRGBA(data, stride, w, h))
 	c.imgs[k] = img
 	return img
 }
