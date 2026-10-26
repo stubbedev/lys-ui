@@ -69,7 +69,7 @@ func TestDrivePopoversPaintsOnDamageAndReapsDestroyed(t *testing.T) {
 	a.popovers.openOrReplace(op.host, op.popover)
 
 	// Nothing changed: a pass, no repaint request.
-	if err := a.drivePopovers(false); err != nil {
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
 	if painter.passes != 1 || surf.frames != 0 {
@@ -77,28 +77,29 @@ func TestDrivePopoversPaintsOnDamageAndReapsDestroyed(t *testing.T) {
 	}
 	// Loop work ran (an Invoke): the content changed, so it repaints.
 	label.SetText("b")
-	if err := a.drivePopovers(false); err != nil {
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
 	if surf.frames != 1 {
 		t.Errorf("damaged content: frames %d, want a repaint", surf.frames)
 	}
-	// Work that ran is always a repaint request, damage or not.
-	if err := a.drivePopovers(true); err != nil {
+	// A pass with nothing damaged (loop work that left the content
+	// alone, a timer elsewhere) repaints nothing (#327).
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
-	if surf.frames != 2 {
-		t.Errorf("worked pass: frames %d", surf.frames)
+	if surf.frames != 1 {
+		t.Errorf("undamaged pass: frames %d, want no repaint", surf.frames)
 	}
 	// The exit tween landed: reaped, closed once, registry cleared.
 	surf.destroyed = true
-	if err := a.drivePopovers(false); err != nil {
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
 	if len(a.openPopovers) != 0 || painter.closes != 1 || *closed != 1 || a.popovers.get(op.host) != nil {
 		t.Errorf("reap: %d open, %d closes, %d closed, registry %v", len(a.openPopovers), painter.closes, *closed, a.popovers.get(op.host))
 	}
-	if err := a.drivePopovers(false); err != nil || painter.passes != 3 {
+	if err := a.drivePopovers(); err != nil || painter.passes != 3 {
 		t.Errorf("a reaped popover was driven again: %d passes", painter.passes)
 	}
 }
@@ -107,7 +108,7 @@ func TestDrivePopoversSurfacesPaintErrors(t *testing.T) {
 	op, _, painter, _ := newLoopPopover(widget.NewSpacer(1, 1))
 	painter.err = errors.New("wire")
 	a := &Application{openPopovers: []*openPopover{op}}
-	if err := a.drivePopovers(false); err == nil {
+	if err := a.drivePopovers(); err == nil {
 		t.Error("a paint failure was swallowed")
 	}
 }
@@ -299,7 +300,7 @@ func TestDrivePopoversReapsChildrenFirst(t *testing.T) {
 	}
 	parent, child := mk("parent"), mk("child")
 	a := &Application{openPopovers: []*openPopover{parent, child}}
-	if err := a.drivePopovers(false); err != nil {
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
 	if len(order) != 2 || order[0] != "child" || order[1] != "parent" || len(a.openPopovers) != 0 {
@@ -309,7 +310,7 @@ func TestDrivePopoversReapsChildrenFirst(t *testing.T) {
 	keep1, _, _, _ := newLoopPopover(widget.NewBox(widget.Column, 0, 0))
 	keep2, _, _, _ := newLoopPopover(widget.NewBox(widget.Column, 0, 0))
 	a.openPopovers = []*openPopover{keep1, keep2}
-	_ = a.drivePopovers(false)
+	_ = a.drivePopovers()
 	if a.openPopovers[0] != keep1 || a.openPopovers[1] != keep2 {
 		t.Error("live popovers were reordered")
 	}
@@ -337,20 +338,20 @@ func TestDrivePopoversFitsGrowingContent(t *testing.T) {
 	widget.CollectDamage(op.keyRoot)
 	a := &Application{openPopovers: []*openPopover{op}}
 
-	if err := a.drivePopovers(true); err != nil {
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
 	if len(surf.resizes) != 0 {
 		t.Fatalf("unchanged content resized: %v", surf.resizes)
 	}
 	box.Append(widget.NewSpacer(60, 30), false)
-	if err := a.drivePopovers(false); err != nil {
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
 	if len(surf.resizes) != 1 || surf.resizes[0] != [2]int{64, 54} {
 		t.Fatalf("grown content: resizes %v, want one to 64x54", surf.resizes)
 	}
-	if err := a.drivePopovers(true); err != nil {
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
 	if len(surf.resizes) != 1 {
@@ -358,7 +359,7 @@ func TestDrivePopoversFitsGrowingContent(t *testing.T) {
 	}
 	surf.dismissed = true
 	box.Append(widget.NewSpacer(10, 10), false)
-	if err := a.drivePopovers(false); err != nil {
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
 	if len(surf.resizes) != 1 {
@@ -372,11 +373,13 @@ func TestDrivePopoversFitsGrowingContent(t *testing.T) {
 func TestPopoverFitHonorsTheContentsSizeRequest(t *testing.T) {
 	box := widget.NewBox(widget.Column, 0, 0)
 	box.Append(widget.NewSpacer(40, 20), false)
-	box.SetSizeRequest(100, 80)
 	op, surf, _, _ := newLoopPopover(box)
-	surf.w, surf.h = 1, 1
+	surf.w, surf.h = 44, 24
+	op.keyRoot.Arrange(render.Rect{W: 40, H: 20})
+	widget.CollectDamage(op.keyRoot)
 	a := &Application{openPopovers: []*openPopover{op}}
-	if err := a.drivePopovers(true); err != nil {
+	box.SetSizeRequest(100, 80)
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
 	// The fake surface's gutter is 2px a side.
@@ -388,7 +391,7 @@ func TestPopoverFitHonorsTheContentsSizeRequest(t *testing.T) {
 	// The fake host's 100px caps the width; the height grows past the
 	// request.
 	box.Append(widget.NewSpacer(90, 100), false)
-	if err := a.drivePopovers(false); err != nil {
+	if err := a.drivePopovers(); err != nil {
 		t.Fatal(err)
 	}
 	if got := surf.resizes[len(surf.resizes)-1]; got != [2]int{104, 124} {
@@ -415,7 +418,7 @@ func TestPopoverShrinkWaitsForTheContent(t *testing.T) {
 	cv := render.New(buf, render.Stride(100), 100, 100)
 	frame := func() {
 		t.Helper()
-		if err := a.drivePopovers(false); err != nil {
+		if err := a.drivePopovers(); err != nil {
 			t.Fatal(err)
 		}
 		op.keyRoot.Arrange(render.Rect{X: 2, Y: 2, W: surf.w - 4, H: surf.h - 4})

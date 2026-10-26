@@ -904,7 +904,7 @@ func (a *Application) tick(step func() error, now time.Time) error {
 			}
 		}
 	}
-	if err := a.drivePopovers(worked); err != nil {
+	if err := a.drivePopovers(); err != nil {
 		return a.loopError(err)
 	}
 	if a.quit {

@@ -629,10 +629,10 @@ func (op *openPopover) release() {
 
 // drivePopovers runs one loop pass over the open popovers: a destroyed
 // one (its exit tween landed) releases its painter and input and fires
-// its close; a live one repaints when anything changed — all marks it
-// dirty (loop work ran that may have touched its content) — and paints
-// at most one frame.
-func (a *Application) drivePopovers(all bool) error {
+// its close; a live one refits and repaints when its content drained
+// damage, as a window draws only what changed, and paints at most one
+// frame.
+func (a *Application) drivePopovers() error {
 	// Newest first: a nested popover destroyed in the same pass as its
 	// parent must leave the wire before it (xdg_popup's topmost rule).
 	kept := make([]*openPopover, 0, len(a.openPopovers))
@@ -645,7 +645,7 @@ func (a *Application) drivePopovers(all bool) error {
 			op.fireClosed()
 			continue
 		}
-		if _, damaged := widget.CollectDamage(op.keyRoot); damaged || all {
+		if _, damaged := widget.CollectDamage(op.keyRoot); damaged {
 			op.fitContent(a.outputs())
 			op.pop.MarkFrame()
 		}
