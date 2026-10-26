@@ -437,3 +437,42 @@ func TestThemeIconFallback(t *testing.T) {
 		t.Error("an exact lookup of a missing name painted")
 	}
 }
+
+// inkedRect is the device rect of the non-black pixels in a dev x dev
+// buffer.
+func inkedRect(data []byte, dev int) render.Rect {
+	var r render.Rect
+	for y := range dev {
+		for x := range dev {
+			if render.ColorFromBytes(data[y*render.Stride(dev)+x*4:])&0xffffff != 0 {
+				r = r.Union(render.Rect{X: x, Y: y, W: 1, H: 1})
+			}
+		}
+	}
+	return r
+}
+
+// A 20px icon covers DeviceBox(20, frac) device pixels at every scale,
+// themed or inline, straight or through -gtk-icon-transform, not its
+// raster's size again times the scale (#374).
+func TestIconCoversItsDeviceBox(t *testing.T) {
+	iconTree(t)
+	for _, xf := range []string{"", "icon { -gtk-icon-transform: scale(1.0001); }"} {
+		if xf != "" {
+			loadCSS(t, xf)
+		}
+		for _, frac := range []int{120, 180, 240} {
+			for name, w := range map[string]*Icon{
+				"theme": NewThemeIcon("flag", 20),
+				"svg":   NewSVGIcon([]byte(testGreenSVG), 20),
+			} {
+				data, dev := paintIcon(w, 40, frac, 120)
+				box := icons.DeviceBox(20, uint32(frac))
+				at := 10 * frac / 120
+				if got, want := inkedRect(data, dev), (render.Rect{X: at, Y: at, W: box, H: box}); got != want {
+					t.Errorf("%s at %d/120, transform %q: inked %+v, want %+v", name, frac, xf, got, want)
+				}
+			}
+		}
+	}
+}

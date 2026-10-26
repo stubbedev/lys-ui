@@ -194,7 +194,7 @@ func (i *Icon) effSize() int {
 // natural is the icon's content size.
 func (i *Icon) natural() Size {
 	if i.kind == iconStatic && i.ic != nil {
-		w, h := i.ic.Size()
+		w, h := i.ic.LogicalSize()
 		return Size{W: w, H: h}
 	}
 	s := i.effSize()
@@ -317,8 +317,7 @@ func (i *Icon) stale(frac uint32, tint Color) bool {
 // icons.DeviceBox(size, frac) pixels and records what it was made for.
 func (i *Icon) resolve(frac uint32, tint Color) {
 	size := i.effSize()
-	dev := icons.DeviceBox(size, frac)
-	ic, err := i.rasterize(frac, tint, dev, size)
+	ic, err := i.rasterize(frac, tint, size)
 	i.resolvedFrac, i.resolvedTint, i.resolvedSize = frac, tint, size
 	if i.kind == iconTheme {
 		i.resolvedGen = icons.Default().Generation()
@@ -330,9 +329,9 @@ func (i *Icon) resolve(frac uint32, tint Color) {
 	i.err, i.ic = nil, ic
 }
 
-// rasterize decodes the source at dev pixels, mask-recoloring it to
-// tint when it is symbolic or a tint is pinned.
-func (i *Icon) rasterize(frac uint32, tint Color, dev, size int) (*render.Icon, error) {
+// rasterize decodes the source for size logical pixels at frac,
+// mask-recoloring it to tint when it is symbolic or a tint is pinned.
+func (i *Icon) rasterize(frac uint32, tint Color, size int) (*render.Icon, error) {
 	switch i.kind {
 	case iconTheme:
 		cache := icons.Default()
@@ -349,16 +348,16 @@ func (i *Icon) rasterize(frac uint32, tint Color, dev, size int) (*render.Icon, 
 		if err != nil {
 			return nil, err
 		}
-		return tintedImage(data, filepath.Base(i.path), dev, tint, i.tint != 0 || icons.IsSymbolic(filepath.Base(i.path), data))
+		return tintedImage(data, filepath.Base(i.path), size, frac, tint, i.tint != 0 || icons.IsSymbolic(filepath.Base(i.path), data))
 	default:
-		return tintedImage(i.svg, "icon.svg", dev, tint, i.tint != 0 || icons.IsSymbolic("icon.svg", i.svg))
+		return tintedImage(i.svg, "icon.svg", size, frac, tint, i.tint != 0 || icons.IsSymbolic("icon.svg", i.svg))
 	}
 }
 
-// tintedImage decodes data into a dev x dev box and, when mask is set,
-// recolors it: every pixel keeps its alpha and takes tint.
-func tintedImage(data []byte, name string, dev int, tint Color, mask bool) (*render.Icon, error) {
-	ic, err := icons.DecodeImage(data, name, dev, dev)
+// tintedImage decodes data for size logical pixels at frac and, when
+// mask is set, recolors it: every pixel keeps its alpha and takes tint.
+func tintedImage(data []byte, name string, size int, frac uint32, tint Color, mask bool) (*render.Icon, error) {
+	ic, err := icons.DecodeIcon(data, name, size, frac)
 	if err != nil {
 		return nil, err
 	}

@@ -57,7 +57,7 @@ func resolveLayerImage(src style.ImageSource) (layerImage, bool) {
 	if ic == nil {
 		return layerImage{}, false
 	}
-	w, h := ic.Size()
+	w, h := ic.LogicalSize()
 	return layerImage{icon: ic, natW: float64(w), natH: float64(h)}, w > 0 && h > 0
 }
 

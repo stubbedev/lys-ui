@@ -274,6 +274,5 @@ func (e *cacheEntry) decode(path string, size int, frac120 uint32) {
 		return
 	}
 	e.symbolic = IsSymbolic(filepath.Base(path), data)
-	dev := DeviceBox(size, frac120)
-	e.natural, e.err = DecodeImage(data, filepath.Base(path), dev, dev)
+	e.natural, e.err = DecodeIcon(data, filepath.Base(path), size, frac120)
 }

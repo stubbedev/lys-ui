@@ -43,6 +43,23 @@ func DecodeImage(data []byte, fileName string, w, h int) (*render.Icon, error) {
 	return render.LoadSVG(data, w, h)
 }
 
+// DecodeIcon decodes icon data named by fileName for a size x size
+// logical box on a surface at the 120-based scale frac120: rasterized
+// into the DeviceBox(size, frac120) pixel box and marked with that
+// scale, so it draws one to one there and covers size logical pixels
+// anywhere.
+func DecodeIcon(data []byte, fileName string, size int, frac120 uint32) (*render.Icon, error) {
+	if frac120 == 0 {
+		frac120 = fracDenom
+	}
+	dev := DeviceBox(size, frac120)
+	ic, err := DecodeImage(data, fileName, dev, dev)
+	if err != nil {
+		return nil, err
+	}
+	return ic.AtScale(int(frac120), fracDenom), nil
+}
+
 // hasJPEGMagic reports whether data starts with the JPEG SOI marker.
 func hasJPEGMagic(data []byte) bool {
 	return len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF

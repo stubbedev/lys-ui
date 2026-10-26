@@ -1931,7 +1931,7 @@ func paintPseudoImage(cv *render.Canvas, n *node, v *style.Values) {
 		if img == nil {
 			continue
 		}
-		iw, ih := img.Size()
+		iw, ih := img.LogicalSize()
 		x, y := box.X, box.Y+max((box.H-ih)/2, 0)
 		if i == 1 {
 			x = box.X + max(box.W-iw, 0)
