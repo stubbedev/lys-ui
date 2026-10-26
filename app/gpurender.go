@@ -1,8 +1,10 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"slices"
 
@@ -64,13 +66,24 @@ func (r *gpuRenderer) fail(err error) {
 
 // refuse takes a dmabuf import the compositor refused: every window
 // goes to the CPU, or, under LYS_UI_RENDERER=gpu, the next buffer
-// fails with it.
+// fails with it. Buffers of a device the compositor named are an error;
+// a compositor that named none refusing the device guessed at is the
+// expected end of that guess, a warning.
 func (r *gpuRenderer) refuse(err error) {
 	if r.required {
 		r.refused = err
 		return
 	}
-	r.fail(err)
+	if r.failed != nil {
+		return
+	}
+	r.failed = err
+	level := slog.LevelWarn
+	if r.hasNode {
+		level = slog.LevelError
+	}
+	logutil.L().Log(context.Background(), level, "app: the compositor refused the GPU's buffers; every window draws on the CPU from now on",
+		"device", r.name, "named_by_compositor", r.hasNode, "err", err)
 }
 
 // renderer is the application's GPU renderer, opened on first use;

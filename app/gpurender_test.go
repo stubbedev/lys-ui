@@ -198,3 +198,24 @@ func TestRendererOpensTheCompositorsDevice(t *testing.T) {
 		t.Errorf("error %v does not name the main device", err)
 	}
 }
+
+// A refusal logs as one, not as a failed frame: a warning when the
+// device was a guess (the compositor named none), an error when the
+// compositor refused buffers of its own main device (#376).
+func TestRefusedImportIsLoggedAsARefusal(t *testing.T) {
+	for _, named := range []bool{false, true} {
+		var log bytes.Buffer
+		logutil.Set(slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelInfo})))
+		r := &gpuRenderer{name: "llvmpipe", hasNode: named}
+		r.refuse(errors.New("refused"))
+		r.refuse(errors.New("refused again"))
+		logutil.Set(nil)
+		want := "level=WARN"
+		if named {
+			want = "level=ERROR"
+		}
+		if got := log.String(); strings.Count(got, "refused the GPU's buffers") != 1 || !strings.Contains(got, want) || strings.Contains(got, "frame failed") {
+			t.Errorf("named %v: log %q; want one refusal line at %s", named, got, want)
+		}
+	}
+}
