@@ -278,3 +278,33 @@ func TestCalendarWeekRowsAreSpaced(t *testing.T) {
 		t.Errorf("the second row's first cell maps to %v %v", d, ok)
 	}
 }
+
+// A calendar arranged wider than its natural size widens its columns to
+// fill it: the day grid spans the width, a click lands on the day of
+// the wide column under it, and the selection keeps a day-sized square
+// centered in its column. At its natural size nothing moves (#324).
+func TestCalendarFillsItsWidth(t *testing.T) {
+	c := NewCalendar(goldenFace(t), 14, Date{2026, time.September, 14})
+	nat := c.Measure(Constraints{Max: Size{W: 1000, H: 1000}})
+	c.Arrange(render.Rect{W: nat.W, H: nat.H})
+	if c.col() != c.cell || c.padX != 0 {
+		t.Fatalf("at its natural width: column %d (cell %d), pad %d", c.col(), c.cell, c.padX)
+	}
+	wide := nat.W + 7*20 + 3
+	c.Arrange(render.Rect{W: wide, H: nat.H})
+	if c.col() != c.cell+20 || c.padX != 1 {
+		t.Fatalf("at %dpx: column %d, pad %d; want %d and 1", wide, c.col(), c.padX, c.cell+20)
+	}
+	gx, gy := c.dayGrid(0)
+	if gx-c.bounds.X+c.monthWidth()+c.padX+1 != wide {
+		t.Errorf("grid from %d, %dpx wide, in %dpx", gx, c.monthWidth(), wide)
+	}
+	at := c.cellRect(0, 6, 2)
+	if d, ok := c.dayAt(Point{X: at.X + at.W - 2, Y: gy + 2*c.rowStride() + 2}); !ok || d != (Date{2026, time.September, 19}) {
+		t.Errorf("a click in Saturday's wide column, week 3, picked %v, %v", d, ok)
+	}
+	sel, _ := c.dayRect(Date{2026, time.September, 14})
+	if s := c.dayShape(sel); s.W != c.cell || s.X-sel.X != (sel.W-c.cell)/2 {
+		t.Errorf("selection shape %v in column %v, want a %dpx square centered", s, sel, c.cell)
+	}
+}

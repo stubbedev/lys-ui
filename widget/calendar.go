@@ -177,7 +177,12 @@ type Calendar struct {
 	weekend     [7]bool
 	weekendPart stylePart
 
+	// cell is a day's natural square; colW the column width the last
+	// Arrange gave each day (at least cell), and padX the slack it
+	// could not share evenly, split around the months.
 	cell    int
+	colW    int
+	padX    int
 	titleH  int
 	headerH int
 
@@ -409,12 +414,16 @@ func (c *Calendar) firstOffset(m Date) int {
 	return (int(m.Weekday()-c.firstWeekday()) + 7) % 7
 }
 
+// col is a day column's width: the arranged one, or before any
+// Arrange the natural cell.
+func (c *Calendar) col() int { return max(c.cell, c.colW) }
+
 // monthWidth is one month's grid width.
-func (c *Calendar) monthWidth() int { return calendarCols * c.cell }
+func (c *Calendar) monthWidth() int { return calendarCols * c.col() }
 
 // monthOrigin is the top-left of shown month i.
 func (c *Calendar) monthOrigin(i int) (int, int) {
-	return c.bounds.X + i*(c.monthWidth()+calendarMonthGap), c.bounds.Y
+	return c.bounds.X + c.padX + i*(c.monthWidth()+calendarMonthGap), c.bounds.Y
 }
 
 // dayGrid is the top-left of month i's day cells.
@@ -430,10 +439,17 @@ func (c *Calendar) cellDate(i, col, row int) Date {
 	return m.AddDays(row*calendarCols + col - c.firstOffset(m))
 }
 
-// cellRect is month i's cell at (col, row).
+// cellRect is month i's cell at (col, row): its whole column wide.
 func (c *Calendar) cellRect(i, col, row int) render.Rect {
 	x, y := c.dayGrid(i)
-	return render.Rect{X: x + col*c.cell, Y: y + row*c.rowStride(), W: c.cell, H: c.cell}
+	return render.Rect{X: x + col*c.col(), Y: y + row*c.rowStride(), W: c.col(), H: c.cell}
+}
+
+// dayShape is the cell-sized square centered in cell: what the
+// selection, today and the keyboard ring fill or outline in a column
+// wider than a day.
+func (c *Calendar) dayShape(cell render.Rect) render.Rect {
+	return render.Rect{X: cell.X + (cell.W-c.cell)/2, Y: cell.Y, W: c.cell, H: c.cell}
 }
 
 // rowStride is a week row's height and the gap below it.
@@ -457,24 +473,29 @@ func (c *Calendar) dayRect(d Date) (render.Rect, bool) {
 	return render.Rect{}, false
 }
 
-// Measure wants each month's title, header and six week rows, side by
-// side, clamped to con.
+// Measure wants each month's title, header and six week rows of
+// natural cells, side by side, clamped to con.
 func (c *Calendar) Measure(con Constraints) Size {
 	if sz, ok := c.measureHit(con); ok {
 		return sz
 	}
-	w := c.months*c.monthWidth() + (c.months-1)*calendarMonthGap
+	w := c.months*calendarCols*c.cell + (c.months-1)*calendarMonthGap
 	h := c.titleH + c.headerH + c.gridHeight()
 	return c.measureStore(con, clampSize(Size{W: w, H: h}, con))
 }
 
-// Arrange records the rect and places the previous button at the
-// first month's left and the next at the last month's right.
+// Arrange records the rect, widens the day columns to share a wider
+// one, and places the previous button at the first month's left and the
+// next at the last month's right.
 func (c *Calendar) Arrange(r render.Rect) {
 	c.node.Arrange(r)
+	gaps := (c.months - 1) * calendarMonthGap
+	c.colW = max(c.cell, (r.W-gaps)/(c.months*calendarCols))
+	c.padX = max(0, r.W-gaps-c.months*calendarCols*c.colW) / 2
 	side := c.cell - 4
 	y := r.Y + (c.titleH-side)/2
-	c.nav[0].Arrange(render.Rect{X: r.X, Y: y, W: side, H: side})
+	firstX, _ := c.monthOrigin(0)
+	c.nav[0].Arrange(render.Rect{X: firstX, Y: y, W: side, H: side})
 	lastX, _ := c.monthOrigin(c.months - 1)
 	c.nav[1].Arrange(render.Rect{X: lastX + c.monthWidth() - side, Y: y, W: side, H: side})
 	setParents(c, c.nav[0], c.nav[1])
@@ -507,6 +528,7 @@ func (c *Calendar) Paint(cv *render.Canvas) {
 	th := Current()
 	names := c.namesOf()
 	radius := min(6, c.cell/4)
+	colW := c.col()
 	small := c.sizePx * 0.85
 	for i := range c.months {
 		m := c.view.AddMonths(i)
@@ -517,7 +539,7 @@ func (c *Calendar) Paint(cv *render.Canvas) {
 		start := c.firstWeekday()
 		for col := range calendarCols {
 			wd := time.Weekday((int(start) + col) % 7)
-			c.face.DrawAligned(cv, names.WeekdayName(wd), render.Rect{X: gx + col*c.cell, Y: y + c.titleH, W: c.cell, H: c.headerH}, small, th.TextMuted, render.AlignCenter)
+			c.face.DrawAligned(cv, names.WeekdayName(wd), render.Rect{X: gx + col*colW, Y: y + c.titleH, W: colW, H: c.headerH}, small, th.TextMuted, render.AlignCenter)
 		}
 		for row := range calendarRows {
 			for col := range calendarCols {
@@ -566,9 +588,9 @@ func (c *Calendar) paintDay(cv *render.Canvas, m, d Date, cell render.Rect, radi
 		}
 		switch {
 		case picked:
-			cv.RoundedRect(cell, radius, th.Accent)
+			cv.RoundedRect(c.dayShape(cell), radius, th.Accent)
 		case d == c.today && !c.inRange(d):
-			cv.RoundedRect(cell, radius, th.MutedColor())
+			cv.RoundedRect(c.dayShape(cell), radius, th.MutedColor())
 		}
 	}
 	c.face.DrawAligned(cv, dayNumber(d.Day), cell, c.sizePx, col, render.AlignCenter)
@@ -577,7 +599,7 @@ func (c *Calendar) paintDay(cv *render.Canvas, m, d Date, cell render.Rect, radi
 		cv.RoundedRect(dot, 2, col)
 	}
 	if !outside && d == c.cursor && c.focused && c.focusVisible {
-		cv.RoundedBorder(cell, render.UniformCorners(radius), render.UniformInsets(2), th.RingColor())
+		cv.RoundedBorder(c.dayShape(cell), render.UniformCorners(radius), render.UniformInsets(2), th.RingColor())
 	}
 }
 
@@ -629,7 +651,7 @@ func (c *Calendar) dayAt(p Point) (Date, bool) {
 		if p.X < gx || p.Y < gy || p.X >= gx+c.monthWidth() || p.Y >= gy+c.gridHeight() || (p.Y-gy)%c.rowStride() >= c.cell {
 			continue
 		}
-		return c.cellDate(i, (p.X-gx)/c.cell, (p.Y-gy)/c.rowStride()), true
+		return c.cellDate(i, (p.X-gx)/c.col(), (p.Y-gy)/c.rowStride()), true
 	}
 	return Date{}, false
 }
