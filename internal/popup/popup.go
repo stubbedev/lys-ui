@@ -92,7 +92,21 @@ type Popup struct {
 	// a new size; repositions counts the requests (their tokens).
 	cfg         Config
 	repositions uint32
+	// side is the check of a vertical popup the compositor shrank to
+	// fit: it tries the anchor's other side once and keeps whichever
+	// gave it more height; sideH is the first side's.
+	side  sideCheck
+	sideH int32
 }
+
+// sideCheck is where a shrunk popup's side check stands.
+type sideCheck uint8
+
+const (
+	sideUnchecked sideCheck = iota
+	sideTrying
+	sideChecked
+)
 
 // Config describes where the popup goes and how big it is.
 type Config struct {
@@ -263,6 +277,16 @@ func (p *Popup) sealGutter(w, h int) {
 // the next frame paints at. It reports false when the compositor
 // cannot reposition popups; the popup then keeps its size.
 func (p *Popup) Resize(w, h int) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	cfg := p.cfg
+	cfg.Width, cfg.Height = w, h
+	return p.reposition(cfg)
+}
+
+// reposition re-places the popup by cfg (xdg_popup.reposition) and
+// makes it the placement; p.mu is held.
+func (p *Popup) reposition(cfg Config) bool {
 	if p.Dismissed() || p.sess.WmBaseVersion() < 3 {
 		return false
 	}
@@ -271,11 +295,7 @@ func (p *Popup) Resize(w, h int) bool {
 		return false
 	}
 	defer func() { _ = positioner.Destroy() }()
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	cfg := p.cfg
-	cfg.Width, cfg.Height = w, h
-	if positioner.SetSize(int32(w), int32(h)) != nil || place(positioner, cfg) != nil {
+	if positioner.SetSize(int32(cfg.Width), int32(cfg.Height)) != nil || place(positioner, cfg) != nil {
 		return false
 	}
 	p.repositions++
@@ -283,8 +303,64 @@ func (p *Popup) Resize(w, h int) bool {
 		return false
 	}
 	p.cfg = cfg
-	p.sealGutter(w, h)
+	p.sealGutter(cfg.Width, cfg.Height)
 	return true
+}
+
+// opposite is the vertical gravity across the anchor from g, and
+// whether g is vertical.
+func opposite(g Gravity) (Gravity, bool) {
+	switch g {
+	case GravityBottom:
+		return GravityTop, true
+	case GravityTop:
+		return GravityBottom, true
+	}
+	return g, false
+}
+
+// checkSide runs the side check: once the popup is mapped (a reposition
+// needs it), with the height h it was configured at, a vertical popup
+// the compositor shrank below its request tries the anchor's other
+// side once (wlroots flips only to a side the whole popup fits, and
+// otherwise shrinks it where it opened, however little room that side
+// has); on that side's configure, a smaller height goes back. It
+// reports whether the configure is a step of the check rather than the
+// placement to keep.
+func (p *Popup) checkSide(h int32) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	next, flip := sideStep(p.side, p.cfg, h, p.sideH)
+	if p.side == sideUnchecked {
+		p.sideH = h
+	}
+	p.side = sideChecked
+	if !flip {
+		return false
+	}
+	cfg := p.cfg
+	cfg.Gravity, _ = opposite(cfg.Gravity)
+	if !p.reposition(cfg) {
+		return false
+	}
+	p.side = next
+	return true
+}
+
+// sideStep is the side check's step for a popup placed by cfg and
+// configured h tall, sideH the first side's height: the check's next
+// state, and whether to re-place the popup on the anchor's other side.
+func sideStep(side sideCheck, cfg Config, h, sideH int32) (sideCheck, bool) {
+	switch side {
+	case sideUnchecked:
+		_, vertical := opposite(cfg.Gravity)
+		if !cfg.AnchorRect.Empty() && vertical && h != 0 && int(h) < cfg.Height {
+			return sideTrying, true
+		}
+	case sideTrying:
+		return sideChecked, h < sideH
+	}
+	return sideChecked, false
 }
 
 // RequestedSize is the size last asked for: at open, or by Resize.
@@ -314,6 +390,9 @@ func (p *Popup) HandleSurfaceConfigure(ev xdg.SurfaceConfigureEvent) {
 
 // HandlePopupConfigure records the placed geometry.
 func (p *Popup) HandlePopupConfigure(ev xdg.PopupConfigureEvent) {
+	if p.side == sideTrying && p.checkSide(ev.Height) {
+		return
+	}
 	p.x, p.y = ev.X, ev.Y
 	if ev.Width != 0 {
 		p.w = ev.Width

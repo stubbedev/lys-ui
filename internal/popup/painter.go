@@ -52,6 +52,7 @@ type Painter struct {
 
 	frameReady   bool
 	framePending bool
+	mapped       bool
 	dirty        atomic.Bool
 }
 
@@ -208,6 +209,10 @@ func (pc *Painter) Pass() (bool, error) {
 	}
 	p.mu.Unlock()
 	pc.framePending = true
+	if !pc.mapped {
+		pc.mapped = true
+		p.checkSide(int32(h))
+	}
 	debug.Log("frame", "popup %d frame %dx%d", pc.surf.Id(), b.Width, b.Height)
 	return true, nil
 }

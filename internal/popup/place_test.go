@@ -59,3 +59,30 @@ func TestPlacementForARect(t *testing.T) {
 		t.Errorf("gutterless offset = %d,%d", p.offsetX, p.offsetY)
 	}
 }
+
+// A vertical popup the compositor shrank tries the anchor's other side
+// once and goes back when that side gives less; one placed whole, a
+// sideways or point popup, or a finished check never moves (#325).
+func TestSideStep(t *testing.T) {
+	below := Config{AnchorRect: render.Rect{X: 10, Y: 800, W: 100, H: 30}, Width: 200, Height: 1600, Gravity: GravityBottom}
+	for _, tc := range []struct {
+		name     string
+		side     sideCheck
+		cfg      Config
+		h, sideH int32
+		next     sideCheck
+		flip     bool
+	}{
+		{"shrunk below tries above", sideUnchecked, below, 190, 0, sideTrying, true},
+		{"above gives more and stays", sideTrying, below, 830, 190, sideChecked, false},
+		{"above gives less and goes back", sideTrying, below, 120, 190, sideChecked, true},
+		{"placed whole stays", sideUnchecked, below, 1600, 0, sideChecked, false},
+		{"sideways stays", sideUnchecked, Config{AnchorRect: below.AnchorRect, Height: 1600, Gravity: GravityRight}, 190, 0, sideChecked, false},
+		{"a point popup stays", sideUnchecked, Config{Height: 1600}, 190, 0, sideChecked, false},
+		{"checked stays", sideChecked, below, 190, 0, sideChecked, false},
+	} {
+		if next, flip := sideStep(tc.side, tc.cfg, tc.h, tc.sideH); next != tc.next || flip != tc.flip {
+			t.Errorf("%s: step (%v, %v), want (%v, %v)", tc.name, next, flip, tc.next, tc.flip)
+		}
+	}
+}
