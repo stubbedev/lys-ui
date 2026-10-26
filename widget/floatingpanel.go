@@ -132,7 +132,7 @@ func (f *FloatingPanel) limit(s Size, area Size) Size {
 // Measure takes the area offered, the panel's natural size where the
 // offer is unbounded.
 func (f *FloatingPanel) Measure(con Constraints) Size {
-	nat := MeasureAsChild(f.panel, Constraints{Max: con.Max})
+	nat := measureChild(f, f.panel, Constraints{Max: con.Max})
 	w, h := con.Max.W, con.Max.H
 	if w >= unboundedPx {
 		w = nat.W
@@ -149,7 +149,7 @@ func (f *FloatingPanel) Measure(con Constraints) Size {
 func (f *FloatingPanel) Arrange(r render.Rect) {
 	f.node.Arrange(r)
 	area := Size{W: r.W, H: r.H}
-	want := MeasureAsChild(f.panel, Constraints{Max: area})
+	want := measureChild(f, f.panel, Constraints{Max: area})
 	if f.size.W > 0 {
 		want.W = f.size.W
 	}
@@ -162,9 +162,8 @@ func (f *FloatingPanel) Arrange(r render.Rect) {
 	}
 	f.offset = Point{X: min(max(f.offset.X, 0), area.W-sz.W), Y: min(max(f.offset.Y, 0), area.H-sz.H)}
 	f.rect = render.Rect{X: r.X + f.offset.X, Y: r.Y + f.offset.Y, W: sz.W, H: sz.H}
-	MeasureAsChild(f.panel, Constraints{Min: sz, Max: sz})
+	measureChild(f, f.panel, Constraints{Min: sz, Max: sz})
 	ArrangeAsChild(f.panel, f.rect)
-	setParents(f, f.panel)
 	f.grip.Arrange(render.Rect{X: f.rect.X + f.rect.W - panelGripPx, Y: f.rect.Y + f.rect.H - panelGripPx, W: panelGripPx, H: panelGripPx})
 	setParents(f, f.grip)
 	if f.settling {
@@ -302,7 +301,7 @@ func (h *panelHandle) Drop(mime string, data []byte, p Point) {
 	}
 }
 
-func (h *panelHandle) Measure(con Constraints) Size { return MeasureAsChild(h.child, con) }
+func (h *panelHandle) Measure(con Constraints) Size { return measureChild(h, h.child, con) }
 
 func (h *panelHandle) Arrange(r render.Rect) {
 	h.node.Arrange(r)
