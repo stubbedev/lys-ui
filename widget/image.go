@@ -155,11 +155,7 @@ type Image struct {
 	// failure, loaded/loading where the load stands, and gen bumps on
 	// every source change so a result landing after SetImage is
 	// dropped instead of overwriting the new source.
-	img image.Image
-	// still marks an img the widget decoded itself (a load, bytes, a
-	// paste): its pixels never change, so a GPU keeps its texture. An
-	// app's raster may change; it draws from its pixels each time.
-	still   bool
+	img     image.Image
 	loadErr error
 	loaded  bool
 	loading bool
@@ -170,8 +166,10 @@ type Image struct {
 }
 
 // NewImage returns an image widget around a decoded image. The widget
-// keeps the reference; treat it as read-only after handoff. A nil img
-// paints nothing.
+// keeps the reference; treat it as read-only after handoff. To show
+// changed pixels, SetImage the raster again, as a render.VersionedImage
+// at its next version so a GPU renderer updates its texture in place.
+// A nil img paints nothing.
 func NewImage(img image.Image) *Image {
 	im := &Image{}
 	im.setSource(imageSource{kind: imageRaster, img: img, key: memKey()})
@@ -203,7 +201,7 @@ func NewBytesImage(data []byte, name string) *Image {
 
 // SetImage swaps the source for a decoded image, dropping the previous
 // source's cache entries and the measure caches that still describe
-// the old size.
+// the old size. The image is handed over as to NewImage.
 func (im *Image) SetImage(img image.Image) {
 	im.setSource(imageSource{kind: imageRaster, img: img, key: memKey()})
 }
@@ -230,16 +228,16 @@ func (im *Image) setSource(src imageSource) {
 	}
 	im.src = src
 	im.gen++
-	im.img, im.loadErr, im.still = nil, nil, false
+	im.img, im.loadErr = nil, nil
 	im.loaded, im.loading = false, false
 	switch src.kind {
 	case imageRaster:
-		im.img, im.loaded = src.img, true
+		im.img, im.loaded = heldImage(src.img), true
 	case imageBytes:
 		img, err := imgcache.Default().Source(src.key, func() (image.Image, error) {
 			return decodeImageData(src.data, src.name)
 		})
-		im.img, im.loadErr, im.loaded, im.still = img, err, true, true
+		im.img, im.loadErr, im.loaded = img, err, true
 	}
 	im.restartPlayback()
 	im.InvalidateLayout()
@@ -310,7 +308,8 @@ func (im *Image) Paint(cv *render.Canvas) {
 	}
 	box := cv.MapRect(im.bounds)
 	pic, frame := im.currentFrame()
-	if rgba, ok := pic.(*image.RGBA); ok && im.still {
+	if rgba, ok := pic.(*image.RGBA); ok {
+		// An animation's frame: decoded once, never changed.
 		pic = render.StillImage{RGBA: rgba}
 	}
 	b := pic.Bounds()
@@ -406,7 +405,7 @@ func (im *Image) applyPaste(gen uint64, img image.Image, err error) {
 	if gen != im.gen {
 		return
 	}
-	im.img, im.loadErr, im.loaded, im.loading, im.still = img, err, true, false, true
+	im.img, im.loadErr, im.loaded, im.loading = img, err, true, false
 	im.restartPlayback()
 	if err == nil && im.OnPasteImage != nil {
 		im.OnPasteImage(img)
@@ -454,7 +453,7 @@ func (im *Image) applyLoad(gen uint64, key string, img image.Image, err error) {
 	im.loading = false
 	im.loaded = true
 	im.src.key = key
-	im.img, im.loadErr, im.still = img, err, true
+	im.img, im.loadErr = img, err
 	im.restartPlayback()
 	// The natural size may have appeared or changed: drop the measure
 	// caches up the tree and owe the frame a repaint.
@@ -512,7 +511,21 @@ func decodeImageData(data []byte, name string) (image.Image, error) {
 	if err != nil {
 		return nil, fmt.Errorf("image: decode %s: %w", name, err)
 	}
-	return img, nil
+	return heldImage(img), nil
+}
+
+// heldImage is img as a widget holds an image handed to it read-only:
+// a still, versioned or animated image as it is, an *image.RGBA as a
+// still image over the same pixels, and any other image converted once
+// (render.Still), so a GPU renderer keeps each as a texture.
+func heldImage(img image.Image) image.Image {
+	switch v := img.(type) {
+	case nil, render.StillImage, render.VersionedImage, *render.Animation:
+		return img
+	case *image.RGBA:
+		return render.StillImage{RGBA: v}
+	}
+	return render.Still(img)
 }
 
 // hashKey builds a source key from content: a changed file or URL body

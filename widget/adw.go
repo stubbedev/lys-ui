@@ -309,9 +309,10 @@ func NewAvatar(face render.Font, size int, name string) *Avatar {
 	return a
 }
 
-// SetImage shows img instead of the initials; nil returns to them.
+// SetImage shows img instead of the initials; nil returns to them. The
+// image is handed over read-only, as to NewImage.
 func (a *Avatar) SetImage(img image.Image) {
-	a.img = img
+	a.img = heldImage(img)
 	a.Invalidate()
 }
 

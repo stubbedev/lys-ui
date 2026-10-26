@@ -565,3 +565,70 @@ func TestImageMeasureUnsettledThenNatural(t *testing.T) {
 		t.Errorf("Measure after the load = %v, want 8x8 (the stale 0x0 cache must be dropped)", got)
 	}
 }
+
+// imageCaptor records the images a recording draws; it takes no other
+// call.
+type imageCaptor struct {
+	render.Player
+	imgs []image.Image
+}
+
+func (c *imageCaptor) DrawImageDevice(_ render.State, img image.Image, _, _ int) {
+	c.imgs = append(c.imgs, img)
+}
+
+func (c *imageCaptor) DrawImageCover(_ render.State, img image.Image, _ render.Rect, _ render.Corners) {
+	c.imgs = append(c.imgs, img)
+}
+
+// drawnImages paints w into a recording and returns the images it
+// draws.
+func drawnImages(w Widget, width, height int) []image.Image {
+	rec := render.NewRecorder(width, height, 1, 1)
+	w.Paint(rec)
+	c := &imageCaptor{}
+	rec.Recording().Play(c)
+	return c.imgs
+}
+
+// Every image an Image, Avatar or ScreenPick draws is one a GPU
+// renderer keeps as a texture: an app's *image.RGBA is held still
+// without a copy, any other model converted once, a versioned image
+// keeps its version, and natural-size and resampled draws alike (#313).
+func TestWidgetImagesStayTexturable(t *testing.T) {
+	rgba := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	versioned := render.VersionedImage{RGBA: image.NewRGBA(image.Rect(0, 0, 4, 4)), Version: 7}
+	for _, tc := range []struct {
+		name string
+		w    Widget
+		size int
+	}{
+		{"image rgba 1:1", NewImage(rgba), 4},
+		{"image nrgba scaled", NewImage(quadImage()), 16},
+		{"image versioned 1:1", NewImage(versioned), 4},
+		{"image versioned scaled", NewImage(versioned), 16},
+		{"avatar", func() Widget { a := NewAvatar(testFace(t), 16, "A B"); a.SetImage(quadImage()); return a }(), 16},
+		{"screen pick scaled", NewScreenPick(quadImage()), 16},
+	} {
+		tc.w.Measure(Constraints{Max: Size{W: tc.size, H: tc.size}})
+		tc.w.Arrange(render.Rect{W: tc.size, H: tc.size})
+		imgs := drawnImages(tc.w, tc.size, tc.size)
+		if len(imgs) == 0 {
+			t.Fatalf("%s: drew no image", tc.name)
+		}
+		for _, img := range imgs {
+			switch v := img.(type) {
+			case render.StillImage:
+			case render.VersionedImage:
+				if v.Version != 7 {
+					t.Errorf("%s: version %d, want the source's 7", tc.name, v.Version)
+				}
+			default:
+				t.Errorf("%s: drew a %T, which a GPU renderer cannot keep", tc.name, img)
+			}
+		}
+	}
+	if s, ok := heldImage(rgba).(render.StillImage); !ok || s.RGBA != rgba {
+		t.Error("an *image.RGBA was copied or not held still")
+	}
+}

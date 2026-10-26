@@ -113,6 +113,8 @@ type videoView struct {
 	raster  *image.RGBA
 	drawn   uint64
 	src     image.Rectangle
+	// version moves with every resample into raster.
+	version uint64
 }
 
 func (p *videoView) Measure(con Constraints) Size {
@@ -145,7 +147,7 @@ func (p *videoView) Paint(cv *render.Canvas) {
 	dw, dh, dx, dy := dst.W, dst.H, box.X+dst.X, box.Y+dst.Y
 	p.painted = seq
 	if srcRect.Dx() == dw && srcRect.Dy() == dh {
-		cv.DrawImageDevice(frame.SubImage(srcRect), dx, dy)
+		cv.DrawImageDevice(render.VersionedImage{RGBA: frame, Version: seq}.SubImage(srcRect), dx, dy)
 		return
 	}
 	if p.raster == nil || p.raster.Rect.Dx() != dw || p.raster.Rect.Dy() != dh {
@@ -154,6 +156,7 @@ func (p *videoView) Paint(cv *render.Canvas) {
 	if p.drawn != seq || p.src != srcRect {
 		render.ResampleInto(p.raster, frame, srcRect)
 		p.drawn, p.src = seq, srcRect
+		p.version++
 	}
-	cv.DrawImageDevice(p.raster, dx, dy)
+	cv.DrawImageDevice(render.VersionedImage{RGBA: p.raster, Version: p.version}, dx, dy)
 }

@@ -19,13 +19,17 @@ type ScreenPick struct {
 	// fit is the drawn rect inside the last arranged bounds, in
 	// logical pixels.
 	fit render.Rect
+	// scaled is the image resampled for the last fit, from source rect
+	// scaledSrc; a new fit resamples into a new raster.
+	scaled    render.StillImage
+	scaledSrc image.Rectangle
 	// OnPick receives the clicked pixel's color.
 	OnPick func(render.Color)
 }
 
-// NewScreenPick returns a pick view over img.
+// NewScreenPick returns a pick view over img, handed over read-only.
 func NewScreenPick(img image.Image) *ScreenPick {
-	s := &ScreenPick{img: img}
+	s := &ScreenPick{img: heldImage(img)}
 	s.cursorName = "crosshair"
 	return s
 }
@@ -60,7 +64,10 @@ func (s *ScreenPick) Paint(cv *render.Canvas) {
 		cv.DrawImageDevice(sub.SubImage(src), s.fit.X, s.fit.Y)
 		return
 	}
-	cv.DrawImageDevice(render.Resample(s.img, src, dw, dh), s.fit.X, s.fit.Y)
+	if s.scaled.RGBA == nil || s.scaledSrc != src || s.scaled.Rect.Dx() != dw || s.scaled.Rect.Dy() != dh {
+		s.scaled, s.scaledSrc = render.StillImage{RGBA: render.Resample(s.img, src, dw, dh)}, src
+	}
+	cv.DrawImageDevice(s.scaled, s.fit.X, s.fit.Y)
 }
 
 // HitTest resolves inside the bounds.
