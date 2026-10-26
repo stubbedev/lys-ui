@@ -96,10 +96,12 @@ type List struct {
 	// a plain listview (a GridView's cells are `child`).
 	rowElement string
 
-	viewW, viewH int
-	offY         int
-	hover        int
-	rows         map[int]*listRow
+	// view is the content box, the scroll viewport inside the list's
+	// CSS box, where the rows lay out.
+	view  render.Rect
+	offY  int
+	hover int
+	rows  map[int]*listRow
 
 	// pointer gesture state: dragging while a press is down, the row
 	// the press anchored on (-1 until a point resolves it), the last
@@ -258,7 +260,7 @@ func (l *List) fitColumns(w int) int {
 func (l *List) stride() (w, step int) {
 	gap, _ := l.spacing()
 	c := l.columns()
-	w = max(1, (l.viewW-(c-1)*gap)/c)
+	w = max(1, (l.view.W-(c-1)*gap)/c)
 	return w, w + gap
 }
 
@@ -267,11 +269,11 @@ func (l *List) stride() (w, step int) {
 func (l *List) cellRect(i int) render.Rect {
 	c := l.columns()
 	w, step := l.stride()
-	x := l.bounds.X + (i%c)*step
+	x := l.view.X + (i%c)*step
 	if i%c == c-1 {
-		w = l.bounds.X + l.viewW - x
+		w = l.view.X + l.view.W - x
 	}
-	return render.Rect{X: x, Y: l.bounds.Y + (i/c)*l.pitch() - l.offY, W: w, H: l.rowH}
+	return render.Rect{X: x, Y: l.view.Y + (i/c)*l.pitch() - l.offY, W: w, H: l.rowH}
 }
 
 // syncSelected mirrors membership into the cached row proxies'
@@ -312,7 +314,7 @@ func (l *List) selectionSingle(i int) {
 // no viewport to scroll against, so the reveal waits for Arrange.
 func (l *List) reveal(i int) {
 	l.kin.stop()
-	if l.viewH <= 0 {
+	if l.view.H <= 0 {
 		l.revealAt = i + 1
 		return
 	}
@@ -378,12 +380,12 @@ func (l *List) Reset() {
 
 // scrollTo nudges the offset so row i is inside the viewport.
 func (l *List) scrollTo(i int) {
-	top, bottom := l.offY, l.offY+l.viewH
+	top, bottom := l.offY, l.offY+l.view.H
 	y := (i / l.columns()) * l.pitch()
 	if y < top {
 		l.offY = y
 	} else if y+l.rowH > bottom {
-		l.offY = y + l.rowH - l.viewH
+		l.offY = y + l.rowH - l.view.H
 	}
 }
 
@@ -403,7 +405,7 @@ func (l *List) measureRowH() {
 		l.probe = l.newRow(0)
 	}
 	setParents(l, l.probe)
-	w := l.viewW
+	w := l.view.W
 	if w <= 0 {
 		w = unboundedPx // not arranged yet: the natural width
 	}
@@ -411,24 +413,27 @@ func (l *List) measureRowH() {
 	l.rowH = max(1, s.H)
 }
 
-// Measure reports the offered width by the full content height,
-// clamped to the constraints: the list is the viewport, not the
-// content.
+// Measure reports the offered width by the full content height inside
+// the list's CSS box, clamped to the constraints: the list is the
+// viewport, not the content.
 func (l *List) Measure(con Constraints) Size {
 	if sz, ok := l.measureHit(con); ok {
 		return sz
 	}
-	lines, w := l.model.len(), 120
-	if l.cellW > 0 {
-		c := l.fitColumns(con.Max.W)
-		lines, w = (lines+c-1)/c, l.cellW
-	}
-	l.measureRowH()
-	h := l.contentH(lines)
-	if l.maxH > 0 {
-		h = min(h, l.maxH)
-	}
-	return l.measureStore(con, clampSize(Size{W: w, H: h}, con))
+	v := l.style(l)
+	return l.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
+		lines, w := l.model.len(), 120
+		if l.cellW > 0 {
+			c := l.fitColumns(inner.Max.W)
+			lines, w = (lines+c-1)/c, l.cellW
+		}
+		l.measureRowH()
+		h := l.contentH(lines)
+		if l.maxH > 0 {
+			h = min(h, l.maxH)
+		}
+		return clampSize(Size{W: w, H: h}, inner)
+	}))
 }
 
 // SetMaxHeight caps the list's natural height at h pixels (0 lifts the
@@ -442,14 +447,16 @@ func (l *List) SetMaxHeight(h int) {
 	l.InvalidateLayout()
 }
 
-// Arrange lays out the viewport.
+// Arrange records the border box inside r and lays the viewport out in
+// its content box.
 func (l *List) Arrange(r render.Rect) {
-	l.node.Arrange(r)
-	l.viewW, l.viewH = r.W, r.H
-	l.cols = l.fitColumns(r.W)
+	border, inner := boxRects(boxOf(l.style(l), render.Insets{}), r)
+	l.node.Arrange(border)
+	l.view = inner
+	l.cols = l.fitColumns(inner.W)
 	l.measureRowH()
 	l.offY = min(l.offY, l.scrollMax())
-	if i := l.revealAt - 1; i >= 0 && l.viewH > 0 {
+	if i := l.revealAt - 1; i >= 0 && l.view.H > 0 {
 		l.revealAt = 0
 		if i < l.model.len() {
 			l.scrollTo(i)
@@ -462,7 +469,7 @@ func (l *List) Arrange(r render.Rect) {
 func (l *List) visible() (first, last int) {
 	n, c := l.model.len(), l.columns()
 	first = min(l.offY/l.pitch()*c, max(0, n-1))
-	last = min(n, ((l.offY+l.viewH)/l.pitch()+1)*c)
+	last = min(n, ((l.offY+l.view.H)/l.pitch()+1)*c)
 	for i := range l.rows {
 		if i < first || i >= last {
 			l.evict(i)
@@ -536,10 +543,10 @@ func findCheckButton(w Widget) *CheckButton {
 // (the `row` node's CSS box).
 func (l *List) Paint(cv *render.Canvas) {
 	th := Current()
-	prev := cv.PushClip(l.bounds)
 	if bg := pickc(0, l.style(l), style.PropBackgroundColor, th.Surface); bg != 0 {
 		cv.FillRect(l.bounds, bg)
 	}
+	prev := cv.PushClip(l.view)
 
 	first, last := l.visible()
 	for i := first; i < last; i++ {
@@ -637,21 +644,21 @@ func (l *List) itemAt(p Point) (int, bool) {
 // rowAt maps a point to a row index, clamped into the model; a gap
 // counts toward the item before it.
 func (l *List) rowAt(p Point) int {
-	line := max((p.Y-l.bounds.Y+l.offY)/l.pitch(), 0)
+	line := max((p.Y-l.view.Y+l.offY)/l.pitch(), 0)
 	return min(line*l.columns()+l.columnAt(p), l.model.len()-1)
 }
 
 // columnAt maps a point to its grid column, clamped.
 func (l *List) columnAt(p Point) int {
 	_, step := l.stride()
-	return min(max((p.X-l.bounds.X)/step, 0), l.columns()-1)
+	return min(max((p.X-l.view.X)/step, 0), l.columns()-1)
 }
 
 // rowAtExact maps a point to a row index only when one is under it:
 // the trailing band below the last row hits no row, where rowAt
 // clamps into the last one.
 func (l *List) rowAtExact(p Point) (int, bool) {
-	y := p.Y - l.bounds.Y + l.offY
+	y := p.Y - l.view.Y + l.offY
 	if y < 0 {
 		return 0, false
 	}
@@ -761,7 +768,7 @@ func (l *List) stopAutoScroll() {
 
 // scrollMax is the largest viewport offset.
 func (l *List) scrollMax() int {
-	return max(0, l.contentH(l.lines(l.model.len()))-l.viewH)
+	return max(0, l.contentH(l.lines(l.model.len()))-l.view.H)
 }
 
 // updateAutoScroll runs or stops the edge auto-scroll for the current
@@ -776,9 +783,9 @@ func (l *List) updateAutoScroll() {
 	}
 	dir := 0
 	switch {
-	case l.dragPoint.Y < l.bounds.Y+listEdgeScroll:
+	case l.dragPoint.Y < l.view.Y+listEdgeScroll:
 		dir = -1
-	case l.dragPoint.Y >= l.bounds.Y+l.bounds.H-listEdgeScroll:
+	case l.dragPoint.Y >= l.view.Y+l.view.H-listEdgeScroll:
 		dir = 1
 	}
 	row := l.pitch()
@@ -888,7 +895,7 @@ func (l *List) KeyAction(a KeyAction, mods Mods) {
 // item sideways in a grid, a viewport of lines per page.
 func (l *List) navigate(from int, a KeyAction) (int, bool) {
 	line, item := l.steps()
-	page := max(1, l.viewH/l.pitch()) * line
+	page := max(1, l.view.H/l.pitch()) * line
 	switch a {
 	case KeyUp:
 		return from - line, true

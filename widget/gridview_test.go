@@ -132,3 +132,29 @@ func TestGridViewRevealsAnEarlySelectionAfterLayout(t *testing.T) {
 		t.Errorf("selecting item 31 scrolled to %d, want 160", g.offY)
 	}
 }
+
+// A grid's CSS padding insets its cells and its scroll viewport, and a
+// point in the padding hits the grid itself (#384).
+func TestGridViewPadding(t *testing.T) {
+	loadCSS(t, `gridview { padding: 12px; }`)
+	g := NewGridView[Widget](newCountingModel(100), 50, 20)
+	frame(t, g, 184, 100)
+	if got := g.Columns(); got != 3 {
+		t.Fatalf("columns = %d, want 3 in the 160px inside the padding", got)
+	}
+	if got, want := g.cellRect(0), (render.Rect{X: 12, Y: 12, W: 53, H: 20}); got != want {
+		t.Errorf("first cell %+v, want %+v inside the padding", got, want)
+	}
+	if got := g.HitTest(Point{X: 5, Y: 30}); got != Widget(&g.List) {
+		t.Errorf("a point in the padding hit %T, want the grid", got)
+	}
+	if got, ok := g.HitTest(Point{X: 14, Y: 14}).(*listRow); !ok || got.idx != 0 {
+		t.Errorf("a point just inside the padding hit %v, want the first cell", got)
+	}
+	if want := g.contentH(g.lines(100)) - 76; g.scrollMax() != want {
+		t.Errorf("scroll range %d, want %d against the 76px viewport", g.scrollMax(), want)
+	}
+	if got := g.Measure(Constraints{Max: Size{W: 184, H: 1 << 20}}).H; got != g.contentH(g.lines(100))+24 {
+		t.Errorf("natural height %d, want the content and the padding", got)
+	}
+}
