@@ -108,7 +108,7 @@ func cssGradient(g *style.Gradient, box render.Rect, buf *[style.MaxResolvedStop
 	if g.Repeat {
 		out.Extend = render.ExtendRepeat
 	}
-	out.Stops = g.Resolve(out.LineLength(box), buf[:0])
+	out.Stops = g.Resolve(float64(out.LineLength(box)), buf[:0])
 	return out
 }
 
