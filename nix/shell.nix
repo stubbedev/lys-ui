@@ -1,3 +1,4 @@
+{ inputs, ... }:
 {
   perSystem = { buildGoModule, go, lib, pkgs, ... }:
     let
@@ -9,6 +10,7 @@
         pkg.override (lib.mapAttrs (_: _: buildGoModule)
           (lib.filterAttrs (name: _: lib.match "buildGo.*Module" name != null)
             (lib.functionArgs pkg.override)));
+      gpuDrivers = inputs.lys-lib.lib.gpuDriverEnv pkgs;
     in
     {
       devShells.default = pkgs.mkShellNoCC ({
@@ -69,57 +71,20 @@
         # cursor setup inside the shell is untouched.
         LYS_UI_TEST_XCURSOR_PATH = "${pkgs.vanilla-dmz}/share/icons";
       } // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-        # The GPU renderer (package gpu) loads libvulkan at runtime;
-        # the loader finds the host's drivers (/run/opengl-driver on
+        # lys-lib's package gpu loads libvulkan and libva at runtime;
+        # the loaders find the host's drivers (/run/opengl-driver on
         # NixOS).
-        LD_LIBRARY_PATH = "${pkgs.vulkan-loader}/lib";
+        LD_LIBRARY_PATH = lib.makeLibraryPath gpuDrivers.libraries;
         # Mesa's lavapipe, a CPU Vulkan driver: the GPU tests force it
         # (VK_DRIVER_FILES) to run without a GPU, as CI does.
         LYS_TEST_LAVAPIPE = "${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.x86_64.json";
         # The Khronos validation layer: the GPU tests run under it, and
         # any error it finds stops the test.
         LYS_TEST_VULKAN_LAYERS = "${pkgs.vulkan-validation-layers}/share/vulkan/explicit_layer.d";
-        # Off NixOS there are no drivers in /run/opengl-driver, and the
-        # host's own Mesa cannot load into processes linked against
-        # nixpkgs' glibc: the Vulkan loader, and sway's EGL and GBM,
-        # would find no driver. There the shell points them at nixpkgs'
-        # Mesa: lavapipe, and the driver for each GPU the kernel drives
-        # (AMD, Intel, nouveau, virtio and the SoC GPUs); NVIDIA's
-        # proprietary driver needs nixGL. Only those: an ICD for absent
-        # hardware can fault while it probes (CI's runners crashed so
-        # with all of them). NixOS keeps its own.
-        shellHook = ''
-          if ! ls /run/opengl-driver/share/vulkan/icd.d/*.json >/dev/null 2>&1; then
-            icds=${pkgs.mesa}/share/vulkan/icd.d
-            VK_DRIVER_FILES=$(printf '%s:' "$icds"/lvp_icd.*.json)
-            for drv in /sys/class/drm/*/device/driver; do
-              case $(basename "$(readlink -f "$drv")") in
-                i915 | xe) want="intel intel_hasvk" ;;
-                amdgpu | radeon) want=radeon ;;
-                nouveau) want=nouveau ;;
-                virtio_gpu) want=virtio ;;
-                msm) want=freedreno ;;
-                panfrost | panthor) want=panfrost ;;
-                v3d | vc4) want=broadcom ;;
-                asahi) want=asahi ;;
-                powervr) want=powervr_mesa ;;
-                *) continue ;;
-              esac
-              for w in $want; do
-                for f in "$icds"/"$w"_icd.*.json; do
-                  case ":$VK_DRIVER_FILES" in
-                    *":$f:"*) ;;
-                    *) [ -e "$f" ] && VK_DRIVER_FILES="$f:$VK_DRIVER_FILES" ;;
-                  esac
-                done
-              done
-            done
-            export VK_DRIVER_FILES="''${VK_DRIVER_FILES%:}"
-            export __EGL_VENDOR_LIBRARY_FILENAMES=${pkgs.mesa}/share/glvnd/egl_vendor.d/50_mesa.json
-            export GBM_BACKENDS_PATH=${pkgs.mesa}/lib/gbm
-            export LIBGL_DRIVERS_PATH=${pkgs.mesa}/lib/dri
-          fi
-        '';
+        # Off NixOS the shell points the Vulkan loader, EGL, GBM and VA
+        # at nixpkgs' drivers for the GPUs present: lys-lib's
+        # gpuDriverEnv, the one hook every lys shell uses.
+        inherit (gpuDrivers) shellHook;
       });
     };
 }
