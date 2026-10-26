@@ -5967,18 +5967,6 @@ func (b *PileBuilder) WatchPeekEdge(get func() widget.Edge) *PileBuilder {
 	return b
 }
 
-// PeekInset calls (*widget.Pile).SetPeekInset.
-func (b *PileBuilder) PeekInset(px int) *PileBuilder {
-	b.do(func(s *Scope, w *widget.Pile) { w.SetPeekInset(px) })
-	return b
-}
-
-// WatchPeekInset re-applies SetPeekInset with get's value after every update.
-func (b *PileBuilder) WatchPeekInset(get func() int) *PileBuilder {
-	b.watch(func(w *widget.Pile) { w.SetPeekInset(get()) })
-	return b
-}
-
 // PeekOffset calls (*widget.Pile).SetPeekOffset.
 func (b *PileBuilder) PeekOffset(px int) *PileBuilder {
 	b.do(func(s *Scope, w *widget.Pile) { w.SetPeekOffset(px) })
@@ -5988,6 +5976,30 @@ func (b *PileBuilder) PeekOffset(px int) *PileBuilder {
 // WatchPeekOffset re-applies SetPeekOffset with get's value after every update.
 func (b *PileBuilder) WatchPeekOffset(get func() int) *PileBuilder {
 	b.watch(func(w *widget.Pile) { w.SetPeekOffset(get()) })
+	return b
+}
+
+// PeekOpacity calls (*widget.Pile).SetPeekOpacity.
+func (b *PileBuilder) PeekOpacity(f float32) *PileBuilder {
+	b.do(func(s *Scope, w *widget.Pile) { w.SetPeekOpacity(f) })
+	return b
+}
+
+// WatchPeekOpacity re-applies SetPeekOpacity with get's value after every update.
+func (b *PileBuilder) WatchPeekOpacity(get func() float32) *PileBuilder {
+	b.watch(func(w *widget.Pile) { w.SetPeekOpacity(get()) })
+	return b
+}
+
+// PeekScale calls (*widget.Pile).SetPeekScale.
+func (b *PileBuilder) PeekScale(f float32) *PileBuilder {
+	b.do(func(s *Scope, w *widget.Pile) { w.SetPeekScale(f) })
+	return b
+}
+
+// WatchPeekScale re-applies SetPeekScale with get's value after every update.
+func (b *PileBuilder) WatchPeekScale(get func() float32) *PileBuilder {
+	b.watch(func(w *widget.Pile) { w.SetPeekScale(get()) })
 	return b
 }
 

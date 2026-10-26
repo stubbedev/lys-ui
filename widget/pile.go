@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"math"
 	"slices"
 
 	"github.com/stubbedev/lys-ui/internal/style"
@@ -8,12 +9,14 @@ import (
 )
 
 // Pile defaults: the cards peeking behind the front, the step each
-// shows past the previous one, the per-side inset each level of depth
-// narrows by, and the gap between cards expanded.
+// shows past the previous one, the scale and opacity each level of
+// depth keeps of the card in front of it, and the gap between cards
+// expanded.
 const (
 	pilePeek        = 2
 	pilePeekOffset  = 8
-	pilePeekInset   = 8
+	pilePeekScale   = 0.94
+	pilePeekOpacity = 0.7
 	pileSpacing     = 8
 	pileFrontClass  = "front"
 	pilePeekClass   = "peek"
@@ -23,7 +26,8 @@ const (
 
 // Pile stacks its children as cards: collapsed, the front card (index
 // 0) shows whole and the next few peek out past one edge of it, each a
-// step further and narrower, showing only their box (background,
+// step further, scaled down about its middle and fainter, showing only
+// their box (background,
 // border, shadow; through a box-less single-child wrapper such as a
 // SwipeDismiss or Revealer, the box inside it) and never their
 // content; expanded, the cards lay out
@@ -40,7 +44,8 @@ type Pile struct {
 	expanded bool
 	peek     int
 	offset   int
-	inset    int
+	scale    float32
+	opacity  float32
 	spacing  int
 	edge     Edge
 	// nat are the children's last measured sizes.
@@ -50,7 +55,7 @@ type Pile struct {
 // NewPile returns an empty, collapsed pile peeking two cards past its
 // bottom edge.
 func NewPile() *Pile {
-	p := &Pile{peek: pilePeek, offset: pilePeekOffset, inset: pilePeekInset, spacing: pileSpacing, edge: EdgeBottom}
+	p := &Pile{peek: pilePeek, offset: pilePeekOffset, scale: pilePeekScale, opacity: pilePeekOpacity, spacing: pileSpacing, edge: EdgeBottom}
 	p.SetElement("pile")
 	return p
 }
@@ -117,14 +122,27 @@ func (p *Pile) SetPeekOffset(px int) {
 	}
 }
 
-// SetPeekInset sets how far, in logical pixels, each level of depth
-// narrows a peeking card on either side.
-func (p *Pile) SetPeekInset(px int) {
-	if px != p.inset {
-		p.inset = px
+// SetPeekScale sets the size, as a fraction in (0, 1], each level of
+// depth keeps of the card in front of it, both sides scaling about the
+// card's middle.
+func (p *Pile) SetPeekScale(f float32) {
+	if f = min(1, max(0.01, f)); f != p.scale {
+		p.scale = f
 		p.InvalidateLayout()
 	}
 }
+
+// SetPeekOpacity sets the opacity, as a fraction in [0, 1], each level
+// of depth keeps of the card in front of it.
+func (p *Pile) SetPeekOpacity(f float32) {
+	if f = min(1, max(0, f)); f != p.opacity {
+		p.opacity = f
+		p.Invalidate()
+	}
+}
+
+// depthPow is f to the power d, one factor per level of depth.
+func depthPow(f float32, d int) float32 { return float32(math.Pow(float64(f), float64(d))) }
 
 // SetSpacing sets the gap between expanded cards.
 func (p *Pile) SetSpacing(px int) {
@@ -258,8 +276,16 @@ func (p *Pile) Arrange(r render.Rect) {
 	}
 	for i, w := range vis {
 		d := min(i, peeks)
-		in := d * p.inset
-		arrangeChild(w, render.Rect{X: front.X + in, Y: front.Y + d*step, W: max(0, front.W-2*in), H: front.H})
+		s := depthPow(p.scale, d)
+		cw, ch := int(math.Round(float64(float32(front.W)*s))), int(math.Round(float64(float32(front.H)*s)))
+		r := render.Rect{X: front.X + (front.W-cw)/2, W: cw, H: ch}
+		// The card's far edge shows d steps past the front's.
+		if p.edge == EdgeTop {
+			r.Y = front.Y + d*step
+		} else {
+			r.Y = front.Y + front.H + d*step - ch
+		}
+		arrangeChild(w, r)
 	}
 }
 
@@ -287,7 +313,9 @@ func (p *Pile) Paint(cv *render.Canvas) {
 		if box, bn := peekBox(w); bn != nil {
 			r := ShownRect(box)
 			r.X, r.Y = r.X+shown.X-n.bounds.X, r.Y+shown.Y-n.bounds.Y
+			prev := cv.PushAlpha(float64(depthPow(p.opacity, i)))
 			paintCSSBox(cv, bn.style(box), r)
+			cv.PopAlpha(prev)
 		}
 	}
 	if len(vis) > 0 {

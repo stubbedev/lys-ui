@@ -22,9 +22,9 @@ func pileOf(t *testing.T, h ...int) (*Pile, []*stub) {
 }
 
 // Collapsed, the front card shows whole at the top and two cards peek
-// below it, each a step lower and narrower, at the front's height; the
-// rest lie buried under the last peek. Only the front takes the pointer
-// (#332).
+// below it, each scaled down about its middle by the peek scale per
+// level, its bottom a step lower; the rest lie buried under the last
+// peek. Only the front takes the pointer (#332, #338).
 func TestPileCollapsed(t *testing.T) {
 	p, cards := pileOf(t, 40, 60, 30, 50)
 	settle(t, p, 200, 400)
@@ -33,9 +33,9 @@ func TestPileCollapsed(t *testing.T) {
 	}
 	want := []render.Rect{
 		{X: 0, Y: 0, W: 200, H: 40},
-		{X: 8, Y: 8, W: 184, H: 40},
-		{X: 16, Y: 16, W: 168, H: 40},
-		{X: 16, Y: 16, W: 168, H: 40},
+		{X: 6, Y: 10, W: 188, H: 38},
+		{X: 11, Y: 21, W: 177, H: 35},
+		{X: 11, Y: 21, W: 177, H: 35},
 	}
 	for i, c := range cards {
 		if c.Bounds() != want[i] {
@@ -89,8 +89,9 @@ func TestPileExpanded(t *testing.T) {
 	}
 }
 
-// A peeking card paints only its own box: its background shows past
-// the front, its content never does.
+// A peeking card paints only its own box, fainter by the peek opacity
+// per level: its background shows past the front, its content never
+// does.
 func TestPilePeeksPaintTheirBoxOnly(t *testing.T) {
 	loadCSS(t, `.card { background-color: #0000ff; }`)
 	t.Cleanup(anim.SetInstant(true))
@@ -107,8 +108,8 @@ func TestPilePeeksPaintTheirBoxOnly(t *testing.T) {
 	if got := at(100, 20); got != render.RGB(255, 0, 0) {
 		t.Errorf("front content %#08x, want red", uint32(got))
 	}
-	if got := at(100, 44); got != render.RGB(0, 0, 0xff) {
-		t.Errorf("past the front, the peek shows %#08x, want its blue box, not its red content", uint32(got))
+	if got := at(100, 44); got.R() != 0 || got.G() != 0 || got.B() != got.A() || got.A() < 175 || got.A() > 181 {
+		t.Errorf("past the front, the peek shows %#08x, want its blue box at 70%%, not its red content", uint32(got))
 	}
 }
 
@@ -128,7 +129,7 @@ func TestPilePeekShowsTheBoxInsideWrappers(t *testing.T) {
 	}
 	settle(t, p, 200, 60)
 	data := paintTree(p, 200, 60)
-	if got := render.ColorFromBytes(data[44*render.Stride(200)+100*4:]); got != render.RGB(0, 0, 0xff) {
+	if got := render.ColorFromBytes(data[44*render.Stride(200)+100*4:]); got.R() != 0 || got.G() != 0 || got.B() == 0 {
 		t.Errorf("past the front, the wrapped peek shows %#08x, want the card's blue box", uint32(got))
 	}
 }
