@@ -612,3 +612,42 @@ func TestGoldenDropdown(t *testing.T) {
 		})
 	}
 }
+
+// A dropdown in a row short of room gives up width down to its floor:
+// an Item's actions narrow it to the space left, its selection
+// ellipsizes before the chevron, which shows whole, and a short label
+// keeps its natural width (#321).
+func TestDropdownShrinksAndEllipsizes(t *testing.T) {
+	face := testFace(t)
+	long := NewDropdown(face, 14, []string{"Creative Live! Cam Sync 4K Analog Stereo"}, 0)
+	it := NewItem(face, "Source", "")
+	it.AddAction(long)
+	h := it.Measure(Constraints{Max: Size{W: 220, H: 200}}).H
+	it.Arrange(render.Rect{W: 220, H: h})
+	content := it.row.Bounds()
+	db := long.Bounds()
+	solo := NewDropdown(face, 14, []string{"Creative Live! Cam Sync 4K Analog Stereo"}, 0)
+	natural := solo.Measure(Constraints{Max: Size{W: 400, H: 100}}).W
+	if db.X+db.W > content.X+content.W || db.W >= natural {
+		t.Fatalf("dropdown %v ends past the item's content %v (natural %d)", db, content, natural)
+	}
+	solo.Arrange(render.Rect{W: 140, H: 36})
+	data := paintTree(solo, 140, 36)
+	bg := render.ColorFromBytes(data[18*render.Stride(140)+(140-dropdownChevronW+2)*4:])
+	for y := 8; y < 28; y++ {
+		for x := 140 - dropdownChevronW; x < 140-22; x++ {
+			if c := render.ColorFromBytes(data[y*render.Stride(140)+x*4:]); c != bg {
+				t.Fatalf("(%d, %d) = %#08x before the chevron; the label ran into its reserve", x, y, uint32(c))
+			}
+		}
+	}
+	short := NewDropdown(face, 14, []string{"Default"}, 0)
+	row := NewBox(Row, 0, 0)
+	row.Append(short, false)
+	nat := short.Measure(Constraints{Max: Size{W: 400, H: 100}}).W
+	row.Measure(Constraints{Max: Size{W: 326, H: 100}})
+	row.Arrange(render.Rect{W: 326, H: 36})
+	if got := short.Bounds().W; got != nat {
+		t.Errorf("short dropdown %dpx wide, want its natural %d", got, nat)
+	}
+}
