@@ -9,7 +9,6 @@ import (
 	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/intconv"
-	"github.com/stubbedev/lys-ui/internal/wlnull"
 )
 
 // Pointer constraints (zwp_pointer_constraints_v1) and relative motion
@@ -198,7 +197,7 @@ func (s *Session) constrain(surf *wl.Surface, region []image.Rectangle, persiste
 	if s.constraintsMgr == nil || p == nil || surf == nil {
 		return nil, ErrPointerConstraintsUnavailable
 	}
-	var reg wl.Proxy = wlnull.Null
+	var reg *wl.Region
 	if region != nil {
 		r, err := s.Compositor().CreateRegion()
 		if err != nil {

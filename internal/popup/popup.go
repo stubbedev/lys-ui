@@ -26,7 +26,6 @@ import (
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/touchinput"
-	"github.com/stubbedev/lys-ui/internal/wlnull"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -202,7 +201,7 @@ func New(sess *wlsession.Session, cfg Config) (*Popup, error) {
 	if err != nil {
 		return nil, fmt.Errorf("popup: get xdg surface: %w", err)
 	}
-	pop, err := getPopup(xdgSurf, cfg.Parent, positioner)
+	pop, err := xdgSurf.GetPopup(cfg.Parent, positioner)
 	if err != nil {
 		return nil, fmt.Errorf("popup: get popup: %w", err)
 	}
@@ -716,16 +715,6 @@ func (in *popupInput) HandlePointerAxis(dx, dy float64) {
 // device went away, so the whole gesture ends: an in-flight press is
 // cancelled without a click, its release will never arrive.
 func (in *popupInput) HandlePointerLeave() { in.router.PointerLost() }
-
-// getPopup is xdg_surface.get_popup. A layer-parented popup has no
-// xdg parent, which goes on the wire as wlnull.Null.
-func getPopup(s *xdg.Surface, parent *xdg.Surface, positioner *xdg.Positioner) (*xdg.Popup, error) {
-	if parent != nil {
-		return s.GetPopup(parent, positioner)
-	}
-	pop := xdg.NewPopup(s.Context())
-	return pop, s.Context().SendRequest(s, 2, pop, wlnull.Null, positioner)
-}
 
 // HandlePointerScrollPixels implements wlsession.SurfacePreciseScroller.
 func (in *popupInput) HandlePointerScrollPixels(dx, dy float64) {

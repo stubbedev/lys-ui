@@ -11,7 +11,6 @@ import (
 	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/intconv"
-	"github.com/stubbedev/lys-ui/internal/wlnull"
 )
 
 // Small per-surface protocols: the content-type hint (the compositor
@@ -142,7 +141,7 @@ func (s *Session) SetBlurRegion(surf *wl.Surface, rects []render.Rect) error {
 		s.blurSurfaces[surf] = obj
 	}
 	if len(rects) == 0 {
-		return obj.Context().SendRequest(obj, 1, wlnull.Null)
+		return obj.SetBlurRegion(nil)
 	}
 	region, err := s.compositor.CreateRegion()
 	if err != nil {
@@ -167,11 +166,7 @@ func (s *Session) Bell(surf *wl.Surface) error {
 	if s.bell == nil {
 		return ErrProtocolUnavailable
 	}
-	var target wl.Proxy = wlnull.Null
-	if surf != nil {
-		target = surf
-	}
-	return s.bell.Context().SendRequest(s.bell, 1, target)
+	return s.bell.Ring(surf)
 }
 
 // releaseSurfaceHints destroys surf's hint objects with its input.

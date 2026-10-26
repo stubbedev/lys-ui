@@ -40,10 +40,13 @@ func TestExpiringClaim(t *testing.T) {
 	}
 }
 
+// dataDeviceSetSelection is the wl_data_device.set_selection opcode.
+const dataDeviceSetSelection = 1
+
 // The expiry's set_selection reaches the wire as the null source and
-// the claim's serial. The generated SetSelection(nil, serial) panicked
-// in the encoder over a real connection, with its send lock held, and
-// froze the client (#277).
+// the claim's serial. SetSelection(nil, serial) once panicked in the
+// encoder over a real connection, with its send lock held, and froze
+// the client (#277, #375).
 func TestClearSelectionSendsTheNullSource(t *testing.T) {
 	frames := headlesstest.WireServer(t, "wayland-clipboard")
 	disp, err := wl.Connect("")
@@ -56,7 +59,7 @@ func TestClearSelectionSendsTheNullSource(t *testing.T) {
 	// No compositor answers here, so drop the id from the unsent
 	// bookkeeping a later new-id request would wait on.
 	dev.Unregister()
-	if err := clearSelection(dev, 42); err != nil {
+	if err := dev.SetSelection(nil, 42); err != nil {
 		t.Fatal(err)
 	}
 	f := headlesstest.WaitForFrame(t, frames, "set_selection", func(f headlesstest.WireFrame) bool {

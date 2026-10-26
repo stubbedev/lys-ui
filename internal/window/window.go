@@ -16,7 +16,6 @@ import (
 	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/intconv"
-	"github.com/stubbedev/lys-ui/internal/wlnull"
 )
 
 // ErrNotConfigured reports a draw attempt before the first configure
@@ -458,7 +457,7 @@ func (w *Window) SetParent(parent *Window) {
 		return
 	}
 	if parent == nil || parent.Toplevel == nil {
-		_ = w.Toplevel.Context().SendRequest(w.Toplevel, 1, wlnull.Null)
+		_ = w.Toplevel.SetParent(nil)
 		return
 	}
 	_ = w.Toplevel.SetParent(parent.Toplevel)

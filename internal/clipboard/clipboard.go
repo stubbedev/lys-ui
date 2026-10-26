@@ -18,7 +18,6 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
 
-	"github.com/stubbedev/lys-ui/internal/wlnull"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/internal/xfer"
 	"github.com/stubbedev/lys-ui/transfer"
@@ -352,20 +351,10 @@ func (c *Clipboard) expire(source *wl.DataSource) {
 		return
 	}
 	if dev := c.sess.DataDevice(); dev != nil {
-		if err := clearSelection(dev, serial); err != nil {
+		if err := dev.SetSelection(nil, serial); err != nil {
 			debug.Log("input", "clipboard expire: %v", err)
 		}
 	}
-}
-
-// dataDeviceSetSelection is the wl_data_device.set_selection opcode.
-const dataDeviceSetSelection = 1
-
-// clearSelection is wl_data_device.set_selection with the null source,
-// which the generated SetSelection cannot send: a nil *wl.DataSource
-// panics in the wire encoder with the connection's send lock held.
-func clearSelection(dev *wl.DataDevice, serial uint32) error {
-	return dev.Context().SendRequest(dev, dataDeviceSetSelection, wlnull.Null, serial)
 }
 
 // claim is Write: it claims the selection with content and returns the

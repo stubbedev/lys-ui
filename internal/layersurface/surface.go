@@ -9,8 +9,6 @@ import (
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
-
-	"github.com/stubbedev/lys-ui/internal/wlnull"
 )
 
 // ErrNotConfigured reports a draw attempt before the first configure
@@ -148,7 +146,7 @@ func New(shell Shell, surf *wl.Surface, output *wl.Output, cfg Config) (*Surface
 	if err := cfg.validate(); err != nil {
 		return nil, err
 	}
-	ls, err := getLayerSurface(shell.LayerShell(), surf, output, uint32(cfg.Layer), cfg.Namespace)
+	ls, err := shell.LayerShell().GetLayerSurface(surf, output, uint32(cfg.Layer), cfg.Namespace)
 	if err != nil {
 		return nil, fmt.Errorf("layersurface: get_layer_surface: %w", err)
 	}
@@ -362,14 +360,3 @@ func (s *Surface) HostSurface() *wl.Surface { return s.WLSurface }
 // LayerPopupSurface returns the layer surface for popup parenting;
 // layer surfaces have no xdg_surface of their own.
 func (s *Surface) LayerPopupSurface() *wlr.ZwlrLayerSurfaceV1 { return s.Layer }
-
-// getLayerSurface is zwlr_layer_shell.get_layer_surface; a nil output
-// lets the compositor choose one (usually the focused output), sent as
-// wlnull.Null because the binding cannot send a typed-nil output.
-func getLayerSurface(shell *wlr.ZwlrLayerShellV1, surf *wl.Surface, output *wl.Output, layer uint32, namespace string) (*wlr.ZwlrLayerSurfaceV1, error) {
-	if output != nil {
-		return shell.GetLayerSurface(surf, output, layer, namespace)
-	}
-	ls := wlr.NewZwlrLayerSurfaceV1(shell.Context())
-	return ls, shell.Context().SendRequest(shell, 0, ls, surf, wlnull.Null, layer, namespace)
-}

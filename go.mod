@@ -6,7 +6,7 @@ require (
 	github.com/go-text/typesetting v0.3.5
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jfreymuth/pulse v0.1.3
-	github.com/stubbedev/lys-lib v0.1.1-0.20261026204547-c12a4ac52b17
+	github.com/stubbedev/lys-lib v0.1.1-0.20261026211158-acfb75c4504c
 	github.com/unxed/xkb-go v0.1.9
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
