@@ -2289,6 +2289,18 @@ func (b *ComboEntryBuilder) WatchEcho(get func() widget.Echo) *ComboEntryBuilder
 	return b
 }
 
+// Ellipsize calls (*widget.ComboEntry).SetEllipsize.
+func (b *ComboEntryBuilder) Ellipsize(mode widget.EllipsizeMode) *ComboEntryBuilder {
+	b.do(func(s *Scope, w *widget.ComboEntry) { w.SetEllipsize(mode) })
+	return b
+}
+
+// WatchEllipsize re-applies SetEllipsize with get's value after every update.
+func (b *ComboEntryBuilder) WatchEllipsize(get func() widget.EllipsizeMode) *ComboEntryBuilder {
+	b.watch(func(w *widget.ComboEntry) { w.SetEllipsize(get()) })
+	return b
+}
+
 // LeadingIcon calls (*widget.ComboEntry).SetLeadingIcon.
 func (b *ComboEntryBuilder) LeadingIcon(name string, px float64, onClick func()) *ComboEntryBuilder {
 	b.do(func(s *Scope, w *widget.ComboEntry) { w.SetLeadingIcon(name, px, onClick) })
@@ -3110,6 +3122,18 @@ func (b *EditableLabelBuilder) WatchEcho(get func() widget.Echo) *EditableLabelB
 	return b
 }
 
+// Ellipsize calls (*widget.EditableLabel).SetEllipsize.
+func (b *EditableLabelBuilder) Ellipsize(mode widget.EllipsizeMode) *EditableLabelBuilder {
+	b.do(func(s *Scope, w *widget.EditableLabel) { w.SetEllipsize(mode) })
+	return b
+}
+
+// WatchEllipsize re-applies SetEllipsize with get's value after every update.
+func (b *EditableLabelBuilder) WatchEllipsize(get func() widget.EllipsizeMode) *EditableLabelBuilder {
+	b.watch(func(w *widget.EditableLabel) { w.SetEllipsize(get()) })
+	return b
+}
+
 // LeadingIcon calls (*widget.EditableLabel).SetLeadingIcon.
 func (b *EditableLabelBuilder) LeadingIcon(name string, px float64, onClick func()) *EditableLabelBuilder {
 	b.do(func(s *Scope, w *widget.EditableLabel) { w.SetLeadingIcon(name, px, onClick) })
@@ -3308,6 +3332,18 @@ func (b *EntryBuilder) Echo(mode widget.Echo) *EntryBuilder {
 // WatchEcho re-applies SetEcho with get's value after every update.
 func (b *EntryBuilder) WatchEcho(get func() widget.Echo) *EntryBuilder {
 	b.watch(func(w *widget.Entry) { w.SetEcho(get()) })
+	return b
+}
+
+// Ellipsize calls (*widget.Entry).SetEllipsize.
+func (b *EntryBuilder) Ellipsize(mode widget.EllipsizeMode) *EntryBuilder {
+	b.do(func(s *Scope, w *widget.Entry) { w.SetEllipsize(mode) })
+	return b
+}
+
+// WatchEllipsize re-applies SetEllipsize with get's value after every update.
+func (b *EntryBuilder) WatchEllipsize(get func() widget.EllipsizeMode) *EntryBuilder {
+	b.watch(func(w *widget.Entry) { w.SetEllipsize(get()) })
 	return b
 }
 
@@ -6718,6 +6754,18 @@ func (b *SearchEntryBuilder) WatchEcho(get func() widget.Echo) *SearchEntryBuild
 	return b
 }
 
+// Ellipsize calls (*widget.SearchEntry).SetEllipsize.
+func (b *SearchEntryBuilder) Ellipsize(mode widget.EllipsizeMode) *SearchEntryBuilder {
+	b.do(func(s *Scope, w *widget.SearchEntry) { w.SetEllipsize(mode) })
+	return b
+}
+
+// WatchEllipsize re-applies SetEllipsize with get's value after every update.
+func (b *SearchEntryBuilder) WatchEllipsize(get func() widget.EllipsizeMode) *SearchEntryBuilder {
+	b.watch(func(w *widget.SearchEntry) { w.SetEllipsize(get()) })
+	return b
+}
+
 // LeadingIcon calls (*widget.SearchEntry).SetLeadingIcon.
 func (b *SearchEntryBuilder) LeadingIcon(name string, px float64, onClick func()) *SearchEntryBuilder {
 	b.do(func(s *Scope, w *widget.SearchEntry) { w.SetLeadingIcon(name, px, onClick) })
@@ -7337,6 +7385,18 @@ func (b *SpinButtonBuilder) Echo(mode widget.Echo) *SpinButtonBuilder {
 // WatchEcho re-applies SetEcho with get's value after every update.
 func (b *SpinButtonBuilder) WatchEcho(get func() widget.Echo) *SpinButtonBuilder {
 	b.watch(func(w *widget.SpinButton) { w.SetEcho(get()) })
+	return b
+}
+
+// Ellipsize calls (*widget.SpinButton).SetEllipsize.
+func (b *SpinButtonBuilder) Ellipsize(mode widget.EllipsizeMode) *SpinButtonBuilder {
+	b.do(func(s *Scope, w *widget.SpinButton) { w.SetEllipsize(mode) })
+	return b
+}
+
+// WatchEllipsize re-applies SetEllipsize with get's value after every update.
+func (b *SpinButtonBuilder) WatchEllipsize(get func() widget.EllipsizeMode) *SpinButtonBuilder {
+	b.watch(func(w *widget.SpinButton) { w.SetEllipsize(get()) })
 	return b
 }
 

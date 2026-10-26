@@ -98,6 +98,10 @@ type Entry struct {
 	// applies. See SetReadOnly for the full contract.
 	readOnly bool
 
+	// ell truncates the text while the field is unfocused and too
+	// short for it (SetEllipsize).
+	ell EllipsizeMode
+
 	// caretHidden suppresses the caret even while focused: a field
 	// presenting as plain text (EditableLabel at rest).
 	caretHidden bool
@@ -408,6 +412,35 @@ func (e *Entry) fontPx() float64 {
 
 // pad is the effective horizontal text inset: the stylesheet's
 // padding when set, else the built-in 8.
+
+// SetEllipsize truncates the shown text where mode says, as a Label
+// does, while the field is unfocused and too short for it: a path field
+// reads "/home/me/…/file" at rest and shows its full text to edit once
+// focused. The text itself, the selection and the caret are untouched.
+// EllipsizeNone, the default, always shows the text panned.
+func (e *Entry) SetEllipsize(mode EllipsizeMode) {
+	if e.ell != mode {
+		e.ell = mode
+		e.Invalidate()
+	}
+}
+
+// Ellipsize returns the unfocused truncation mode.
+func (e *Entry) Ellipsize() EllipsizeMode { return e.ell }
+
+// restingLine is the text the field shows truncated at rest, and
+// whether it does: unfocused, not composing, with a mode, and wider
+// than the field.
+func (e *Entry) restingLine(disp string) (string, bool) {
+	if e.ell == EllipsizeNone || e.focused || e.composing() {
+		return "", false
+	}
+	avail := float64(e.innerRect().W)
+	if e.shape(disp).Advance() <= avail {
+		return "", false
+	}
+	return render.EllipsizeText(e.font(), disp, e.ell, avail, e.fontPx()), true
+}
 
 // SetPlaceholder sets the text shown when the entry is empty.
 func (e *Entry) SetPlaceholder(s string) {
@@ -1167,6 +1200,24 @@ func (e *Entry) Paint(cv *render.Canvas) {
 	// The line origin comes from lineX, so a right-to-left line hugs
 	// the right edge and pans mirrored, and a selection across mixed
 	// directions highlights one band per visual run.
+	if line, ok := e.restingLine(disp); ok {
+		// At rest the truncated line sits at the reading's start edge,
+		// unpanned, without a selection band.
+		sh := e.shape(line)
+		x := c.X
+		if text.RTL(line, e.effDir()) {
+			x = c.X + c.W - int(sh.Advance()+0.5)
+		}
+		prev := cv.PushClip(e.innerRect())
+		baseline := e.baseline(sh, c)
+		sh.Draw(cv, x, baseline, textCol)
+		if deco := cssDecoration(v); deco.Lines != 0 {
+			sh.DrawDecoration(cv, x, baseline, deco, textCol)
+		}
+		cv.PopClip(prev)
+		e.paintIcons(cv)
+		return
+	}
 	sh := e.shape(disp)
 	lx := e.lineX(sh)
 	prev := cv.PushClip(e.innerRect())

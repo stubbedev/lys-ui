@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"bytes"
 	"slices"
 	"strings"
 	"testing"
@@ -247,5 +248,51 @@ func TestEntrySetColorYieldsToTheStylesheetAtZero(t *testing.T) {
 	data, stride, sz = entryShot(t, s.Entry)
 	if _, n := inked(data, stride, sz, render.RGB(0xff, 0, 0)); n == 0 {
 		t.Error("with no programmatic ink the text node's red does not paint")
+	}
+}
+
+// A path field with SetEllipsize reads truncated at rest and shows its
+// full text once focused; the text itself never changes (#380).
+func TestEntryEllipsizesAtRest(t *testing.T) {
+	face := testFace(t)
+	path := "/home/someone/projects/a/rather/deep/directory/tree/file.txt"
+	e := NewEntry(face, 14, render.RGB(255, 255, 255))
+	e.SetText(path)
+	e.SetEllipsize(EllipsizeMiddle)
+	other := newFocusTarget()
+	root := NewBox(Column, 0, 0)
+	root.Append(e, false).Append(other, false)
+	root.Measure(Constraints{Max: Size{W: 140, H: 80}})
+	root.Arrange(render.Rect{W: 140, H: 80})
+	r := &Router{Root: root}
+
+	line, ok := e.restingLine(e.displayText())
+	if !ok || !strings.Contains(line, render.Ellipsis) || !strings.HasPrefix(line, "/home") || !strings.HasSuffix(line, ".txt") {
+		t.Fatalf("at rest the field shows %q, %v; want the path's head and tail around an ellipsis", line, ok)
+	}
+	shot := func() []byte {
+		data := make([]byte, render.Stride(140)*80)
+		root.Paint(render.New(data, render.Stride(140), 140, 80))
+		return data
+	}
+	rest := shot()
+	if err := r.SetFocus(e); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := e.restingLine(e.displayText()); ok {
+		t.Error("the focused field still shows the truncated line")
+	}
+	if bytes.Equal(rest, shot()) {
+		t.Error("focusing the field changed nothing on screen")
+	}
+	if e.Text() != path {
+		t.Errorf("text %q, want the full path kept", e.Text())
+	}
+	e.SetEllipsize(EllipsizeNone)
+	if err := r.SetFocus(other); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := e.restingLine(e.displayText()); ok {
+		t.Error("EllipsizeNone still truncates at rest")
 	}
 }
