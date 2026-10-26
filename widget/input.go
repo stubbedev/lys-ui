@@ -79,6 +79,26 @@ type PressEnder interface {
 	PressEnd()
 }
 
+// DragInterceptor is an ancestor that may take over a press in its
+// subtree once the pointer moves: a swipe-to-dismiss card takes a
+// sideways drag from the button the press landed on. It sees every move
+// of a press it has not taken; true takes the gesture. The pressed
+// widget's press then ends without a click, and the interceptor
+// receives the rest: its DragMove for each move, and PressEnd at the
+// release.
+type DragInterceptor interface {
+	InterceptDrag(from, at Point) bool
+}
+
+// PixelClaimer is a widget that may take a finger scroll before the
+// scrollers beneath it: a swipe-to-dismiss card takes a sideways one.
+// It is offered the first deltas of a gesture no scroller holds yet;
+// true takes them, and then the rest of the gesture (ClaimPixels) and
+// its end (ScrollEnder).
+type PixelClaimer interface {
+	ClaimPixels(dx, dy float64) bool
+}
+
 // CursorNamer lets a widget request a pointer shape while hovered,
 // using xcursor names ("xterm" for text, "left_ptr" arrow default).
 type CursorNamer interface {
@@ -265,6 +285,18 @@ func (r *Router) AxisPixels(dx, dy float64, mods Mods) {
 	if dx == 0 && dy == 0 && r.pixelTarget == nil {
 		return
 	}
+	if c, ok := r.pixelTarget.(PixelClaimer); ok && r.pixelClaimed {
+		c.ClaimPixels(dx, dy)
+		return
+	}
+	if r.pixelTarget == nil {
+		for w := r.hover; w != nil; w = parentOf(w) {
+			if c, ok := w.(PixelClaimer); ok && IsEnabled(w) && c.ClaimPixels(dx, dy) {
+				r.pixelTarget, r.pixelClaimed = w, true
+				return
+			}
+		}
+	}
 	var steps [2]int
 	stepped := false
 	step := func() [2]int {
@@ -311,7 +343,7 @@ func (r *Router) claimScroll(target Widget, dx, dy int, mods Mods) bool {
 // since moved off it.
 func (r *Router) AxisEnd() {
 	t := r.pixelTarget
-	r.pixelTarget = nil
+	r.pixelTarget, r.pixelClaimed = nil, false
 	if e, ok := t.(ScrollEnder); ok && IsEnabled(t) {
 		e.ScrollEnd()
 	}
@@ -481,6 +513,13 @@ type Router struct {
 	// widget, or over the surface's empty space the root.
 	chained  Widget
 	dragging bool
+	// pressAt is where the press began; intercepted marks a press a
+	// DragInterceptor took over.
+	pressAt     Point
+	intercepted bool
+	// pixelClaimed marks a finger scroll a PixelClaimer (pixelTarget)
+	// took.
+	pixelClaimed bool
 	// pointer is where the pointer rests while pointerIn, for Rehover.
 	pointer   Point
 	pointerIn bool
@@ -529,9 +568,38 @@ func (r *Router) Move(p Point) {
 		h.HoverMove(p)
 	}
 	if r.dragging {
+		r.intercept(p)
 		if d, ok := r.pressed.(DragMover); ok {
 			d.DragMove(p)
 		}
+	}
+}
+
+// intercept offers a move of a press no interceptor holds yet to the
+// pressed widget and its ancestors, nearest first; an ancestor that
+// takes it ends the pressed widget's press without a click and becomes
+// the pressed widget for the rest of the gesture.
+func (r *Router) intercept(p Point) {
+	if r.intercepted {
+		return
+	}
+	for w := r.pressed; w != nil; w = parentOf(w) {
+		di, ok := w.(DragInterceptor)
+		if !ok || !IsEnabled(w) || !di.InterceptDrag(r.pressAt, p) {
+			continue
+		}
+		if w == r.pressed {
+			r.intercepted = true
+			return
+		}
+		if pr, ok := r.pressed.(PressSetter); ok {
+			pr.SetPressed(false)
+		}
+		if pe, ok := r.pressed.(PressEnder); ok {
+			pe.PressEnd()
+		}
+		r.pressed, r.intercepted = w, true
+		return
 	}
 }
 
@@ -593,7 +661,7 @@ func (r *Router) Press(button uint32, p Point, mods Mods) {
 		setFocusStyle(r.focus, hit, false)
 		r.focus = hit
 	}
-	r.pressed = hit
+	r.pressed, r.pressAt, r.intercepted = hit, p, false
 	r.dragging = hit != nil
 	if pr, ok := hit.(PressSetter); ok {
 		pr.SetPressed(true)
@@ -683,7 +751,7 @@ func (r *Router) Release(button uint32, p Point) {
 		pr.SetPressed(false)
 	}
 	hit := r.Root.HitTest(p)
-	if hit == r.pressed && IsEnabled(hit) {
+	if !r.intercepted && hit == r.pressed && IsEnabled(hit) {
 		handled := false
 		if hit == r.lastClickWidget && time.Since(r.lastClick) < doubleClickWindow {
 			// Only widgets with a double-click behavior consume the
@@ -707,7 +775,7 @@ func (r *Router) Release(button uint32, p Point) {
 	if pe, ok := r.pressed.(PressEnder); ok {
 		pe.PressEnd()
 	}
-	r.pressed = nil
+	r.pressed, r.intercepted = nil, false
 	r.dragging = false
 }
 
@@ -733,7 +801,7 @@ func (r *Router) CancelPress() {
 	if pe, ok := r.pressed.(PressEnder); ok {
 		pe.PressEnd()
 	}
-	r.pressed = nil
+	r.pressed, r.intercepted = nil, false
 	r.dragging = false
 }
 

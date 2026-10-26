@@ -7814,6 +7814,24 @@ func (b *SwatchPickerBuilder) OnEdited(fn func(c render.Color)) *SwatchPickerBui
 	return b
 }
 
+// SwipeDismissBuilder builds a widget.SwipeDismiss.
+type SwipeDismissBuilder struct {
+	base[*widget.SwipeDismiss, *SwipeDismissBuilder]
+}
+
+// SwipeDismiss builds a widget.SwipeDismiss with widget.NewSwipeDismiss.
+func SwipeDismiss(child Node) *SwipeDismissBuilder {
+	b := &SwipeDismissBuilder{}
+	b.init(b, func(s *Scope) *widget.SwipeDismiss { return widget.NewSwipeDismiss(build(s, child)) })
+	return b
+}
+
+// OnDismiss sets the widget's OnDismiss field.
+func (b *SwipeDismissBuilder) OnDismiss(fn func(dir int)) *SwipeDismissBuilder {
+	b.do(func(_ *Scope, w *widget.SwipeDismiss) { w.OnDismiss = fn })
+	return b
+}
+
 // SwitchBuilder builds a widget.Switch.
 type SwitchBuilder struct {
 	base[*widget.Switch, *SwitchBuilder]
