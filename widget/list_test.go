@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -148,8 +149,8 @@ func TestListRowHit(t *testing.T) {
 	}
 }
 
-// paintedList is a 10-row list painted once, so its visible rows are
-// cached.
+// paintedList is a 10-row list laid out and painted once, so its
+// visible rows are realized.
 func paintedList(t *testing.T, mode SelectionMode) (*List, *countingModel) {
 	t.Helper()
 	model := newCountingModel(10)
@@ -169,7 +170,7 @@ func TestListRefreshRequeriesRowsKeepingState(t *testing.T) {
 	l.Select(3)
 	before := model.called[3]
 	l.Refresh()
-	l.Paint(render.New(make([]uint8, 100*60*4), 100*4, 100, 60))
+	l.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 60})
 	if model.called[3] != before+1 {
 		t.Errorf("row 3 asked %d times after Refresh, want %d", model.called[3], before+1)
 	}
@@ -196,7 +197,7 @@ func TestListResetDropsEverything(t *testing.T) {
 		if len(reports) != 1 || len(reports[0]) != 0 {
 			t.Errorf("mode %d: reports = %v, want one empty selection", mode, reports)
 		}
-		l.Paint(render.New(make([]uint8, 100*60*4), 100*4, 100, 60))
+		l.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 60})
 		if model.called[2] != before+1 {
 			t.Errorf("mode %d: row 2 not re-queried after Reset", mode)
 		}
@@ -557,4 +558,50 @@ func TestListRowNthChildIsTheModelIndex(t *testing.T) {
 		t.Fatal("the scroll left row 0 materialized; scroll further")
 	}
 	check("scrolled")
+}
+
+// Children lists the rows on screen in model order once the list is
+// laid out, and follows a scroll; Tab treats the list as one stop, its
+// rows passed by, and leaves it from a focused row (#385).
+func TestListChildrenAndTabStop(t *testing.T) {
+	l := NewList(newCountingModel(40), 10)
+	before, after := newFocusTarget(), newFocusTarget()
+	root := NewBox(Column, 0, 0)
+	root.Append(before, false).Append(l, true).Append(after, false)
+	root.Measure(Constraints{Max: Size{W: 100, H: 60}})
+	root.Arrange(render.Rect{W: 100, H: 60})
+
+	idx := func() []int {
+		var out []int
+		for _, k := range l.Children() {
+			out = append(out, k.(*listRow).idx)
+		}
+		return out
+	}
+	got := idx()
+	if len(got) == 0 || got[0] != 0 || !slices.IsSorted(got) {
+		t.Fatalf("children %v, want the rows on screen from 0, in order", got)
+	}
+	l.ScrollBy(0, 2)
+	if got := idx(); len(got) == 0 || got[0] == 0 || !slices.IsSorted(got) {
+		t.Errorf("children after a scroll %v, want the rows now on screen, in order", got)
+	}
+
+	r := &Router{Root: root}
+	r.FocusNext()
+	r.FocusNext()
+	if r.Focused() != Widget(l) {
+		t.Fatalf("second Tab focused %T, want the list as one stop", r.Focused())
+	}
+	r.FocusNext()
+	if r.Focused() != Widget(after) {
+		t.Errorf("third Tab focused %T, want past the list's rows to the next widget", r.Focused())
+	}
+	if err := r.SetFocus(l.Children()[0]); err != nil {
+		t.Fatal(err)
+	}
+	r.FocusNext()
+	if r.Focused() != Widget(after) {
+		t.Errorf("Tab from a focused row went to %T, want past its list", r.Focused())
+	}
 }

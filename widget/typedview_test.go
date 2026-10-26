@@ -122,13 +122,13 @@ func TestTypedListRecyclesRows(t *testing.T) {
 		t.Fatalf("%d rows live, want the 4 visible", len(l.core.rows.live))
 	}
 
-	l.offY = 40
+	l.setOffset(40)
 	l.Paint(cv)
 	if spy.setups != 4 || spy.binds != 6 || spy.unbinds != 2 {
 		t.Fatalf("after a scroll: %d setups, %d binds, %d unbinds", spy.setups, spy.binds, spy.unbinds)
 	}
 
-	l.offY = 9940 * 20
+	l.setOffset(9940 * 20)
 	l.Paint(cv)
 	if spy.setups > 8 || spy.binds != spy.setups+spy.unbinds {
 		t.Fatalf("deep scroll: %d setups, %d binds, %d unbinds", spy.setups, spy.binds, spy.unbinds)

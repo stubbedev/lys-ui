@@ -154,9 +154,13 @@ type A11yState struct {
 	Enabled bool
 	// Multiline distinguishes text areas from single-line entries.
 	Multiline bool
-	// Focusable reports whether Tab traversal can land on the widget,
-	// which is exactly the set of KeyActionHandler implementations.
+	// Focusable reports whether focus can land on the widget, by Tab,
+	// a click, SetFocus or an assistive technology: an enabled, rendered
+	// KeyActionHandler.
 	Focusable bool
+	// TabStop reports whether Tab traversal lands on it: focusable, and
+	// not a row of a list, whose rows are one stop with the list.
+	TabStop bool
 	// Bounds is the arranged rect, so a bridge can report extents.
 	Bounds render.Rect
 }
@@ -168,7 +172,7 @@ func Describe(w Widget) A11yState {
 	if w == nil {
 		return A11yState{}
 	}
-	st := A11yState{Role: RoleOf(w), Enabled: IsEnabled(w), Focusable: isFocusable(w)}
+	st := A11yState{Role: RoleOf(w), Enabled: IsEnabled(w), Focusable: isFocusable(w), TabStop: tabStop(w)}
 	if n := nodeOf(w); n != nil && n.accName != "" {
 		st.Name = n.accName
 	} else if t, ok := w.(TooltipTexter); ok {

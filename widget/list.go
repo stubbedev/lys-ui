@@ -383,9 +383,34 @@ func (l *List) scrollTo(i int) {
 	top, bottom := l.offY, l.offY+l.view.H
 	y := (i / l.columns()) * l.pitch()
 	if y < top {
-		l.offY = y
+		l.setOffset(y)
 	} else if y+l.rowH > bottom {
-		l.offY = y + l.rowH - l.view.H
+		l.setOffset(y + l.rowH - l.view.H)
+	}
+}
+
+// setOffset scrolls to y, clamped to the content, and lays the rows now
+// in view out.
+func (l *List) setOffset(y int) {
+	l.offY = min(max(0, y), l.scrollMax())
+	l.layoutRows()
+	l.Invalidate()
+}
+
+// layoutRows realizes the rows in view and arranges each in its cell:
+// virtualization is layout's work, so Paint only paints, and Children
+// lists the rows on screen.
+func (l *List) layoutRows() {
+	if l.rowH <= 0 {
+		return
+	}
+	first, last := l.visible()
+	for i := first; i < last; i++ {
+		w := l.rows[i]
+		// Parent first: the row measures and styles inside Arrange, and
+		// its cascade must reach the stylesheets above the list.
+		setParents(l, w)
+		w.Arrange(l.cellRect(i))
 	}
 }
 
@@ -462,6 +487,7 @@ func (l *List) Arrange(r render.Rect) {
 			l.scrollTo(i)
 		}
 	}
+	l.layoutRows()
 }
 
 // visible returns the half-open range of rows inside the viewport and
@@ -548,18 +574,11 @@ func (l *List) Paint(cv *render.Canvas) {
 	}
 	prev := cv.PushClip(l.view)
 
-	first, last := l.visible()
-	for i := first; i < last; i++ {
-		w := l.rows[i]
-		rect := l.cellRect(i)
-		// Parent first: the row measures and styles inside Arrange, and
-		// its cascade must reach the stylesheets above the list.
-		setParents(l, w)
-		w.Arrange(rect)
-		if l.mode == SelectionMultiple && i == l.cursor {
-			cv.BorderRect(rect, 1, th.Accent)
+	for _, r := range l.realized() {
+		if l.mode == SelectionMultiple && r.idx == l.cursor {
+			cv.BorderRect(r.Bounds(), 1, th.Accent)
 		}
-		PaintChild(cv, w)
+		PaintChild(cv, r)
 	}
 	cv.PopClip(prev)
 }
@@ -794,9 +813,8 @@ func (l *List) updateAutoScroll() {
 		return
 	}
 	if anim.Instant() {
-		l.offY = min(max(0, l.offY+dir*row), l.scrollMax())
+		l.setOffset(l.offY + dir*row)
 		l.applyDragSelection()
-		l.Invalidate()
 		return
 	}
 	if l.scrollAnim != nil && l.scrollDir == dir {
@@ -806,9 +824,8 @@ func (l *List) updateAutoScroll() {
 	l.scrollDir = dir
 	base := l.offY
 	l.scrollAnim = anim.Play(anim.Animate(listScrollStep, func(t float64) {
-		l.offY = min(max(0, base+int(float64(dir*row)*t)), l.scrollMax())
+		l.setOffset(base + int(float64(dir*row)*t))
 		l.applyDragSelection()
-		l.Invalidate()
 		if t >= 1 {
 			l.scrollAnim = nil
 			l.updateAutoScroll()
@@ -841,8 +858,7 @@ func (l *List) ScrollBy(dx, dy int) {
 		return
 	}
 	l.kin.stop()
-	l.offY = min(max(0, l.offY+dy*scrollStepPx), l.scrollMax())
-	l.Invalidate()
+	l.setOffset(l.offY + dy*scrollStepPx)
 }
 
 // ClickAt applies a press-and-release on the list itself: a row hit
@@ -1097,11 +1113,35 @@ func (l *List) appendStyleKids(buf []Widget) []Widget {
 	if l.probe != nil {
 		buf = append(buf, l.probe)
 	}
-	for _, i := range slices.Sorted(maps.Keys(l.rows)) {
-		buf = append(buf, l.rows[i])
+	for _, r := range l.realized() {
+		buf = append(buf, r)
 	}
 	return buf
 }
+
+// Children returns the realized rows in model order: the rows on
+// screen, each the proxy around its model widget. Rows off screen do
+// not exist.
+func (l *List) Children() []Widget {
+	kids := make([]Widget, 0, len(l.rows))
+	for _, r := range l.realized() {
+		kids = append(kids, r)
+	}
+	return kids
+}
+
+// realized is the realized rows in model order.
+func (l *List) realized() []*listRow {
+	rows := make([]*listRow, 0, len(l.rows))
+	for _, i := range slices.Sorted(maps.Keys(l.rows)) {
+		rows = append(rows, l.rows[i])
+	}
+	return rows
+}
+
+// focusGroup implements focusGroup: the rows are one Tab stop with the
+// list, the arrows moving the keyboard among them.
+func (l *List) focusGroup() {}
 
 // modelPosition implements modelPositioner: the row's place in the
 // model.
@@ -1145,7 +1185,6 @@ func (l *List) movePixels(dy float64) bool {
 	if off == l.offY {
 		return false
 	}
-	l.offY = off
-	l.Invalidate()
+	l.setOffset(off)
 	return true
 }

@@ -67,10 +67,10 @@ func TestShowcaseTabTraversal(t *testing.T) {
 		}
 	})
 
-	t.Run("the cycle is complete: every focusable control, one lap each", func(t *testing.T) {
+	t.Run("the cycle is complete: every Tab stop, one lap each", func(t *testing.T) {
 		var focusable []widget.A11yState
 		for _, st := range widget.DescribeTree(show.root) {
-			if st.Focusable {
+			if st.TabStop {
 				focusable = append(focusable, st)
 			}
 		}
@@ -102,7 +102,7 @@ func TestShowcaseTabTraversal(t *testing.T) {
 			t.Errorf("after a lap focus = %T, want wrapped back to %T", r.Focused(), start)
 		}
 		if len(seen) != len(focusable) {
-			t.Errorf("one lap visited %d controls, want every one of the %d focusable", len(seen), len(focusable))
+			t.Errorf("one lap visited %d controls, want every one of the %d Tab stops", len(seen), len(focusable))
 		}
 		for _, want := range expect {
 			if !seen[want] {

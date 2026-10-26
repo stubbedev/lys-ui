@@ -1197,7 +1197,7 @@ func (r *Router) focusStep(dir int) {
 	r.dropUnfocusable()
 	var order []Widget
 	focusWalker(r.focusScope(), func(w Widget) {
-		if isFocusable(w) {
+		if tabStop(w) {
 			order = append(order, w)
 		}
 	})
@@ -1206,8 +1206,12 @@ func (r *Router) focusStep(dir int) {
 	}
 	idx := 0
 	if r.focus != nil {
+		at := r.focus
+		if g := groupOf(at); g != nil {
+			at = g
+		}
 		for i, w := range order {
-			if w == r.focus {
+			if w == at {
 				idx = (i + dir + len(order)) % len(order)
 				break
 			}
@@ -1220,6 +1224,26 @@ func (r *Router) focusStep(dir int) {
 	// Keyboard focus scrolls into view (GtkViewport scroll-to-focus).
 	RevealRect(r.focus, boundsOf(r.focus))
 }
+
+// focusGroup is a widget whose focusable descendants are one Tab stop
+// with it: a List keeps the keyboard on its rows and moves it with the
+// arrows, so Tab passes its rows by, as GTK's list views do.
+type focusGroup interface{ focusGroup() }
+
+// groupOf is the outermost focus group above w, nil when none is.
+func groupOf(w Widget) Widget {
+	var g Widget
+	for p := parentOf(w); p != nil; p = parentOf(p) {
+		if _, ok := p.(focusGroup); ok {
+			g = p
+		}
+	}
+	return g
+}
+
+// tabStop reports whether Tab lands on w: focusable, and not inside a
+// focus group, which is its rows' one stop.
+func tabStop(w Widget) bool { return isFocusable(w) && groupOf(w) == nil }
 
 // FocusTrapper is a widget that can hold Tab traversal inside a part
 // of itself: a modal sheet over the content. FocusTrap returns that
@@ -1273,7 +1297,7 @@ func (r *Router) focusAfter(skip Widget) Widget {
 	}
 	for i := range order {
 		w := order[(start+i)%len(order)]
-		if isFocusable(w) && !inSubtree(w, skip) {
+		if tabStop(w) && !inSubtree(w, skip) {
 			return w
 		}
 	}
