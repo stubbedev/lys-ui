@@ -409,9 +409,8 @@ func (l *List) Arrange(r render.Rect) {
 // caches their proxy widgets, evicting everything off-screen.
 func (l *List) visible() (first, last int) {
 	n, c := l.model.len(), l.columns()
-	line := l.offY / l.rowH
-	first = min(line*c, max(0, n-1))
-	last = min(n, (line+l.viewH/l.rowH+1)*c)
+	first = min(l.offY/l.rowH*c, max(0, n-1))
+	last = min(n, ((l.offY+l.viewH)/l.rowH+1)*c)
 	for i := range l.rows {
 		if i < first || i >= last {
 			l.evict(i)

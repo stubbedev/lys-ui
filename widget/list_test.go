@@ -502,3 +502,15 @@ func TestListDragIconStacksTheRows(t *testing.T) {
 		t.Error("a press on an unselected row arms a stacked drag icon")
 	}
 }
+
+// A viewport whose top and bottom both cut a row builds the bottom one
+// too: rows 10px, 29px of view at offset 9 reach row 3 (#370).
+func TestListVisibleReachesThePartialBottomRow(t *testing.T) {
+	l := NewList(newCountingModel(10), 10)
+	l.Measure(Constraints{Max: Size{W: 100, H: 29}})
+	l.Arrange(render.Rect{W: 100, H: 29})
+	l.offY = 9
+	if first, last := l.visible(); first != 0 || last != 4 {
+		t.Errorf("visible rows [%d, %d), want [0, 4)", first, last)
+	}
+}
