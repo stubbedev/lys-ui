@@ -102,3 +102,24 @@ func TestWrappersPassTheirChildsMinimumThrough(t *testing.T) {
 		}
 	}
 }
+
+// A wrapping label beside a button in a short row wraps narrower and
+// taller so the button stays inside the row, as GTK lays them out.
+func TestWrappingLabelGivesWayToASibling(t *testing.T) {
+	face := goldenFace(t)
+	l := NewLabel(face, 14, strings.Repeat("a notice that wraps ", 12), 0)
+	l.SetWrap(true)
+	btn := NewButton(newStub(60, 20), 6, 4)
+	row := NewBox(Row, 8, 0)
+	row.Append(l, true)
+	row.Append(btn, false)
+	sz := row.Measure(Constraints{Max: Size{W: 300, H: 400}})
+	row.Arrange(render.Rect{W: 300, H: sz.H})
+	if b := btn.Bounds(); b.X+b.W > 300 {
+		t.Errorf("button ends at %d, want inside the 300px row", b.X+b.W)
+	}
+	lb := l.Bounds()
+	if need := l.Measure(Constraints{Max: Size{W: lb.W, H: 400}}).H; lb.H < need {
+		t.Errorf("label %dx%d, want the %d it needs wrapped at its width", lb.W, lb.H, need)
+	}
+}

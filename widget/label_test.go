@@ -208,8 +208,10 @@ func TestRowGivesWayToAnEllipsizingLabel(t *testing.T) {
 	wrapped.SetWrap(true)
 	wrapped.SetEllipsize(EllipsizeEnd)
 	wrapped.Measure(Constraints{Max: Size{W: 1000, H: 100}})
-	if got := wrapped.ShrinkableWidth(); got != 0 {
-		t.Errorf("a wrapping label offers %dpx of width", got)
+	// A wrapping label gives way down to its widest word, wrapping
+	// taller; the row measures it again at the width it gets.
+	if got, want := wrapped.ShrinkableWidth(), wrapped.Measure(Constraints{Max: Size{W: 1000, H: 100}}).W-wrapped.MinSize().W; got != want || got == 0 {
+		t.Errorf("a wrapping label offers %dpx of width, want %d, down to its widest word", got, want)
 	}
 }
 

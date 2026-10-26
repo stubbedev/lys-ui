@@ -526,12 +526,17 @@ func (l *Label) Measure(con Constraints) Size {
 	return l.measureStore(con, l.measured)
 }
 
-// ShrinkableWidth implements WidthShrinker: a single-line ellipsizing
-// label gives up its measured width down to the ellipsis and its CSS
-// box, the minimum GTK gives an ellipsized label. Wrapping and
-// clipping labels keep their width.
+// ShrinkableWidth implements WidthShrinker: a wrapping label gives up
+// its measured width down to its widest word (MinSize), wrapping onto
+// more lines, and a single-line ellipsizing one down to the ellipsis
+// and its CSS box: the minimums GTK gives them. A clipping label keeps
+// its width.
 func (l *Label) ShrinkableWidth() int {
-	if l.wrapOf(l.style(l)) || l.ellOf(l.style(l)) == EllipsizeNone {
+	v := l.style(l)
+	if l.wrapOf(v) {
+		return max(0, l.measured.W-l.MinSize().W)
+	}
+	if l.ellOf(v) == EllipsizeNone {
 		return 0
 	}
 	face, px := l.effStyle()
