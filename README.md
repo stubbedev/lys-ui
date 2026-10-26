@@ -61,6 +61,7 @@ implementation.
 | `i18n` | gettext catalogs (`.mo`, `.po`) |
 | `highlight` | syntax highlighters for the code view |
 | `media` | video and sound playback |
+| `media/mux` | MP4 and Matroska muxing of H.264, H.265 and Opus |
 | `pdf` | PDF writing |
 | `transfer` | the shared shape of clipboard and drag-and-drop content |
 | `dmabuf` | dma-buf frame descriptions |
