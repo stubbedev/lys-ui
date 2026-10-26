@@ -188,3 +188,44 @@ func TestAFillingCompositeGivesWayInARow(t *testing.T) {
 		t.Errorf("the item group ends at %d, past the 900px row", got.X+got.W)
 	}
 }
+
+// An overlay gives way as its main child would: a column short of room
+// shrinks the scroll under it, the overlaid child stays inside the
+// shrunk box, and the footer stays inside the column. Regression: an
+// Overlay was no Shrinker, so a file chooser's body took its full
+// height and pushed the buttons out of the panel.
+func TestOverlayShrinksItsScroll(t *testing.T) {
+	scroll := propagating(NewScroll(newStub(50, 300)))
+	badge := newStub(10, 10)
+	over := NewOverlay()
+	over.Append(scroll)
+	over.AppendAligned(badge, AlignEnd, AlignEnd)
+	footer := newStub(50, 30)
+	col := NewBox(Column, 0, 0)
+	col.Append(newStub(50, 20), false)
+	col.Append(over, true)
+	col.Append(footer, false)
+	layoutColumn(col, 60, 200)
+	if got := over.Bounds().H; got != 150 {
+		t.Errorf("overlay height = %d, want 150 (200 less the 50 around it)", got)
+	}
+	if got := scroll.Bounds().H; got != 150 {
+		t.Errorf("scroll height = %d, want the overlay's 150", got)
+	}
+	if b, o := badge.Bounds(), over.Bounds(); b.Y+b.H != o.Y+o.H {
+		t.Errorf("badge ends at %d, want the shrunk overlay's bottom %d", b.Y+b.H, o.Y+o.H)
+	}
+	if b := footer.Bounds(); b.Y+b.H != 200 {
+		t.Errorf("footer ends at %d, want inside the 200 box", b.Y+b.H)
+	}
+	// Only as far as the child that needs the most height lets it.
+	over.Measure(Constraints{Max: Size{W: 60, H: 1000}})
+	if got, want := over.Shrinkable(), 300-scrollFloor; got != want {
+		t.Errorf("shrinkable = %d, want %d", got, want)
+	}
+	over.Append(newStub(50, 100))
+	over.Measure(Constraints{Max: Size{W: 60, H: 1000}})
+	if got, want := over.Shrinkable(), 300-100; got != want {
+		t.Errorf("shrinkable over a 100px stub = %d, want %d", got, want)
+	}
+}

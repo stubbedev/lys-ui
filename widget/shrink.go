@@ -228,6 +228,21 @@ func (s *Stack) Shrinkable() int {
 	return tallest - floor
 }
 
+// Shrinkable implements Shrinker: every child shares the overlay's
+// rect, so it gives way as far as the child that needs the most height
+// lets it, a scrolled main child carrying its overlays down with it.
+func (o *Overlay) Shrinkable() int {
+	tallest, floor := 0, 0
+	for i, k := range o.kids {
+		if i >= len(o.nats) || !IsVisible(k) {
+			continue
+		}
+		tallest = max(tallest, o.nats[i])
+		floor = max(floor, o.nats[i]-shrinkableOf(k))
+	}
+	return tallest - floor
+}
+
 // pageFloor is the least height a page works at: its last measured
 // height less what it can give up.
 func (s *Stack) pageFloor(name string) int {

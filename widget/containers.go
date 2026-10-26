@@ -344,6 +344,9 @@ type Overlay struct {
 	// aligns holds the per-axis alignment of each child (index-matched
 	// with kids); AlignFill on both axes is a plain Append.
 	aligns [][2]Align
+	// nats is each child's height at the last Measure, zero for a
+	// hidden one (index-matched with kids), for Shrinkable.
+	nats []int
 }
 
 // NewOverlay returns an empty overlay.
@@ -375,11 +378,14 @@ func (o *Overlay) Measure(con Constraints) Size {
 	v := o.style(o)
 	return o.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
 		best := Size{}
-		for _, k := range o.kids {
+		o.nats = slices.Grow(o.nats[:0], len(o.kids))[:len(o.kids)]
+		for i, k := range o.kids {
+			o.nats[i] = 0
 			if !IsVisible(k) {
 				continue
 			}
 			nat := measureChild(o, k, inner)
+			o.nats[i] = nat.H
 			best.W = max(best.W, nat.W)
 			best.H = max(best.H, nat.H)
 		}
