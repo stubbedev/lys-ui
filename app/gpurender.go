@@ -78,7 +78,7 @@ func (a *Application) renderer() (*gpuRenderer, error) {
 			a.gpuErr = fmt.Errorf("app: %s=gpu: %w", rendererEnv, err)
 			return nil, a.gpuErr
 		}
-		debug.Log("gpu", "drawing on the CPU: %v", err)
+		logutil.L().Info("app: no GPU renderer; every window draws on the CPU", "err", err)
 		return nil, nil
 	}
 	debug.Log("gpu", "drawing on %s in %d modifier(s)", r.dev.Name(), len(r.modifiers))

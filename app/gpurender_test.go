@@ -1,13 +1,16 @@
 package app
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
 	"github.com/stubbedev/lys-ui/gpu"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/gputest"
+	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/render"
 	"github.com/stubbedev/lys-ui/widget"
@@ -134,5 +137,24 @@ func TestReconnectReagreesRenderer(t *testing.T) {
 		if a.gpu != nil {
 			a.gpu.dev.Close()
 		}
+	}
+}
+
+// Falling back to the CPU says so once, at Info, with the reason: an
+// application installed where no Vulkan driver loads (Nix on another
+// distribution) otherwise renders slowly without a word.
+func TestRendererFallbackIsLogged(t *testing.T) {
+	t.Setenv(rendererEnv, "auto")
+	var log bytes.Buffer
+	logutil.Set(slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { logutil.Set(nil) })
+	a := &Application{sess: &wlsession.Session{}}
+	for range 2 {
+		if r, err := a.renderer(); r != nil || err != nil {
+			t.Fatalf("renderer = %v, %v; want the CPU", r, err)
+		}
+	}
+	if n := strings.Count(log.String(), "draws on the CPU"); n != 1 || !strings.Contains(log.String(), "no linux-dmabuf") {
+		t.Errorf("log %q: want one fallback line naming the reason", log.String())
 	}
 }
