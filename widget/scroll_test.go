@@ -17,6 +17,23 @@ func newScrollFixture(t *testing.T) *Scroll {
 	return s
 }
 
+// A scroll's bars keep 1px off the viewport's outer edge and both ends
+// of their axis (#318).
+func TestScrollBarsInsetFromTheEdges(t *testing.T) {
+	s := NewScroll(newStub(200, 200))
+	s.ShowBars = true
+	s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+	s.Arrange(render.Rect{X: 10, Y: 20, W: 60, H: 60})
+	v, _ := s.vBarGeometry()
+	if v.X+v.W != 10+60-1 || v.Y != 20+1 || v.Y+v.H != 20+s.viewH-1 {
+		t.Errorf("vertical track %v, want 1px off the right, top and bottom of the viewport", v)
+	}
+	h, _ := s.hBarGeometry()
+	if h.Y+h.H != 20+60-1 || h.X != 10+1 || h.X+h.W != 10+s.viewW-1 {
+		t.Errorf("horizontal track %v, want 1px off the bottom, left and right of the viewport", h)
+	}
+}
+
 // TestScrollHandleDrag pins the 1:1 handle mapping: grabbing the
 // handle and moving the pointer down scales pointer motion by the
 // viewport-to-track ratio into content offset.

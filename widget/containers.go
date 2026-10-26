@@ -525,6 +525,10 @@ type Scroll struct {
 // gutter is the scrollbar strip width reserved inside the viewport.
 const gutter = 8
 
+// barInset keeps a bar's track off the viewport's outer edge and off
+// both ends of its axis.
+const barInset = 1
+
 // barDwell is how long the bars stay after the last scroll or hover;
 // barFade is the fade duration through the anim package.
 const (
@@ -954,25 +958,27 @@ func (s *Scroll) HitTest(p Point) Widget {
 	return s
 }
 
-// vBarGeometry returns the vertical track and handle rects; the track
-// width is zero without bars or vertical overflow.
+// vBarGeometry returns the vertical track and handle rects, barInset
+// from the viewport's right, top and bottom; the track width is zero
+// without bars or vertical overflow.
 func (s *Scroll) vBarGeometry() (track, handle render.Rect) {
 	r := s.AxisRange(Column)
 	if !s.ShowBars || !r.Overflows() {
 		return track, handle
 	}
-	track = render.Rect{X: s.view.X + s.view.W - gutter, Y: s.view.Y, W: gutter, H: s.viewH}
+	track = render.Rect{X: s.view.X + s.view.W - gutter, Y: s.view.Y + barInset, W: gutter - barInset, H: s.viewH - 2*barInset}
 	return track, r.thumbRect(track, Column)
 }
 
-// hBarGeometry returns the horizontal track and handle rects; the
-// track height is zero without bars or horizontal overflow.
+// hBarGeometry returns the horizontal track and handle rects, barInset
+// from the viewport's bottom, left and right; the track height is zero
+// without bars or horizontal overflow.
 func (s *Scroll) hBarGeometry() (track, handle render.Rect) {
 	r := s.AxisRange(Row)
 	if !s.ShowBars || !r.Overflows() {
 		return track, handle
 	}
-	track = render.Rect{X: s.view.X, Y: s.view.Y + s.view.H - gutter, W: s.viewW, H: gutter}
+	track = render.Rect{X: s.view.X + barInset, Y: s.view.Y + s.view.H - gutter, W: s.viewW - 2*barInset, H: gutter - barInset}
 	return track, r.thumbRect(track, Row)
 }
 

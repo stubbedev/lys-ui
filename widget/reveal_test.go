@@ -155,7 +155,7 @@ func TestScrollCSSBox(t *testing.T) {
 	s.SetOffset(0, scrollStepPx)
 	s.Arrange(render.Rect{W: 100, H: 80})
 	track, _ := s.vBarGeometry()
-	if track.X+track.W != 100-7 || track.Y != 7 {
+	if track.X+track.W != 100-7-barInset || track.Y != 7+barInset {
 		t.Errorf("bar track %v, want inside the padding", track)
 	}
 
