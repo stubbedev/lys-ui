@@ -39,6 +39,26 @@ gpu:
     LYS_UI_TEST_GPU=lavapipe go test -count=1 ./gpu/... ./widget
     LYS_UI_TEST_GPU=lavapipe go test -count=1 -run GPU ./app
 
+# The GPU paths on this host's own GPU, under the validation layer:
+# the renderer, dmabuf export and the video encoder, the widget goldens
+# drawn on the GPU and the app's GPU frames, then the dmabuf capture
+# tests against a headless sway rendering on the same GPU. For AMD and
+# Intel machines, which CI's lavapipe cannot stand in for: lavapipe
+# has no video encoder and no compositor-side dmabuf import.
+gpu-host:
+    #!/bin/sh
+    rc=0
+    LYS_UI_TEST_GPU=host go test -count=1 -v ./gpu/... 2>&1 | grep -vE '^=== (RUN|PAUSE|CONT)' || rc=1
+    LYS_UI_TEST_GPU=host go test -count=1 ./widget || rc=1
+    LYS_UI_TEST_GPU=host go test -count=1 -run GPU ./app || rc=1
+    dir=$(mktemp -d /tmp/lys-ui-gpu-host.XXXXXX)
+    LYS_UI_TEST_WLR_RENDERER=vulkan just test-env "$dir" || exit 1
+    trap 'just test-env-stop "$dir"' EXIT INT TERM
+    . "$dir/client.env"
+    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$dir" LYS_UI_HEADLESS=1
+    go test -count=1 -v -run Dmabuf ./capture 2>&1 | grep -vE '^=== (RUN|PAUSE|CONT)' || rc=1
+    exit $rc
+
 # Run the suite under the race detector. It needs cgo, so only this
 # recipe enables it, with the dev shell's pinned C compiler
 # (LYS_UI_RACE_CC); allocation budgets skip under -race, whose
@@ -271,12 +291,15 @@ test-env dir=test_dir:
     # Inside the dev shell (CI runs `nix develop -c just headless`)
     # sway is already on PATH, so the dev shell is only the fallback
     # for a host shell.
-    boot="exec sway -c '$dir/sway.cfg'"
+    # LYS_UI_TEST_WLR_RENDERER picks sway's renderer: pixman (the
+    # default, no GPU) or gles2 / vulkan on the host's GPU, which the
+    # dmabuf capture tests need (gpu-host).
+    boot="exec sway --unsupported-gpu -c '$dir/sway.cfg'"
     if ! command -v sway >/dev/null 2>&1; then
-        boot="exec nix develop -c sway -c '$dir/sway.cfg'"
+        boot="exec nix develop -c sway --unsupported-gpu -c '$dir/sway.cfg'"
     fi
     DBUS_SESSION_BUS_ADDRESS="$bus" XDG_RUNTIME_DIR="$dir" WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
-        WLR_RENDERER=pixman sh -c "echo \$\$ > '$dir/sway.pid'; $boot" \
+        WLR_RENDERER="${LYS_UI_TEST_WLR_RENDERER:-pixman}" sh -c "echo \$\$ > '$dir/sway.pid'; $boot" \
         >"$dir/sway.log" 2>&1 &
     sock=""
     for i in $(seq 1 50); do
