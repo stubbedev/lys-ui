@@ -442,7 +442,7 @@ func (w *hostWindow) create() (*buffer.Buffer, error) {
 	bw, bh := w.layoutSize()
 	dw, dh := scale.DeviceSize(bw, w.frac120), scale.DeviceSize(bh, w.frac120)
 	if w.renderer != nil {
-		return w.renderer.newBuffer(w.sess, dw, dh, w.scale)
+		return w.renderer.NewBuffer(w.sess, dw, dh, w.scale)
 	}
 	return buffer.NewFile(w.sess.Shm(), dw, dh, w.scale)
 }
@@ -848,7 +848,7 @@ func (w *hostWindow) draw() bool {
 		return true
 	}
 
-	if w.renderer != nil && w.renderer.failed != nil {
+	if w.renderer != nil && w.renderer.Failed() {
 		w.dropRenderer()
 	}
 	b, err := w.pool.Acquire()
@@ -892,17 +892,15 @@ func (w *hostWindow) draw() bool {
 		bw, bh, w.frac120, len(rects), region.W, region.H)
 
 	if b.Target != nil {
-		cv := w.renderer.rec.ResetRecorder(b.Width, b.Height, w.devNum(), scale.Denom)
-		w.paintTree(cv, region)
-		if err := w.renderer.render(cv.Recording(), b.Target); err != nil {
-			if w.renderer.required {
-				w.drawErr = fmt.Errorf("app: GPU frame: %w", err)
-				return false
-			}
+		ok, err := w.renderer.Frame(b, w.devNum(), func(cv *render.Canvas) { w.paintTree(cv, region) })
+		if err != nil {
+			w.drawErr = err
+			return false
+		}
+		if !ok {
 			// The frame never reached the compositor: its buffer goes
 			// back, the window turns to the CPU, and the next pass
 			// repaints it whole into shared memory.
-			w.renderer.fail(err)
 			b.Release()
 			w.dropRenderer()
 			w.pendingRects = append(w.pendingRects, render.Rect{W: bw, H: bh})

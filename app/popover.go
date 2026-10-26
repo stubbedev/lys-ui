@@ -497,7 +497,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	op := &openPopover{
 		host:       host,
 		pop:        pop,
-		painter:    pop.NewPainter(a.sess, a.fracFor(host), keyRoot, widget.Current().Surface),
+		painter:    pop.NewPainter(a.sess, a.popupRenderer(), a.fracFor(host), keyRoot, widget.Current().Surface),
 		router:     router,
 		keyRoot:    keyRoot,
 		popover:    p,

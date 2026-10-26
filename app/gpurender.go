@@ -11,6 +11,8 @@ import (
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/debug"
 	"github.com/stubbedev/lys-ui/internal/logutil"
+	"github.com/stubbedev/lys-ui/internal/popup"
+	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/render"
 )
@@ -142,9 +144,38 @@ func (a *Application) reagreeRenderer() error {
 	return nil
 }
 
-// newBuffer is a dmabuf buffer of r for a bufW x bufH window.
-func (r *gpuRenderer) newBuffer(sess *wlsession.Session, bufW, bufH, scale int) (*buffer.Buffer, error) {
+// NewBuffer is a dmabuf buffer of r for a bufW x bufH surface.
+func (r *gpuRenderer) NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) (*buffer.Buffer, error) {
 	return buffer.NewDmabuf(r.dev, sess.Dmabuf(), bufW, bufH, scale, r.modifiers)
+}
+
+// Frame renders paint into b's target at device scale num over
+// scale.Denom. A failed frame turns every surface to the CPU (fail)
+// and reports false; with the GPU required it is the error.
+func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, paint func(cv *render.Canvas)) (bool, error) {
+	cv := r.rec.ResetRecorder(b.Width, b.Height, num, scale.Denom)
+	paint(cv)
+	if err := r.render(cv.Recording(), b.Target); err != nil {
+		if r.required {
+			return false, fmt.Errorf("app: GPU frame: %w", err)
+		}
+		r.fail(err)
+		return false, nil
+	}
+	return true, nil
+}
+
+// Failed reports whether a frame failed, turning every surface to the
+// CPU.
+func (r *gpuRenderer) Failed() bool { return r.failed != nil }
+
+// popupRenderer is what popups draw with: the GPU renderer while it
+// draws, nil (the CPU) otherwise.
+func (a *Application) popupRenderer() popup.Renderer {
+	if a.gpu == nil || a.gpu.Failed() {
+		return nil
+	}
+	return a.gpu
 }
 
 // closeRenderer releases the GPU once every window has gone.

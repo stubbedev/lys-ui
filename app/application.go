@@ -944,7 +944,7 @@ func (a *Application) updateTips(now time.Time) {
 			// A nil *popup.Popup must not be wrapped: the interface
 			// would carry a typed nil that the nil checks below let
 			// through to a dereference.
-			tp, pc := openTooltip(w.sess, w.host, a.resolveFace(nil), a.tooltipOpts, w.frac120, int(w.input.x), int(w.input.y), h, text)
+			tp, pc := openTooltip(w.sess, a.popupRenderer(), w.host, a.resolveFace(nil), a.tooltipOpts, w.frac120, int(w.input.x), int(w.input.y), h, text)
 			if tp == nil {
 				return nil, nil
 			}

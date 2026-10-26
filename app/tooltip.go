@@ -237,7 +237,7 @@ func tooltipAnchor(hover widget.Widget, pointerX, pointerY int, window render.Re
 // use, without a second wayland dispatcher. Tooltips are ungrabbed
 // (NoGrab), so the fades never hold input hostage. A hovered widget
 // with markup (SetTooltipMarkup) renders through a RichLabel.
-func openTooltip(sess *wlsession.Session, host Host, face *render.Typeface, opts TooltipOptions, frac120 uint32, pointerX, pointerY int, hover widget.Widget, text string) (*popup.Popup, *popup.Painter) {
+func openTooltip(sess *wlsession.Session, gpu popup.Renderer, host Host, face *render.Typeface, opts TooltipOptions, frac120 uint32, pointerX, pointerY int, hover widget.Widget, text string) (*popup.Popup, *popup.Painter) {
 	xdgParent, layerParent, ok := popupParentOf(host)
 	if !ok || face == nil {
 		debug.Log("input", "tooltip unavailable: host %T or nil face", host)
@@ -276,7 +276,7 @@ func openTooltip(sess *wlsession.Session, host Host, face *render.Typeface, opts
 	// the state machine re-seals on dismissal, and later commits keep
 	// the region (double-buffered state persists until changed).
 	tp.SealInput()
-	painter := tp.NewPainter(sess, frac120, box, widget.Current().Surface)
+	painter := tp.NewPainter(sess, gpu, frac120, box, widget.Current().Surface)
 	debug.Log("input", "tooltip open %q under %+v", text, anchor)
 	return tp, painter
 }

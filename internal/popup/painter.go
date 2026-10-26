@@ -21,12 +21,24 @@ import (
 	"github.com/stubbedev/lys-ui/widget"
 )
 
+// Renderer draws a popup's frames on the GPU, as its window's are: the
+// buffers it renders into and the frame a paint becomes there. A frame
+// that fails reports false, after which Failed holds and the popup
+// draws on the CPU; an error ends the popup.
+type Renderer interface {
+	NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) (*buffer.Buffer, error)
+	Frame(b *buffer.Buffer, num int, paint func(cv *render.Canvas)) (bool, error)
+	Failed() bool
+}
+
 // Painter owns one popup surface's buffer pool and frame pacing.
 // Pass drives at most one frame per call; the owning loop calls it
 // once per pass and parks however it likes between passes.
 type Painter struct {
 	p *Popup
 
+	sess    *wlsession.Session
+	gpu     Renderer // nil draws on the CPU
 	pool    *buffer.Pool
 	surf    *wl.Surface
 	frac120 uint32
@@ -34,10 +46,9 @@ type Painter struct {
 	noPlate bool          // Config.NoPlate: the content paints its own look
 	gutter  int           // the shadow margin the content is inset by
 	visual  widget.Widget // the morph wrapper around the content, plate included
-	// create allocates a buffer at the popup's current size; w, h is
-	// the size the pool's buffers have, so a resize retires them.
-	create func() (*buffer.Buffer, error)
-	w, h   int
+	// w, h is the size the pool's buffers have, so a resize retires
+	// them.
+	w, h int
 
 	frameReady   bool
 	framePending bool
@@ -46,29 +57,25 @@ type Painter struct {
 
 // NewPainter wraps root in the tween view (seeded from the
 // coordinator, so the first frame is the hidden or offset one, never a
-// flash of the finished surface) and returns the frame driver.
-func (p *Popup) NewPainter(sess *wlsession.Session, frac120 uint32, root widget.Widget, bg render.Color) *Painter {
+// flash of the finished surface) and returns the frame driver. A
+// non-nil gpu draws the frames on the GPU.
+func (p *Popup) NewPainter(sess *wlsession.Session, gpu Renderer, frac120 uint32, root widget.Widget, bg render.Color) *Painter {
 	if frac120 == 0 {
 		frac120 = scale.Denom
-	}
-	create := func() (*buffer.Buffer, error) {
-		w, h := p.Size()
-		return buffer.NewFile(sess.Shm(),
-			scale.DeviceSize(w, frac120), scale.DeviceSize(h, frac120),
-			scale.IntegerScale(frac120))
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	pc := &Painter{
 		p:       p,
-		pool:    buffer.New(create, 2),
+		sess:    sess,
+		gpu:     gpu,
 		surf:    p.WLSurface,
 		frac120: frac120,
 		bg:      bg,
 		noPlate: p.cfg.NoPlate,
 		gutter:  p.gutter,
-		create:  create,
 	}
+	pc.pool = buffer.New(pc.create, 2)
 	reveal, morph := p.fx.Visual()
 	p.anim = newAnimView(root, reveal, morph, p.gravity, p.gutter, pc.paintPlate)
 	pc.visual = p.anim.morph
@@ -76,6 +83,24 @@ func (p *Popup) NewPainter(sess *wlsession.Session, frac120 uint32, root widget.
 	pc.dirty.Store(true)
 	p.painter = pc
 	return pc
+}
+
+// create allocates a buffer at the popup's current size: a GPU target
+// while the popup draws on the GPU, shared memory otherwise.
+func (pc *Painter) create() (*buffer.Buffer, error) {
+	w, h := pc.p.Size()
+	dw, dh, s := scale.DeviceSize(w, pc.frac120), scale.DeviceSize(h, pc.frac120), scale.IntegerScale(pc.frac120)
+	if pc.gpu != nil {
+		return pc.gpu.NewBuffer(pc.sess, dw, dh, s)
+	}
+	return buffer.NewFile(pc.sess.Shm(), dw, dh, s)
+}
+
+// dropGPU turns the popup to the CPU after a GPU frame failed: the pool
+// retires its targets for shared-memory buffers.
+func (pc *Painter) dropGPU() {
+	pc.gpu = nil
+	pc.pool.Resize(pc.create)
 }
 
 // frameDone flips ready when the compositor reports the frame as taken
@@ -118,6 +143,9 @@ func (pc *Painter) Pass() (bool, error) {
 		return true, nil
 	}
 	pc.dirty.Store(false)
+	if pc.gpu != nil && pc.gpu.Failed() {
+		pc.dropGPU()
+	}
 	if w, h := pc.p.Size(); w != pc.w || h != pc.h {
 		// The popup was re-placed at a new size: buffers of the old one
 		// retire as they come back.
@@ -145,14 +173,16 @@ func (pc *Painter) Pass() (bool, error) {
 	pc.visual.Measure(widget.Constraints{Max: widget.Size{W: w, H: h}})
 	pc.visual.Arrange(render.Rect{W: w, H: h})
 
-	cv := render.NewScaled(b.Data, b.Stride, b.Width, b.Height, int(pc.frac120), scale.Denom)
-	// The surface raw-clears to transparent: with a shadow gutter the
-	// falloff must blend over whatever the popup floats above, and a
-	// recycled buffer must not leak its last frame through. The morph
-	// paints shadow, plate and content together, so the motion carries
-	// the elevation with the popup.
-	cv.ClearDevice(cv.Rect(), render.Color(0))
-	pc.visual.Paint(cv)
+	drawn, err := pc.paint(b)
+	if err != nil {
+		p.mu.Unlock()
+		return false, err
+	}
+	if !drawn {
+		p.mu.Unlock()
+		pc.dirty.Store(true)
+		return true, nil
+	}
 
 	if err := pc.surf.Attach(b.WL, 0, 0); err != nil {
 		p.mu.Unlock()
@@ -180,6 +210,33 @@ func (pc *Painter) Pass() (bool, error) {
 	pc.framePending = true
 	debug.Log("frame", "popup %d frame %dx%d", pc.surf.Id(), b.Width, b.Height)
 	return true, nil
+}
+
+// paint draws the visual into b: through the GPU renderer into a
+// target, onto shared memory otherwise. A GPU frame that failed never
+// reaches the compositor: b goes back, the popup turns to the CPU, and
+// paint reports false for the next pass to repaint.
+func (pc *Painter) paint(b *buffer.Buffer) (bool, error) {
+	// The surface raw-clears to transparent: with a shadow gutter the
+	// falloff must blend over whatever the popup floats above, and a
+	// recycled buffer must not leak its last frame through. The morph
+	// paints shadow, plate and content together, so the motion carries
+	// the elevation with the popup.
+	draw := func(cv *render.Canvas) {
+		cv.ClearDevice(cv.Rect(), render.Color(0))
+		pc.visual.Paint(cv)
+	}
+	if b.Target == nil {
+		draw(render.NewScaled(b.Data, b.Stride, b.Width, b.Height, int(pc.frac120), scale.Denom))
+		return true, nil
+	}
+	ok, err := pc.gpu.Frame(b, int(pc.frac120), draw)
+	if err != nil || ok {
+		return ok, err
+	}
+	b.Release()
+	pc.dropGPU()
+	return false, nil
 }
 
 // Close releases the painter's pool storage back to the session arena.

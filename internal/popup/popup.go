@@ -498,7 +498,7 @@ func (p *Popup) MarkFrame() {
 // second dispatcher (tooltips) use NewPainter from the application
 // loop instead.
 func Run(sess *wlsession.Session, p *Popup, frac120 uint32, root widget.Widget, bg render.Color, keys widget.KeyActionHandler) error {
-	frame := p.NewPainter(sess, frac120, root, bg)
+	frame := p.NewPainter(sess, nil, frac120, root, bg)
 	defer frame.Close()
 
 	router := &widget.Router{Root: root}
