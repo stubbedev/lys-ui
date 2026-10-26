@@ -869,10 +869,15 @@ func clampSize(s Size, con Constraints) Size {
 // it for that child, the keyboard focus ring (render.Canvas.MarkFocus),
 // so later siblings cover the ring. Containers defined outside the kit
 // call it for their children too; one that does not still gets the ring,
-// drawn over the whole frame at its end. A child its computed
-// visibility hides paints nothing — a Box still paints its children,
-// which may show themselves (visibility: visible inside a hidden box).
+// drawn over the whole frame at its end. A child hidden by SetVisible
+// or display: none paints nothing, whoever its container is, and nor
+// does one its computed visibility hides, except that a Box still
+// paints its children, which may show themselves (visibility: visible
+// inside a hidden box).
 func PaintChild(cv *render.Canvas, w Widget) {
+	if !ownVisible(w) {
+		return
+	}
 	if !shown(w) {
 		if _, ok := w.(contentsHost); !ok {
 			return

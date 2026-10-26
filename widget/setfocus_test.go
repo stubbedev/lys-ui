@@ -189,3 +189,30 @@ func TestForgetKeepsFocusVisibility(t *testing.T) {
 		}
 	}
 }
+
+// paintRecorder records whether it painted.
+type paintRecorder struct {
+	node
+	painted bool
+}
+
+func (p *paintRecorder) Measure(con Constraints) Size { return clampSize(Size{W: 10, H: 10}, con) }
+func (p *paintRecorder) Paint(*render.Canvas)         { p.painted = true }
+func (p *paintRecorder) HitTest(Point) Widget         { return nil }
+
+// A container from outside the kit that paints every child through
+// PaintChild still paints nothing for one hidden with SetVisible.
+func TestPaintChildSkipsAHiddenWidget(t *testing.T) {
+	w := &paintRecorder{}
+	cv := render.New(make([]byte, render.Stride(10)*10), render.Stride(10), 10, 10)
+	PaintChild(cv, w)
+	if !w.painted {
+		t.Fatal("a visible widget did not paint")
+	}
+	w.painted = false
+	w.SetVisible(false)
+	PaintChild(cv, w)
+	if w.painted {
+		t.Error("a widget hidden with SetVisible(false) painted")
+	}
+}
