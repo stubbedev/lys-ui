@@ -1,13 +1,13 @@
 module github.com/stubbedev/lys-ui
 
-go 1.27.1
+go 1.27.3
 
 require (
 	github.com/go-text/typesetting v0.3.5
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/jfreymuth/pulse v0.1.3
 	github.com/neurlang/wayland v0.4.5
-	github.com/stubbedev/lys-lib v0.1.0
+	github.com/stubbedev/lys-lib v0.1.1-0.20261026142145-4dd7053ef2cc
 	github.com/unxed/xkb-go v0.1.8
 	golang.org/x/image v0.46.0
 	golang.org/x/sys v0.48.0

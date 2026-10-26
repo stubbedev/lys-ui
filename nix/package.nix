@@ -21,7 +21,7 @@
             );
           };
           env.CGO_ENABLED = "0";
-          vendorHash = "sha256-QEx06iY+AJ4iU6PhWLYZQdUG1OwDE1/0b0VhOjd0BFc=";
+          vendorHash = "sha256-pPMRWTTkLXEGlhjZZ55yt0ZGQ6msEnYN5PewfyMEJnw=";
           doCheck = false;
           # The GPU renderer loads the Vulkan loader at run time (no
           # cgo, so no rpath): the binaries find it through the
