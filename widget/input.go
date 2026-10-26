@@ -848,9 +848,15 @@ func (r *Router) Forget(w Widget) {
 		r.gestureTarget = nil
 	}
 	if inSubtree(r.focus, w) {
+		// The focus moves on as visible as it was: a pointer-given focus
+		// keeps no ring, a keyboard one keeps it.
+		visible := false
+		if n := nodeOf(r.focus); n != nil {
+			visible = n.focusVisible
+		}
 		setFocusStyle(r.focus, nil, false)
 		r.focus = r.focusAfter(w)
-		setFocusStyle(nil, r.focus, true)
+		setFocusStyle(nil, r.focus, visible)
 	}
 	if inSubtree(r.dragTarget, w) {
 		r.applyDragTarget(nil, false)

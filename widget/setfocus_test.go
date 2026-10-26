@@ -147,3 +147,36 @@ func TestCaretOnlyWhileFocused(t *testing.T) {
 		}
 	}
 }
+
+// A removed widget's focus moves on as visible as it was: a pointer
+// press gave it no ring, so the next widget takes none either; a
+// keyboard focus keeps its ring (#336).
+func TestForgetKeepsFocusVisibility(t *testing.T) {
+	face := goldenFace(t)
+	for _, keyboard := range []bool{false, true} {
+		a, b := NewButton(NewLabel(face, 14, "a", 0), 4, 4), NewButton(NewLabel(face, 14, "b", 0), 4, 4)
+		root := NewBox(Column, 0, 0)
+		root.Append(a, false)
+		root.Append(b, false)
+		arrangeTree(t, root, 100, 80)
+		r := &Router{Root: root}
+		if keyboard {
+			r.FocusNext()
+		} else {
+			p := Point{X: a.Bounds().X + 2, Y: a.Bounds().Y + 2}
+			r.Press(BTNLeft, p, 0)
+			r.Release(BTNLeft, p)
+		}
+		if r.Focused() != Widget(a) {
+			t.Fatalf("keyboard %v: focus on %T, want a", keyboard, r.Focused())
+		}
+		root.Remove(a)
+		r.Forget(a)
+		if r.Focused() != Widget(b) {
+			t.Fatalf("keyboard %v: focus moved to %T, want b", keyboard, r.Focused())
+		}
+		if b.focusVisible != keyboard {
+			t.Errorf("keyboard %v: the moved focus shows a ring %v", keyboard, b.focusVisible)
+		}
+	}
+}
