@@ -87,7 +87,7 @@ func (w *hostWindow) setInspect(on bool) {
 	}
 	bw, bh := w.layoutSize()
 	if bw > 0 && bh > 0 {
-		w.pendingRects = append(w.pendingRects, render.Rect{W: bw, H: bh})
+		w.damage.Full(render.Rect{W: bw, H: bh})
 	}
 	w.dirty = true
 }

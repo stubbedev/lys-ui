@@ -85,7 +85,7 @@ func TestWindowInspectToggle(t *testing.T) {
 	}
 	// The full-window rect must be pending, so the annotations
 	// actually appear even though no widget invalidated.
-	if _, any := widget.CollectDamage(w.router.Root); !any && len(w.pendingRects) == 0 {
+	if _, any := widget.CollectDamage(w.router.Root); !any && w.damage.Empty() {
 		t.Error("no full-repaint rect queued; toggle would paint nothing")
 	}
 

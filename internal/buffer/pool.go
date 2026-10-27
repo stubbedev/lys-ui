@@ -267,6 +267,40 @@ func CopyRect(dst, src *Buffer, r render.Rect) {
 	}
 }
 
+// Copier copies rects between two GPU targets' buffers: a surface's
+// GPU renderer. A copy it cannot make reports false, with the error
+// when the GPU failed.
+type Copier interface {
+	Copy(dst, src *Buffer, r render.Rect) (bool, error)
+}
+
+// CopyForward brings b up to the screen where it is stale by copying
+// that region from the front buffer, which shows what the screen does,
+// instead of painting it: a buffer that sat out frames (the third,
+// taken while frames outpace releases) can owe most of the surface.
+// Shared-memory buffers copy on the CPU, GPU targets through gpu (nil
+// when the surface has no renderer). A copy that cannot be made leaves
+// b stale, for the frame to paint; the GPU's error comes back.
+func (p *Pool) CopyForward(b *Buffer, gpu Copier) error {
+	front := p.front
+	stale := b.Stale.Intersect(render.Rect{W: b.Width, H: b.Height})
+	if stale.Empty() || front == nil || front == b || front.Width != b.Width || front.Height != b.Height {
+		return nil
+	}
+	switch {
+	case b.Target != nil && front.Target != nil && gpu != nil:
+		if ok, err := gpu.Copy(b, front, stale); !ok {
+			return err
+		}
+	case b.Data != nil && front.Data != nil:
+		CopyRect(b, front, stale)
+	default:
+		return nil
+	}
+	b.Stale = render.Rect{}
+	return nil
+}
+
 // Resize swaps the pool to a new buffer size. Free buffers are disposed
 // on the spot; buffers the compositor still holds are preserved - their
 // wl_buffer objects and arena slots stay alive until the release event

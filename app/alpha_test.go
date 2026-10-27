@@ -99,7 +99,7 @@ func TestTranslucentBackgroundCompositesThroughTheBufferPath(t *testing.T) {
 
 	h := newPaintHarness(root, 64, 32)
 	h.wnd.cfg.background = render.RGBA(br, bg_, bb, ba)
-	h.wnd.pendingRects = append(h.wnd.pendingRects, render.Rect{W: 64, H: 32})
+	h.wnd.damage.Full(render.Rect{W: 64, H: 32})
 	painted, damage := h.frame()
 	if painted == 0 {
 		t.Fatal("frame painted nothing; harness broken")

@@ -36,6 +36,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
 	"github.com/stubbedev/lys-ui/internal/inspect"
 	"github.com/stubbedev/lys-ui/internal/intconv"
+	"github.com/stubbedev/lys-ui/internal/repaint"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/touchinput"
@@ -150,16 +151,9 @@ type hostWindow struct {
 	// moved - another widget focused, or one that steers its ring (a
 	// code input's active slot) - repaints both rects.
 	lastRing render.Rect
-	// pendingRects accumulates drained invalidations until they are
-	// painted into an acquired buffer; it survives pool-busy retries.
-	pendingRects []render.Rect
-	// damageSeen is the widget damage generation this tree last drained
-	// at: a draw whose generation matches it skips the CollectDamage
-	// walk, the pump-work check below included.
-	damageSeen uint64
-	// devRects is the scratch the device-space damage rect list is
-	// built in, one backing array per window.
-	devRects []render.Rect
+	// damage is what the tree owes the next frame, held across
+	// pool-busy retries.
+	damage repaint.Region
 	// canvas is the window's own frame canvas, Reset per painted frame
 	// instead of a fresh NewScaled struct each time.
 	canvas       render.Canvas
@@ -596,7 +590,7 @@ func (w *hostWindow) rescale(frac120 uint32) {
 	// the screen must still be fully repainted at the new device size.
 	// Queue the whole window; the fresh buffers' full staleness covers
 	// the device-space remainder on the next frame.
-	w.pendingRects = append(w.pendingRects, render.Rect{W: bw, H: bh})
+	w.damage.Full(render.Rect{W: bw, H: bh})
 	w.dirty = true
 	debug.Log("frame", "rescale %d/120: buffers %d px per logical px",
 		frac120, frac120)
@@ -844,32 +838,19 @@ func (w *hostWindow) draw() bool {
 	w.syncOpaque(bw, bh)
 	w.syncBlur()
 
-	// Drain invalidations into the pending region. The pending list
-	// survives busy retries (the flags are already drained) and is what
-	// lets a frame with nothing paintable skip the buffer entirely.
-	// Rects are clipped to the window here: a widget may owe pixels
-	// outside the buffer (an overflowing scroll child), and such rects
-	// must not keep a frame alive.
+	// Drain invalidations into the owed region, which is what lets a
+	// frame with nothing paintable skip the buffer entirely.
 	bufBounds := render.Rect{W: bw, H: bh}
-	if gen := widget.DamageGeneration(); gen != w.damageSeen {
-		w.damageSeen = gen
-		rects, _ := widget.CollectDamage(w.router.Root)
+	if w.damage.Collect(w.router.Root, bufBounds) {
 		if report := widget.DamageReport(); report != "" {
 			debug.Log("damage", "%dx%d window owes bounds: %s", bw, bh, report)
 		}
-		if len(rects) > 0 {
-			for _, r := range rects {
-				if r = r.Intersect(bufBounds); !r.Empty() {
-					w.pendingRects = append(w.pendingRects, r)
-				}
-			}
-		}
 	}
-	w.pendingRects = append(w.pendingRects, w.focusChangeRects()...)
+	w.damage.Add(bufBounds, w.focusChangeRects()...)
 	if refitted {
-		w.pendingRects = append(w.pendingRects, bufBounds)
+		w.damage.Full(bufBounds)
 	}
-	if len(w.pendingRects) == 0 {
+	if w.damage.Empty() {
 		debug.Log("frame", "draw skipped: nothing damaged")
 		w.paintedPixels = 0
 		w.lastDamage = nil
@@ -891,7 +872,7 @@ func (w *hostWindow) draw() bool {
 		w.drawErr = fmt.Errorf("app: acquire buffer: %w", err)
 		return false
 	}
-	if err := w.copyForward(b); err != nil {
+	if err := w.pool.CopyForward(b, w.copier()); err != nil {
 		w.drawErr = err
 		return false
 	}
@@ -900,26 +881,8 @@ func (w *hostWindow) draw() bool {
 	// since its content was last on screen, not just this frame's
 	// damage. Fresh buffers are fully stale: the full-repaint fallback
 	// for the first frame, after resizes, and after rescales.
-	// Everything past this point is in device pixels: pending logical
-	// damage maps outward, stale is tracked in buffer pixels.
-	bufBounds = render.Rect{W: b.Width, H: b.Height}
-	rects := w.devRects[:0]
-	for _, r := range w.pendingRects {
-		if r = render.MapRect(r, w.devNum(), scale.Denom).Intersect(bufBounds); !r.Empty() {
-			rects = append(rects, r)
-		}
-	}
-	// changed is what actually differs on screen after this commit; it
-	// drives the other buffers' staleness. It deliberately excludes
-	// b.Stale: initializing a fresh buffer paints the whole window but
-	// changes nothing the screen was not already showing.
-	changed := render.UnionAll(rects)
-	if sb := b.Stale.Intersect(bufBounds); !sb.Empty() {
-		rects = append(rects, sb)
-	}
-	region := render.UnionAll(rects)
-	w.pendingRects = w.pendingRects[:0]
-	w.devRects = rects
+	// Everything past this point is in device pixels.
+	rects, changed, region := w.damage.Plan(b, w.devNum())
 	debug.Log("frame", "draw %dx%d at %d/120: %d damage rect(s), region %dx%d",
 		bw, bh, w.frac120, len(rects), region.W, region.H)
 
@@ -935,7 +898,7 @@ func (w *hostWindow) draw() bool {
 			// repaints it whole into shared memory.
 			b.Release()
 			w.dropRenderer()
-			w.pendingRects = append(w.pendingRects, render.Rect{W: bw, H: bh})
+			w.damage.Full(render.Rect{W: bw, H: bh})
 			w.dirty = true
 			return true
 		}
@@ -987,31 +950,13 @@ func (w *hostWindow) draw() bool {
 	return true
 }
 
-// copyForward brings b up to the screen where it is stale by copying
-// that region from the buffer presented last, which shows what the
-// screen does, instead of painting it: a buffer that sat out frames
-// (the pool's third, used while frames outpace releases, as a popover
-// opens) can owe most of the window. A copy the GPU fails leaves the
-// region to paint, the renderer failing as a frame would.
-func (w *hostWindow) copyForward(b *buffer.Buffer) error {
-	front := w.pool.Front()
-	stale := b.Stale.Intersect(render.Rect{W: b.Width, H: b.Height})
-	if stale.Empty() || front == nil || front == b || front.Width != b.Width || front.Height != b.Height {
+// copier is the window's GPU copier for Pool.CopyForward, nil drawing
+// on the CPU.
+func (w *hostWindow) copier() buffer.Copier {
+	if w.renderer == nil {
 		return nil
 	}
-	switch {
-	case b.Target != nil && front.Target != nil && w.renderer != nil:
-		ok, err := w.renderer.Copy(b, front, stale)
-		if !ok {
-			return err
-		}
-	case b.Data != nil && front.Data != nil:
-		buffer.CopyRect(b, front, stale)
-	default:
-		return nil
-	}
-	b.Stale = render.Rect{}
-	return nil
+	return w.renderer
 }
 
 // dropRenderer turns the window to the CPU after its renderer failed:
