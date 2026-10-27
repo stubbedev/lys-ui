@@ -8,11 +8,13 @@ package imgcache
 
 import (
 	"container/list"
+	"fmt"
 	"image"
 	"image/draw"
 	"sync"
 
 	"github.com/stubbedev/lys-lib/render"
+	memory "github.com/stubbedev/memory-go"
 )
 
 // DefaultEntryLimit is the process-wide entry budget. A bar holds a
@@ -42,10 +44,13 @@ type entryKey = any
 
 type entry struct {
 	key   entryKey
-	img   image.Image // decoded source, or the resampled *image.RGBA
+	img   image.Image // decoded source, or the resampled still image
 	err   error       // sticky decode failure (sources only)
 	bytes int
 	el    *list.Element // the LRU list node; front is most recent
+	// mem holds a resampled raster's pixels off the Go heap, in the
+	// cache's pixels; empty for a source.
+	mem memory.Slice[byte]
 }
 
 // Cache memoizes decoded sources and resampled rasters under one LRU
@@ -60,6 +65,14 @@ type Cache struct {
 	mu    sync.Mutex
 	items map[entryKey]*entry
 	lru   *list.List // of *entry, front = most recently used
+
+	// pixels holds the resampled rasters off the Go heap: the cache
+	// owns them outright (a widget draws one per paint and keeps
+	// none), so eviction hands their pages back rather than leaving
+	// them to raise the GC's heap goal.
+	pixels memory.Shared
+	// forget drops an evicted raster's GPU texture (SetForget).
+	forget func(render.ImageID)
 
 	bytes      int
 	maxEntries int
@@ -128,27 +141,56 @@ func (c *Cache) Source(key string, decode func() (image.Image, error)) (image.Im
 	return rgba, err
 }
 
-// Raster returns the resampled raster for key, calling build once on a
-// miss, as a still image with its own identity, so every widget drawing
-// it shares one GPU texture. Resampling cannot fail, so neither does
-// this.
-func (c *Cache) Raster(key RasterKey, build func() *image.RGBA) render.StillImage {
+// Raster returns the resampled raster for key, key.W x key.H, as a
+// still image with its own identity, so every widget drawing it shares
+// one GPU texture. On a miss fill writes the pixels into the cache's
+// own memory, off the Go heap. A raster is valid for the frame that
+// draws it: eviction frees it once every recording that might draw it
+// has ended (render.Retire), so a caller draws it and keeps nothing.
+func (c *Cache) Raster(key RasterKey, fill func(dst *image.RGBA) error) (render.StillImage, error) {
 	c.mu.Lock()
 	if e, ok := c.items[key]; ok {
 		c.touchLocked(e)
 		c.hits++
 		c.mu.Unlock()
 		raster, _ := e.img.(render.StillImage)
-		return raster
+		return raster, nil
 	}
 	c.misses++
 	c.mu.Unlock()
 
-	img := render.NewStillImage(build())
+	mem, err := memory.MakeSlice[byte](&c.pixels, 4*key.W*key.H)
+	if err != nil {
+		return render.StillImage{}, fmt.Errorf("imgcache: a %dx%d raster: %w", key.W, key.H, err)
+	}
+	dst := &image.RGBA{Pix: mem.Elems(), Stride: 4 * key.W, Rect: image.Rect(0, 0, key.W, key.H)}
+	if err := fill(dst); err != nil {
+		c.free(mem)
+		return render.StillImage{}, fmt.Errorf("imgcache: resample %s into %dx%d: %w", key.Source, key.W, key.H, err)
+	}
+	img := render.NewStillImage(dst)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.storeLocked(&entry{key: key, img: img, bytes: pixelBytes(img.Rect)})
-	return img
+	c.storeLocked(&entry{key: key, img: img, bytes: pixelBytes(img.Rect), mem: mem})
+	return img, nil
+}
+
+// SetForget sets what drops an evicted raster's GPU texture, nil for
+// nothing: the GPU renderer's device, while one draws. It is called on
+// whichever goroutine evicts.
+func (c *Cache) SetForget(forget func(render.ImageID)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.forget = forget
+}
+
+// free hands mem back once no recording can draw it.
+func (c *Cache) free(mem memory.Slice[byte]) {
+	render.Retire(func() {
+		if err := memory.FreeSlice(&c.pixels, mem); err != nil {
+			panic(fmt.Sprintf("imgcache: free a raster: %v", err))
+		}
+	})
 }
 
 // InvalidateSource drops the decoded source called key and every
@@ -187,6 +229,9 @@ func (c *Cache) HasRaster(key RasterKey) bool {
 func (c *Cache) Reset() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	for _, e := range c.items {
+		c.release(e)
+	}
 	c.items = map[entryKey]*entry{}
 	c.lru.Init()
 	c.bytes = 0
@@ -246,6 +291,19 @@ func (c *Cache) removeLocked(e *entry) {
 	c.lru.Remove(e.el)
 	c.bytes -= e.bytes
 	delete(c.items, e.key)
+	c.release(e)
+}
+
+// release frees an evicted raster's pixels and drops its texture; a
+// source's are the Go heap's to collect.
+func (c *Cache) release(e *entry) {
+	if e.mem.Len() == 0 {
+		return
+	}
+	if raster, ok := e.img.(render.StillImage); ok && c.forget != nil {
+		c.forget(raster.ID)
+	}
+	c.free(e.mem)
 }
 
 // normalize converts a decoded image into a premultiplied still image

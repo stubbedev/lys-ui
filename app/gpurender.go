@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
+	"github.com/stubbedev/lys-ui/internal/imgcache"
 	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/popup"
 	"github.com/stubbedev/lys-ui/internal/scale"
@@ -140,6 +141,8 @@ func (a *Application) renderer() (*gpuRenderer, error) {
 	}
 	debug.Log("gpu", "drawing on %s in %d modifier(s)", r.dev.Name(), len(r.modifiers))
 	a.gpu = r
+	// Evicted image rasters drop their textures with their pixels.
+	imgcache.Default().SetForget(r.dev.Forget)
 	return r, nil
 }
 
@@ -300,6 +303,7 @@ func (a *Application) ForgetImage(id render.ImageID) {
 // closeRenderer releases the GPU once every window has gone.
 func (a *Application) closeRenderer() {
 	if a.gpu != nil {
+		imgcache.Default().SetForget(nil)
 		a.gpu.dev.Close()
 		a.gpu = nil
 	}

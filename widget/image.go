@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/imgcache"
+	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/transfer"
 )
@@ -331,17 +332,24 @@ func (im *Image) Paint(cv *render.Canvas) {
 		cv.DrawImageDevice(render.Resample(pic, srcRect, dw, dh), dx, dy)
 		return
 	}
-	raster := imgcache.Default().Raster(imgcache.RasterKey{
+	raster, err := imgcache.Default().Raster(imgcache.RasterKey{
 		Source: im.src.key,
 		Frame:  frame,
 		Src:    srcRect,
 		W:      dw,
 		H:      dh,
-	}, func() *image.RGBA {
-		return render.Resample(pic, srcRect, dw, dh)
+	}, func(dst *image.RGBA) error {
+		return render.ResampleTo(dst, pic, srcRect)
 	})
+	if err != nil {
+		imageWarn(err)
+		return
+	}
 	cv.DrawImageDevice(raster, dx, dy)
 }
+
+// imageWarn reports an image that could not paint this frame.
+var imageWarn = func(err error) { logutil.L().Warn("widget: image paint", "err", err) }
 
 // placement is the scale policy and position the image draws by in
 // the device rect box: object-fit and object-position where the

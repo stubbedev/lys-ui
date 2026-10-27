@@ -114,26 +114,44 @@ type errorBoom struct{}
 
 func (errorBoom) Error() string { return "boom" }
 
+// fillRed paints dst red, a raster's fill.
+func fillRed(dst *image.RGBA) {
+	for i := 0; i < len(dst.Pix); i += 4 {
+		dst.Pix[i], dst.Pix[i+3] = 0xff, 0xff
+	}
+}
+
+// mustRaster is c.Raster, failing the test on an error.
+func mustRaster(t *testing.T, c *Cache, key RasterKey, fill func(dst *image.RGBA) error) render.StillImage {
+	t.Helper()
+	img, err := c.Raster(key, fill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return img
+}
+
 func TestRasterHitDoesNotRebuild(t *testing.T) {
 	c := New()
 	key := RasterKey{Source: "s", Src: image.Rect(0, 0, 4, 4), W: 8, H: 8}
 	builds := 0
-	build := func() *image.RGBA {
+	build := func(dst *image.RGBA) error {
 		builds++
-		return redRGBA(8, 8)
+		fillRed(dst)
+		return nil
 	}
-	a := c.Raster(key, build)
+	a := mustRaster(t, c, key, build)
 	if builds != 1 {
 		t.Fatalf("builds = %d after first Raster, want 1", builds)
 	}
-	if b := c.Raster(key, build); b != a {
+	if b := mustRaster(t, c, key, build); b != a {
 		t.Error("Raster hit returned a different raster")
 	}
 	if builds != 1 {
 		t.Errorf("cache hit rebuilt the raster: builds = %d, want 1", builds)
 	}
 	// A different device size is a different key.
-	c.Raster(RasterKey{Source: "s", Src: key.Src, W: 16, H: 16}, build)
+	mustRaster(t, c, RasterKey{Source: "s", Src: key.Src, W: 16, H: 16}, build)
 	if builds != 2 {
 		t.Errorf("builds = %d after a new size, want 2", builds)
 	}
@@ -142,25 +160,26 @@ func TestRasterHitDoesNotRebuild(t *testing.T) {
 func TestLRUEvictsUnderEntryCap(t *testing.T) {
 	c := newWithLimits(2, 1<<30)
 	builds := map[string]int{}
-	build := func(id string) func() *image.RGBA {
-		return func() *image.RGBA {
+	build := func(id string) func(dst *image.RGBA) error {
+		return func(dst *image.RGBA) error {
 			builds[id]++
-			return redRGBA(1, 1)
+			fillRed(dst)
+			return nil
 		}
 	}
 	key := func(id string) RasterKey {
 		return RasterKey{Source: id, Src: image.Rect(0, 0, 1, 1), W: 1, H: 1}
 	}
 
-	c.Raster(key("a"), build("a"))
-	c.Raster(key("b"), build("b"))
-	c.Raster(key("a"), build("a")) // touch a: b becomes the LRU entry
-	c.Raster(key("c"), build("c")) // evicts b
+	mustRaster(t, c, key("a"), build("a"))
+	mustRaster(t, c, key("b"), build("b"))
+	mustRaster(t, c, key("a"), build("a")) // touch a: b becomes the LRU entry
+	mustRaster(t, c, key("c"), build("c")) // evicts b
 
 	if builds["b"] != 1 {
 		t.Fatalf("b rebuilt too early: %d builds", builds["b"])
 	}
-	c.Raster(key("b"), build("b")) // must miss now
+	mustRaster(t, c, key("b"), build("b")) // must miss now
 	if builds["b"] != 2 {
 		t.Errorf("b was not evicted: builds = %d, want 2", builds["b"])
 	}
@@ -177,22 +196,23 @@ func TestByteCapEvictsLRU(t *testing.T) {
 	// 20-byte cap always evicts exactly the least recent one.
 	c := newWithLimits(100, 20)
 	builds := map[string]int{}
-	build := func(id string) func() *image.RGBA {
-		return func() *image.RGBA {
+	build := func(id string) func(dst *image.RGBA) error {
+		return func(dst *image.RGBA) error {
 			builds[id]++
-			return redRGBA(2, 1)
+			fillRed(dst)
+			return nil
 		}
 	}
 	key := func(id string) RasterKey {
 		return RasterKey{Source: id, W: 2, H: 1}
 	}
-	c.Raster(key("a"), build("a"))
-	c.Raster(key("b"), build("b"))
-	c.Raster(key("c"), build("c"))
+	mustRaster(t, c, key("a"), build("a"))
+	mustRaster(t, c, key("b"), build("b"))
+	mustRaster(t, c, key("c"), build("c"))
 	if builds["a"] != 1 {
 		t.Errorf("a rebuilt before the cap: %d builds", builds["a"])
 	}
-	c.Raster(key("a"), build("a"))
+	mustRaster(t, c, key("a"), build("a"))
 	if builds["a"] != 2 {
 		t.Errorf("a was not the LRU eviction victim: builds = %d", builds["a"])
 	}
@@ -206,13 +226,14 @@ func TestNewestSurvivesTinyBudget(t *testing.T) {
 	// churn or a negative byte count.
 	c := newWithLimits(100, 2)
 	builds := 0
-	build := func() *image.RGBA {
+	build := func(dst *image.RGBA) error {
 		builds++
-		return redRGBA(4, 4)
+		fillRed(dst)
+		return nil
 	}
 	key := RasterKey{Source: "s", W: 4, H: 4}
-	c.Raster(key, build)
-	c.Raster(key, build)
+	mustRaster(t, c, key, build)
+	mustRaster(t, c, key, build)
 	if builds != 1 {
 		t.Errorf("builds = %d, want 1 (the single entry survives and stays cached)", builds)
 	}
@@ -229,9 +250,9 @@ func TestInvalidateSourceDropsDerivedRasters(t *testing.T) {
 	if _, err := c.Source("gone", func() (image.Image, error) { return redRGBA(4, 4), nil }); err != nil {
 		t.Fatal(err)
 	}
-	c.Raster(RasterKey{Source: "gone", W: 8, H: 8}, func() *image.RGBA { return redRGBA(8, 8) })
-	c.Raster(RasterKey{Source: "gone", W: 4, H: 4}, func() *image.RGBA { return redRGBA(4, 4) })
-	c.Raster(RasterKey{Source: "kept", W: 4, H: 4}, func() *image.RGBA { return redRGBA(4, 4) })
+	mustRaster(t, c, RasterKey{Source: "gone", W: 8, H: 8}, func(dst *image.RGBA) error { fillRed(dst); return nil })
+	mustRaster(t, c, RasterKey{Source: "gone", W: 4, H: 4}, func(dst *image.RGBA) error { fillRed(dst); return nil })
+	mustRaster(t, c, RasterKey{Source: "kept", W: 4, H: 4}, func(dst *image.RGBA) error { fillRed(dst); return nil })
 
 	c.InvalidateSource("gone")
 
@@ -252,7 +273,7 @@ func TestReset(t *testing.T) {
 	if _, err := c.Source("k", func() (image.Image, error) { return redRGBA(2, 2), nil }); err != nil {
 		t.Fatal(err)
 	}
-	c.Raster(RasterKey{Source: "k", W: 2, H: 2}, func() *image.RGBA { return redRGBA(2, 2) })
+	mustRaster(t, c, RasterKey{Source: "k", W: 2, H: 2}, func(dst *image.RGBA) error { fillRed(dst); return nil })
 	c.Reset()
 	if got := c.Bytes(); got != 0 {
 		t.Errorf("Bytes after reset = %d, want 0", got)
@@ -260,5 +281,35 @@ func TestReset(t *testing.T) {
 	sources, rasters := c.Len()
 	if sources != 0 || rasters != 0 {
 		t.Errorf("Len after reset = (%d, %d), want (0, 0)", sources, rasters)
+	}
+}
+
+// A raster lives off the Go heap in the cache's memory, filled where it
+// lies; evicting it drops its GPU texture and frees its pages once no
+// recording can draw it, and Reset frees them all (#412).
+func TestRastersLiveOffTheHeapAndEvictionFreesThem(t *testing.T) {
+	c := newWithLimits(1, 1<<30)
+	var forgotten []render.ImageID
+	c.SetForget(func(id render.ImageID) { forgotten = append(forgotten, id) })
+	a := mustRaster(t, c, RasterKey{Source: "a", W: 4, H: 4}, func(dst *image.RGBA) error { fillRed(dst); return nil })
+	if st := c.pixels.Stats(); st.Live != 1 || st.Bytes < 4*4*4 {
+		t.Fatalf("raster memory %+v, want one 4x4 raster off the heap", st)
+	}
+	if a.RGBAAt(3, 3).R != 0xff {
+		t.Error("the raster does not hold what fill wrote")
+	}
+	mustRaster(t, c, RasterKey{Source: "b", W: 4, H: 4}, func(dst *image.RGBA) error { fillRed(dst); return nil })
+	if st := c.pixels.Stats(); st.Live != 1 {
+		t.Errorf("%d rasters live after evicting one under a one-entry cap", st.Live)
+	}
+	if len(forgotten) != 1 || forgotten[0] != a.ID {
+		t.Errorf("forgot %v on eviction, want the evicted raster's %v", forgotten, a.ID)
+	}
+	if _, err := c.Raster(RasterKey{Source: "c", W: 2, H: 2}, func(*image.RGBA) error { return errBoom }); err == nil {
+		t.Error("a failed fill came back as a raster")
+	}
+	c.Reset()
+	if st := c.pixels.Stats(); st.Live != 0 {
+		t.Errorf("%d rasters outlived Reset", st.Live)
 	}
 }
