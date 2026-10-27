@@ -9,6 +9,7 @@ package popup
 import (
 	"errors"
 	"sync/atomic"
+	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
@@ -17,16 +18,19 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/intconv"
+	"github.com/stubbedev/lys-ui/internal/repaint"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
 // Renderer draws a popup's frames on the GPU, as its window's are: the
-// buffers it renders into and the frame a paint becomes there. A frame
-// that fails reports false, after which Failed holds and the popup
-// draws on the CPU; an error ends the popup.
+// buffers it renders into, the frame a paint becomes there, and the
+// copy that brings a reused buffer forward. A frame that fails reports
+// false, after which Failed holds and the popup draws on the CPU; an
+// error ends the popup.
 type Renderer interface {
+	buffer.Copier
 	NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) (*buffer.Buffer, error)
 	Frame(b *buffer.Buffer, num int, paint func(cv *render.Canvas)) (bool, error)
 	Failed() bool
@@ -50,6 +54,8 @@ type Painter struct {
 	// w, h is the size the pool's buffers have, so a resize retires
 	// them.
 	w, h int
+	// damage is what the visual owes the next frame.
+	damage repaint.Region
 
 	frameReady   bool
 	framePending bool
@@ -103,6 +109,36 @@ func (pc *Painter) create() (*buffer.Buffer, error) {
 func (pc *Painter) dropGPU() {
 	pc.gpu = nil
 	pc.pool.Resize(pc.create)
+	pc.damage.Full(render.Rect{W: pc.w, H: pc.h})
+}
+
+// copier is the popup's GPU copier for Pool.CopyForward, nil drawing
+// on the CPU.
+func (pc *Painter) copier() buffer.Copier {
+	if pc.gpu == nil {
+		return nil
+	}
+	return pc.gpu
+}
+
+// Collect drains the visual's invalidations into what the next frame
+// owes and reports whether it owed any: the owner refits the popup to
+// its content then and marks the frame.
+func (pc *Painter) Collect() bool {
+	w, h := pc.p.Size()
+	return pc.collect(render.Rect{W: w, H: h})
+}
+
+// collect is Collect within bounds, logging under LYS_DEBUG=damage
+// what owed its whole bounds.
+func (pc *Painter) collect(bounds render.Rect) bool {
+	if !pc.damage.Collect(pc.visual, bounds) {
+		return false
+	}
+	if report := widget.DamageReport(); report != "" {
+		debug.Log("damage", "%dx%d popup owes bounds: %s", bounds.W, bounds.H, report)
+	}
+	return true
 }
 
 // frameDone flips ready when the compositor reports the frame as taken
@@ -125,8 +161,9 @@ func (f frameDone) HandleCallbackDone(ev wl.CallbackDoneEvent) {
 func (pc *Painter) Owes() bool { return pc.dirty.Load() }
 
 // Pass paints at most one frame: when a repaint is owed and the
-// compositor has taken the previous one, measure, arrange, paint under
-// the current reveal, commit, and arm the next frame callback. The
+// compositor has taken the previous one, measure, arrange, paint what
+// the visual owes under the current reveal (plus what the reused
+// buffer is stale in), commit, and arm the next frame callback. The
 // whole wire sequence holds p.mu, serialized against the dismissal
 // state machine's SealInput and Destroy. It returns false when the
 // popup is destroyed and the painter is spent.
@@ -153,47 +190,75 @@ func (pc *Painter) Pass() (bool, error) {
 		// retire as they come back.
 		pc.pool.Resize(pc.create)
 		pc.w, pc.h = w, h
+		pc.damage.Full(render.Rect{W: w, H: h})
 	}
-	b, err := pc.pool.Acquire()
-	if errors.Is(err, buffer.ErrBusy) {
-		// The release event (dispatched by the owning loop) wakes it.
-		debug.Log("frame", "popup frame deferred: pool busy (a buffer held, or its import pending)")
-		pc.dirty.Store(true)
-		return true, nil
+	committed, live, err := pc.frame()
+	if !committed || err != nil {
+		return live, err
 	}
-	if err != nil {
-		return false, err
+	if !pc.mapped {
+		pc.mapped = true
+		_, h := pc.p.Size()
+		pc.p.checkSide(intconv.Int32(h))
 	}
+	return true, nil
+}
+
+// frame is Pass's wire sequence under p.mu: lay out, paint what is
+// owed, and commit. It reports whether a frame went out, and live as
+// Pass does.
+func (pc *Painter) frame() (committed, live bool, err error) {
 	p := pc.p
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	if p.Destroyed() {
-		p.mu.Unlock()
-		buffer.Cancel(b)
-		return false, nil
+		return false, false, nil
 	}
 	w, h := p.Size()
 	_ = p.sc.Apply(pc.frac120, w, h)
 	pc.visual.Measure(widget.Constraints{Max: widget.Size{W: w, H: h}})
 	pc.visual.Arrange(render.Rect{W: w, H: h})
+	bounds := render.Rect{W: w, H: h}
+	pc.collect(bounds)
+	if !pc.mapped {
+		pc.damage.Full(bounds)
+	}
+	if pc.damage.Empty() {
+		return false, true, nil
+	}
 
-	drawn, err := pc.paint(b)
+	b, err := pc.pool.Acquire()
+	if errors.Is(err, buffer.ErrBusy) {
+		// The release event (dispatched by the owning loop) wakes it;
+		// the owed region waits in damage.
+		debug.Log("frame", "popup frame deferred: pool busy (a buffer held, or its import pending)")
+		pc.dirty.Store(true)
+		return false, true, nil
+	}
 	if err != nil {
-		p.mu.Unlock()
-		return false, err
+		return false, false, err
+	}
+	start := time.Now()
+	if err := pc.pool.CopyForward(b, pc.copier()); err != nil {
+		return false, false, err
+	}
+	rects, changed, region := pc.damage.Plan(b, int(pc.frac120))
+	drawn, err := pc.paint(b, region)
+	if err != nil {
+		return false, false, err
 	}
 	if !drawn {
-		p.mu.Unlock()
 		pc.dirty.Store(true)
-		return true, nil
+		return false, true, nil
 	}
 
 	if err := pc.surf.Attach(b.WL, 0, 0); err != nil {
-		p.mu.Unlock()
-		return false, err
+		return false, false, err
 	}
-	if err := pc.surf.DamageBuffer(0, 0, intconv.Int32(b.Width), intconv.Int32(b.Height)); err != nil {
-		p.mu.Unlock()
-		return false, err
+	for _, r := range rects {
+		if err := pc.surf.DamageBuffer(intconv.Int32(r.X), intconv.Int32(r.Y), intconv.Int32(r.W), intconv.Int32(r.H)); err != nil {
+			return false, false, err
+		}
 	}
 	// The frame request is double-buffered state: it must precede the
 	// commit it rides on. Requested after, it would wait for a commit
@@ -201,37 +266,34 @@ func (pc *Painter) Pass() (bool, error) {
 	// it is waiting for has fired.
 	cb, err := pc.surf.Frame()
 	if err != nil {
-		p.mu.Unlock()
-		return false, err
+		return false, false, err
 	}
 	wlclient.CallbackAddListener(cb, frameDone{ready: &pc.frameReady})
 	if err := pc.surf.Commit(); err != nil {
-		p.mu.Unlock()
-		return false, err
+		return false, false, err
 	}
-	p.mu.Unlock()
+	pc.pool.Presented(b, changed)
 	pc.framePending = true
-	if !pc.mapped {
-		pc.mapped = true
-		p.checkSide(intconv.Int32(h))
-	}
-	debug.Log("frame", "popup %d committed %dx%d", pc.surf.Id(), b.Width, b.Height)
-	return true, nil
+	debug.Log("frame", "popup %d committed %dx%d: region %dx%d in %v", pc.surf.Id(), b.Width, b.Height, region.W, region.H, time.Since(start))
+	return true, true, nil
 }
 
-// paint draws the visual into b: through the GPU renderer into a
-// target, onto shared memory otherwise. A GPU frame that failed never
-// reaches the compositor: b goes back, the popup turns to the CPU, and
-// paint reports false for the next pass to repaint.
-func (pc *Painter) paint(b *buffer.Buffer) (bool, error) {
-	// The surface raw-clears to transparent: with a shadow gutter the
+// paint draws the visual into b within the device region: through the
+// GPU renderer into a target, onto shared memory otherwise. A GPU frame
+// that failed never reaches the compositor: b goes back, the popup
+// turns to the CPU, and paint reports false for the next pass to
+// repaint.
+func (pc *Painter) paint(b *buffer.Buffer, region render.Rect) (bool, error) {
+	// The region raw-clears to transparent: with a shadow gutter the
 	// falloff must blend over whatever the popup floats above, and a
 	// recycled buffer must not leak its last frame through. The morph
 	// paints shadow, plate and content together, so the motion carries
 	// the elevation with the popup.
 	draw := func(cv *render.Canvas) {
-		cv.ClearDevice(cv.Rect(), render.Color(0))
+		prev := cv.PushClipDevice(region)
+		cv.ClearDevice(region, render.Color(0))
 		pc.visual.Paint(cv)
+		cv.PopClip(prev)
 	}
 	if b.Target == nil {
 		draw(render.NewScaled(b.Data, b.Stride, b.Width, b.Height, int(pc.frac120), scale.Denom))

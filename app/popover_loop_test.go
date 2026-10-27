@@ -35,18 +35,25 @@ func (f *fakePopSurface) Resize(w, h int) bool {
 	return true
 }
 
-// fakePopPainter records passes.
+// fakePopPainter records passes and drains its content's damage as the
+// real painter does.
 type fakePopPainter struct {
+	root           widget.Widget
 	passes, closes int
 	err            error
 }
 
+func (f *fakePopPainter) Collect() bool {
+	_, damaged := widget.CollectDamage(f.root)
+	return damaged
+}
 func (f *fakePopPainter) Pass() (bool, error) { f.passes++; return true, f.err }
 func (f *fakePopPainter) Close()              { f.closes++ }
 
 func newLoopPopover(content widget.Widget) (*openPopover, *fakePopSurface, *fakePopPainter, *int) {
-	surf, painter := &fakePopSurface{}, &fakePopPainter{}
+	surf := &fakePopSurface{}
 	root := &popoverKeyRoot{onDismiss: func() {}, content: content}
+	painter := &fakePopPainter{root: root}
 	closed := 0
 	op := &openPopover{
 		host: &fakeHost{w: 100, h: 100}, pop: surf, painter: painter,

@@ -37,6 +37,10 @@ func (g *gpuFrames) Frame(b *buffer.Buffer, num int, paint func(cv *render.Canva
 
 func (g *gpuFrames) Failed() bool { return g.failed }
 
+func (g *gpuFrames) Copy(*buffer.Buffer, *buffer.Buffer, render.Rect) (bool, error) {
+	return false, nil
+}
+
 func openGPU(t *testing.T) *gpu.Device {
 	t.Helper()
 	if _, err := gputest.SetupTest(t); err != nil {
@@ -66,11 +70,11 @@ func TestPopupFramesDrawOnTheGPU(t *testing.T) {
 		}
 		t.Cleanup(tg.Close)
 		pc := &Painter{gpu: &gpuFrames{dev: dev}, frac120: scale.Denom, visual: v.morph}
-		if ok, err := pc.paint(&buffer.Buffer{Width: w, Height: h, Target: tg}); !ok || err != nil {
+		if ok, err := pc.paint(&buffer.Buffer{Width: w, Height: h, Target: tg}, render.Rect{W: w, H: h}); !ok || err != nil {
 			t.Fatalf("reveal %v: GPU frame drawn %v, %v", reveal, ok, err)
 		}
 		cpu := &buffer.Buffer{Width: w, Height: h, Stride: render.Stride(w), Data: make([]byte, render.Stride(w)*h)}
-		if ok, err := (&Painter{frac120: scale.Denom, visual: v.morph}).paint(cpu); !ok || err != nil {
+		if ok, err := (&Painter{frac120: scale.Denom, visual: v.morph}).paint(cpu, render.Rect{W: w, H: h}); !ok || err != nil {
 			t.Fatalf("reveal %v: CPU frame drawn %v, %v", reveal, ok, err)
 		}
 		got, err := tg.ReadPixels()
@@ -101,7 +105,7 @@ func TestPopupGPUFrameFailureFallsBackToCPU(t *testing.T) {
 	pc := &Painter{gpu: &gpuFrames{dev: dev, lost: true}, frac120: scale.Denom, visual: v.morph}
 	pc.pool = buffer.New(pc.create, 2)
 	b := &buffer.Buffer{Width: 64, Height: 24, Target: tg}
-	if ok, err := pc.paint(b); ok || err != nil {
+	if ok, err := pc.paint(b, render.Rect{W: b.Width, H: b.Height}); ok || err != nil {
 		t.Fatalf("failed frame reported %v, %v; want not drawn and no error", ok, err)
 	}
 	if pc.gpu != nil {

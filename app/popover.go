@@ -576,6 +576,7 @@ type popSurface interface {
 
 // popPainter is the frame pipeline half (a *popup.Painter).
 type popPainter interface {
+	Collect() bool
 	Pass() (bool, error)
 	Close()
 }
@@ -654,7 +655,7 @@ func (a *Application) drivePopovers() error {
 			op.fireClosed()
 			continue
 		}
-		if _, damaged := widget.CollectDamage(op.keyRoot); damaged {
+		if op.painter.Collect() {
 			op.fitContent(a.outputs())
 			op.pop.MarkFrame()
 		}

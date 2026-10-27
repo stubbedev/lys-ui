@@ -1121,11 +1121,26 @@ func TestHeadlessPopoverTakesTypingAndRepaints(t *testing.T) {
 		t.Errorf("the popover never grew past %dx%d with its content\n%s", fw, fh, tailTraces(w, 25))
 	}
 	// The ticker changes the label every 100ms with no input arriving:
-	// an app-loop popover paints each change.
-	for i := range 3 {
-		if _, err := w.Wait("frame", " committed ", traceTimeout); err != nil {
+	// an app-loop popover paints each change, and once the growth's
+	// motion settles, only the label's rect, not the whole popup
+	// (#409).
+	partial := false
+	for i := range 40 {
+		tr, err := w.Wait("frame", " committed ", traceTimeout)
+		if err != nil {
 			t.Fatalf("popover frame %d after the timer change never painted: %v\n%s", i, err, tailTraces(w, 25))
 		}
+		var pid, pw, ph, rw, rh int
+		if _, err := fmt.Sscanf(tr.Message, "popup %d committed %dx%d: region %dx%d", &pid, &pw, &ph, &rw, &rh); err != nil {
+			t.Fatalf("bad frame trace %q: %v", tr.Message, err)
+		}
+		if rw*rh < pw*ph/2 {
+			partial = true
+			break
+		}
+	}
+	if !partial {
+		t.Errorf("every ticker frame repainted the whole popover\n%s", tailTraces(w, 25))
 	}
 	if err := in.Tap(KeyEscape); err != nil {
 		t.Fatal(err)
