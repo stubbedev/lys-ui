@@ -317,6 +317,7 @@ func (r *Revealer) Paint(cv *render.Canvas) {
 	// at rest, hidden or fading, the child paints directly.
 	layer := r.layer
 	r.layer = nil
+	defer keepOrFree(layer, &r.layer)
 	if r.child == nil || !r.shows() {
 		return
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/icons"
 	"github.com/stubbedev/lys-ui/internal/inspect"
 	"github.com/stubbedev/lys-ui/internal/layersurface"
+	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/notify"
 	"github.com/stubbedev/lys-ui/internal/portalsettings"
 	"github.com/stubbedev/lys-ui/internal/recentfiles"
@@ -980,8 +981,9 @@ func (a *Application) armTrim() {
 // trim (buffer.Pool.Trim): a wallpaper drawn once keeps one 4K buffer
 // instead of three. A GPU device that drew nothing for a whole interval
 // gives back its scratch canvases and staging too (trimIdle). The timer
-// stops once no window holds a spare and the device is trimmed, so an
-// idle application parks without waking for it.
+// stops once no window holds a spare and the device is trimmed, freeing
+// the pooled CPU layers as it does, so an idle application parks
+// without waking for it.
 func (a *Application) trimBuffers() {
 	spares := false
 	for _, w := range a.windows {
@@ -993,6 +995,10 @@ func (a *Application) trimBuffers() {
 		spares = true
 	}
 	if !spares {
+		// Idle: the pooled CPU layers, a whole canvas each, go too.
+		if err := render.TrimLayers(); err != nil {
+			logutil.L().Error("app: trim the CPU layers", "err", err)
+		}
 		a.stopTrim()
 		a.stopTrim = nil
 	}

@@ -309,6 +309,9 @@ func (s *Stack) Paint(cv *render.Canvas) {
 	if !switching {
 		// At rest the pages paint directly: the switch's layers, a
 		// full-canvas buffer each, go until the next switch.
+		for _, l := range s.layers {
+			keepOrFree(l, nil)
+		}
 		s.layers = [2]*render.Layer{}
 		PaintChild(cv, w)
 		return

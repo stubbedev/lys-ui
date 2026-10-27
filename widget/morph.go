@@ -139,6 +139,8 @@ func (m *Morph) Paint(cv *render.Canvas) {
 	// rest, hidden or fading, the content paints directly.
 	layer, inner := m.layer, m.inner
 	m.layer, m.inner = nil, nil
+	defer keepOrFree(layer, &m.layer)
+	defer keepOrFree(inner, &m.inner)
 	switch {
 	case r <= 0 || m.child == nil:
 		return
@@ -183,6 +185,17 @@ func (m *Morph) Paint(cv *render.Canvas) {
 	prev := cv.PushClip(b)
 	cv.Composite(l, dev, render.Scale(s, s).About(ox, oy), math.Min(1, r*morphFade))
 	cv.PopClip(prev)
+}
+
+// keepOrFree frees taken, a layer a transition took for this frame,
+// unless the frame kept a layer in *kept (nil for none): canvas.Layer
+// reuses a layer it is handed or frees it for a bigger one, so only a
+// frame at rest, which takes no layer, leaves taken to free.
+func keepOrFree(taken *render.Layer, kept **render.Layer) {
+	if taken == nil || (kept != nil && *kept != nil) {
+		return
+	}
+	taken.Free()
 }
 
 // clipAt is the unrolled clip of the content rect b at reveal r: cut
