@@ -1,13 +1,18 @@
 package sysfont
 
 import (
+	"bytes"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/go-text/typesetting/font"
+	"github.com/go-text/typesetting/fontscan"
 	"github.com/go-text/typesetting/language"
 	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/stubbedev/lys-ui/internal/uifont"
 )
 
 // mustSans resolves the default sans face, skipping the test when the
@@ -211,9 +216,14 @@ func TestFallbackChain(t *testing.T) {
 	})
 
 	t.Run("color emoji renders through the bitmap glyph path", func(t *testing.T) {
+		// Best falls back rather than failing, so an install is told by
+		// the family it resolved.
 		emoji, err := Best("Noto Color Emoji", 16)
 		if err != nil {
-			t.Skipf("Noto Color Emoji not installed: %v", err)
+			t.Fatalf("Best(Noto Color Emoji): %v", err)
+		}
+		if emoji.Family() != "Noto Color Emoji" {
+			t.Skipf("Noto Color Emoji not installed; it resolved %q", emoji.Family())
 		}
 		ch := render.NewChain(emoji)
 		s := ch.Shape("\U0001F600\U0001F642", 16) // grinning + slightly smiling
@@ -340,5 +350,33 @@ func TestItalicWithoutAnItalicFaceIsOblique(t *testing.T) {
 	}
 	if v, err := Variant(ui, false, true); err != nil || !v.Slanted() {
 		t.Errorf("Variant italic %v (err %v), want a synthetic oblique", v, err)
+	}
+}
+
+// With no family the matcher knows as monospace installed, the generic
+// falls through to whatever face there is; monospace text then gets the
+// embedded mono instead, so it still lines up (#396).
+func TestMonospaceNeverResolvesProportional(t *testing.T) {
+	data, err := os.ReadFile("testdata/Cantarell-Regular.ttf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fm := fontscan.NewFontMap(quietLogger{})
+	for _, f := range []struct {
+		family string
+		data   []byte
+	}{{"Cantarell", data}, {uifont.MonoFamily, uifont.Mono}} {
+		if err := fm.AddFont(bytes.NewReader(f.data), "test:"+f.family, f.family); err != nil {
+			t.Fatalf("add %s: %v", f.family, err)
+		}
+	}
+	fm.SetQuery(fontscan.Query{Families: []string{fontscan.Monospace}, Aspect: regAspect})
+	face := fm.ResolveFace('x')
+	if face == nil || face.IsMonospace() {
+		t.Fatal("the fixture store's monospace generic already resolved a monospaced face")
+	}
+	got := monospaced(fm, face, regAspect, 'x')
+	if !got.IsMonospace() || got.Describe().Family != uifont.MonoFamily {
+		t.Errorf("monospace resolved %q (monospaced %v), want the embedded %q", got.Describe().Family, got.IsMonospace(), uifont.MonoFamily)
 	}
 }

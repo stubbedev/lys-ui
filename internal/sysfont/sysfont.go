@@ -91,6 +91,9 @@ func lookup(family string, aspect font.Aspect, script language.Script, r rune) (
 	if face == nil {
 		return nil, fmt.Errorf("sysfont: no %s face found", family)
 	}
+	if script == 0 && font.NormalizeFamily(family) == fontscan.Monospace {
+		face = monospaced(fm, face, aspect, r)
+	}
 	// A per-rune lookup (script hint set) intentionally crosses
 	// families: return whatever covering face the matcher found. A
 	// family lookup probes with 'x', and the matcher filters its
@@ -111,6 +114,22 @@ func lookup(family string, aspect font.Aspect, script language.Script, r rune) (
 		}
 	}
 	return typeface(face)
+}
+
+// monospaced keeps face, the store's answer to the monospace generic,
+// when it is monospaced, else resolves the embedded mono instead: the
+// generic falls through to any face when no family the matcher knows
+// as monospace is installed, and text set in monospace must line up.
+// Caller holds storeMu.
+func monospaced(fm *fontscan.FontMap, face *font.Face, aspect font.Aspect, r rune) *font.Face {
+	if face.IsMonospace() {
+		return face
+	}
+	fm.SetQuery(fontscan.Query{Families: []string{uifont.MonoFamily}, Aspect: aspect})
+	if mono := fm.ResolveFace(r); mono != nil {
+		return mono
+	}
+	return face
 }
 
 // faceForFamily loads the first system face of family outside the
