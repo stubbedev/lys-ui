@@ -313,6 +313,10 @@ func (r *Revealer) shows() bool {
 // Paint draws the child through the transition at its progress.
 func (r *Revealer) Paint(cv *render.Canvas) {
 	r.painted = render.Rect{}
+	// Only a transformed frame keeps the layer, a full-canvas buffer:
+	// at rest, hidden or fading, the child paints directly.
+	layer := r.layer
+	r.layer = nil
 	if r.child == nil || !r.shows() {
 		return
 	}
@@ -338,7 +342,7 @@ func (r *Revealer) Paint(cv *render.Canvas) {
 	}
 	dev := cv.MapRect(r.bounds)
 	m, alpha, clip := r.transform(dev, p)
-	r.layer = cv.Layer(r.layer, dev)
+	r.layer = cv.Layer(layer, dev)
 	r.child.Paint(r.layer.Canvas())
 	if clip {
 		prev := cv.PushClipDevice(dev)

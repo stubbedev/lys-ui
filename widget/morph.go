@@ -135,6 +135,10 @@ const (
 // Paint draws the child at the current reveal.
 func (m *Morph) Paint(cv *render.Canvas) {
 	r := m.reveal
+	// Only a morphing frame keeps the layers, full-canvas buffers: at
+	// rest, hidden or fading, the content paints directly.
+	layer, inner := m.layer, m.inner
+	m.layer, m.inner = nil, nil
 	switch {
 	case r <= 0 || m.child == nil:
 		return
@@ -152,7 +156,7 @@ func (m *Morph) Paint(cv *render.Canvas) {
 	if dev.Empty() {
 		return
 	}
-	l := cv.Layer(m.layer, dev)
+	l := cv.Layer(layer, dev)
 	m.layer = l
 	content := m.shownContent()
 	// The clip unrolls from the origin side; a centered origin has no
@@ -164,7 +168,7 @@ func (m *Morph) Paint(cv *render.Canvas) {
 		if m.plate != nil {
 			m.plate(l.Canvas(), clip)
 		}
-		in := cv.Layer(m.inner, dev)
+		in := cv.Layer(inner, dev)
 		m.inner = in
 		PaintChild(in.Canvas(), m.child)
 		p := &render.Path{}
