@@ -835,7 +835,11 @@ func (w *hostWindow) draw() bool {
 	bufBounds := render.Rect{W: bw, H: bh}
 	if gen := widget.DamageGeneration(); gen != w.damageSeen {
 		w.damageSeen = gen
-		if rects, _ := widget.CollectDamage(w.router.Root); len(rects) > 0 {
+		rects, _ := widget.CollectDamage(w.router.Root)
+		if report := widget.DamageReport(); report != "" {
+			debug.Log("damage", "%dx%d window owes bounds: %s", bw, bh, report)
+		}
+		if len(rects) > 0 {
 			for _, r := range rects {
 				if r = r.Intersect(bufBounds); !r.Empty() {
 					w.pendingRects = append(w.pendingRects, r)

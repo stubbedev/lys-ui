@@ -157,6 +157,7 @@ func (pc *Painter) Pass() (bool, error) {
 	b, err := pc.pool.Acquire()
 	if errors.Is(err, buffer.ErrBusy) {
 		// The release event (dispatched by the owning loop) wakes it.
+		debug.Log("frame", "popup frame deferred: pool busy (a buffer held, or its import pending)")
 		pc.dirty.Store(true)
 		return true, nil
 	}

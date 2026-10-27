@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // measureMisses counts, in lysdebug builds, the measures that missed
@@ -63,5 +64,67 @@ func MeasureMissReport() string {
 		parts = append(parts, fmt.Sprintf("%d %s", measureMisses[k], k))
 	}
 	clear(measureMisses)
+	return strings.Join(parts, ", ")
+}
+
+// boundsDamage records, in lysdebug builds, the widgets that owed their
+// whole bounds since the last DamageReport and why, keyed by size,
+// type and reason.
+var boundsDamage = map[string]int{}
+
+// damageReasons is why n would owe its whole bounds now, read before
+// takeDamage clears the marks.
+func damageReasons(n *node) string {
+	if n == nil {
+		return ""
+	}
+	var why []string
+	if n.invalid {
+		why = append(why, "invalid")
+	}
+	if n.subInvalid {
+		why = append(why, "descendant")
+	}
+	if n.themeSeen != themeGen {
+		why = append(why, "theme")
+	}
+	if n.styleDmg != styleGen {
+		why = append(why, "stylegen")
+	}
+	return strings.Join(why, "+")
+}
+
+// noteDamage records that w owed its whole bounds this frame, and why.
+func noteDamage(w Widget, bounds render.Rect, why string) {
+	boundsDamage[fmt.Sprintf("%dx%d %T %s", bounds.W, bounds.H, w, why)]++
+}
+
+// DamageReport returns the widgets that owed their whole bounds since
+// the last call, largest first ("1920x1080 *widget.Box invalid, ..."),
+// and clears them; "" when there were none or the build lacks the
+// lysdebug tag. The app logs it per frame under LYS_DEBUG=damage.
+func DamageReport() string {
+	if !debug.Enabled || len(boundsDamage) == 0 {
+		return ""
+	}
+	area := func(k string) int {
+		var w, h int
+		_, _ = fmt.Sscanf(k, "%dx%d", &w, &h)
+		return w * h
+	}
+	keys := slices.SortedFunc(maps.Keys(boundsDamage), func(a, b string) int {
+		if d := area(b) - area(a); d != 0 {
+			return d
+		}
+		return strings.Compare(a, b)
+	})
+	parts := make([]string, 0, min(len(keys), 8))
+	for _, k := range keys[:min(len(keys), 8)] {
+		if c := boundsDamage[k]; c > 1 {
+			k = fmt.Sprintf("%s (x%d)", k, c)
+		}
+		parts = append(parts, k)
+	}
+	clear(boundsDamage)
 	return strings.Join(parts, ", ")
 }

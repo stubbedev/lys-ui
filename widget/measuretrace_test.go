@@ -102,3 +102,30 @@ func TestMeasureCacheDropsEveryEntryOnAStyleChange(t *testing.T) {
 		t.Errorf("width b after the style change returned the old size %v, want a fresh measure", got)
 	}
 }
+
+// A lysdebug build names the widgets that owed their whole bounds and
+// why, largest first, and a release build reports nothing (#399).
+func TestDamageReport(t *testing.T) {
+	inner := NewBox(Column, 0, 0)
+	inner.Append(newStub(10, 10), false)
+	root := NewBox(Column, 0, 0)
+	root.Append(inner, false)
+	arrangeTree(t, root, 120, 80)
+	CollectDamage(root)
+	DamageReport()
+	root.Invalidate()
+	CollectDamage(root)
+	report := DamageReport()
+	if !debug.Enabled {
+		if report != "" {
+			t.Errorf("a release build reported %q", report)
+		}
+		return
+	}
+	if !strings.HasPrefix(report, "120x80 *widget.Box invalid") {
+		t.Errorf("report %q, want the invalidated root first", report)
+	}
+	if DamageReport() != "" {
+		t.Error("the report did not clear")
+	}
+}

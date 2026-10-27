@@ -8,6 +8,7 @@ package widget
 import (
 	"sync/atomic"
 
+	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/style"
@@ -119,7 +120,14 @@ func collectInto(w Widget, rects *[]render.Rect, depth int) render.Rect {
 		}
 	}
 	if dn, ok := w.(damageNoder); ok {
+		var why string
+		if debug.Enabled {
+			why = damageReasons(nodeOf(w))
+		}
 		bounds, extras, dirty := dn.takeDamage()
+		if debug.Enabled && dirty && !bounds.Empty() {
+			noteDamage(w, bounds, why)
+		}
 		if dirty {
 			if !bounds.Empty() {
 				*rects = append(*rects, bounds)
