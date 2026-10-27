@@ -1747,7 +1747,7 @@ func (n *node) restyle(w Widget) *style.Values {
 	} else {
 		*v = style.Values{}
 		if n.pseudoGen != styleGen {
-			n.pseudo = [3]style.Values{}
+			n.pseudo = nil
 			n.pseudoGen = styleGen
 		}
 	}
@@ -1812,7 +1812,11 @@ func restyleCountersAfter(w Widget) {
 }
 
 // pseudoNames are the painted pseudo-elements, in cache order.
-var pseudoNames = [3]string{"before", "after", "first-letter"}
+var pseudoNames = [...]string{"before", "after", "first-letter"}
+
+// pseudoNext is what computePseudos cascades into before it keeps or
+// drops a node's set (loop-goroutine only, like styleNext).
+var pseudoNext [len(pseudoNames)]style.Values
 
 // prevCountersOf reads the two counter sets CSS counter inheritance
 // takes beside the parent's: the previous visible sibling's, and the
@@ -1848,29 +1852,43 @@ func lastStyleKid(w Widget) Widget {
 	return nil
 }
 
-// computePseudos cascades the ::before/::after rules of this widget,
+// computePseudos cascades the pseudo-element rules of this widget,
 // inheriting from its own computed style, and repaints when one moved.
+// A widget no rule addresses keeps no set at all.
 func (n *node) computePseudos(layers []style.Layer, self *style.Values) {
-	oldPseudo := n.pseudo
+	addressed := false
 	for i, name := range pseudoNames {
-		var pv style.Values
-		style.ComputePseudo(layers, &styleSelf, self, envFor(n), &styleScratch, &pv, name)
-		n.pseudo[i] = pv
-	}
-	n.pseudoGen = styleGen
-	for i := range pseudoNames {
-		if !oldPseudo[i].Equal(&n.pseudo[i]) {
-			n.Invalidate()
-			break
+		if style.ComputePseudo(layers, &styleSelf, self, envFor(n), &styleScratch, &pseudoNext[i], name) {
+			addressed = true
 		}
 	}
+	n.pseudoGen = styleGen
+	if !addressed {
+		if n.pseudo != nil {
+			n.pseudo = nil
+			n.Invalidate()
+		}
+		return
+	}
+	if n.pseudo == nil {
+		n.pseudo = new([len(pseudoNames)]style.Values)
+		n.Invalidate()
+	} else {
+		for i := range pseudoNames {
+			if !n.pseudo[i].Equal(&pseudoNext[i]) {
+				n.Invalidate()
+				break
+			}
+		}
+	}
+	*n.pseudo = pseudoNext
 }
 
-// PseudoStyle returns w's computed ::before/::after style — the
-// cascade a `::before`/`::after` rule produced, inheriting from the
-// widget's own. nil when no pseudo-element rules are loaded or the
-// name is not one of the two. The values are fresh only after a
-// restyle; paint paths read them through PaintBoxLayers.
+// PseudoStyle returns w's computed ::before/::after/::first-letter
+// style — the cascade the pseudo-element's rules produced, inheriting
+// from the widget's own. nil when no rule addresses any of w's
+// pseudo-elements or the name is not one of them. The values are fresh
+// only after a restyle; paint paths read them through PaintBoxLayers.
 func PseudoStyle(w Widget, pseudo string) *style.Values {
 	n := nodeOf(w)
 	if n == nil || !sensNow.pseudo {
@@ -1880,6 +1898,9 @@ func PseudoStyle(w Widget, pseudo string) *style.Values {
 		if name == pseudo {
 			if n.pseudoGen != styleGen || n.styleDirty {
 				n.style(w)
+			}
+			if n.pseudo == nil {
+				return nil
 			}
 			return &n.pseudo[i]
 		}
@@ -1910,7 +1931,7 @@ type pseudoFacer interface {
 // then its content string — before at the content start, after at the
 // content end. Content needs a face; box layers paint for any widget.
 func paintPseudos(cv *render.Canvas, w Widget, n *node, v *style.Values) {
-	if !sensNow.pseudo || n.pseudoGen != styleGen {
+	if !sensNow.pseudo || n.pseudoGen != styleGen || n.pseudo == nil {
 		return
 	}
 	b := boxOf(v, render.Insets{})
@@ -1949,7 +1970,7 @@ func paintPseudos(cv *render.Canvas, w Widget, n *node, v *style.Values) {
 // the content start (::before) or end (::after), vertically centered
 // at its natural size beside any text content.
 func paintPseudoImage(cv *render.Canvas, n *node, v *style.Values) {
-	if !sensNow.pseudo || n.pseudoGen != styleGen {
+	if !sensNow.pseudo || n.pseudoGen != styleGen || n.pseudo == nil {
 		return
 	}
 	b := boxOf(v, render.Insets{})

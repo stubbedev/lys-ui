@@ -48,13 +48,17 @@ func Compute(layers []Layer, n Node, parent, old *Values, env Env, sc *Scratch, 
 // of n: only the rules addressing that pseudo-element cascade, and the
 // result inherits from parent, the element's own computed style. A
 // content declaration's quote keywords move the element's inherited
-// quote depth, so descendants' open-quote continues the count.
-func ComputePseudo(layers []Layer, n Node, parent *Values, env Env, sc *Scratch, v *Values, name string) {
+// quote depth, so descendants' open-quote continues the count. It
+// reports whether any rule addressed the pseudo-element: without one,
+// v holds only what it inherited, and the pseudo-element draws
+// nothing.
+func ComputePseudo(layers []Layer, n Node, parent *Values, env Env, sc *Scratch, v *Values, name string) bool {
 	sc.pseudo = name
 	sc.computeAll(layers, n, parent, nil, env, v)
 	if parent != nil && v.HasContent {
 		parent.QuoteDepth = v.QuoteDepth
 	}
+	return !sc.offered.Empty() || !sc.offeredStart.Empty() || len(sc.customs) > 0 || len(sc.metas) > 0
 }
 
 func (sc *Scratch) computeAll(layers []Layer, n Node, parent, old *Values, env Env, v *Values) {

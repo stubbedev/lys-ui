@@ -262,10 +262,11 @@ type node struct {
 	kidsAdaps []*styleTargeter
 	kidsGen   uint64
 
-	// pseudo holds the computed ::before/::after styles (stylepart
-	// pseudo-elements style through the parts themselves), stamped with
-	// the cascade generation.
-	pseudo    [3]style.Values
+	// pseudo holds the computed ::before/::after/::first-letter styles
+	// (stylepart pseudo-elements style through the parts themselves),
+	// stamped with the cascade generation; nil while no rule addresses
+	// any of them, which is nearly every widget, as each set is 13 KB.
+	pseudo    *[len(pseudoNames)]style.Values
 	pseudoGen uint64
 
 	// disabled is the widget's own half of the enable state: false (the
