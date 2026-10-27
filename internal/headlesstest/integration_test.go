@@ -1125,7 +1125,8 @@ func TestHeadlessPopoverTakesTypingAndRepaints(t *testing.T) {
 	// motion settles, only the label's rect, not the whole popup
 	// (#409).
 	partial := false
-	for i := range 40 {
+	settle := time.Now().Add(traceTimeout)
+	for i := 0; !partial && time.Now().Before(settle); i++ {
 		tr, err := w.Wait("frame", " committed ", traceTimeout)
 		if err != nil {
 			t.Fatalf("popover frame %d after the timer change never painted: %v\n%s", i, err, tailTraces(w, 25))
@@ -1134,10 +1135,7 @@ func TestHeadlessPopoverTakesTypingAndRepaints(t *testing.T) {
 		if _, err := fmt.Sscanf(tr.Message, "popup %d committed %dx%d: region %dx%d", &pid, &pw, &ph, &rw, &rh); err != nil {
 			t.Fatalf("bad frame trace %q: %v", tr.Message, err)
 		}
-		if rw*rh < pw*ph/2 {
-			partial = true
-			break
-		}
+		partial = rw*rh < pw*ph/2
 	}
 	if !partial {
 		t.Errorf("every ticker frame repainted the whole popover\n%s", tailTraces(w, 25))
