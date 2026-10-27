@@ -3,7 +3,9 @@ package buffer
 import (
 	"fmt"
 	"slices"
+	"time"
 
+	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/dmabuf"
 	"github.com/stubbedev/lys-lib/dmabufwl"
 	"github.com/stubbedev/lys-lib/gpu"
@@ -25,10 +27,12 @@ import (
 // compositor answers, and a pool counts it busy meanwhile. A refusal
 // drops the buffer from its pool and reports the error to rejected.
 func NewDmabuf(dev *gpu.Device, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, modifiers []uint64, rejected func(error)) (*Buffer, error) {
+	start := time.Now()
 	t, err := dev.NewTarget(bufW, bufH, dmabuf.FormatARGB8888, modifiers)
 	if err != nil {
 		return nil, err
 	}
+	allocated := time.Now()
 	w, err := intconv.CheckedInt32(bufW)
 	if err != nil {
 		t.Close()
@@ -45,7 +49,7 @@ func NewDmabuf(dev *gpu.Device, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, mod
 		return nil, fmt.Errorf("buffer: dmabuf %dx%d: %w", bufW, bufH, err)
 	}
 	b := &Buffer{Width: bufW, Height: bufH, Scale: scale, Stale: render.Rect{W: bufW, H: bufH}, Target: t, pending: true}
-	imp := &dmabufImport{b: b, done: func() { _ = params.Destroy() }, rejected: rejected}
+	imp := &dmabufImport{b: b, done: func() { _ = params.Destroy() }, rejected: rejected, allocate: allocated.Sub(start), sent: time.Now()}
 	params.AddCreatedHandler(imp)
 	params.AddFailedHandler(imp)
 	if err := params.Create(w, h, dmabuf.FormatARGB8888, 0); err != nil {
@@ -62,12 +66,17 @@ type dmabufImport struct {
 	// done releases the import's params once the compositor answered.
 	done     func()
 	rejected func(error)
+	// allocate is how long the target took; sent is when the import
+	// went out. The LYS_DEBUG=frame log reports both.
+	allocate time.Duration
+	sent     time.Time
 }
 
 // HandleZwpBufferParamsV1Created implements the created handler: the
 // buffer takes its wl_buffer and goes back to its pool as a released
 // one would.
 func (imp *dmabufImport) HandleZwpBufferParamsV1Created(ev wlr.ZwpBufferParamsV1CreatedEvent) {
+	debug.Log("frame", "dmabuf %dx%d: target allocated in %v, import answered in %v", imp.b.Width, imp.b.Height, imp.allocate, time.Since(imp.sent))
 	imp.done()
 	imp.created(ev.Buffer)
 }
