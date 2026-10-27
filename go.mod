@@ -7,6 +7,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jfreymuth/pulse v0.1.3
 	github.com/stubbedev/lys-lib v0.1.1-0.20261027091102-6e35fe623924
+	github.com/stubbedev/memory-go v0.2.0
 	github.com/unxed/xkb-go v0.1.9
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
@@ -19,4 +20,5 @@ require (
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
+	modernc.org/memory v1.12.1 // indirect
 )

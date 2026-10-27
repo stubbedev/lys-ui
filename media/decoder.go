@@ -1,10 +1,12 @@
 package media
 
 import (
+	"fmt"
 	"image"
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+	memory "github.com/stubbedev/memory-go"
 )
 
 const (
@@ -33,6 +35,10 @@ type seekRequest struct {
 }
 
 type decoder struct {
+	// pixels holds the frame buffers off the Go heap: a stream's frames
+	// cost the GC nothing, and the pages go back to the system when the
+	// stream closes rather than when a collection gets to them.
+	pixels memory.Shared
 	src    Source
 	seeker Seeker
 	size   image.Rectangle
@@ -99,7 +105,12 @@ func (d *decoder) run() {
 			}
 			continue
 		case buf == nil && allocated < framePool:
-			buf = &frameBuf{img: image.NewRGBA(d.size), id: render.NewImageID()}
+			var err error
+			if buf, err = d.newFrameBuf(); err != nil {
+				atEnd = true
+				pending = &decoded{gen: gen, err: err}
+				continue
+			}
 			allocated++
 		case buf == nil:
 			select {
@@ -146,9 +157,29 @@ func (d *decoder) recycle(img *frameBuf) {
 	}
 }
 
+// newFrameBuf allocates one frame buffer of the stream's size off the
+// Go heap.
+func (d *decoder) newFrameBuf() (*frameBuf, error) {
+	stride := 4 * d.size.Dx()
+	pix, err := memory.MakeSlice[byte](&d.pixels, stride*d.size.Dy())
+	if err != nil {
+		return nil, fmt.Errorf("media: a %dx%d frame buffer: %w", d.size.Dx(), d.size.Dy(), err)
+	}
+	return &frameBuf{img: &image.RGBA{Pix: pix.Elems(), Stride: stride, Rect: d.size}, id: render.NewImageID()}, nil
+}
+
+// close stops the decoder and frees its frame buffers once nothing can
+// read them: the decoding goroutine has stopped, the stream has
+// dropped its frames, and every recording that may draw one has ended
+// (render.Retire).
 func (d *decoder) close() error {
 	close(d.quit)
 	err := d.src.Close()
 	<-d.done
+	render.Retire(func() {
+		if err := d.pixels.Close(); err != nil {
+			panic(fmt.Sprintf("media: free the frame buffers: %v", err))
+		}
+	})
 	return err
 }

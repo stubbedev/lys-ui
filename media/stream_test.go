@@ -350,3 +350,32 @@ func TestClosedStreamRefusesWork(t *testing.T) {
 		}
 	})
 }
+
+// A stream's frames live off the Go heap, and its pages go back on
+// Close, after which it hands out no frame (#413).
+func TestStreamFramesAreFreedOnClose(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		defer animclock.Reset()
+		s := newStream(&fakeSource{frames: 3, failAt: -1}, "test", noAudio)
+		s.Play()
+		time.Sleep(0)
+		synctest.Wait()
+		s.advance(time.Now())
+		frame := s.Frame()
+		if frame.RGBA == nil {
+			t.Fatal("no frame decoded")
+		}
+		if st := s.dec.pixels.Stats(); st.Live == 0 || st.Bytes < len(frame.Pix) {
+			t.Errorf("frame buffers %+v off the heap, want at least the %d-byte frame", st, len(frame.Pix))
+		}
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if st := s.dec.pixels.Stats(); st.Live != 0 {
+			t.Errorf("%d frame buffers outlived Close", st.Live)
+		}
+		if s.Frame().RGBA != nil {
+			t.Error("a closed stream still hands out a frame")
+		}
+	})
+}

@@ -144,9 +144,10 @@ func (s *Stream) Closed() bool { return s.closed }
 func (s *Stream) Err() error { return s.err }
 
 // Frame returns the frame to show, its RGBA nil before the first is
-// decoded: a pooled buffer's pixels under the buffer's identity, at a
-// version that changes whenever the frame does. The image belongs to
-// the stream and stays valid until the next change.
+// decoded and after Close: a pooled buffer's pixels under the buffer's
+// identity, at a version that changes whenever the frame does. The
+// image belongs to the stream and stays valid until the next change or
+// Close.
 func (s *Stream) Frame() render.VersionedImage {
 	if s.cur == nil {
 		return render.VersionedImage{Version: s.frameSeq}
@@ -222,6 +223,9 @@ func (s *Stream) Close() error {
 	s.closed, s.playing = true, false
 	s.stopAudio()
 	s.sync()
+	// The frames go with the decoder's buffers: nothing reads one
+	// after Close.
+	s.cur, s.queue = nil, nil
 	err := s.dec.close()
 	s.notify()
 	if err != nil {
