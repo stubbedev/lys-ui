@@ -811,6 +811,9 @@ func (w *hostWindow) draw() bool {
 		w.router.Root.Measure(widget.Constraints{Max: widget.Size{W: bw, H: bh}})
 		w.router.Root.Arrange(render.Rect{X: 0, Y: 0, W: bw, H: bh})
 	}
+	if report := widget.MeasureMissReport(); report != "" {
+		debug.Log("measure", "%dx%d layout missed the measure cache: %s", bw, bh, report)
+	}
 	w.input.rehover()
 	w.applyInputRegion()
 	// Same surface-state shape as the scale: the opaque region tracks

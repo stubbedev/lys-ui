@@ -36,6 +36,7 @@ import (
 	"slices"
 	"sync/atomic"
 
+	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/anim"
@@ -598,6 +599,9 @@ func (n *node) measureHit(con Constraints) (Size, bool) {
 		if n.measureIn2 == con {
 			return n.measureOut2, true
 		}
+	}
+	if debug.Enabled {
+		noteMeasureMiss(n, con)
 	}
 	return Size{}, false
 }
