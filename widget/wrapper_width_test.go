@@ -123,3 +123,28 @@ func TestWrappingLabelGivesWayToASibling(t *testing.T) {
 		t.Errorf("label %dx%d, want the %d it needs wrapped at its width", lb.W, lb.H, need)
 	}
 }
+
+// A badge in a row short of room ellipsizes, giving width down to the
+// ellipsis inside its box, and keeps its whole text with room (#403).
+func TestBadgeGivesWay(t *testing.T) {
+	face := goldenFace(t)
+	b := NewBadge(face, "configured by the user's own file")
+	nat := b.Measure(Constraints{Max: Size{W: 1000, H: 100}}).W
+	if min := MinWidth(b); min >= nat/2 {
+		t.Errorf("badge minimum %d of its natural %d, want down to the ellipsis", min, nat)
+	}
+	row := NewBox(Row, 0, 0)
+	title := newStub(200, 20)
+	row.Append(title, true)
+	row.Append(b, false)
+	row.Measure(Constraints{Max: Size{W: 260, H: 40}})
+	row.Arrange(render.Rect{W: 260, H: 40})
+	if r := b.Bounds(); r.X+r.W > 260 || r.W >= nat {
+		t.Errorf("badge %v in a 260px row beside a 200px title, want it narrowed inside the row", r)
+	}
+	row.Measure(Constraints{Max: Size{W: 1000, H: 40}})
+	row.Arrange(render.Rect{W: 1000, H: 40})
+	if got := b.Bounds().W; got != nat {
+		t.Errorf("with room the badge is %d wide, want its natural %d", got, nat)
+	}
+}

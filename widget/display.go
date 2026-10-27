@@ -44,6 +44,8 @@ func NewBadge(face render.Font, text string) *Badge {
 	b := &Badge{row: NewBox(Row, 4, 0)}
 	b.SetElement("badge")
 	b.label = NewLabel(face, badgeTextPx, text, 0)
+	// A row short of room narrows the badge down to the ellipsis.
+	b.label.SetEllipsize(EllipsizeEnd)
 	b.row.AppendAligned(b.label, false, AlignCenter)
 	b.initComposite(b, b.row)
 	b.boxed = true
