@@ -102,6 +102,9 @@ type Entry struct {
 	// short for it (SetEllipsize).
 	ell EllipsizeMode
 
+	// blink is the caret's blink phase while focused.
+	blink caretBlink
+
 	// caretHidden suppresses the caret even while focused: a field
 	// presenting as plain text (EditableLabel at rest).
 	caretHidden bool
@@ -1264,14 +1267,8 @@ func (e *Entry) Paint(cv *render.Canvas) {
 	// entry has keyboard focus (GTK's rule); hidden while the input
 	// method hides its composing caret. Every frame reads the same
 	// offset, so a repaint (blink or otherwise) never jumps it.
-	if caret := e.caretRune(); caret >= 0 && e.focused && !e.caretHidden {
-		adv := 0
-		if caret < len(e.runes) {
-			for _, band := range sh.AppendCaretBands(e.bands[:0], caret, caret+1) {
-				adv = int(band[1] - band[0] + 0.5)
-			}
-		}
-		cv.FillRect(caretShapeRect(e.caretX(sh, caret), c.Y, c.H, adv, v.CaretShape), caretCol)
+	if r, ok := e.caretRect(sh); ok && !e.blink.hidden {
+		cv.FillRect(r, caretCol)
 	}
 	cv.PopClip(prev)
 	e.paintIcons(cv)
@@ -1296,6 +1293,38 @@ func (e *Entry) paintIcons(cv *render.Canvas) {
 }
 
 // baseline centers sh's line in the text area c.
+// caretRect is the caret in its CSS shape after the text before it,
+// spanning the font's extents on the line's baseline, while the entry
+// has keyboard focus (GTK's rule); none while the input method hides
+// its composing caret.
+func (e *Entry) caretRect(sh *render.ShapedText) (render.Rect, bool) {
+	caret := e.caretRune()
+	if caret < 0 || !e.focused || e.caretHidden {
+		return render.Rect{}, false
+	}
+	adv := 0
+	if caret < len(e.runes) {
+		for _, band := range sh.AppendCaretBands(e.bands[:0], caret, caret+1) {
+			adv = int(band[1] - band[0] + 0.5)
+		}
+	}
+	y, h := caretExtents(sh, e.baseline(sh, e.contentRect()))
+	return caretShapeRect(e.caretX(sh, caret), y, h, adv, e.style(e).CaretShape), true
+}
+
+// restartBlink implements caretBlinker.
+func (e *Entry) restartBlink() { e.blink.restart(e.repaintCaret) }
+
+// stopBlink implements caretBlinker.
+func (e *Entry) stopBlink() { e.blink.stop(e.repaintCaret) }
+
+// repaintCaret damages the caret's rect alone.
+func (e *Entry) repaintCaret() {
+	if r, ok := e.caretRect(e.shape(e.displayText())); ok {
+		e.InvalidateRect(r)
+	}
+}
+
 func (e *Entry) baseline(sh *render.ShapedText, c render.Rect) int {
 	return c.Y + int(math.Round((float64(c.H)-float64(sh.LineHeight()))/2+sh.Ascent()))
 }

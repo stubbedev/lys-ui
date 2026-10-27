@@ -17,6 +17,8 @@ import (
 // widths; editing and Text stay logical regardless.
 type TextArea struct {
 	node
+	// blink is the caret's blink phase while focused.
+	blink       caretBlink
 	face        render.Font
 	faces       faceCache
 	sizePx      float64
@@ -1197,19 +1199,46 @@ func (t *TextArea) Paint(cv *render.Canvas) {
 	// has keyboard focus; hidden while the input method hides its
 	// composing caret. Every frame reads the same pan, so a repaint
 	// (blink or otherwise) never jumps it.
-	caret := t.caretPos()
-	if t.focused && (!t.composing() || t.peCur >= 0) {
-		row := t.rowOf(caret)
-		adv := 0
-		if caret.col < len(t.lines[caret.line]) {
-			lsh := t.shapeLine(t.lines[caret.line])
-			for _, band := range lsh.AppendCaretBands(t.bands[:0], caret.col, caret.col+1) {
-				adv = int(band[1] - band[0] + 0.5)
-			}
-		}
-		cv.FillRect(caretShapeRect(t.caretX(caret.line, caret.col), c.Y+row*lineH+2, lineH-4, adv, v.CaretShape), caretCol)
+	if r, ok := t.caretRect(); ok && !t.blink.hidden {
+		cv.FillRect(r, caretCol)
 	}
 	cv.PopClip(prev)
+}
+
+// caretRect is the caret in its CSS shape on the caret's visual row,
+// spanning the font's extents on the row's baseline, while the area has
+// keyboard focus; none while the input method hides its composing
+// caret.
+func (t *TextArea) caretRect() (render.Rect, bool) {
+	if !t.focused || (t.composing() && t.peCur < 0) {
+		return render.Rect{}, false
+	}
+	caret := t.caretPos()
+	lsh := t.shapeLine(t.lines[caret.line])
+	adv := 0
+	if caret.col < len(t.lines[caret.line]) {
+		for _, band := range lsh.AppendCaretBands(t.bands[:0], caret.col, caret.col+1) {
+			adv = int(band[1] - band[0] + 0.5)
+		}
+	}
+	lineH := t.lineHeight()
+	top := t.textRect().Y + t.rowOf(caret)*lineH
+	baseline := top + int(math.Round((float64(lineH)-float64(lsh.LineHeight()))/2+lsh.Ascent()))
+	y, h := caretExtents(lsh, baseline)
+	return caretShapeRect(t.caretX(caret.line, caret.col), y, h, adv, t.style(t).CaretShape), true
+}
+
+// restartBlink implements caretBlinker.
+func (t *TextArea) restartBlink() { t.blink.restart(t.repaintCaret) }
+
+// stopBlink implements caretBlinker.
+func (t *TextArea) stopBlink() { t.blink.stop(t.repaintCaret) }
+
+// repaintCaret damages the caret's rect alone.
+func (t *TextArea) repaintCaret() {
+	if r, ok := t.caretRect(); ok {
+		t.InvalidateRect(r)
+	}
 }
 
 // bandAt is a selection band's rect on the row at y.

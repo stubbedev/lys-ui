@@ -554,6 +554,9 @@ type Router struct {
 // tracking. p is in root coordinates. A hit inside a disabled subtree
 // hovers nothing: an inert control shows no hover shade.
 func (r *Router) Move(p Point) {
+	if r.pressed != nil {
+		defer r.touchCaret()
+	}
 	r.pointer, r.pointerIn = p, true
 	hit := r.hitAt(p)
 	if r.hover != hit {
@@ -646,6 +649,7 @@ func (r *Router) Rehover() bool {
 // was, exactly like a press on empty space outside any control leaves
 // a text field alone.
 func (r *Router) Press(button uint32, p Point, mods Mods) {
+	defer r.touchCaret()
 	hit := r.Root.HitTest(p)
 	if hit != nil && !IsEnabled(hit) {
 		return
@@ -688,6 +692,9 @@ func setFocusStyle(old, new Widget, visible bool) {
 	}
 	if n := nodeOf(old); n != nil && n.focused {
 		n.focused, n.focusVisible = false, false
+		if b, ok := old.(caretBlinker); ok {
+			b.stopBlink()
+		}
 		n.invalidateState(style.Focus | style.FocusVisible)
 		shiftFocusWithin(old, -1)
 		if n.onFocus != nil {
@@ -696,6 +703,9 @@ func setFocusStyle(old, new Widget, visible bool) {
 	}
 	if n := nodeOf(new); n != nil && !n.focused {
 		n.focused, n.focusVisible = true, visible
+		if b, ok := new.(caretBlinker); ok {
+			b.restartBlink()
+		}
 		n.invalidateState(style.Focus | style.FocusVisible)
 		shiftFocusWithin(new, 1)
 		if n.onFocus != nil {
@@ -746,6 +756,7 @@ func shiftFocusWithin(w Widget, delta int) {
 // it — unless the widget was disabled between press and release, in
 // which case the click dies with the gesture.
 func (r *Router) Release(button uint32, p Point) {
+	defer r.touchCaret()
 	if button != BTNLeft || r.pressed == nil {
 		return
 	}
@@ -984,6 +995,7 @@ func (r *Router) applyDragTarget(w Widget, accepted bool) {
 // (GTK's key controller on a parent), and an ancestor FocusNavigator
 // may move focus instead.
 func (r *Router) KeyAction(a KeyAction, mods Mods) {
+	defer r.touchCaret()
 	target := r.keyboardTarget()
 	if o := contextMenuOpener(target); a == KeyContextMenu && o != nil {
 		at := Point{}
@@ -1071,6 +1083,7 @@ type TextInserter interface {
 // Type delivers a typed character to the focused widget, honoring a
 // disable-during-focus just like KeyAction.
 func (r *Router) Type(ch rune) {
+	defer r.touchCaret()
 	if h, ok := r.keyboardTarget().(RuneHandler); ok {
 		h.InsertRune(ch)
 	}
@@ -1090,6 +1103,7 @@ type SelectAller interface {
 // SelectAll asks the focused widget to select its entire content,
 // honoring a disable-during-focus just like KeyAction.
 func (r *Router) SelectAll() {
+	defer r.touchCaret()
 	if s, ok := r.keyboardTarget().(SelectAller); ok {
 		s.SelectAll()
 	}
@@ -1223,6 +1237,15 @@ func (r *Router) focusStep(dir int) {
 	r.focus = order[idx]
 	// Keyboard focus scrolls into view (GtkViewport scroll-to-focus).
 	RevealRect(r.focus, boundsOf(r.focus))
+}
+
+// touchCaret restarts the focused field's caret blink: every input it
+// takes (a key, typed text, a press or a drag) shows the caret solid
+// again, as GTK's does.
+func (r *Router) touchCaret() {
+	if b, ok := r.focus.(caretBlinker); ok {
+		b.restartBlink()
+	}
 }
 
 // focusGroup is a widget whose focusable descendants are one Tab stop
