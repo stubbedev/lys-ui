@@ -380,3 +380,20 @@ func TestMonospaceNeverResolvesProportional(t *testing.T) {
 		t.Errorf("monospace resolved %q (monospaced %v), want the embedded %q", got.Describe().Family, got.IsMonospace(), uifont.MonoFamily)
 	}
 }
+
+// A fallback chain loads a store face only when a rune needs one:
+// building it and shaping text its base covers loads none, so a UI in
+// one script never pulls in a CJK collection or an emoji font.
+func TestFallbackLoadsFacesOnlyOnDemand(t *testing.T) {
+	sans := mustSans(t)
+	storeMu.Lock()
+	direct, cached := len(directFaces), len(faceCache)
+	storeMu.Unlock()
+	ch := Fallback(sans)
+	ch.Shape("plain latin text", 14)
+	storeMu.Lock()
+	defer storeMu.Unlock()
+	if len(directFaces) != direct || len(faceCache) != cached {
+		t.Errorf("a chain over covered text loaded %d direct and %d store faces", len(directFaces)-direct, len(faceCache)-cached)
+	}
+}

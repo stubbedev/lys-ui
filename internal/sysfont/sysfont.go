@@ -17,6 +17,7 @@ import (
 	"sync"
 
 	"github.com/go-text/typesetting/font"
+	"github.com/go-text/typesetting/font/opentype"
 	"github.com/go-text/typesetting/fontscan"
 	"github.com/go-text/typesetting/language"
 	"github.com/stubbedev/lys-lib/render"
@@ -167,23 +168,28 @@ func loadFaceFile(path string, index uint16) (*render.Typeface, error) {
 	return render.NewTypeface(face)
 }
 
-// faceFromFile parses a font file into the face at index (0 for plain
-// single-font files). ParseTTC handles plain files too. The path comes
-// from fontscan's system font index, never from user input.
+// faceFromFile parses the face at index of a font file (0 for plain
+// single-font files). Only that face is read: a collection's other
+// faces (a CJK .ttc holds ten) would each copy every table. The path
+// comes from fontscan's system font index, never from user input.
 func faceFromFile(path string, index uint16) (*font.Face, error) {
 	f, err := os.Open(path) //nolint:gosec // path is fontscan's trusted font index, not user input
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	faces, err := font.ParseTTC(f)
+	loaders, err := opentype.NewLoaders(f)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sysfont: read %s: %w", path, err)
 	}
-	if int(index) >= len(faces) {
+	if int(index) >= len(loaders) {
 		return nil, fmt.Errorf("sysfont: %s has no face %d", path, index)
 	}
-	return faces[index], nil
+	ft, err := font.NewFont(loaders[index])
+	if err != nil {
+		return nil, fmt.Errorf("sysfont: face %d of %s: %w", index, path, err)
+	}
+	return font.NewFace(ft), nil
 }
 
 // typeface wraps face in a render.Typeface, sharing one instance per
@@ -328,17 +334,37 @@ func Weighted(family string, size float64, weight int, italic bool) (*render.Typ
 	return instantiate(tf, aspect), nil
 }
 
+// fallbackFamilies are the standard Linux fallback families
+// fontconfig itself prefers, in order: their proper CJK and color emoji
+// glyphs beat whatever else the store's script fallback digs up
+// (bitmap-style Unifont, monochrome emoji outlines).
+var fallbackFamilies = []string{"Noto Sans CJK JP", "Noto Color Emoji"}
+
 // Fallback returns a chain that shapes with base and, for runes it
-// lacks, first the standard Linux fallback families fontconfig itself
-// prefers (Noto Sans CJK for Han, Noto Color Emoji for emoji), then
-// the system store per rune and script. Pass the chain anywhere a
-// render.Font is expected; a base with full coverage never consults
-// the fallbacks. Runes nothing covers render .notdef, as before.
+// lacks, a face from the system store: the first of base's family and
+// the standard fallback families (fallbackFamilies) that covers the
+// rune, else the store's own pick for its script. The matcher picks
+// from the store's coverage index, so only a face some rune needs is
+// ever loaded: text in one script never pulls in a CJK collection or
+// an emoji font. Pass the chain anywhere a render.Font is expected; a
+// base with full coverage never consults the store. Runes nothing
+// covers render .notdef, as before.
 func Fallback(base *render.Typeface) *render.Chain {
-	family := base.Family()
-	chain := render.NewChain(base, preferenceFaces()...)
-	return chain.WithResolver(func(r rune) *render.Typeface {
-		tf, err := lookup(family, regAspect, language.LookupScript(r), r)
+	families := append([]string{base.Family()}, fallbackFamilies...)
+	return render.NewChain(base).WithResolver(func(r rune) *render.Typeface {
+		fm, err := fontmap()
+		if err != nil {
+			return nil
+		}
+		storeMu.Lock()
+		defer storeMu.Unlock()
+		fm.SetQuery(fontscan.Query{Families: families, Aspect: regAspect})
+		fm.SetScript(language.LookupScript(r))
+		face := fm.ResolveFace(r)
+		if face == nil {
+			return nil
+		}
+		tf, err := typeface(face)
 		if err != nil {
 			return nil
 		}
@@ -346,33 +372,21 @@ func Fallback(base *render.Typeface) *render.Chain {
 	})
 }
 
-// preferenceFaces returns the installed faces of the standard Linux
-// fallback families, in preference order. Their proper CJK and color
-// emoji glyphs beat whatever else the store's script fallback digs up
-// (bitmap-style Unifont, monochrome emoji outlines).
-func preferenceFaces() []*render.Typeface {
+// FallbackFamilies returns the standard Linux fallback family names
+// Fallback chains prefer, reporting only the ones installed, in
+// preference order. Diagnostics (the doctor block) use it to show
+// what mixed-script text falls back to; it loads no face.
+func FallbackFamilies() []string {
 	if _, err := fontmap(); err != nil {
 		return nil
 	}
 	storeMu.Lock()
 	defer storeMu.Unlock()
-	var out []*render.Typeface
-	for _, fam := range []string{"Noto Sans CJK JP", "Noto Color Emoji"} {
-		if tf := faceForFamily(fam); tf != nil {
-			out = append(out, tf)
-		}
-	}
-	return out
-}
-
-// FallbackFamilies returns the standard Linux fallback family names
-// Fallback chains prefer, reporting only the ones installed, in
-// preference order. Diagnostics (the doctor block) use it to show
-// what mixed-script text actually falls back to.
-func FallbackFamilies() []string {
 	var out []string
-	for _, tf := range preferenceFaces() {
-		out = append(out, tf.Family())
+	for _, fam := range fallbackFamilies {
+		if _, ok := storeFM.FindSystemFont(fam); ok {
+			out = append(out, fam)
+		}
 	}
 	return out
 }
