@@ -56,34 +56,36 @@ func (c *computeCounter) Measure(con Constraints) Size {
 func (c *computeCounter) Paint(*render.Canvas) {}
 func (c *computeCounter) HitTest(Point) Widget { return nil }
 
-// A vertical scroll's page meets three constraint sets each frame (two
-// overflow probe widths, then its natural height to arrange at): all
-// three stay cached, and a fourth evicts the least recently used
-// (#391).
-func TestMeasureCacheHoldsThreeConstraintSets(t *testing.T) {
+// A page in a vertical scroll beside a sidebar meets four constraint
+// sets each frame (the row's whole width and the width the sidebar
+// leaves, each with and without the scrollbar gutter): all four stay
+// cached, and a fifth evicts the least recently used (#397).
+func TestMeasureCacheHoldsFourConstraintSets(t *testing.T) {
 	c := &computeCounter{}
 	sets := []Constraints{
+		{Max: Size{W: 1812, H: unboundedPx}},
+		{Max: Size{W: 1820, H: unboundedPx}},
 		{Max: Size{W: 1556, H: unboundedPx}},
 		{Max: Size{W: 1564, H: unboundedPx}},
-		{Max: Size{W: 1556, H: 2023}},
 	}
 	for range 3 {
 		for _, con := range sets {
 			c.Measure(con)
 		}
 	}
-	if c.computed != 3 {
-		t.Fatalf("three passes over three constraint sets computed %d times, want 3", c.computed)
+	if c.computed != 4 {
+		t.Fatalf("three passes over four constraint sets computed %d times, want 4", c.computed)
 	}
 	c.Measure(Constraints{Max: Size{W: 900, H: 600}})
+	c.Measure(sets[3])
 	c.Measure(sets[2])
 	c.Measure(sets[1])
-	if c.computed != 4 {
-		t.Errorf("computed %d times, want 4: the most recent sets kept", c.computed)
+	if c.computed != 5 {
+		t.Errorf("computed %d times, want 5: the most recent sets kept", c.computed)
 	}
 	c.Measure(sets[0])
-	if c.computed != 5 {
-		t.Errorf("computed %d times, want 5: the least recently used set evicted", c.computed)
+	if c.computed != 6 {
+		t.Errorf("computed %d times, want 6: the least recently used set evicted", c.computed)
 	}
 }
 

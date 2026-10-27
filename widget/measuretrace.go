@@ -29,7 +29,13 @@ func noteMeasureMiss(n *node, con Constraints) {
 	case n.subStyle:
 		reason = "substyle"
 	default:
-		reason = fmt.Sprintf("constraints(%v, was %v | %v | %v)", con.Max, n.measureIn.Max, n.measureOld[0].in.Max, n.measureOld[1].in.Max)
+		was := []string{fmt.Sprint(n.measureIn.Max)}
+		for _, e := range n.measureOld {
+			if e.ok {
+				was = append(was, fmt.Sprint(e.in.Max))
+			}
+		}
+		reason = fmt.Sprintf("constraints(%v, was %s)", con.Max, strings.Join(was, " | "))
 	}
 	kind := "unparented"
 	if n.self != nil {

@@ -132,11 +132,12 @@ type node struct {
 	extras     []render.Rect
 
 	// measure cache: measureIn/Out is the most recently used Measure
-	// once measureSeen, and measureOld the two before it, most recent
-	// first. Three slots absorb the containers that measure a child
-	// under several constraint sets a frame (a row's natural and shrunk
-	// passes; a vertical scroll's two overflow probe widths and the
-	// natural height it then arranges at) — fewer would thrash.
+	// once measureSeen, and measureOld the three before it, most recent
+	// first. Four slots absorb the constraint sets one frame meets: a
+	// page in a vertical scroll beside a sidebar is measured at the row's
+	// whole width and again at the width the sidebar leaves (the row's
+	// natural and shrunk passes), each with and without the scrollbar
+	// gutter, then arranged at its natural height — fewer would thrash.
 	// measureDirty forces a recompute after InvalidateLayout. The style
 	// marks join the key: a stale cascade (or one marked by a class or
 	// state change) drops every entry, since padding, font-size, and
@@ -148,7 +149,7 @@ type node struct {
 	subStyle   bool
 	measureIn  Constraints
 	measureOut Size
-	measureOld [2]measureEntry
+	measureOld [3]measureEntry
 	// measureCount tallies Measure entries; the zero-recursion pin test
 	// reads it.
 	measureCount int
@@ -593,7 +594,7 @@ type measureEntry struct {
 func (n *node) dropMeasureCache() {
 	n.measureSeen = false
 	n.measureIn, n.measureOut = Constraints{}, Size{}
-	n.measureOld = [2]measureEntry{}
+	n.measureOld = [3]measureEntry{}
 }
 
 // measureHit returns the cached natural size when it is still valid
@@ -645,7 +646,7 @@ func (n *node) measureCalls() int { return n.measureCount }
 // with the style generation it measured under.
 func (n *node) measureStore(con Constraints, s Size) Size {
 	if n.measureSeen && con != n.measureIn {
-		n.measureOld[1] = n.measureOld[0]
+		copy(n.measureOld[1:], n.measureOld[:len(n.measureOld)-1])
 		n.measureOld[0] = measureEntry{in: n.measureIn, out: n.measureOut, ok: true}
 	}
 	n.measureSeen = true
