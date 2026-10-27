@@ -147,7 +147,7 @@ func TestEntryIMEPreedit(t *testing.T) {
 
 	t.Run("cursor rect sits inside the field", func(t *testing.T) {
 		e := newIMEEntry(t)
-		e.Measure(Constraints{Max: Size{W: 200, H: 100}})
+		SizeWithin(e, Size{W: 200, H: 100})
 		e.Arrange(render.Rect{X: 10, Y: 20, W: 200, H: 30})
 		e.IMEPreedit("せ", 3, 3)
 		r := e.IMECursorRect()
@@ -161,7 +161,7 @@ func TestEntryIMEPreedit(t *testing.T) {
 
 	t.Run("paint draws the composing display and underline", func(t *testing.T) {
 		e := newIMEEntry(t)
-		e.Measure(Constraints{Max: Size{W: 200, H: 100}})
+		SizeWithin(e, Size{W: 200, H: 100})
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 		e.IMEPreedit("せ", 3, 3)
 		cv := render.New(make([]byte, render.Stride(200)*30), render.Stride(200), 200, 30)
@@ -209,7 +209,7 @@ func TestTextAreaIMEPreedit(t *testing.T) {
 
 	t.Run("the visual row cache covers the composing display", func(t *testing.T) {
 		a := newArea(t)
-		a.Measure(Constraints{Max: Size{W: 60, H: 400}})
+		SizeWithin(a, Size{W: 60, H: 400})
 		a.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 400})
 		a.IMEPreedit("せせせせ", 12, 12) // wraps "helloせせせせ" onto several rows
 		a.ensureRows(a.wrapWidth())
@@ -293,7 +293,7 @@ func TestTextAreaIMEPreedit(t *testing.T) {
 
 	t.Run("cursor rect and multiline flag", func(t *testing.T) {
 		a := newArea(t)
-		a.Measure(Constraints{Max: Size{W: 200, H: 100}})
+		SizeWithin(a, Size{W: 200, H: 100})
 		a.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 60})
 		a.IMEPreedit("せ", 3, 3)
 		if !a.IMEMultiline() {

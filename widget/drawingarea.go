@@ -34,8 +34,8 @@ func (d *DrawingArea) SetContentSize(w, h int) {
 func (d *DrawingArea) QueueDraw() { d.Invalidate() }
 
 // Measure requests the content size.
-func (d *DrawingArea) Measure(con Constraints) Size {
-	return clampSize(Size{W: d.w, H: d.h}, con)
+func (d *DrawingArea) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(Size{W: d.w, H: d.h}.Along(axis))
 }
 
 // Paint runs OnDraw clipped to the area.

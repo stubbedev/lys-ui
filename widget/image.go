@@ -293,11 +293,11 @@ func (im *Image) Err() error { return im.loadErr }
 // sources are loaded from construction on.
 func (im *Image) Loaded() bool { return im.loaded }
 
-// Measure returns the decoded image's natural size, clamped to con. An
-// unsettled source measures 0 x 0; when the load lands, InvalidateLayout
-// drops this cache so the next frame remeasures.
-func (im *Image) Measure(con Constraints) Size {
-	if sz, ok := im.measureHit(con); ok {
+// Measure is the decoded image's pictureRequest. An unsettled source
+// measures 0 x 0; when the load lands, InvalidateLayout drops this cache
+// so the next frame remeasures.
+func (im *Image) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := im.measureHit(axis, forSize); ok {
 		return sz
 	}
 	w, h := 0, 0
@@ -308,7 +308,19 @@ func (im *Image) Measure(con Constraints) Size {
 		b := im.img.Bounds()
 		w, h = b.Dx(), b.Dy()
 	}
-	return im.measureStore(con, clampSize(Size{W: w, H: h}, con))
+	return im.measureStore(axis, forSize, pictureRequest(Size{W: w, H: h}, axis, forSize))
+}
+
+// pictureRequest is the request of a picture that scales into its box
+// (GtkPicture's): it needs nothing, and wants its natural size along
+// axis, scaled to keep its aspect ratio when the extent across is
+// smaller than its natural one.
+func pictureRequest(nat Size, axis Axis, forSize int) Sizes {
+	along, across := nat.Along(axis), nat.Along(otherAxis(axis))
+	if forSize == Unknown || across == 0 || forSize >= across {
+		return Sizes{Nat: along}
+	}
+	return Sizes{Nat: (along*forSize + across/2) / across}
 }
 
 // Paint settles the source if needed, then draws: the placeholder

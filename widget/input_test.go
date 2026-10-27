@@ -21,8 +21,8 @@ func (s *inputStub) SetPressed(on bool) { s.pressed = on }
 func (s *inputStub) ClickAt(p Point)    { s.clicks++ }
 func (s *inputStub) DragMove(p Point)   { s.dragTo = append(s.dragTo, p) }
 func (s *inputStub) ScrollBy(dy int)    { s.scroll += dy }
-func (s *inputStub) Measure(c Constraints) Size {
-	return clampSize(s.nat, c)
+func (s *inputStub) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(s.nat.Along(axis))
 }
 func (s *inputStub) Arrange(r render.Rect) { s.node.Arrange(r) }
 func (s *inputStub) Paint(*render.Canvas)  {}
@@ -34,7 +34,7 @@ func TestRouterHover(t *testing.T) {
 	a := &inputStub{nat: Size{W: 20, H: 20}}
 	b := &inputStub{nat: Size{W: 20, H: 20}}
 	box := NewBox(Row, 0, 0).Append(a, false).Append(b, false)
-	box.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(box, Size{W: 100, H: 100})
 	box.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 20})
 
 	r := &Router{Root: box}
@@ -67,7 +67,7 @@ func TestRouterHover(t *testing.T) {
 func TestRouterClick(t *testing.T) {
 	a := &inputStub{nat: Size{W: 20, H: 20}}
 	box := NewBox(Row, 0, 0).Append(a, false)
-	box.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(box, Size{W: 100, H: 100})
 	box.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 20})
 	r := &Router{Root: box}
 
@@ -104,10 +104,10 @@ func TestRouterClick(t *testing.T) {
 
 func TestRouterDrag(t *testing.T) {
 	s := NewSlider(0, 100, 0, 0)
-	s.Measure(Constraints{Max: Size{W: 500, H: 100}})
+	SizeWithin(s, Size{W: 500, H: 100})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 204, H: 18})
 	root := NewBox(Row, 0, 0).Append(s, false)
-	root.Measure(Constraints{Max: Size{W: 500, H: 100}})
+	SizeWithin(root, Size{W: 500, H: 100})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 204, H: 18})
 
 	r := &Router{Root: root}
@@ -131,7 +131,7 @@ func TestRouterDrag(t *testing.T) {
 func TestRouterPointerLost(t *testing.T) {
 	a := &inputStub{nat: Size{W: 20, H: 20}}
 	box := NewBox(Row, 0, 0).Append(a, false)
-	box.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(box, Size{W: 100, H: 100})
 	box.Arrange(render.Rect{X: 0, Y: 0, W: 20, H: 20})
 	r := &Router{Root: box}
 
@@ -193,8 +193,8 @@ func TestRouterScrollBubbles(t *testing.T) {
 	scroll := NewScroll(tall)
 	scroll.ShowBars = true
 	root := NewBox(Row, 0, 0).Append(scroll, false)
-	root.Measure(Constraints{Max: Size{W: 100, H: 100}})
-	scroll.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(root, Size{W: 100, H: 100})
+	SizeWithin(scroll, Size{W: 100, H: 100})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 100})
 	scroll.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 100})
 
@@ -212,7 +212,7 @@ func TestRouterFocusKeys(t *testing.T) {
 	e := NewEntry(entryFace(t), 14, render.RGB(255, 255, 255))
 	e.SetText("hi")
 	box := NewBox(Row, 0, 0).Append(e, false)
-	box.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(box, Size{W: 200, H: 100})
 	box.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 28})
 
 	r := &Router{Root: box}
@@ -243,7 +243,7 @@ func TestRouterFocusKeys(t *testing.T) {
 func TestParentChain(t *testing.T) {
 	leaf := newStub(10, 10)
 	box := NewBox(Row, 0, 0).Append(leaf, false)
-	box.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(box, Size{W: 100, H: 100})
 	box.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 100})
 
 	t.Run("arranged children know their container", func(t *testing.T) {
@@ -314,7 +314,9 @@ type focusTarget struct {
 
 func newFocusTarget() *focusTarget { return &focusTarget{} }
 
-func (f *focusTarget) Measure(con Constraints) Size { return clampSize(Size{W: 8, H: 8}, con) }
+func (f *focusTarget) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(Size{W: 8, H: 8}.Along(axis))
+}
 
 func (f *focusTarget) Paint(cv *render.Canvas) {}
 

@@ -38,7 +38,7 @@ func captureRemoved() (removed *[]Widget, restore func()) {
 // mutation tests start from.
 func boxFixture(t *testing.T, b *Box) {
 	t.Helper()
-	b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(b, Size{W: 100, H: 100})
 	b.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 20})
 }
 
@@ -105,12 +105,12 @@ func TestBoxRemove(t *testing.T) {
 		b := NewBox(Row, 0, 0)
 		b.Append(newStub(10, 10), false)
 		b.Append(newStub(10, 10), false)
-		con := Constraints{Max: Size{W: 100, H: 100}}
-		before := b.Measure(con)
+		con := Size{W: 100, H: 100}
+		before := SizeWithin(b, con)
 		if !b.Remove(b.Children()[0]) {
 			t.Fatal("Remove missed the child")
 		}
-		if after := b.Measure(con); after.W != before.W-10 {
+		if after := SizeWithin(b, con); after.W != before.W-10 {
 			t.Errorf("measure after remove = %v, want the cache dropped and shrunk by 10", after)
 		}
 	})
@@ -186,7 +186,7 @@ func TestBoxClear(t *testing.T) {
 			t.Errorf("parent of %v survived Clear", k)
 		}
 	}
-	if got := b.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 2, H: 2}) {
+	if got := SizeWithin(b, Size{W: 100, H: 100}); got != (Size{W: 2, H: 2}) {
 		t.Errorf("measure after Clear = %v, want padding only 2x2", got)
 	}
 	// Clearing an empty box does nothing, fires nothing.
@@ -257,7 +257,7 @@ func TestMutationRecomputesBounds(t *testing.T) {
 	}
 
 	// Reflow moves the survivor and invalidates its old pixels.
-	b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(b, Size{W: 100, H: 100})
 	b.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 20})
 	if y.rect != (render.Rect{X: 0, Y: 0, W: 10, H: 20}) {
 		t.Errorf("survivor did not reflow: %v", y.rect)
@@ -320,12 +320,12 @@ func TestStackRemove(t *testing.T) {
 		big, small := newStub(40, 40), newStub(10, 10)
 		s.Add("big", big)
 		s.Add("small", small)
-		con := Constraints{Max: Size{W: 100, H: 100}}
-		if got := s.Measure(con); got.W != 40 {
+		con := Size{W: 100, H: 100}
+		if got := SizeWithin(s, con); got.W != 40 {
 			t.Fatalf("stack measure = %v, want the 40px child", got)
 		}
 		s.Remove("big")
-		if got := s.Measure(con); got.W != 10 {
+		if got := SizeWithin(s, con); got.W != 10 {
 			t.Errorf("stack measure after remove = %v, want the cache dropped to 10", got)
 		}
 	})
@@ -358,7 +358,7 @@ func TestScrollSetChild(t *testing.T) {
 	t.Run("swaps content and resets the scroll position", func(t *testing.T) {
 		s := NewScroll(newStub(60, 200))
 		s.ShowBars = true
-		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+		SizeWithin(s, Size{W: 60, H: 60})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 		s.SetOffset(0, 50)
 		old := s.child
@@ -386,7 +386,7 @@ func TestScrollSetChild(t *testing.T) {
 		// The 100px child still overflows vertically, so the vertical
 		// gutter stays reserved and the 60px-wide child overflows
 		// horizontally by exactly that gutter.
-		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+		s.Arrange(render.Rect{W: 60, H: 60})
 		if maxX, maxY := s.scrollMax(); maxX != gutter || maxY != 40 {
 			t.Errorf("scrollMax after swap = (%d,%d), want (%d,40)", maxX, maxY, gutter)
 		}
@@ -395,7 +395,7 @@ func TestScrollSetChild(t *testing.T) {
 	t.Run("re-setting the same child is a no-op", func(t *testing.T) {
 		cur := newStub(60, 100)
 		s := NewScroll(cur)
-		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+		SizeWithin(s, Size{W: 60, H: 60})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 		removed, restore := captureRemoved()
 		defer restore()
@@ -415,8 +415,8 @@ func TestScrollSetChild(t *testing.T) {
 		if s.Children() != nil {
 			t.Errorf("children after nil = %v, want none", s.Children())
 		}
-		con := Constraints{Max: Size{W: 60, H: 60}}
-		if got := s.Measure(con); got != (Size{}) {
+		con := Size{W: 60, H: 60}
+		if got := SizeWithin(s, con); got != (Size{}) {
 			t.Errorf("empty scroll measure = %v, want zero", got)
 		}
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60}) // must not panic
@@ -450,7 +450,7 @@ func removeRouterFixture(t *testing.T) (root *Box, ts []*recTarget, r *Router) {
 	for _, w := range ts {
 		root.Append(w, false)
 	}
-	root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(root, Size{W: 100, H: 100})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 24, H: 8})
 	r = &Router{Root: root}
 	return root, ts, r
@@ -523,7 +523,7 @@ func TestRemoveClearsRouterState(t *testing.T) {
 		t3 := newRecTarget()
 		root.Append(inner, false)
 		root.Append(t3, false)
-		root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(root, Size{W: 100, H: 100})
 		root.Arrange(render.Rect{X: 0, Y: 0, W: 16, H: 8})
 		r := &Router{Root: root}
 

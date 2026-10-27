@@ -27,7 +27,7 @@ func TestSharedElementMorphs(t *testing.T) {
 	cv := render.New(data, render.Stride(w), w, h)
 	root := NewBox(Column, 0, 0)
 	frame := func() {
-		root.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(root, Size{W: w, H: h})
 		root.Arrange(render.Rect{W: w, H: h})
 		CollectDamage(root)
 		cv.Clear(cv.Rect(), 0)
@@ -94,7 +94,7 @@ func TestSharedElementReducedMotionCrossFades(t *testing.T) {
 	cv := render.New(data, render.Stride(w), w, h)
 	root := NewBox(Column, 0, 0)
 	frame := func() {
-		root.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(root, Size{W: w, H: h})
 		root.Arrange(render.Rect{W: w, H: h})
 		CollectDamage(root)
 		cv.Clear(cv.Rect(), 0)
@@ -145,7 +145,7 @@ func TestSharedElementAcrossSurfaces(t *testing.T) {
 	})
 	t.Cleanup(func() { SetSurfaceOriginResolver(nil) })
 	paint := func(root *Box) {
-		root.Measure(Constraints{Max: Size{W: 120, H: 120}})
+		SizeWithin(root, Size{W: 120, H: 120})
 		root.Arrange(render.Rect{W: 120, H: 120})
 		CollectDamage(root)
 		root.Paint(render.New(make([]byte, render.Stride(120)*120), render.Stride(120), 120, 120))

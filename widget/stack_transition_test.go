@@ -14,7 +14,7 @@ func stackAt(t StackTransition) *Stack {
 	s.Add("a", &solidLeaf{sz: Size{W: 40, H: 20}, col: render.RGB(255, 0, 0)})
 	s.Add("b", &solidLeaf{sz: Size{W: 40, H: 20}, col: render.RGB(0, 0, 255)})
 	s.SetTransition(t, 100*time.Millisecond)
-	s.Measure(Constraints{Max: Size{W: 80, H: 60}})
+	SizeWithin(s, Size{W: 80, H: 60})
 	s.Arrange(render.Rect{X: 20, Y: 20, W: 40, H: 20})
 	return s
 }

@@ -36,7 +36,7 @@ func TestMenuDisabledRows(t *testing.T) {
 		MenuItem{Label: "Share", Items: []MenuItem{{Label: "Mail", OnClick: func() {}}}, Disabled: true},
 		MenuItem{Label: "Quit", OnClick: func() { fired = "quit" }},
 	)
-	sz := menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
+	sz := SizeWithin(menu, Size{W: 300, H: 300})
 	menu.Arrange(render.Rect{X: 0, Y: 0, W: 160, H: sz.H})
 	rowY := func(i int) int { return rowCenter(menu, i).Y }
 
@@ -88,7 +88,7 @@ func TestMenuDisabledRows(t *testing.T) {
 
 	t.Run("a disabled check row keeps its state", func(t *testing.T) {
 		check := NewMenu(face, 14, MenuItem{Label: "Wrap", Kind: ItemCheck, Checked: true, OnClick: func() {}, Disabled: true})
-		csz := check.Measure(Constraints{Max: Size{W: 300, H: 300}})
+		csz := SizeWithin(check, Size{W: 300, H: 300})
 		check.Arrange(render.Rect{W: 160, H: csz.H})
 		check.ClickAt(Point{X: 40, Y: rowY(0)})
 		if !check.items[0].Checked {
@@ -105,18 +105,18 @@ func TestMenuRowIcons(t *testing.T) {
 		MenuItem{Label: "Open", OnClick: func() {}, Icon: solidIcon(t, 12, red)},
 		MenuItem{Label: "Close", OnClick: func() {}},
 	)
-	con := Constraints{Max: Size{W: 400, H: 400}}
+	con := Size{W: 400, H: 400}
 
 	t.Run("an icon row widens the menu by the slot", func(t *testing.T) {
-		pw := plain.Measure(con).W
-		iw := iconic.Measure(con).W
+		pw := SizeWithin(plain, con).W
+		iw := SizeWithin(iconic, con).W
 		if iw != pw+12+8 {
 			t.Errorf("width with icon = %d, want %d (plain %d + 12px icon + 8px gap)", iw, pw+20, pw)
 		}
 	})
 
 	t.Run("the icon paints at the row's leading edge", func(t *testing.T) {
-		sz := iconic.Measure(con)
+		sz := SizeWithin(iconic, con)
 		data := make([]byte, render.Stride(sz.W)*sz.H)
 		cv := render.New(data, render.Stride(sz.W), sz.W, sz.H)
 		iconic.Arrange(render.Rect{W: sz.W, H: sz.H})
@@ -140,7 +140,7 @@ func TestMenuRowIcons(t *testing.T) {
 func TestMenuHoverHookAndRowBounds(t *testing.T) {
 	face := entryFace(t)
 	m := NewMenu(face, 13, MenuItem{Label: "one"}, MenuItem{Label: "two"}, MenuItem{Label: "three"})
-	m.Measure(Constraints{Max: Size{W: 200, H: 400}})
+	SizeWithin(m, Size{W: 200, H: 400})
 	m.Arrange(render.Rect{X: 10, Y: 20, W: 120, H: 200})
 	var hovered []int
 	m.OnHover = func(i int) { hovered = append(hovered, i) }
@@ -175,7 +175,7 @@ func TestMenuHoverHookAndRowBounds(t *testing.T) {
 // drawn there, and the rows sit inside the menu's own border.
 func TestMenuSeparatorIsAThinRow(t *testing.T) {
 	m := NewMenu(entryFace(t), 13, MenuItem{Label: "one"}, MenuSeparator(), MenuItem{Label: "two"})
-	size := m.Measure(Constraints{Max: Size{W: 200, H: 400}})
+	size := SizeWithin(m, Size{W: 200, H: 400})
 	m.Arrange(render.Rect{X: 0, Y: 0, W: size.W, H: size.H})
 	one, sep, two := m.RowBounds(0), m.RowBounds(1), m.RowBounds(2)
 	if sep.H != menuSeparatorBand || sep.Y != one.Y+one.H+menuRowGap || two.Y != sep.Y+sep.H+menuRowGap {
@@ -194,7 +194,7 @@ func TestMenuSeparatorIsAThinRow(t *testing.T) {
 // of the row on each side (#281).
 func TestMenuSeparatorSpansTheMenu(t *testing.T) {
 	m := NewMenu(entryFace(t), 13, MenuItem{Label: "one", OnClick: func() {}}, MenuSeparator(), MenuItem{Label: "two", OnClick: func() {}})
-	sz := m.Measure(Constraints{Max: Size{W: 300, H: 300}})
+	sz := SizeWithin(m, Size{W: 300, H: 300})
 	m.Arrange(render.Rect{W: sz.W, H: sz.H})
 	data := make([]byte, render.Stride(sz.W)*sz.H)
 	cv := render.New(data, render.Stride(sz.W), sz.W, sz.H)

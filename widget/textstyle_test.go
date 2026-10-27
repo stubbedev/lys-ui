@@ -23,8 +23,8 @@ func TestCSSLetterSpacing(t *testing.T) {
 		root.Append(w, false)
 	}
 	arrangeTree(t, root, 300, 200)
-	con := Constraints{Max: Size{W: 300, H: 100}}
-	if d := wide.Measure(con).W - plain.Measure(con).W; d < 13 || d > 15 {
+	con := Size{W: 300, H: 100}
+	if d := SizeWithin(wide, con).W - SizeWithin(plain, con).W; d < 13 || d > 15 {
 		t.Errorf("seven clusters at 2px widened the label by %d, want 14", d)
 	}
 	sh := e.shape("abc")

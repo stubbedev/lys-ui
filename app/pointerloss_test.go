@@ -19,7 +19,7 @@ func newPointerLossTestInput(t *testing.T) (*surfaceInput, *widget.Button) {
 	}
 	btn := widget.NewButton(widget.NewLabel(face, 13, "drag me", render.RGB(255, 255, 255)), 8, 4)
 	root := widget.NewBox(widget.Row, 0, 0).Append(btn, false)
-	root.Measure(widget.Constraints{Max: widget.Size{W: 100, H: 100}})
+	widget.SizeWithin(root, widget.Size{W: 100, H: 100})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 100})
 	in := &surfaceInput{
 		router:  &widget.Router{Root: root},

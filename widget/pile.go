@@ -49,8 +49,6 @@ type Pile struct {
 	opacity  float32
 	spacing  int
 	edge     Edge
-	// nat are the children's last measured sizes.
-	nat []Size
 }
 
 // NewPile returns an empty, collapsed pile peeking two cards past its
@@ -211,30 +209,29 @@ func (p *Pile) syncClasses() {
 
 // Measure is the front card and its peeks collapsed, the column of
 // cards expanded, inside the pile's CSS box.
-func (p *Pile) Measure(con Constraints) Size {
-	if sz, ok := p.measureHit(con); ok {
+func (p *Pile) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := p.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := p.style(p)
-	return p.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
+	return p.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
 		vis := p.visible()
-		p.nat = p.nat[:0]
-		var sz Size
+		var req Sizes
 		for i, w := range vis {
-			n := measureChild(p, w, Constraints{Max: Size{W: inner.Max.W, H: inner.Max.H}})
-			p.nat = append(p.nat, n)
-			sz.W = max(sz.W, n.W)
+			n := measureChild(p, w, axis, forSize)
 			switch {
+			case axis == Row:
+				req = req.widest(n)
 			case p.expanded && i > 0:
-				sz.H += p.spacing + n.H
+				req = req.plus(n.grow(p.spacing))
 			case i == 0:
-				sz.H = n.H
+				req = n
 			}
 		}
-		if !p.expanded && len(vis) > 0 {
-			sz.H += p.shownPeeks() * p.offset
+		if axis == Column && !p.expanded && len(vis) > 0 {
+			req = req.grow(p.shownPeeks() * p.offset)
 		}
-		return clampSize(sz, inner)
+		return req
 	}))
 }
 
@@ -247,16 +244,17 @@ func (p *Pile) Arrange(r render.Rect) {
 	border, inner := boxRects(boxOf(p.style(p), render.Insets{}), r)
 	p.node.Arrange(border)
 	vis := p.visible()
-	if len(vis) == 0 || len(p.nat) != len(vis) {
+	if len(vis) == 0 {
 		return
 	}
+	height := func(w Widget) int { return measureChild(p, w, Column, inner.W).Nat }
 	if p.expanded {
 		y := inner.Y
 		if p.edge == EdgeTop {
 			y = inner.Y + inner.H
 		}
-		for i, w := range vis {
-			h := p.nat[i].H
+		for _, w := range vis {
+			h := height(w)
 			if p.edge == EdgeTop {
 				y -= h
 				arrangeChild(w, render.Rect{X: inner.X, Y: y, W: inner.W, H: h})
@@ -269,7 +267,7 @@ func (p *Pile) Arrange(r render.Rect) {
 		return
 	}
 	peeks := p.shownPeeks()
-	front := render.Rect{X: inner.X, Y: inner.Y, W: inner.W, H: p.nat[0].H}
+	front := render.Rect{X: inner.X, Y: inner.Y, W: inner.W, H: height(vis[0])}
 	step := p.offset
 	if p.edge == EdgeTop {
 		front.Y = inner.Y + inner.H - front.H

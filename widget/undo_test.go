@@ -356,7 +356,7 @@ func TestTextAreaUndo(t *testing.T) {
 	t.Run("undo schedules damage and rebuilds the row cache", func(t *testing.T) {
 		c := newTestClock()
 		ta := newUndoArea(t, c, "one")
-		ta.Measure(Constraints{Max: Size{W: 200, H: 100}})
+		SizeWithin(ta, Size{W: 200, H: 100})
 		ta.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 60})
 		ta.KeyAction(KeyEnd, 0)
 		ta.InsertRune('X')

@@ -213,7 +213,7 @@ func TestDialogHeaderPairsTitleAndDescription(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sz := root.Measure(widget.Constraints{Max: widget.Size{W: 440, H: 600}})
+	sz := widget.SizeWithin(root, widget.Size{W: 440, H: 600})
 	root.Arrange(render.Rect{W: 440, H: sz.H})
 	var labels []*widget.Label
 	var footer widget.Widget

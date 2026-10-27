@@ -475,14 +475,14 @@ func (c *Calendar) dayRect(d Date) (render.Rect, bool) {
 }
 
 // Measure wants each month's title, header and six week rows of
-// natural cells, side by side, clamped to con.
-func (c *Calendar) Measure(con Constraints) Size {
-	if sz, ok := c.measureHit(con); ok {
+// natural cells, side by side.
+func (c *Calendar) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := c.measureHit(axis, forSize); ok {
 		return sz
 	}
 	w := c.months*calendarCols*c.cell + (c.months-1)*calendarMonthGap
 	h := c.titleH + c.headerH + c.gridHeight()
-	return c.measureStore(con, clampSize(Size{W: w, H: h}, con))
+	return c.measureStore(axis, forSize, FixedSizes(Size{W: w, H: h}.Along(axis)))
 }
 
 // Arrange records the rect, widens the day columns to share a wider

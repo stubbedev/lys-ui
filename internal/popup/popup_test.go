@@ -25,8 +25,8 @@ type inkProbe struct {
 	paints int
 }
 
-func (p *inkProbe) Measure(con widget.Constraints) widget.Size {
-	return widget.Size{W: min(60, con.Max.W), H: min(20, con.Max.H)}
+func (p *inkProbe) Measure(axis widget.Axis, _ int) widget.Sizes {
+	return widget.Sizes{Nat: widget.Size{W: 60, H: 20}.Along(axis)}
 }
 
 func (p *inkProbe) Arrange(r render.Rect) { p.bounds = r }
@@ -44,7 +44,7 @@ func newTweenView(t *testing.T, reveal float64, g Gravity) (*animView, *inkProbe
 	t.Helper()
 	probe := &inkProbe{}
 	v := newAnimView(probe, reveal, true, g, 0, nil)
-	v.morph.Measure(widget.Constraints{Max: widget.Size{W: 100, H: 100}})
+	widget.SizeWithin(v.morph, widget.Size{W: 100, H: 100})
 	v.morph.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 20})
 	return v, probe
 }

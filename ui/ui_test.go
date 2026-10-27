@@ -203,7 +203,7 @@ func TestFixedBuilderPlacesChildren(t *testing.T) {
 	if len(kids) != 2 {
 		t.Fatalf("fixed holds %d children, want 2", len(kids))
 	}
-	nat := fixed.Measure(widget.Constraints{Max: widget.Size{W: 300, H: 300}})
+	nat := widget.SizeWithin(fixed, widget.Size{W: 300, H: 300})
 	fixed.Arrange(render.Rect{X: 0, Y: 0, W: nat.W, H: nat.H})
 	label := kids[0].(interface{ Bounds() render.Rect })
 	spacer := kids[1].(interface{ Bounds() render.Rect })

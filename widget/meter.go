@@ -70,15 +70,15 @@ func (m *meter) troughSize() Size {
 	return Size{W: picki(tv, style.PropMinWidth, 160), H: picki(tv, style.PropMinHeight, 8)}
 }
 
-// measureMeter wants the trough inside self's CSS box, clamped to con.
-func (m *meter) measureMeter(self Widget, con Constraints) Size {
-	if sz, ok := m.measureHit(con); ok {
+// measureMeter wants the trough inside self's CSS box.
+func (m *meter) measureMeter(self Widget, axis Axis, forSize int) Sizes {
+	if sz, ok := m.measureHit(axis, forSize); ok {
 		return sz
 	}
 	ts := m.troughSize()
 	v := m.style(self)
-	return m.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		return clampSize(ts, inner)
+	return m.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		return FixedSizes(ts.Along(axis))
 	}))
 }
 

@@ -31,7 +31,9 @@ type spyRoot struct {
 	painted  int
 }
 
-func (s *spyRoot) Measure(widget.Constraints) widget.Size { return s.nat }
+func (s *spyRoot) Measure(axis widget.Axis, _ int) widget.Sizes {
+	return widget.FixedSizes(s.nat.Along(axis))
+}
 
 func (s *spyRoot) Arrange(r render.Rect) { s.arranged = r }
 
@@ -75,7 +77,7 @@ func TestToastLayerArrange(t *testing.T) {
 
 	t.Run("the wrapped root keeps the whole window", func(t *testing.T) {
 		full := render.Rect{X: 0, Y: 0, W: 300, H: 200}
-		if got := l.Measure(widget.Constraints{Max: widget.Size{W: full.W, H: full.H}}); got != root.nat {
+		if got := widget.SizeWithin(l, widget.Size{W: full.W, H: full.H}); got != root.nat {
 			t.Errorf("Measure = %v, want the root's natural %v", got, root.nat)
 		}
 		l.Arrange(full)

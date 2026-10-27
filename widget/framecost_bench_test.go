@@ -62,7 +62,7 @@ func settingsTree(tb testing.TB) Widget {
 
 // settingsFrame lays root out and paints it whole at w x h.
 func settingsFrame(root Widget, cv *render.Canvas, w, h int) {
-	root.Measure(Constraints{Max: Size{W: w, H: h}})
+	SizeWithin(root, Size{W: w, H: h})
 	root.Arrange(render.Rect{W: w, H: h})
 	CollectDamage(root)
 	root.Paint(cv)
@@ -76,7 +76,7 @@ func BenchmarkSettingsFrame(b *testing.B) {
 	settingsFrame(root, cv, w, h)
 	b.Run("layout", func(b *testing.B) {
 		for b.Loop() {
-			root.Measure(Constraints{Max: Size{W: w, H: h}})
+			SizeWithin(root, Size{W: w, H: h})
 			root.Arrange(render.Rect{W: w, H: h})
 			CollectDamage(root)
 		}

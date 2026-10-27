@@ -73,7 +73,7 @@ func NewActionRow(face render.Font, sizePx float64, title, subtitle string) *Act
 	r.column = NewBox(Column, 0, 0)
 	r.column.Append(r.line, false)
 	r.initComposite(r, r.column)
-	r.fillWidth = true
+	r.SetHExpand(true)
 	r.surfaceRadius = 4
 	return r
 }

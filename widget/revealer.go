@@ -1,7 +1,6 @@
 package widget
 
 import (
-	"math"
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -89,7 +88,8 @@ type Revealer struct {
 	// next one repaints what a transform left behind.
 	painted render.Rect
 	// collapse sizes a slide's slot by its progress (SetCollapse);
-	// full is the child's natural size the last Measure found.
+	// full is the child's natural size along the slide at the last
+	// Arrange.
 	collapse bool
 	full     Size
 }
@@ -243,28 +243,32 @@ func (r *Revealer) setProgress(p float64) {
 // Measure is the child's size, nothing for a hidden RevealNone, and
 // for a collapsing slide the child's natural extent along the slide
 // scaled by the eased progress.
-func (r *Revealer) Measure(con Constraints) Size {
-	if sz, ok := r.measureHit(con); ok {
+func (r *Revealer) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := r.measureHit(axis, forSize); ok {
 		return sz
 	}
 	if r.child == nil || (r.transition == RevealNone && !r.reveal) {
-		return r.measureStore(con, clampSize(Size{}, con))
+		return r.measureStore(axis, forSize, Sizes{})
 	}
 	if !r.collapses() {
-		return r.measureStore(con, clampSize(measureChild(r, r.child, con), con))
+		return r.measureStore(axis, forSize, measureChild(r, r.child, axis, forSize))
 	}
-	// The child measures free along the slide: its natural extent is
-	// what the slot grows to.
-	free := Constraints{Max: con.Max}
+	if axis != r.slideAxis() {
+		// The child lays out at its full extent along the slide, not
+		// at the slot's.
+		return r.measureStore(axis, forSize, measureChild(r, r.child, axis, Unknown))
+	}
+	nat := measureChild(r, r.child, axis, forSize).Nat
 	t := anim.EaseInOutCubic(r.progress)
+	return r.measureStore(axis, forSize, FixedSizes(int(roundHalfUp(float64(nat)*t))))
+}
+
+// slideAxis is the axis a slide runs along.
+func (r *Revealer) slideAxis() Axis {
 	if r.vertical() {
-		free.Max.H = math.MaxInt
-		r.full = measureChild(r, r.child, free)
-		return r.measureStore(con, clampSize(Size{W: r.full.W, H: int(roundHalfUp(float64(r.full.H) * t))}, con))
+		return Column
 	}
-	free.Max.W = math.MaxInt
-	r.full = measureChild(r, r.child, free)
-	return r.measureStore(con, clampSize(Size{W: int(roundHalfUp(float64(r.full.W) * t)), H: r.full.H}, con))
+	return Row
 }
 
 // Arrange gives the child the whole rect; a collapsing slide's child
@@ -277,6 +281,10 @@ func (r *Revealer) Arrange(rect render.Rect) {
 	}
 	setParents(r, r.child)
 	if r.collapses() {
+		r.full = naturalChild(r, r.child)
+		if r.vertical() {
+			r.full.H = measureChild(r, r.child, Column, rect.W).Nat
+		}
 		rect = r.childRect(rect)
 	}
 	arrangeChild(r.child, rect)

@@ -203,7 +203,7 @@ func TestBackdropUnderOpacityStaysInItsBox(t *testing.T) {
 	glass := NewBox(Column, 0, 0)
 	glass.AddClass("g")
 	glass.Append(NewSpacer(60, 30), false)
-	glass.Measure(Constraints{Max: Size{W: 60, H: 30}})
+	SizeWithin(glass, Size{W: 60, H: 30})
 	glass.Arrange(render.Rect{X: 40, Y: 40, W: 60, H: 30})
 	const w, h = 140, 110
 	data := make([]byte, render.Stride(w)*h)

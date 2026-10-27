@@ -200,8 +200,8 @@ func (s *Slider) ValueAt(p Point) float64 {
 
 // Measure wants the trough's length (200px unstyled) by the thicker
 // of the trough and the knob, at least 18px, inside the scale's box.
-func (s *Slider) Measure(con Constraints) Size {
-	if sz, ok := s.measureHit(con); ok {
+func (s *Slider) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := s.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := s.style(s)
@@ -213,8 +213,8 @@ func (s *Slider) Measure(con Constraints) Size {
 	if s.axis == Column {
 		sz = Size{W: max(18, picki(tv, thickProp, 4), kw), H: length}
 	}
-	return s.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		return clampSize(sz, inner)
+	return s.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		return FixedSizes(sz.Along(axis))
 	}))
 }
 

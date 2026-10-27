@@ -26,7 +26,7 @@ func TestClamp(t *testing.T) {
 	th := DarkTheme()
 	child := NewLabel(face, 14, "x", th.Text)
 	c := NewClamp(300, child)
-	c.Measure(Constraints{Max: Size{W: 500, H: 40}})
+	SizeWithin(c, Size{W: 500, H: 40})
 	c.Arrange(render.Rect{X: 0, Y: 0, W: 500, H: 40})
 	if got := child.Bounds(); got.X != 100 || got.W != 300 {
 		t.Errorf("wide clamp = %+v, want centered 300", got)
@@ -52,7 +52,7 @@ func TestBreakpointBin(t *testing.T) {
 		Unapply: func() { wide++ },
 	})
 	layout := func(w int) {
-		b.Measure(Constraints{Max: Size{W: w, H: 100}})
+		SizeWithin(b, Size{W: w, H: 100})
 		b.Arrange(render.Rect{X: 0, Y: 0, W: w, H: 100})
 	}
 	layout(600)
@@ -120,7 +120,7 @@ func TestCarousel(t *testing.T) {
 	for i := range 3 {
 		c.Append(NewLabel(face, 20, string(rune('A'+i)), th.Text))
 	}
-	c.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(c, Size{W: 200, H: 100})
 	c.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 100})
 	first, _ := c.pages[0].(Boundser)
 	second, _ := c.pages[1].(Boundser)
@@ -246,13 +246,13 @@ func TestNavigationSplitView(t *testing.T) {
 	content := page("content")
 	s := NewNavigationSplitView(face, 14, side, content, 400)
 
-	s.Measure(Constraints{Max: Size{W: 600, H: 300}})
+	SizeWithin(s, Size{W: 600, H: 300})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 600, H: 300})
 	if s.Collapsed() {
 		t.Fatal("wide split collapsed")
 	}
 
-	s.Measure(Constraints{Max: Size{W: 360, H: 300}})
+	SizeWithin(s, Size{W: 360, H: 300})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 360, H: 300})
 	if !s.Collapsed() {
 		t.Fatal("narrow split did not collapse")
@@ -277,13 +277,13 @@ func TestOverlaySplitView(t *testing.T) {
 	content := NewLabel(face, 14, "main", th.Text)
 	s := NewOverlaySplitView(side, content, 400)
 
-	s.Measure(Constraints{Max: Size{W: 600, H: 200}})
+	SizeWithin(s, Size{W: 600, H: 200})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 600, H: 200})
 	if s.Collapsed() || !s.SidebarShowing() {
 		t.Fatal("wide overlay collapsed or hidden")
 	}
 
-	s.Measure(Constraints{Max: Size{W: 360, H: 200}})
+	SizeWithin(s, Size{W: 360, H: 200})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 360, H: 200})
 	if !s.Collapsed() || s.SidebarShowing() {
 		t.Fatal("narrow overlay did not collapse or still showing")
@@ -356,7 +356,7 @@ func TestSplitRehomesSharedPages(t *testing.T) {
 	content := &NavigationPage{Title: "content", W: NewLabel(face, 14, "content", th.Text)}
 	s := NewNavigationSplitView(face, 14, side, content, 400)
 	layout := func(w int) {
-		s.Measure(Constraints{Max: Size{W: w, H: 200}})
+		SizeWithin(s, Size{W: w, H: 200})
 		s.Arrange(render.Rect{W: w, H: 200})
 	}
 	layout(600)
@@ -386,9 +386,9 @@ func TestSplitRestylesRehomedPages(t *testing.T) {
 	content := &NavigationPage{Title: "content", W: NewLabel(face, 14, "content", th.Text)}
 	s := NewNavigationSplitView(face, 14, side, content, 400)
 	height := func(w int) int {
-		s.Measure(Constraints{Max: Size{W: w, H: 400}})
+		SizeWithin(s, Size{W: w, H: 400})
 		s.Arrange(render.Rect{W: w, H: 400})
-		return side.W.Measure(Constraints{Max: Size{W: w, H: 400}}).H
+		return SizeWithin(side.W, Size{W: w, H: 400}).H
 	}
 	if h := height(600); h >= 50 {
 		t.Fatalf("wide: the stack rule reached the sidebar (h=%d)", h)

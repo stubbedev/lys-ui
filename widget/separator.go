@@ -35,11 +35,11 @@ func NewSeparator(orientation Orientation) *Separator {
 func (s *Separator) Orientation() Orientation { return s.orientation }
 
 // Measure wants one pixel; allocation decides the rest.
-func (s *Separator) Measure(con Constraints) Size {
-	if sz, ok := s.measureHit(con); ok {
+func (s *Separator) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := s.measureHit(axis, forSize); ok {
 		return sz
 	}
-	return s.measureStore(con, clampSize(Size{W: sepThickness, H: sepThickness}, con))
+	return s.measureStore(axis, forSize, FixedSizes(sepThickness))
 }
 
 // Paint draws the rule centered in the allocated rect, in the theme

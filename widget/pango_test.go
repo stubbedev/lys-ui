@@ -134,7 +134,7 @@ func TestPangoDrunFormat(t *testing.T) {
 	}
 	l := NewRichLabel(testFace(t), 14, `<span size='small'>(Terminal)</span>`, 0)
 	full := NewRichLabel(testFace(t), 14, `(Terminal)`, 0)
-	if small, big := l.Measure(unbounded).W, full.Measure(unbounded).W; small >= big {
+	if small, big := naturalSize(l).W, naturalSize(full).W; small >= big {
 		t.Errorf("a small run measures %d, not narrower than the full-size %d", small, big)
 	}
 }

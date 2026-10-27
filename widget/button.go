@@ -50,13 +50,13 @@ func NewButton(child Widget, padding, radius int) *Button {
 // Measure pads the child's natural size inside the CSS box: the
 // constructor padding (or the stylesheet's, per side), border, margin,
 // and min sizes.
-func (b *Button) Measure(con Constraints) Size {
-	if sz, ok := b.measureHit(con); ok {
+func (b *Button) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := b.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := b.style(b)
-	return b.measureStore(con, measureBox(v, b.box(v), con, func(inner Constraints) Size {
-		return measureChild(b, b.child, Constraints{Max: inner.Max})
+	return b.measureStore(axis, forSize, measureBox(v, b.box(v), axis, forSize, func(axis Axis, forSize int) Sizes {
+		return measureChild(b, b.child, axis, forSize)
 	}))
 }
 

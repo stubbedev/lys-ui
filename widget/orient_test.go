@@ -15,7 +15,7 @@ func TestVerticalSlider(t *testing.T) {
 	if !s.hasClass("vertical") || s.hasClass("horizontal") {
 		t.Error("orientation classes not swapped")
 	}
-	sz := s.Measure(Constraints{Max: Size{W: 500, H: 500}})
+	sz := SizeWithin(s, Size{W: 500, H: 500})
 	if sz.W != 18 || sz.H != 200 {
 		t.Fatalf("vertical natural = %v, want 18x200", sz)
 	}
@@ -47,7 +47,7 @@ func TestVerticalSlider(t *testing.T) {
 func TestSpinSteppers(t *testing.T) {
 	face := chromeFace(t)
 	s := NewSpinButton(face, 14, DarkTheme().Text, 0, 10, 1, 0)
-	s.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(s, Size{W: 200, H: 100})
 	s.Arrange(render.Rect{W: 120, H: 30})
 	r := s.trailingRect()
 	if r.Empty() || r.X+r.W > 120 {

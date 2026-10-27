@@ -35,7 +35,7 @@ func TestClickWithin(t *testing.T) {
 	card.Append(closeBtn, false)
 	card.Append(group, false)
 	card.SetOnClickWithin(func() { cards++ })
-	card.Measure(Constraints{Max: Size{W: 200, H: 200}})
+	SizeWithin(card, Size{W: 200, H: 200})
 	card.Arrange(render.Rect{W: 200, H: 200})
 	r := &Router{Root: card}
 

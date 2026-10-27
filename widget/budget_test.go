@@ -41,7 +41,7 @@ func TestAllocBudgetStyleFullRestyle(t *testing.T) {
 	show := buildShowcase(t)
 	LoadStylesheet(galleryCSS)
 	t.Cleanup(func() { LoadStylesheet("") })
-	show.root.Measure(Constraints{Max: Size{W: showW, H: showH}})
+	SizeWithin(show.root, Size{W: showW, H: showH})
 	show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
 	CollectDamage(show.root)
 	restyle := func() {

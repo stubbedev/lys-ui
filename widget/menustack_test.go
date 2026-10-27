@@ -22,7 +22,7 @@ func stackFixture(t *testing.T, fired *string) *MenuStack {
 }
 
 func layStack(s *MenuStack) {
-	sz := s.Measure(Constraints{Max: Size{W: 600, H: 600}})
+	sz := SizeWithin(s, Size{W: 600, H: 600})
 	s.Arrange(render.Rect{W: sz.W, H: sz.H})
 }
 
@@ -93,16 +93,16 @@ func TestMenuStackKeyboard(t *testing.T) {
 func TestMenuStackMeasuresTheLargestLevel(t *testing.T) {
 	fired := ""
 	s := stackFixture(t, &fired)
-	con := Constraints{Max: Size{W: 600, H: 600}}
-	stack := s.Measure(con)
-	root := s.Top().Measure(con)
+	con := Size{W: 600, H: 600}
+	stack := SizeWithin(s, con)
+	root := SizeWithin(s.Top(), con)
 	if stack.W <= root.W {
 		t.Errorf("stack width %d, want wider than the root level's %d (the submenu's long label)", stack.W, root.W)
 	}
 	// Sliding in never needs more room than the stack measured.
 	layStack(s)
 	s.ClickAt(stackRow(s, 1))
-	if sub := s.Top().Measure(con); sub.W > stack.W || sub.H > stack.H {
+	if sub := SizeWithin(s.Top(), con); sub.W > stack.W || sub.H > stack.H {
 		t.Errorf("submenu %v exceeds the stack's %v", sub, stack)
 	}
 }

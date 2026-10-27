@@ -25,7 +25,7 @@ func TestActionRowActivation(t *testing.T) {
 	r := NewActionRow(face, 14, "Notifications", "When they arrive")
 	activated := 0
 	r.OnActivate = func() { activated++ }
-	r.Measure(Constraints{Max: Size{W: 320, H: 200}})
+	SizeWithin(r, Size{W: 320, H: 200})
 	r.Arrange(render.Rect{X: 0, Y: 0, W: 320, H: 40})
 
 	r.ClickAt(Point{X: 3, Y: 2})
@@ -86,7 +86,7 @@ func TestActionRowRTLMirroring(t *testing.T) {
 	r := NewActionRow(face, 14, "row", "")
 	r.PackStart(NewLabel(face, 14, "start", th.Text))
 	r.PackEnd(NewLabel(face, 14, "end", th.Text))
-	r.Measure(Constraints{Max: Size{W: 320, H: 100}})
+	SizeWithin(r, Size{W: 320, H: 100})
 	r.Arrange(render.Rect{X: 0, Y: 0, W: 320, H: 40})
 	start := r.start.Bounds()
 	end := r.end.Bounds()
@@ -95,7 +95,7 @@ func TestActionRowRTLMirroring(t *testing.T) {
 	}
 	r.SetDirection(DirectionRTL)
 	r.InvalidateLayout()
-	r.Measure(Constraints{Max: Size{W: 320, H: 100}})
+	SizeWithin(r, Size{W: 320, H: 100})
 	r.Arrange(render.Rect{X: 0, Y: 0, W: 320, H: 40})
 	if s, e := r.start.Bounds(), r.end.Bounds(); s.X <= e.X {
 		t.Errorf("RTL row packs did not mirror: start=%v end=%v", s, e)
@@ -182,7 +182,7 @@ func TestPreferencesGroupAndPage(t *testing.T) {
 	if got := len(g.rows.Children()); got != 2 {
 		t.Fatalf("group holds %d rows", got)
 	}
-	g.Measure(Constraints{Max: Size{W: 360, H: 400}})
+	SizeWithin(g, Size{W: 360, H: 400})
 	g.Arrange(render.Rect{X: 0, Y: 0, W: 360, H: 120})
 
 	p := NewPreferencesPage()
@@ -191,7 +191,7 @@ func TestPreferencesGroupAndPage(t *testing.T) {
 	if got := len(p.column.Children()); got != 2 {
 		t.Errorf("page holds %d groups", got)
 	}
-	p.Measure(Constraints{Max: Size{W: 500, H: 400}})
+	SizeWithin(p, Size{W: 500, H: 400})
 	p.Arrange(render.Rect{X: 0, Y: 0, W: 500, H: 400})
 }
 

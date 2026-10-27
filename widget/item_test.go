@@ -205,9 +205,9 @@ func TestItemEllipsize(t *testing.T) {
 	face := goldenFace(t)
 	it := NewItem(face, "WH-1000XM4-WIRELESS-NOISE-CANCELLING", "00:1B:66:A2:5C:3F:00:1B:66:A2")
 	it.AddAction(NewButton(NewLabel(face, 14, "Connect", 0), 0, 0))
-	wrapped := MinWidth(it)
+	wrapped := minWidth(it)
 	it.SetEllipsize(true)
-	if got := MinWidth(it); got >= wrapped {
+	if got := minWidth(it); got >= wrapped {
 		t.Errorf("ellipsizing item's minimum %d, not below the wrapping one's %d", got, wrapped)
 	}
 }

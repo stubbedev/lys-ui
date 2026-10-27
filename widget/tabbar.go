@@ -59,7 +59,7 @@ func (t *tabWidget) DragContent() *DragContent {
 func NewTabBar(face render.Font, sizePx float64, view *TabView) *TabBar {
 	b := &TabBar{view: view, face: requireFace("widget.NewTabBar", face), sizePx: sizePx, row: NewBox(Row, 2, 0)}
 	b.initComposite(b, b.row)
-	b.fillWidth = true
+	b.SetHExpand(true)
 	b.boxed = true
 	b.SetElement("tabbar")
 	b.cancel = view.Subscribe(b.rebuild)
@@ -274,7 +274,6 @@ func snapshot(w Widget, width, height int) *image.NRGBA {
 	data := make([]byte, stride*height)
 	cv := render.New(data, stride, width, height)
 	cv.Clear(cv.Rect(), Current().Bg)
-	w.Measure(Constraints{Max: Size{W: width, H: height}})
 	w.Arrange(render.Rect{W: width, H: height})
 	w.Paint(cv)
 	return render.NRGBA(data, stride, width, height)

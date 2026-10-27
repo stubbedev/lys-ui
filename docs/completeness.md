@@ -39,7 +39,7 @@ live in [architecture.md](architecture.md#non-goals).
 | DropDown, ComboBox | `Dropdown`, `DropdownOf[T]`, `NewDropdownRows` (icons, headers); type-ahead | widget/dropdown.go |
 | widget layout properties (`hexpand`, `vexpand`, `halign`, `valign`, `margin-*`, `set_size_request`, `max-width`/`max-height`) | `SetHExpand`/`SetVExpand` (propagated like GTK's computed expand), `SetHAlign`/`SetVAlign`, `SetMargin`, `SetSizeRequest` and `SetMaximumSize` (clipping what overflows) on every widget, honored by the containers | widget/layoutprops.go |
 | Box, CenterBox, Stack, Overlay, ScrolledWindow | `Box`, `CenterBox`, `Stack` (transitions), `Overlay`, `Scroll` (kinetic, `RevealRect`, smooth scrolling, snap, overscroll chaining), `Scrollbar` | widget/box.go, widget/centerbox.go, widget/containers.go |
-| Grid, FlowBox, adw WrapBox, Fixed | `Grid` (spans, squeeze to MinSizer floors), `FlowBox`, `NewWrapBox`, `Fixed` (children at explicit (x, y) logical pixels, natural size, union measurement) | widget/grid.go, widget/flowbox.go, widget/fixed.go |
+| Grid, FlowBox, adw WrapBox, Fixed | `Grid` (spans, squeeze to the children's minimums), `FlowBox`, `NewWrapBox`, `Fixed` (children at explicit (x, y) logical pixels, natural size, union measurement) | widget/grid.go, widget/flowbox.go, widget/fixed.go |
 | Paned, Frame, AspectFrame, Revealer, Expander, SizeGroup | the same names | widget/paned.go, widget/frame.go, widget/revealer.go, widget/expander.go, widget/shrink.go |
 | Notebook | `Notebook`: close hook, reorder by drag, overflow scrolling | widget/notebook.go |
 | adw ToolbarView | `ToolbarView`: top and bottom bar stacks, sliding reveal, flat/raised/raised-border styles, content extending under the bars | widget/toolbarview.go |

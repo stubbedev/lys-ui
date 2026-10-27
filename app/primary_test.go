@@ -84,7 +84,7 @@ func TestPastePrimaryTargetsHoveredOverFocused(t *testing.T) {
 	left := widget.NewEntry(face, 13, render.RGB(255, 255, 255))
 	right := widget.NewEntry(face, 13, render.RGB(255, 255, 255))
 	root := widget.NewBox(widget.Row, 0, 0).Append(left, true).Append(right, true)
-	root.Measure(widget.Constraints{Max: widget.Size{W: 200, H: 30}})
+	widget.SizeWithin(root, widget.Size{W: 200, H: 30})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 	r := &widget.Router{Root: root}
 

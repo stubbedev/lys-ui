@@ -15,7 +15,7 @@ func TestSeparatorMeasure(t *testing.T) {
 			{"horizontal", NewSeparator(Horizontal)},
 			{"vertical", NewSeparator(Vertical)},
 		} {
-			got := tc.sep.Measure(Constraints{Max: Size{W: 200, H: 50}})
+			got := SizeWithin(tc.sep, Size{W: 200, H: 50})
 			if got.W != 1 || got.H != 1 {
 				t.Errorf("%s natural size = %v, want 1x1", tc.name, got)
 			}
@@ -41,7 +41,7 @@ func TestSeparatorPaint(t *testing.T) {
 		cv := render.New(data, render.Stride(w), w, h)
 		cv.Clear(cv.Rect(), bg)
 		sep := NewSeparator(Horizontal)
-		sep.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(sep, Size{W: w, H: h})
 		sep.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
 		sep.Paint(cv)
 
@@ -64,7 +64,7 @@ func TestSeparatorPaint(t *testing.T) {
 		cv := render.New(data, render.Stride(w), w, h)
 		cv.Clear(cv.Rect(), bg)
 		sep := NewSeparator(Vertical)
-		sep.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(sep, Size{W: w, H: h})
 		sep.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
 		sep.Paint(cv)
 
@@ -84,7 +84,7 @@ func TestSeparatorPaint(t *testing.T) {
 		cv := render.New(make([]byte, render.Stride(4)*4), render.Stride(4), 4, 4)
 		for _, o := range []Orientation{Horizontal, Vertical} {
 			sep := NewSeparator(o)
-			sep.Measure(Constraints{Max: Size{W: 4, H: 4}})
+			SizeWithin(sep, Size{W: 4, H: 4})
 			sep.Arrange(render.Rect{X: 1, Y: 1, W: 1, H: 1})
 			sep.Paint(cv)
 			sep.Arrange(render.Rect{})

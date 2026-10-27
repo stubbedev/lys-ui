@@ -633,39 +633,54 @@ func styleAt(spans []MarkupRun, i int) TextStyle {
 	return TextStyle{}
 }
 
-// Measure returns the line's total advance and its line height - the
-// maximum over the runs - inside the CSS box, clamped to con. Wrap mode
-// reports the widest wrapped row and one line height per row at the
-// offered content width.
-func (l *RichLabel) Measure(con Constraints) Size {
-	if s, ok := l.measureHit(con); ok {
+// Measure reports the line inside the CSS box: across its total
+// advance, needing the ellipsis when it ellipsizes, else its widest
+// token when it wraps, else all of it, max-width-chars holding the
+// advance of one that can narrow; down one line height - the maximum
+// over the runs - per row it wraps into at the width given.
+func (l *RichLabel) Measure(axis Axis, forSize int) Sizes {
+	if s, ok := l.measureHit(axis, forSize); ok {
 		return s
 	}
 	if l.px() != l.shapedPx {
 		l.retext()
 	}
 	v := l.style(l)
-	return l.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, l.measureText))
+	return l.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, l.measureText))
 }
 
 // measureText is Measure inside the CSS box.
-func (l *RichLabel) measureText(con Constraints) Size {
-	limit := con.Max.W
-	if c := l.widthCap(); c > 0 {
-		limit = min(limit, c)
-	}
-	if l.wrap && l.markup != "" && limit < l.natural.W {
-		l.reflow(limit)
-		w := 0
-		for _, line := range l.lines {
-			w = max(w, int(math.Ceil(line.advance)))
-		}
-		lineH, _ := l.lineBox()
-		return clampSize(Size{W: w, H: len(l.lines) * lineH}, con)
-	}
+func (l *RichLabel) measureText(axis Axis, forSize int) Sizes {
 	lineH, _ := l.lineBox()
-	nat := Size{W: min(l.natural.W, limit), H: lineH}
-	return clampSize(nat, con)
+	if axis == Column {
+		width := forSize
+		if width == Unknown {
+			width = l.measureText(Row, Unknown).Nat
+		}
+		if !l.wrap || l.markup == "" || width >= l.natural.W {
+			return FixedSizes(lineH)
+		}
+		l.reflow(width)
+		return FixedSizes(len(l.lines) * lineH)
+	}
+	req := FixedSizes(l.natural.W)
+	switch {
+	case l.ell != EllipsizeNone:
+		ell := l.faceFor(TextStyle{}).Shape(render.Ellipsis, l.shapedPx).Advance()
+		req.Min = min(int(math.Ceil(ell)), req.Nat)
+	case l.wrap && l.text != "":
+		widest := 0.0
+		rows, _ := l.wrapSpans(1)
+		for _, tok := range rows {
+			line, _, _ := l.shapeOne(tok)
+			widest = math.Max(widest, line.advance)
+		}
+		req.Min = min(int(math.Ceil(widest)), req.Nat)
+	}
+	if c := l.widthCap(); c > 0 && req.Min < req.Nat {
+		req.Nat = max(min(req.Nat, c), req.Min)
+	}
+	return req
 }
 
 // lineBox is a row's height and its baseline's depth below the row's
@@ -709,38 +724,16 @@ func (l *RichLabel) widthCap() int {
 	if l.maxChars <= 0 {
 		return 0
 	}
-	sh := l.faceFor(TextStyle{}).Shape(approxCharSample, l.shapedPx)
-	avg := sh.Advance() / float64(len(approxCharSample))
-	return int(math.Ceil(avg * float64(l.maxChars)))
+	return int(math.Ceil(approxCharPx(l.faceFor(TextStyle{}), l.shapedPx) * float64(l.maxChars)))
 }
 
-// ShrinkableWidth implements WidthShrinker: a wrapping label gives up
-// its measured width down to its widest token (MinSize), wrapping onto
-// more lines, as a GTK wrapping label's minimum is; a single-line label
-// keeps its width.
-func (l *RichLabel) ShrinkableWidth() int {
-	if !l.wrap || l.text == "" || !l.measureSeen {
-		return 0
+// CharsWithin is how many approximate character widths fit in px, the
+// max-width-chars that holds the label's natural width to px.
+func (l *RichLabel) CharsWithin(px int) int {
+	if l.px() != l.shapedPx {
+		l.retext()
 	}
-	return max(0, l.measureOut.W-l.MinSize().W)
-}
-
-// MinSize is a wrapping label's floor: the widest unbreakable token —
-// wrapping narrower than that clips tokens, the one thing wrapping
-// promised not to do — and one line height, inside the CSS box.
-func (l *RichLabel) MinSize() Size {
-	o := boxOf(l.style(l), render.Insets{}).outer()
-	floor := Size{H: l.natural.H}
-	if l.wrap && l.text != "" {
-		w := 0.0
-		rows, _ := l.wrapSpans(1)
-		for _, tok := range rows {
-			line, _, _ := l.shapeOne(tok)
-			w = math.Max(w, line.advance)
-		}
-		floor.W = int(math.Ceil(w))
-	}
-	return Size{W: floor.W + o.Left + o.Right, H: floor.H + o.Top + o.Bottom}
+	return int(float64(px) / approxCharPx(l.faceFor(TextStyle{}), l.shapedPx))
 }
 
 // lineGeom resolves the aligned line origin and the runs' shared

@@ -17,11 +17,8 @@ type composite struct {
 	node
 	self Widget
 	root Widget
-	// fillWidth claims the full offered width (bars, rows, lists);
-	// off, the composite wants its root's natural size.
-	fillWidth bool
-	// fixedWidth, when positive, pins the measured width (table cells
-	// that must line up across rows); the root measures within it.
+	// fixedWidth, when positive, pins the width (table cells that must
+	// line up across rows); the root measures within it.
 	fixedWidth int
 	// minHeight floors the measured height (chrome bars keep their
 	// height when their content is short).
@@ -34,9 +31,6 @@ type composite struct {
 	// surfaceRing is the default border width the surface draws (in
 	// the theme's border color) until the cascade declares one.
 	surfaceRing int
-	// measuredW and floorW are the last measured width and the least
-	// it works at, for ShrinkableWidth.
-	measuredW, floorW int
 	// boxed makes the composite its own CSS element: it paints its
 	// cascade box over its bounds less the margin, and lays the root
 	// out inside its margin, border and padding, as a Box does. The
@@ -73,39 +67,29 @@ func (c *composite) setRoot(root Widget) {
 	c.InvalidateLayout()
 }
 
-// Measure measures the root, widened to the offer under fillWidth.
-func (c *composite) Measure(con Constraints) Size {
-	if sz, ok := c.measureHit(con); ok {
+// Measure is the root's request inside the insets, its width pinned
+// under fixedWidth and its height floored at minHeight.
+func (c *composite) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := c.measureHit(axis, forSize); ok {
 		return sz
 	}
-	in := c.insets()
-	inner := in.innerOf(con)
-	if c.fixedWidth > 0 {
-		inner.Max.W = min(inner.Max.W, c.fixedWidth)
+	if axis == Row && c.fixedWidth > 0 {
+		return c.measureStore(axis, forSize, FixedSizes(c.fixedWidth))
 	}
-	sz := measureChild(c.self, c.root, inner)
-	o := in.outer()
-	sz.W += o.Left + o.Right
-	sz.H += o.Top + o.Bottom
-	floor := sz.W - shrinkableWidthOf(c.root)
-	switch {
-	case c.fixedWidth > 0:
-		sz.W = c.fixedWidth
-		floor = sz.W
-	case c.fillWidth:
-		sz.W = con.Max.W
+	if axis == Column && c.fixedWidth > 0 {
+		forSize = c.fixedWidth
 	}
-	sz.H = max(sz.H, c.minHeight)
-	sz = clampSize(sz, con)
-	c.measuredW, c.floorW = sz.W, min(floor, sz.W)
-	return c.measureStore(con, sz)
+	o := c.insets().outer()
+	inner := forSize
+	if inner != Unknown {
+		inner = max(0, inner-insetsAlong(o, otherAxis(axis)))
+	}
+	s := measureChild(c.self, c.root, axis, inner).grow(insetsAlong(o, axis))
+	if axis == Column {
+		s = s.atLeast(c.minHeight)
+	}
+	return c.measureStore(axis, forSize, s)
 }
-
-// ShrinkableWidth implements WidthShrinker: a composite gives what its
-// root can, and one that fills its offer gives the fill back too, down
-// to its content's natural width, as a GTK row allocated less than it
-// would take still lays its content out.
-func (c *composite) ShrinkableWidth() int { return max(0, c.measuredW-c.floorW) }
 
 // Arrange lays the root over the content box, as its parent: inside
 // its margins and held to its CSS sizes, matching Measure.

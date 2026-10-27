@@ -29,7 +29,7 @@ func TestClipsFollowTheDeviceScale(t *testing.T) {
 			},
 		} {
 			w := build()
-			w.Measure(Constraints{Max: Size{W: 40, H: 40}})
+			SizeWithin(w, Size{W: 40, H: 40})
 			w.Arrange(render.Rect{W: 40, H: 40})
 			dev := 40 * scale.num / scale.denom
 			data := make([]byte, render.Stride(dev)*dev)

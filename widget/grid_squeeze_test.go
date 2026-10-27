@@ -6,17 +6,24 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 )
 
-// flooredStub is a stub with a MinSizer floor.
+// flooredStub is a stub that lays out at sizes down to floor.
 type flooredStub struct {
 	stub
 	floor Size
 }
 
-func (s *flooredStub) MinSize() Size { return s.floor }
+// squeezable is a stub of natural size w x h that lays out at any size.
+func squeezable(w, h int) *flooredStub { return &flooredStub{nat: Size{W: w, H: h}} }
+
+func (s *flooredStub) Measure(axis Axis, _ int) Sizes {
+	return Sizes{Min: s.floor.Along(axis), Nat: s.nat.Along(axis)}
+}
+
+func (s *flooredStub) HitTest(p Point) Widget { return s.HitLeaf(s, p) }
 
 // TestGridSqueezeHonorsFloors pins the deficit negotiation (#67): a
 // squeezed grid shrinks its tracks proportionally, stops at per-track
-// floors derived from MinSizer children, and overflows only once every
+// floors derived from the children's minimums, and overflows only once every
 // floor is reached - spanning children ride the shrunken run, and
 // aligned children keep their natural sizes like squeezed Box children.
 func TestGridSqueezeHonorsFloors(t *testing.T) {
@@ -28,7 +35,7 @@ func TestGridSqueezeHonorsFloors(t *testing.T) {
 		narrow.nat = Size{W: 10, H: 10}
 		g.Attach(wide, 0, 0, 1, 1)
 		g.Attach(narrow, 1, 0, 1, 1)
-		g.Measure(Constraints{Max: Size{W: 400, H: 100}})
+		SizeWithin(g, Size{W: 400, H: 100})
 
 		// Natural 100 in a 60 rect: the narrow track's floor equals its
 		// natural (no room), so the whole 40px deficit falls on the wide
@@ -52,13 +59,13 @@ func TestGridSqueezeHonorsFloors(t *testing.T) {
 
 	t.Run("a spanning child rides the shrunken run", func(t *testing.T) {
 		g := NewGrid(0, 0)
-		a := newStub(10, 5)
-		c := newStub(10, 5)
-		span := newStub(20, 5)
+		a := squeezable(10, 5)
+		c := squeezable(10, 5)
+		span := squeezable(20, 5)
 		g.Attach(a, 0, 0, 1, 1)
 		g.Attach(c, 1, 0, 1, 1)
 		g.Attach(span, 0, 1, 2, 1)
-		g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(g, Size{W: 100, H: 100})
 
 		// Natural columns 10+10 in a 12 rect: each column takes 6, so
 		// the span (both columns, no spacing) gets 12.
@@ -73,12 +80,12 @@ func TestGridSqueezeHonorsFloors(t *testing.T) {
 
 	t.Run("an aligned child keeps its natural size in a shrunken cell", func(t *testing.T) {
 		g := NewGrid(0, 0)
-		a := newStub(10, 5)
-		c := newStub(10, 5)
+		a := squeezable(10, 5)
+		c := squeezable(10, 5)
 		g.Attach(a, 0, 0, 1, 1)
 		g.Attach(c, 1, 0, 1, 1)
 		g.SetAlign(c, AlignStart, AlignFill)
-		g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(g, Size{W: 100, H: 100})
 		g.Arrange(render.Rect{X: 0, Y: 0, W: 10, H: 5})
 
 		// The fill child takes the squeezed 5-wide cell; the start
@@ -97,30 +104,30 @@ func TestGridSqueezeHonorsFloors(t *testing.T) {
 		wide := &flooredStub{floor: Size{W: 30, H: 10}}
 		wide.nat = Size{W: 90, H: 10}
 		inner.Attach(wide, 0, 0, 1, 1)
-		inner.Measure(Constraints{Max: Size{W: 400, H: 100}})
+		SizeWithin(inner, Size{W: 400, H: 100})
 
 		outer := NewGrid(0, 0)
 		outer.Attach(inner, 0, 0, 1, 1)
-		outer.Measure(Constraints{Max: Size{W: 400, H: 100}})
+		SizeWithin(outer, Size{W: 400, H: 100})
 		if got := outer.colMin[0]; got != 30 {
 			t.Errorf("outer column floor = %d, want the inner grid's 30", got)
 		}
 	})
 }
 
-// TestGridMinSizerLabelFloor pins the real MinSizer consumer: a
-// wrapping label's widest-token floor stops its column, where a plain
-// stub with the same natural width squeezes to nothing.
-func TestGridMinSizerLabelFloor(t *testing.T) {
+// TestGridLabelFloor pins a real floor: a wrapping label's widest-token
+// minimum stops its column, where a stub that lays out at any size
+// squeezes to nothing.
+func TestGridLabelFloor(t *testing.T) {
 	g := NewGrid(0, 0)
 	label := NewLabel(entryFace(t), 12, "alpha beta", render.RGB(0, 0, 0))
 	label.SetWrap(true)
-	plain := newStub(100, 16)
+	plain := squeezable(100, 16)
 	g.Attach(label, 0, 0, 1, 1)
 	g.Attach(plain, 1, 0, 1, 1)
-	g.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	SizeWithin(g, Size{W: 400, H: 100})
 
-	floor := label.MinSize().W
+	floor := minWidth(label)
 	if floor <= 0 {
 		t.Fatalf("wrapping label floor = %d, want the widest token", floor)
 	}

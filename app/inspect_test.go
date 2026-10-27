@@ -25,7 +25,7 @@ func chordTree(t *testing.T) (widget.Widget, *widget.Entry) {
 	}
 	entry := widget.NewEntry(face, 13, render.RGB(255, 255, 255))
 	box := widget.NewBox(widget.Column, 0, 0).Append(entry, false)
-	box.Measure(widget.Constraints{Max: widget.Size{W: 200, H: 100}})
+	widget.SizeWithin(box, widget.Size{W: 200, H: 100})
 	box.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 100})
 	return box, entry
 }

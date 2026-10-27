@@ -247,7 +247,7 @@ func newFixture(t *testing.T) *fixture {
 // the natural measure.
 func arrange(t *testing.T, root widget.Widget, w, h int) {
 	t.Helper()
-	root.Measure(widget.Constraints{Max: widget.Size{W: w, H: h}})
+	widget.SizeWithin(root, widget.Size{W: w, H: h})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
 }
 

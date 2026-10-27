@@ -13,7 +13,7 @@ func flowGrid(n int) *FlowBox {
 	for range n {
 		f.Append(NewSpacer(20, 20))
 	}
-	f.Measure(Constraints{Max: Size{W: 70, H: 200}})
+	SizeWithin(f, Size{W: 70, H: 200})
 	f.Arrange(render.Rect{W: 70, H: 200})
 	return f
 }
@@ -62,7 +62,7 @@ func TestFlowBoxSelection(t *testing.T) {
 	clicked := 0
 	btn.OnClick = func() { clicked++ }
 	child := f.Append(btn)
-	f.Measure(Constraints{Max: Size{W: 70, H: 200}})
+	SizeWithin(f, Size{W: 70, H: 200})
 	f.Arrange(render.Rect{W: 70, H: 200})
 	b := btn.Bounds()
 	if hit := f.HitTest(Point{X: b.X + 1, Y: b.Y + 1}); hit == Widget(child) {

@@ -10,7 +10,7 @@ import (
 // kineticScroll is a 100x100 Scroll over a 100x2000 column.
 func kineticScroll() *Scroll {
 	s := NewScroll(NewSpacer(100, 2000))
-	s.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(s, Size{W: 100, H: 100})
 	s.Arrange(render.Rect{W: 100, H: 100})
 	return s
 }
@@ -119,7 +119,7 @@ func TestGoldenOvershootGlow(t *testing.T) {
 	th := DarkTheme()
 	s := NewScroll(NewSpacer(100, 400))
 	s.ShowBars = false
-	s.Measure(Constraints{Max: Size{W: 120, H: 80}})
+	SizeWithin(s, Size{W: 120, H: 80})
 	s.Arrange(render.Rect{W: 120, H: 80})
 	s.ScrollPixels(0, -120)
 	NewGolden(t, s, "overshoot", goldenTheme(th), goldenFrame(120, 80))

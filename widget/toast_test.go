@@ -17,7 +17,7 @@ type fixedWidget struct {
 	paint int
 }
 
-func (f *fixedWidget) Measure(con Constraints) Size { return clampSize(f.sz, con) }
+func (f *fixedWidget) Measure(axis Axis, forSize int) Sizes { return FixedSizes(f.sz.Along(axis)) }
 
 func (f *fixedWidget) Arrange(r render.Rect) { f.node.Arrange(r) }
 
@@ -39,7 +39,7 @@ func TestToastAutoDismiss(t *testing.T) {
 		}
 	})
 
-	toast.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	SizeWithin(toast, Size{W: 400, H: 100})
 	toast.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 32})
 
 	t.Run("arranging starts the entrance and the dismiss clock", func(t *testing.T) {
@@ -97,7 +97,7 @@ func TestToastHoverCancelsDismissal(t *testing.T) {
 	toast := NewToast(face, "Syncing", 500*time.Millisecond)
 	fired := 0
 	toast.OnDismissed = func() { fired++ }
-	toast.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	SizeWithin(toast, Size{W: 400, H: 100})
 	toast.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 32})
 
 	// One frame in, the pointer lands on the toast: the pending
@@ -144,7 +144,7 @@ func TestToastHoverRescuesMidExit(t *testing.T) {
 	toast := NewToast(face, "Undo?", time.Second)
 	fired := 0
 	toast.OnDismissed = func() { fired++ }
-	toast.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	SizeWithin(toast, Size{W: 400, H: 100})
 	toast.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 32})
 
 	toast.Dismiss()
@@ -174,7 +174,7 @@ func TestToastCloseStopsEverything(t *testing.T) {
 	toast := NewToast(face, "bye", time.Second)
 	fired := 0
 	toast.OnDismissed = func() { fired++ }
-	toast.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	SizeWithin(toast, Size{W: 400, H: 100})
 	toast.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 32})
 	if !animActiveNow(t) {
 		t.Fatal("armed toast scheduled nothing")
@@ -201,7 +201,7 @@ func TestToastActionClick(t *testing.T) {
 	acted, fired := 0, 0
 	toast.SetAction("Restart", func() { acted++ })
 	toast.OnDismissed = func() { fired++ }
-	toast.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	SizeWithin(toast, Size{W: 400, H: 100})
 	toast.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 36})
 	if toast.actionRect.Empty() {
 		t.Fatal("action hit rect never laid out")
@@ -232,15 +232,15 @@ func TestToastActionClick(t *testing.T) {
 func TestToastDescriptionLine(t *testing.T) {
 	face := testFace(t)
 	toast := NewToast(face, "Saved", 0)
-	one := toast.Measure(Constraints{Max: Size{W: 1000, H: 1000}})
+	one := SizeWithin(toast, Size{W: 1000, H: 1000})
 	toast.SetDescription("Sunday, December 03, 2023 at 9:00 AM")
-	two := toast.Measure(Constraints{Max: Size{W: 1000, H: 1000}})
+	two := SizeWithin(toast, Size{W: 1000, H: 1000})
 	line := face.Shape(toast.Description(), toast.sizePx)
 	if two.H != one.H+toastLineGap+line.LineHeight() || two.W != 2*toastPadX+int(line.Advance()+0.5) {
 		t.Errorf("with a description %v, want %v grown by a line and as wide as it", two, one)
 	}
 	toast.SetDescription("")
-	if got := toast.Measure(Constraints{Max: Size{W: 1000, H: 1000}}); got != one {
+	if got := SizeWithin(toast, Size{W: 1000, H: 1000}); got != one {
 		t.Errorf("cleared description %v, want %v", got, one)
 	}
 }

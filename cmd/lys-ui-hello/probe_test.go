@@ -26,7 +26,7 @@ func arrangedShowcase(t *testing.T) *showcase {
 	const (
 		w, h = 640, 470
 	)
-	show.root.Measure(widget.Constraints{Max: widget.Size{W: w, H: h}})
+	widget.SizeWithin(show.root, widget.Size{W: w, H: h})
 	show.root.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
 	return show
 }

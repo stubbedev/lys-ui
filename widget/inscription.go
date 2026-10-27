@@ -88,21 +88,18 @@ func (in *Inscription) setSize(field *int, n int) {
 	}
 }
 
-// MinSize is the minimum character and line counts' extent.
-func (in *Inscription) MinSize() Size {
-	return Size{W: int(math.Ceil(float64(in.minChars) * in.charW)), H: in.minLines * in.lineH}
-}
-
 // Measure claims the natural character and line counts' extent, never
 // below the minimum.
-func (in *Inscription) Measure(con Constraints) Size {
-	if sz, ok := in.measureHit(con); ok {
+func (in *Inscription) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := in.measureHit(axis, forSize); ok {
 		return sz
 	}
-	m := in.MinSize()
-	w := max(int(math.Ceil(float64(max(in.natChars, in.minChars))*in.charW)), m.W)
-	h := max(max(in.natLines, in.minLines)*in.lineH, m.H)
-	return in.measureStore(con, Size{W: min(max(w, con.Min.W), con.Max.W), H: min(max(h, con.Min.H), con.Max.H)})
+	minW, natW := int(math.Ceil(float64(in.minChars)*in.charW)), int(math.Ceil(float64(in.natChars)*in.charW))
+	req := Sizes{Min: minW, Nat: max(natW, minW)}
+	if axis == Column {
+		req = Sizes{Min: in.minLines * in.lineH, Nat: max(in.natLines, in.minLines) * in.lineH}
+	}
+	return in.measureStore(axis, forSize, req)
 }
 
 // Arrange records the bounds.

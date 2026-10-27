@@ -49,7 +49,7 @@ func NewAlert(face render.Font, title, description string) *Alert {
 	a.row.Append(a.text, true)
 	a.SetDescription(description)
 	a.initComposite(a, a.row)
-	a.fillWidth = true
+	a.SetHExpand(true)
 	a.boxed = true
 	return a
 }

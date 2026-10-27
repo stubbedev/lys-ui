@@ -159,7 +159,7 @@ func (b *Scrollbar) Axis() Axis { return b.axis }
 // Measure is the bar's thickness across its axis; along it the bar
 // takes what its parent stretches it to. scrollbar-width: none
 // collapses it, thin keeps the slot and paints slimmer.
-func (b *Scrollbar) Measure(con Constraints) Size {
+func (b *Scrollbar) Measure(axis Axis, forSize int) Sizes {
 	sz := Size{W: gutter}
 	if b.axis == Row {
 		sz = Size{H: gutter}
@@ -167,7 +167,7 @@ func (b *Scrollbar) Measure(con Constraints) Size {
 	if barSpecOf(b.style(b)).width == style.BarWidthNone {
 		sz = Size{}
 	}
-	return clampSize(sz, con)
+	return FixedSizes(sz.Along(axis))
 }
 
 // Paint draws the track and thumb while the target overflows.

@@ -21,7 +21,7 @@ func TestCaretBlinks(t *testing.T) {
 	other := newFocusTarget()
 	root := NewBox(Column, 0, 0)
 	root.Append(e, false).Append(other, false)
-	root.Measure(Constraints{Max: Size{W: 160, H: 80}})
+	SizeWithin(root, Size{W: 160, H: 80})
 	root.Arrange(render.Rect{W: 160, H: 80})
 	r := &Router{Root: root}
 	if err := r.SetFocus(e); err != nil {
@@ -81,7 +81,7 @@ func TestCaretDoesNotBlinkUnderReducedMotion(t *testing.T) {
 	e := NewEntry(testFace(t), 14, render.RGB(255, 255, 255))
 	root := NewBox(Column, 0, 0)
 	root.Append(e, false)
-	root.Measure(Constraints{Max: Size{W: 160, H: 40}})
+	SizeWithin(root, Size{W: 160, H: 40})
 	root.Arrange(render.Rect{W: 160, H: 40})
 	if err := (&Router{Root: root}).SetFocus(e); err != nil {
 		t.Fatal(err)

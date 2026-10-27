@@ -195,8 +195,8 @@ type indentGuides struct {
 	depth int
 }
 
-func (g *indentGuides) Measure(con Constraints) Size {
-	return clampSize(Size{W: indentStep * g.depth, H: 1}, con)
+func (g *indentGuides) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(Size{W: indentStep * g.depth, H: 1}.Along(axis))
 }
 
 func (g *indentGuides) Arrange(r render.Rect) { g.node.Arrange(r) }

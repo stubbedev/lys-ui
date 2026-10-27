@@ -184,7 +184,7 @@ func (a *Application) NewDialog(parent DialogParent, cfg DialogConfig) (*Dialog,
 		return nil, err
 	}
 	if cfg.Height == 0 {
-		cfg.Height = intconv.Uint32(root.Measure(widget.Constraints{Max: widget.Size{W: int(cfg.Width), H: dialogMaxHeight}}).H)
+		cfg.Height = intconv.Uint32(root.Measure(widget.Column, int(cfg.Width)).Within(dialogMaxHeight))
 	}
 
 	winCfg := WindowConfig{

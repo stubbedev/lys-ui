@@ -85,7 +85,7 @@ func renderDragIcon(sess *wlsession.Session, w widget.Widget, frac120 uint32) *w
 	if sess == nil || sess.Compositor() == nil || sess.Shm() == nil || w == nil {
 		return nil
 	}
-	size := w.Measure(widget.Constraints{Max: widget.Size{W: maxDragIcon, H: maxDragIcon}})
+	size := widget.SizeWithin(w, widget.Size{W: maxDragIcon, H: maxDragIcon})
 	if size.W <= 0 || size.H <= 0 {
 		return nil
 	}

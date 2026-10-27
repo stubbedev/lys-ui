@@ -45,42 +45,52 @@ func fitBounds(out *wlsession.Output, all []*wlsession.Output) widget.Size {
 	return bound
 }
 
-// naturalSize measures root within limit, arranging and re-measuring
-// while the tree settles: a subtree first measured without its
-// ancestors resolves its scoped stylesheet only once arranged.
-func naturalSize(root widget.Widget, limit widget.Size) widget.Size {
-	con := widget.Constraints{Max: limit}
-	size := root.Measure(con)
+// naturalSize measures root within limit (sizeIn), arranging and
+// re-measuring while the tree settles: a subtree first measured without
+// its ancestors resolves its scoped stylesheet only once arranged.
+func naturalSize(root widget.Widget, limit widget.Size, pinW bool) widget.Size {
+	size := sizeIn(root, limit, pinW)
 	for range maxLayoutPasses {
 		root.Arrange(render.Rect{W: size.W, H: size.H})
 		if !widget.LayoutPending(root) {
 			break
 		}
-		size = root.Measure(con)
+		size = sizeIn(root, limit, pinW)
 	}
 	return size
 }
 
-// measureOnly is a settled tree's natural size: its styles resolved in
-// an earlier frame, so one cached Measure answers without disturbing
-// the arrangement the frame is about to make.
-func measureOnly(root widget.Widget, limit widget.Size) widget.Size {
-	return root.Measure(widget.Constraints{Max: limit})
+// measureOnly is a settled tree's size within limit (sizeIn): its
+// styles resolved in an earlier frame, so the cached measures answer
+// without disturbing the arrangement the frame is about to make.
+func measureOnly(root widget.Widget, limit widget.Size, pinW bool) widget.Size {
+	return sizeIn(root, limit, pinW)
+}
+
+// sizeIn is root's size within limit: its width pinned to limit's when
+// pinW (a surface whose width does not follow the content), and its
+// height at that width.
+func sizeIn(root widget.Widget, limit widget.Size, pinW bool) widget.Size {
+	if !pinW {
+		return widget.SizeWithin(root, limit)
+	}
+	return widget.Size{W: limit.W, H: root.Measure(widget.Column, limit.W).Within(limit.H)}
 }
 
 // fittedSize resolves the requested size against the content: each
 // content-sized axis takes root's natural extent (at least one pixel,
 // the protocol's floor for a non-automatic axis), measured with the
 // other axis at its current size when that one is fixed.
-func fittedSize(root widget.Widget, fit fitAxes, width, height uint32, cur [2]int, out *wlsession.Output, all []*wlsession.Output, measure func(widget.Widget, widget.Size) widget.Size) (uint32, uint32) {
+func fittedSize(root widget.Widget, fit fitAxes, width, height uint32, cur [2]int, out *wlsession.Output, all []*wlsession.Output, measure func(widget.Widget, widget.Size, bool) widget.Size) (uint32, uint32) {
 	limit := fitBounds(out, all)
-	if !fit.w && cur[0] > 0 {
+	pinW := !fit.w && cur[0] > 0
+	if pinW {
 		limit.W = cur[0]
 	}
 	if !fit.h && cur[1] > 0 {
 		limit.H = cur[1]
 	}
-	size := measure(root, limit)
+	size := measure(root, limit, pinW)
 	if fit.w {
 		width = intconv.Uint32(max(size.W, 1))
 	}

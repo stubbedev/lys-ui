@@ -120,15 +120,15 @@ type videoView struct {
 	version uint64
 }
 
-func (p *videoView) Measure(con Constraints) Size {
-	if sz, ok := p.measureHit(con); ok {
+func (p *videoView) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := p.measureHit(axis, forSize); ok {
 		return sz
 	}
 	var sz Size
 	if p.stream != nil {
 		sz.W, sz.H = p.stream.Size()
 	}
-	return p.measureStore(con, clampSize(sz, con))
+	return p.measureStore(axis, forSize, pictureRequest(sz, axis, forSize))
 }
 
 func (p *videoView) HitTest(pt Point) Widget { return p.HitLeaf(p, pt) }

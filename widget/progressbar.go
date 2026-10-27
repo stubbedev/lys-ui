@@ -115,7 +115,7 @@ func (p *ProgressBar) setActivity(on bool) {
 }
 
 // Measure wants the 160x10 trough inside the bar's CSS box.
-func (p *ProgressBar) Measure(con Constraints) Size { return p.measureMeter(p, con) }
+func (p *ProgressBar) Measure(axis Axis, forSize int) Sizes { return p.measureMeter(p, axis, forSize) }
 
 // Arrange lays the bar out and syncs the pulse with visibility.
 func (p *ProgressBar) Arrange(r render.Rect) {

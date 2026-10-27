@@ -21,22 +21,22 @@ func TestFlowBoxWraps(t *testing.T) {
 	for _, l := range leaves {
 		f.Append(l)
 	}
-	if sz := f.Measure(Constraints{Max: Size{W: 1000, H: 1000}}); sz != (Size{W: 5*40 + 4*4, H: 20}) {
+	if sz := SizeWithin(f, Size{W: 1000, H: 1000}); sz != (Size{W: 5*40 + 4*4, H: 20}) {
 		t.Errorf("wide: %v, want one line", sz)
 	}
 	// 100px fits two 40px children and their gap per line.
-	if sz := f.Measure(Constraints{Max: Size{W: 100, H: 1000}}); sz != (Size{W: 84, H: 3*20 + 2*6}) {
+	if sz := SizeWithin(f, Size{W: 100, H: 1000}); sz != (Size{W: 100, H: 3*20 + 2*6}) {
 		t.Errorf("narrow: %v, want three lines of two", sz)
 	}
 	// The gaps count: at 82 two children fit but not their gap, at 126
 	// three fit but not both gaps.
-	if sz := f.Measure(Constraints{Max: Size{W: 82, H: 1000}}); sz.H != 5*20+4*6 {
+	if sz := SizeWithin(f, Size{W: 82, H: 1000}); sz.H != 5*20+4*6 {
 		t.Errorf("82px: %v, want one per line", sz)
 	}
-	if sz := f.Measure(Constraints{Max: Size{W: 126, H: 1000}}); sz.H != 3*20+2*6 {
+	if sz := SizeWithin(f, Size{W: 126, H: 1000}); sz.H != 3*20+2*6 {
 		t.Errorf("126px: %v, want two per line", sz)
 	}
-	f.Measure(Constraints{Max: Size{W: 100, H: 1000}})
+	SizeWithin(f, Size{W: 100, H: 1000})
 	f.Arrange(render.Rect{X: 10, Y: 10, W: 100, H: 72})
 	if leaves[2].bounds != (render.Rect{X: 10, Y: 36, W: 40, H: 20}) || leaves[3].bounds.X != 54 {
 		t.Errorf("third child at %v, fourth at %v", leaves[2].bounds, leaves[3].bounds)
@@ -49,17 +49,17 @@ func TestFlowBoxWraps(t *testing.T) {
 	}
 	// The per-line cap.
 	f.SetMaxChildrenPerLine(2)
-	if sz := f.Measure(Constraints{Max: Size{W: 1000, H: 1000}}); sz.H != 3*20+2*6 {
+	if sz := SizeWithin(f, Size{W: 1000, H: 1000}); sz.H != 3*20+2*6 {
 		t.Errorf("two per line: %v", sz)
 	}
 	f.SetMaxChildrenPerLine(0)
-	if sz := f.Measure(Constraints{Max: Size{W: 1000, H: 1000}}); sz.H != 5*20+4*6 {
+	if sz := SizeWithin(f, Size{W: 1000, H: 1000}); sz.H != 5*20+4*6 {
 		t.Errorf("a cap below one is one: %v", sz)
 	}
 	f.SetMaxChildrenPerLine(7)
 	// Hidden children take no slot.
 	f.ChildAt(1).SetVisible(false)
-	f.Measure(Constraints{Max: Size{W: 100, H: 1000}})
+	SizeWithin(f, Size{W: 100, H: 1000})
 	f.Arrange(render.Rect{W: 100, H: 72})
 	if leaves[2].bounds.X != 44 || leaves[2].bounds.Y != 0 {
 		t.Errorf("after a hidden child the next sits at %v", leaves[2].bounds)
@@ -75,7 +75,7 @@ func TestFlowBoxWraps(t *testing.T) {
 		t.Error("RemoveAt")
 	}
 	f.Clear()
-	if f.Len() != 0 || len(f.Children()) != 0 || f.Measure(Constraints{Max: Size{W: 100, H: 100}}) != (Size{}) {
+	if f.Len() != 0 || len(f.Children()) != 0 || SizeWithin(f, Size{W: 100, H: 100}) != (Size{}) {
 		t.Error("Clear")
 	}
 }
@@ -86,7 +86,7 @@ func TestFlowBoxChildNodes(t *testing.T) {
 	leaf := &solidLeaf{sz: Size{W: 10, H: 10}, col: render.RGB(0, 0, 0xff)}
 	c := f.Append(leaf)
 	c.AddClass("mark")
-	sz := f.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	sz := SizeWithin(f, Size{W: 100, H: 100})
 	if sz != (Size{W: 16, H: 16}) {
 		t.Errorf("styled child %v, want the padding around it", sz)
 	}
@@ -174,12 +174,12 @@ func TestFlowBoxWrapsInATightRow(t *testing.T) {
 	row := NewBox(Row, 0, 0)
 	row.Append(label, false)
 	row.Append(frame, false)
-	wide := row.Measure(Constraints{Max: Size{W: 1000, H: 500}})
+	wide := SizeWithin(row, Size{W: 1000, H: 500})
 	if wide.H != 20 {
 		t.Fatalf("with room: %v, want one line", wide)
 	}
 	// 150px: 50 for the label, 100 for the chips, two per line.
-	narrow := row.Measure(Constraints{Max: Size{W: 150, H: 500}})
+	narrow := SizeWithin(row, Size{W: 150, H: 500})
 	if narrow.H != 3*20+2*4 || narrow.W > 150 {
 		t.Errorf("tight: %v, want three lines within 150", narrow)
 	}
@@ -188,8 +188,8 @@ func TestFlowBoxWrapsInATightRow(t *testing.T) {
 		t.Errorf("flow box at %v, want the 100px beside the label", b)
 	}
 	// Never below its widest child.
-	f.Measure(Constraints{Max: Size{W: 1000, H: 500}})
-	if got := f.ShrinkableWidth(); got != 5*40+4*4-40 {
+	SizeWithin(f, Size{W: 1000, H: 500})
+	if got := widthGive(f); got != 5*40+4*4-40 {
 		t.Errorf("shrinkable %d, want down to one 40px child", got)
 	}
 	face := entryFace(t)
@@ -197,7 +197,7 @@ func TestFlowBoxWrapsInATightRow(t *testing.T) {
 	e.SetTextWidth(GTKTextWidth)
 	row2 := NewBox(Row, 0, 0)
 	row2.Append(e, false)
-	row2.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(row2, Size{W: 100, H: 100})
 	row2.Arrange(render.Rect{W: 100, H: 40})
 	if e.Bounds().W > 100 {
 		t.Errorf("a non-expanding entry kept %dpx in a 100px row", e.Bounds().W)
@@ -215,9 +215,9 @@ func TestListShrinks(t *testing.T) {
 	l := NewList[Widget](staticRows(rows), 0)
 	col := NewBox(Column, 0, 0)
 	col.Append(l, true)
-	full := col.Measure(Constraints{Max: Size{W: 200, H: 5000}}).H
-	if l.Shrinkable() != full-l.rowH || l.rowH == 0 {
-		t.Fatalf("shrinkable %d of %d (row %d)", l.Shrinkable(), full, l.rowH)
+	full := SizeWithin(col, Size{W: 200, H: 5000}).H
+	if heightGive(l) != full-l.rowH || l.rowH == 0 {
+		t.Fatalf("shrinkable %d of %d (row %d)", heightGive(l), full, l.rowH)
 	}
 	col.Arrange(render.Rect{W: 200, H: 3 * l.rowH})
 	if b := l.Bounds(); b.H != 3*l.rowH {
@@ -237,7 +237,7 @@ func TestSliderScaleNodes(t *testing.T) {
 		scale:hover trough slider { opacity: 1; }
 	`)
 	s := NewSlider(0, 100, 0, 50)
-	if sz := s.Measure(Constraints{Max: Size{W: 1000, H: 100}}); sz != (Size{W: 160, H: 18}) {
+	if sz := SizeWithin(s, Size{W: 1000, H: 100}); sz != (Size{W: 160, H: 18}) {
 		t.Errorf("measured %v, want the trough's 160px by 18", sz)
 	}
 	s.Arrange(render.Rect{W: 160, H: 20})
@@ -278,7 +278,7 @@ func TestSliderScaleNodes(t *testing.T) {
 // primary-button-warps-slider), before any drag; disabled, nothing.
 func TestSliderWarpsOnPress(t *testing.T) {
 	s := NewSlider(0, 100, 0, 0)
-	s.Measure(Constraints{Max: Size{W: 208, H: 18}})
+	SizeWithin(s, Size{W: 208, H: 18})
 	s.Arrange(render.Rect{W: 208, H: 18})
 	r := &Router{Root: s}
 	r.Press(BTNLeft, Point{X: 104, Y: 9}, 0)
@@ -301,7 +301,7 @@ func TestElementReportsTheTypeName(t *testing.T) {
 	icon := NewThemeIcon("x", 16)
 	box := NewBox(Row, 0, 0)
 	box.Append(icon, false)
-	box.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(box, Size{W: 100, H: 100})
 	if icon.Element() != "image" {
 		t.Errorf("a parented icon reports %q", icon.Element())
 	}

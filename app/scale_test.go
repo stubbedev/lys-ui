@@ -182,7 +182,7 @@ func TestLogicalHitTestsAtFractionalScales(t *testing.T) {
 		root := widget.NewBox(widget.Row, 8, 0)
 		root.Append(entry, true)
 		root.Append(btn, false)
-		root.Measure(widget.Constraints{Max: widget.Size{W: 400, H: 60}})
+		widget.SizeWithin(root, widget.Size{W: 400, H: 60})
 		root.Arrange(render.Rect{X: 0, Y: 0, W: 400, H: 60})
 		in := &surfaceInput{router: &widget.Router{Root: root}, request: func() {}}
 

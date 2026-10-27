@@ -19,7 +19,7 @@ func paintSwitchTrack(t *testing.T) render.Color {
 	data := make([]byte, render.Stride(40)*22)
 	cv := render.New(data, render.Stride(40), 40, 22)
 	s := NewSwitch(false)
-	s.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(s, Size{W: 100, H: 100})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 22})
 	s.Paint(cv)
 	// (28, 11) is inside the 32x18 pill, clear of the off knob.
@@ -59,7 +59,7 @@ func TestThemeExplicitColorWins(t *testing.T) {
 	green := render.RGB(0, 200, 0)
 	b := NewButton(newStub(0, 0), 0, 0)
 	b.Bg = green
-	b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(b, Size{W: 100, H: 100})
 	b.Arrange(render.Rect{X: 0, Y: 0, W: 20, H: 20})
 
 	paint := func() render.Color {

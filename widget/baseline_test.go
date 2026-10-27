@@ -22,7 +22,7 @@ func TestBoxBaseline(t *testing.T) {
 	for _, w := range []Widget{small, large, entry, button, icon} {
 		row.AppendAligned(w, false, AlignBaseline)
 	}
-	sz := row.Measure(Constraints{Max: Size{W: 600, H: 200}})
+	sz := SizeWithin(row, Size{W: 600, H: 200})
 	row.Arrange(render.Rect{W: sz.W, H: sz.H})
 	line, ok := row.Baseline()
 	if !ok {

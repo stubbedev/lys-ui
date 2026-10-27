@@ -16,7 +16,7 @@ import (
 // points the way a sweep does: list rows, the entry, empty padding.
 func BenchmarkPointerMove(b *testing.B) {
 	show := buildShowcase(b)
-	show.root.Measure(Constraints{Max: Size{W: showW, H: showH}})
+	SizeWithin(show.root, Size{W: showW, H: showH})
 	show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
 	r := &Router{Root: show.root}
 	pts := []Point{
@@ -37,7 +37,7 @@ func BenchmarkPointerMove(b *testing.B) {
 // and routes one wheel tick per op - the event path behind `just axis`.
 func BenchmarkWheelOverScroll(b *testing.B) {
 	show := buildShowcase(b)
-	show.root.Measure(Constraints{Max: Size{W: showW, H: showH}})
+	SizeWithin(show.root, Size{W: showW, H: showH})
 	show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
 	r := &Router{Root: show.root}
 	r.Move(Point{X: 450, Y: 350})
@@ -51,7 +51,7 @@ func BenchmarkWheelOverScroll(b *testing.B) {
 // spread of points as the move benchmark.
 func BenchmarkDragHover(b *testing.B) {
 	show := buildShowcase(b)
-	show.root.Measure(Constraints{Max: Size{W: showW, H: showH}})
+	SizeWithin(show.root, Size{W: showW, H: showH})
 	show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
 	r := &Router{Root: show.root}
 	r.DragEnter(nil, Point{X: 400, Y: 200})

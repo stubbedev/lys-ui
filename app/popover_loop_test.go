@@ -240,7 +240,7 @@ func TestPopoverClickReachesTheWidgetUnderThePointer(t *testing.T) {
 	content.Append(widget.NewLabel(face, 14, "title", render.RGB(255, 255, 255)), false)
 	content.Append(button, false)
 	op, _, _, _ := newLoopPopover(content)
-	op.keyRoot.Measure(widget.Constraints{Max: widget.Size{W: 200, H: 200}})
+	widget.SizeWithin(op.keyRoot, widget.Size{W: 200, H: 200})
 	op.keyRoot.Arrange(render.Rect{W: 200, H: 200})
 
 	b := button.Bounds()

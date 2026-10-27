@@ -76,9 +76,6 @@ type Entry struct {
 
 	// text is GtkText's node under the field (`entry > text`).
 	text entryText
-	// measuredW is the last Measure's width, what ShrinkableWidth
-	// gives from.
-	measuredW int
 	// widthChars and maxWidthChars are GtkEntry's width-chars and
 	// max-width-chars (SetWidthChars); 0 is unset.
 	widthChars, maxWidthChars int
@@ -288,9 +285,9 @@ func (e *Entry) leadingRect() render.Rect {
 func (e *Entry) slotSize(w Widget) Size {
 	h := e.bounds.H
 	if h <= 0 {
-		h = unboundedPx
+		h = math.MaxInt
 	}
-	return w.Measure(Constraints{Max: Size{W: unboundedPx, H: h}})
+	return SizeWithin(w, Size{W: math.MaxInt, H: h})
 }
 
 // entryTrailingGap is the space between the text and the trailing icon.
@@ -1066,30 +1063,41 @@ func (e *Entry) charsText() (natural, floor int, ok bool) {
 }
 
 // Measure wants the text advance (or the placeholder's) plus padding; an
-// empty field keeps its padding so the box stays visible. Clamped to con.
-// Composing text counts toward the wanted width. SetTextWidth fixes the
-// text's share instead. MaxWidth caps the reported width — a
-// 500-character paste then stops widening the layout at the cap and
-// pans inside it instead.
-func (e *Entry) Measure(con Constraints) Size {
-	if sz, ok := e.measureHit(con); ok {
+// empty field keeps its padding so the box stays visible. Composing
+// text counts toward the wanted width. SetTextWidth fixes the text's
+// share instead. MaxWidth caps the wanted width — a 500-character
+// paste then stops widening the layout at the cap and pans inside it
+// instead. The field needs only its insets and the width-chars floor
+// (GtkText's minimum without width-chars is no text at all), the text
+// panning inside what it gets. The stylesheet's min-* floors hold on
+// both, and its margin sits outside the field, as in every CSS box. The
+// open completion list claims height below the field.
+func (e *Entry) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := e.measureHit(axis, forSize); ok {
 		return sz
+	}
+	v := e.style(e)
+	m := marginOf(v)
+	in := e.textInsets()
+	if axis == Column {
+		lg := e.font().Shape("lg", e.fontPx())
+		line := max(int(lg.Ascent()+lg.Descent()+0.5), picki(e.text.style(&e.text), style.PropMinHeight, 0))
+		h := max(line+in.Top+in.Bottom, picki(v, style.PropMinHeight, entryMinHeight))
+		return e.measureStore(axis, forSize, FixedSizes(h+m.Top+m.Bottom+e.completionHeight()))
 	}
 	text := e.displayText()
 	if text == "" {
 		text = e.placeholder
 	}
-	px := e.fontPx()
-	in := e.textInsets()
 	w := in.Left + in.Right
-	chars, _, byChars := e.charsText()
+	chars, least, byChars := e.charsText()
 	switch {
 	case byChars:
 		w += chars
 	case e.textWidth > 0:
 		w += e.textWidth
 	case text != "":
-		w += int(e.font().Shape(text, px).Advance() + 0.5)
+		w += int(e.font().Shape(text, e.fontPx()).Advance() + 0.5)
 		if e.displayText() != "" {
 			// Room for the margin the pan keeps past a trailing
 			// caret, so a field at its natural width shows its text
@@ -1097,47 +1105,13 @@ func (e *Entry) Measure(con Constraints) Size {
 			w += caretPad
 		}
 	}
-	lg := e.font().Shape("lg", px)
-	line := max(int(lg.Ascent()+lg.Descent()+0.5), picki(e.text.style(&e.text), style.PropMinHeight, 0))
-	h := line + in.Top + in.Bottom
 	if e.MaxWidth > 0 {
 		w = min(w, max(e.MaxWidth, 16))
 	}
-	// The stylesheet's min-* floors hold before the constraints clamp:
-	// the field claims at least the styled floor, overflowing if needed.
-	v := e.style(e)
-	w = max(w, picki(v, style.PropMinWidth, 0))
-	h = max(h, picki(v, style.PropMinHeight, entryMinHeight))
-	// The stylesheet's margin sits outside the field, as in every CSS box.
-	m := marginOf(v)
-	sz := e.measureStore(con, clampSize(Size{W: w + m.Left + m.Right, H: h + m.Top + m.Bottom}, con))
-	// The open completion list claims height below the field (the
-	// parent learns through the cache drop the open/close bought).
-	sz.H += e.completionHeight()
-	e.measuredW = sz.W
-	return sz
-}
-
-// ShrinkableWidth implements WidthShrinker: a field gives up its text
-// width down to its insets and the stylesheet's min-width (GtkText's
-// minimum without width-chars is no text at all), the text panning
-// inside what is left.
-func (e *Entry) ShrinkableWidth() int {
-	v := e.style(e)
-	in, m := e.textInsets(), marginOf(v)
-	_, chars, _ := e.charsText()
-	floor := max(in.Left+in.Right+chars, picki(v, style.PropMinWidth, 0)) + m.Left + m.Right
-	return max(0, e.measuredW-floor)
-}
-
-// MinSize implements MinSizer: the stylesheet's min-* floors when set,
-// no floor otherwise (the zero Size).
-func (e *Entry) MinSize() Size {
-	v := e.style(e)
-	return Size{
-		W: picki(v, style.PropMinWidth, 0),
-		H: picki(v, style.PropMinHeight, 0),
-	}
+	floor := picki(v, style.PropMinWidth, 0)
+	req := Sizes{Min: max(in.Left+in.Right+least, floor), Nat: max(w, floor)}
+	req.Min = min(req.Min, req.Nat)
+	return e.measureStore(axis, forSize, req.grow(m.Left+m.Right))
 }
 
 // Paint draws the field: placeholder when empty, text otherwise, the

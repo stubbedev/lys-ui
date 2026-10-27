@@ -123,7 +123,7 @@ func TestEntryMeasurePaint(t *testing.T) {
 	t.Run("placeholder gives an empty entry width", func(t *testing.T) {
 		e := NewEntry(face, 14, render.RGB(255, 255, 255))
 		e.SetPlaceholder("type here")
-		got := e.Measure(Constraints{Max: Size{W: 500, H: 100}})
+		got := SizeWithin(e, Size{W: 500, H: 100})
 		if got.W <= 0 {
 			t.Errorf("placeholder entry width = %d, want > 0", got.W)
 		}
@@ -131,7 +131,7 @@ func TestEntryMeasurePaint(t *testing.T) {
 
 	t.Run("empty entry without placeholder wants only padding", func(t *testing.T) {
 		e := NewEntry(face, 14, render.RGB(255, 255, 255))
-		got := e.Measure(Constraints{Max: Size{W: 500, H: 100}})
+		got := SizeWithin(e, Size{W: 500, H: 100})
 		if want := entryPad.Left + entryPad.Right; got.W != want {
 			t.Errorf("empty entry width = %d, want the padding %d", got.W, want)
 		}
@@ -139,7 +139,7 @@ func TestEntryMeasurePaint(t *testing.T) {
 
 	t.Run("painting an empty entry shows no text ink beyond the cursor", func(t *testing.T) {
 		e := NewEntry(face, 14, render.RGB(255, 255, 255))
-		e.Measure(Constraints{Max: Size{W: 500, H: 100}})
+		SizeWithin(e, Size{W: 500, H: 100})
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 28})
 		cv := render.New(make([]byte, render.Stride(200)*28), render.Stride(200), 200, 28)
 		e.Paint(cv)
@@ -185,7 +185,7 @@ func TestSliderValueModel(t *testing.T) {
 
 	t.Run("ValueAt maps the trough to values with edge padding", func(t *testing.T) {
 		s := NewSlider(0, 100, 0, 0)
-		s.Measure(Constraints{Max: Size{W: 500, H: 100}})
+		SizeWithin(s, Size{W: 500, H: 100})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 204, H: 18})
 		if got := s.ValueAt(Point{X: 4}); got != 0 {
 			t.Errorf("left edge = %v, want 0", got)
@@ -283,7 +283,7 @@ func TestSwitchAndCheck(t *testing.T) {
 			data := make([]byte, render.Stride(40)*22)
 			cv := render.New(data, render.Stride(40), 40, 22)
 			s := NewSwitch(on)
-			s.Measure(Constraints{Max: Size{W: 100, H: 100}})
+			SizeWithin(s, Size{W: 100, H: 100})
 			s.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 22})
 			s.Paint(cv)
 			return render.ColorFromBytes(data[11*render.Stride(40)+3*4:])
@@ -327,7 +327,7 @@ func TestStack(t *testing.T) {
 	})
 
 	t.Run("measure takes the largest child", func(t *testing.T) {
-		got := newStack().Measure(Constraints{Max: Size{W: 100, H: 100}})
+		got := SizeWithin(newStack(), Size{W: 100, H: 100})
 		if got != (Size{W: 30, H: 10}) {
 			t.Errorf("stack measure = %v, want 30x10", got)
 		}
@@ -351,7 +351,7 @@ func TestStack(t *testing.T) {
 
 	t.Run("hit test respects visibility", func(t *testing.T) {
 		s := NewStack().Add("a", newStub(10, 10)).Add("b", newStub(10, 10))
-		s.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(s, Size{W: 100, H: 100})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 20})
 		if got := s.HitTest(Point{X: 5, Y: 5}); got != s.kids["a"] {
 			t.Errorf("hit = %v, want child a", got)
@@ -361,11 +361,11 @@ func TestStack(t *testing.T) {
 
 func TestOverlay(t *testing.T) {
 	o := NewOverlay().Append(newStub(10, 10)).Append(newStub(5, 5))
-	o.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(o, Size{W: 100, H: 100})
 	o.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 20})
 
 	t.Run("measure takes the largest child", func(t *testing.T) {
-		if got := o.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 10, H: 10}) {
+		if got := SizeWithin(o, Size{W: 100, H: 100}); got != (Size{W: 10, H: 10}) {
 			t.Errorf("overlay measure = %v", got)
 		}
 	})
@@ -373,7 +373,7 @@ func TestOverlay(t *testing.T) {
 	t.Run("topmost child wins the hit test", func(t *testing.T) {
 		bottom, top := newStub(20, 20), newStub(20, 20)
 		ov := NewOverlay().Append(bottom).Append(top)
-		ov.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(ov, Size{W: 100, H: 100})
 		ov.Arrange(render.Rect{X: 0, Y: 0, W: 30, H: 30})
 		if got := ov.HitTest(Point{X: 5, Y: 5}); got != top {
 			t.Errorf("hit = %v, want top", got)
@@ -383,7 +383,7 @@ func TestOverlay(t *testing.T) {
 	t.Run("an aligned child sits at its natural size and hits only there", func(t *testing.T) {
 		content, corner := newStub(20, 20), newStub(6, 4)
 		ov := NewOverlay().Append(content).AppendAligned(corner, AlignEnd, AlignStart)
-		ov.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(ov, Size{W: 100, H: 100})
 		ov.Arrange(render.Rect{X: 10, Y: 10, W: 50, H: 30})
 		if got := corner.Bounds(); got != (render.Rect{X: 54, Y: 10, W: 6, H: 4}) {
 			t.Errorf("corner arranged at %v, want the top-right 6x4", got)
@@ -414,7 +414,7 @@ func TestScroll(t *testing.T) {
 
 	newScroll := func() *Scroll {
 		s := propagating(NewScroll(tall))
-		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+		SizeWithin(s, Size{W: 60, H: 60})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 		return s
 	}
@@ -424,7 +424,7 @@ func TestScroll(t *testing.T) {
 		// an unbounded appetite that blew up natural measurement in
 		// parent boxes and laid the viewport past the window edge.
 		s := newScroll()
-		if got := s.Measure(Constraints{Max: Size{W: 60, H: 60}}); got != (Size{W: 50, H: 60}) {
+		if got := SizeWithin(s, Size{W: 60, H: 60}); got != (Size{W: 50, H: 60}) {
 			t.Errorf("viewport measure = %v, want the child natural 50x60 clamped to 60 height", got)
 		}
 		if s.nat.H != 200 {
@@ -447,7 +447,7 @@ func TestScroll(t *testing.T) {
 		const (
 			w, h = 640, 470
 		)
-		row.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(row, Size{W: w, H: h})
 		row.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
 		// Walk to the scroll: its viewport must sit inside the window.
 		var found *Scroll
@@ -486,7 +486,7 @@ func TestScroll(t *testing.T) {
 
 	t.Run("child smaller than the viewport stays pinned", func(t *testing.T) {
 		s := NewScroll(newStub(10, 10))
-		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+		SizeWithin(s, Size{W: 60, H: 60})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 		s.SetOffset(5, 5)
 		if s.offX != 0 || s.offY != 0 {
@@ -496,7 +496,7 @@ func TestScroll(t *testing.T) {
 
 	t.Run("hits inside land on the child, empty area on the scroll", func(t *testing.T) {
 		s := NewScroll(newStub(20, 20))
-		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+		SizeWithin(s, Size{W: 60, H: 60})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 		// The 20x20 child centers in the 60x60 viewport: it spans
 		// (20,20)-(40,40); everything else is the scroll's empty area.
@@ -514,7 +514,7 @@ func TestScroll(t *testing.T) {
 	t.Run("fill stretches a smaller child across the viewport", func(t *testing.T) {
 		s := NewScroll(newStub(20, 20))
 		s.FillX, s.FillY = true, true
-		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+		SizeWithin(s, Size{W: 60, H: 60})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 		cb := s.child.(*stub).Bounds()
 		if cb.W != 60 || cb.H != 60 {
@@ -534,7 +534,7 @@ func TestScroll(t *testing.T) {
 			list.Append(l, false)
 		}
 		s := NewScroll(list)
-		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+		SizeWithin(s, Size{W: 60, H: 60})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 		s.SetOffset(0, 30)                               // scrolled 1.5 rows down
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60}) // the loop re-arranges each frame
@@ -548,7 +548,7 @@ func TestScroll(t *testing.T) {
 
 func TestSpacer(t *testing.T) {
 	s := NewSpacer(12, 4)
-	if got := s.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 12, H: 4}) {
+	if got := SizeWithin(s, Size{W: 100, H: 100}); got != (Size{W: 12, H: 4}) {
 		t.Errorf("spacer = %v, want 12x4", got)
 	}
 	if got := s.HitTest(Point{X: 1, Y: 1}); got != nil {
@@ -575,7 +575,7 @@ func TestOverlayHiddenChildTakesNoPart(t *testing.T) {
 	top := &paintSpy{nat: Size{W: 80, H: 80}}
 	ov := NewOverlay().Append(bottom).Append(top)
 	top.SetVisible(false)
-	if got := ov.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 20, H: 20}) {
+	if got := SizeWithin(ov, Size{W: 100, H: 100}); got != (Size{W: 20, H: 20}) {
 		t.Errorf("measure = %v, want the visible child's 20x20", got)
 	}
 	ov.Arrange(render.Rect{W: 30, H: 30})
@@ -601,7 +601,7 @@ func TestOverlayCSSBox(t *testing.T) {
 	fill := NewSpacer(0, 0)
 	ring := NewOverlay().Append(fill)
 	ring.AddClass("ring")
-	if got := ring.Measure(Constraints{Max: Size{W: 200, H: 200}}); got != (Size{W: 72, H: 72}) {
+	if got := SizeWithin(ring, Size{W: 200, H: 200}); got != (Size{W: 72, H: 72}) {
 		t.Errorf("styled overlay %v, want the 64px floor plus 4px padding each side", got)
 	}
 	ring.Arrange(render.Rect{W: 72, H: 72})
@@ -609,7 +609,7 @@ func TestOverlayCSSBox(t *testing.T) {
 		t.Errorf("filling child %v, want the content box", got)
 	}
 	plain := NewOverlay().Append(NewSpacer(30, 20))
-	if got := plain.Measure(Constraints{Max: Size{W: 200, H: 200}}); got != (Size{W: 30, H: 20}) {
+	if got := SizeWithin(plain, Size{W: 200, H: 200}); got != (Size{W: 30, H: 20}) {
 		t.Errorf("unstyled overlay %v, want its largest child", got)
 	}
 }

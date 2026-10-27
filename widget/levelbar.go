@@ -110,7 +110,7 @@ func (b *LevelBar) syncOffset() {
 }
 
 // Measure wants the 160x10 trough inside the bar's CSS box.
-func (b *LevelBar) Measure(con Constraints) Size { return b.measureMeter(b, con) }
+func (b *LevelBar) Measure(axis Axis, forSize int) Sizes { return b.measureMeter(b, axis, forSize) }
 
 // Paint draws the trough and the proportional block.
 func (b *LevelBar) Paint(cv *render.Canvas) { b.paintMeter(cv, 0, b.value) }

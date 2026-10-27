@@ -472,7 +472,6 @@ func (s *showcase) mapped(w, h int) {
 	s.shown = true
 	log.Printf("lys-ui-hello: mapped at %dx%d", w, h)
 	app.Trace("demo", "mapped %dx%d", w, h)
-	s.root.Measure(widget.Constraints{Max: widget.Size{W: w, H: h}})
 	s.root.Arrange(render.Rect{W: w, H: h})
 	mw, mh := widget.MediaViewportOf(s.root)
 	app.Trace("demo", "media viewport %dx%d", mw, mh)

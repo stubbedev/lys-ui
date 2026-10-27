@@ -72,7 +72,7 @@ func NewField(face render.Font, label string, control Widget) *Field {
 	f.err.SetWrap(true)
 	f.bps.add(Breakpoint{Min: fieldResponsiveMin, Apply: func() { f.setWide(true) }, Unapply: func() { f.setWide(false) }})
 	f.initComposite(f, f.box)
-	f.fillWidth = true
+	f.SetHExpand(true)
 	f.boxed = true
 	if n := nodeOf(control); n != nil && n.accName == "" {
 		n.accName, f.named = label, true
@@ -211,7 +211,7 @@ func NewFieldSet(face render.Font, legend string) *FieldSet {
 	s.fields.SetPadding(render.Insets{Top: 16})
 	s.box.Append(title, false).Append(s.fields, false)
 	s.initComposite(s, s.box)
-	s.fillWidth = true
+	s.SetHExpand(true)
 	s.boxed = true
 	return s
 }

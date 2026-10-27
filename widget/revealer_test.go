@@ -17,10 +17,10 @@ type solidLeaf struct {
 	col render.Color
 }
 
-func (s *solidLeaf) Measure(con Constraints) Size { return clampSize(s.sz, con) }
-func (s *solidLeaf) Arrange(r render.Rect)        { s.node.Arrange(r) }
-func (s *solidLeaf) Paint(cv *render.Canvas)      { cv.FillRect(s.bounds, s.col) }
-func (s *solidLeaf) HitTest(p Point) Widget       { return s.HitLeaf(s, p) }
+func (s *solidLeaf) Measure(axis Axis, forSize int) Sizes { return FixedSizes(s.sz.Along(axis)) }
+func (s *solidLeaf) Arrange(r render.Rect)                { s.node.Arrange(r) }
+func (s *solidLeaf) Paint(cv *render.Canvas)              { cv.FillRect(s.bounds, s.col) }
+func (s *solidLeaf) HitTest(p Point) Widget               { return s.HitLeaf(s, p) }
 
 var (
 	revealBG   = render.RGB(0, 0, 0)
@@ -35,7 +35,7 @@ func revealerAt(t *testing.T, tr RevealTransition) (*Revealer, *solidLeaf) {
 	r := NewRevealer(leaf)
 	r.SetTransition(tr)
 	r.SetDuration(100 * time.Millisecond)
-	r.Measure(Constraints{Max: Size{W: 80, H: 60}})
+	SizeWithin(r, Size{W: 80, H: 60})
 	r.Arrange(render.Rect{X: 20, Y: 20, W: 40, H: 20})
 	return r, leaf
 }
@@ -93,7 +93,7 @@ func TestRevealerRevealsAndHides(t *testing.T) {
 	if got := lit(paintReveal(r), render.Rect{W: 80, H: 60}); got != 0 {
 		t.Fatalf("a new revealer drew %d px, want hidden", got)
 	}
-	if sz := r.Measure(Constraints{Max: Size{W: 80, H: 60}}); sz != (Size{W: 40, H: 20}) {
+	if sz := SizeWithin(r, Size{W: 80, H: 60}); sz != (Size{W: 40, H: 20}) {
 		t.Errorf("hidden fade measures %v, want the full child size held", sz)
 	}
 
@@ -166,14 +166,14 @@ func TestRevealerZeroDurationSnaps(t *testing.T) {
 func TestRevealerNoneTakesNoSpaceHidden(t *testing.T) {
 	pinAnimClock(t)
 	r, _ := revealerAt(t, RevealNone)
-	if sz := r.Measure(Constraints{Max: Size{W: 80, H: 60}}); sz != (Size{}) {
+	if sz := SizeWithin(r, Size{W: 80, H: 60}); sz != (Size{}) {
 		t.Errorf("hidden none measures %v, want nothing", sz)
 	}
 	if r.HitTest(Point{X: 30, Y: 30}) != nil {
 		t.Error("a hidden child took input")
 	}
 	r.SetRevealed(true)
-	if sz := r.Measure(Constraints{Max: Size{W: 80, H: 60}}); sz != (Size{W: 40, H: 20}) {
+	if sz := SizeWithin(r, Size{W: 80, H: 60}); sz != (Size{W: 40, H: 20}) {
 		t.Errorf("shown none measures %v", sz)
 	}
 	if got := redAt(paintReveal(r), 30, 30); got != 255 {
@@ -285,7 +285,7 @@ func collapsingAt(t *testing.T, tr RevealTransition) (*Revealer, *solidLeaf) {
 }
 
 func relayout(r *Revealer) Size {
-	sz := r.Measure(Constraints{Max: Size{W: 80, H: 60}})
+	sz := SizeWithin(r, Size{W: 80, H: 60})
 	r.Arrange(render.Rect{X: 20, Y: 20, W: sz.W, H: sz.H})
 	return sz
 }

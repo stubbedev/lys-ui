@@ -38,7 +38,7 @@ func swatch(classes ...string) *Box {
 }
 
 func (s *motionScene) frame() {
-	s.root.Measure(Constraints{Max: Size{W: 100, H: 120}})
+	SizeWithin(s.root, Size{W: 100, H: 120})
 	s.root.Arrange(render.Rect{W: 100, H: 120})
 	CollectDamage(s.root)
 	s.cv.Clear(s.cv.Rect(), 0)
@@ -180,7 +180,7 @@ func TestLayoutMotionRemovalThenReappend(t *testing.T) {
 	s.root.Remove(w)
 	other := NewBox(Column, 0, 0)
 	other.Append(w, false)
-	other.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(other, Size{W: 100, H: 100})
 	if w.Parent() != Widget(other) || len(s.root.departing) != 0 {
 		t.Errorf("after re-appending: parent %v, departing %d; want the new box and no departure", w.Parent(), len(s.root.departing))
 	}

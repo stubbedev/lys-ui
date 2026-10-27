@@ -238,7 +238,7 @@ func TestFixedViewPositionsItems(t *testing.T) {
 
 	placed := func() []render.Rect {
 		t.Helper()
-		nat := fixed.Measure(widget.Constraints{Max: widget.Size{W: 300, H: 300}})
+		nat := widget.SizeWithin(fixed, widget.Size{W: 300, H: 300})
 		fixed.Arrange(render.Rect{X: 0, Y: 0, W: nat.W, H: nat.H})
 		out := make([]render.Rect, len(rows))
 		for i, r := range rows {

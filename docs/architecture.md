@@ -97,10 +97,14 @@ Widgets record invalidation instead of apps blindly repainting:
 parent chain into `widget.CollectDamage` (widget/damage.go,
 widget/widget.go). The frame loop clips painting to the damage union,
 sends per-rect `damage_buffer`, and skips buffer acquisition and
-commit entirely when nothing is dirty. `Measure` is memoized per
-widget against the constraints it was asked with (widget/widget.go),
-so a static tree costs one cache hit at the root; edits and resizes
-drop exactly the affected branch.
+commit entirely when nothing is dirty. Layout is GTK's measure
+protocol: `Measure(axis, forSize)` reports a widget's minimum and
+natural extent along one axis for an extent across (height for
+width), never clamped to its host, and a container measures its
+children where it arranges them, handing out room as GTK's box
+allocation does (widget/measure.go). Each widget memoizes its last few
+requests (widget/widget.go), so a static tree's frame computes no
+measure at all; edits and resizes drop exactly the affected branch.
 
 Partial repaint carries an obligation: it is only correct if the
 acquired buffer already matches the screen outside the damaged region.

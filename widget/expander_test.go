@@ -16,20 +16,20 @@ func TestExpanderToggleAnimates(t *testing.T) {
 	c := pinAnimClock(t)
 	child := &fixedWidget{sz: Size{W: 120, H: 60}}
 	e := NewExpander(face, "Advanced", child)
-	con := Constraints{Max: Size{W: 300, H: 500}}
+	con := Size{W: 300, H: 500}
 	rect := render.Rect{X: 0, Y: 0, W: 300, H: 500}
 	// relayout is the frame's layout pass: the draw loop re-measures
 	// and re-arranges the tree every frame, which is what moves the
 	// animated height into the child's rect.
 	relayout := func() {
-		e.Measure(con)
+		SizeWithin(e, con)
 		e.Arrange(rect)
 	}
 	relayout()
 	headH := e.headerH()
 
 	t.Run("closed, the child is hidden and unmeasured", func(t *testing.T) {
-		if got := e.Measure(con); got.H != headH {
+		if got := SizeWithin(e, con); got.H != headH {
 			t.Errorf("closed height = %d, want the header %d", got.H, headH)
 		}
 		if kids := e.Children(); len(kids) != 0 {
@@ -47,13 +47,13 @@ func TestExpanderToggleAnimates(t *testing.T) {
 		// Mid-flight the height sits strictly between header and full.
 		c.step()
 		relayout()
-		mid := e.Measure(con).H
+		mid := SizeWithin(e, con).H
 		if mid <= headH || mid >= headH+60 {
 			t.Errorf("mid-flight height = %d, want strictly inside (%d, %d)", mid, headH, headH+60)
 		}
 		c.drive()
 		relayout()
-		if got := e.Measure(con); got.H != headH+60 {
+		if got := SizeWithin(e, con); got.H != headH+60 {
 			t.Errorf("settled height = %d, want %d", got.H, headH+60)
 		}
 		if !e.Open() {
@@ -80,7 +80,7 @@ func TestExpanderToggleAnimates(t *testing.T) {
 	t.Run("collapsing animates back and re-hides", func(t *testing.T) {
 		e.Toggle()
 		c.drive()
-		if got := e.Measure(con); got.H != headH {
+		if got := SizeWithin(e, con); got.H != headH {
 			t.Errorf("collapsed height = %d, want %d", got.H, headH)
 		}
 		if kids := e.Children(); len(kids) != 0 {
@@ -97,7 +97,7 @@ func TestExpanderChildrenOnlyWhileOpen(t *testing.T) {
 	c := pinAnimClock(t)
 	child := &fixedWidget{sz: Size{W: 100, H: 40}}
 	e := NewExpander(face, "Details", child)
-	e.Measure(Constraints{Max: Size{W: 300, H: 500}})
+	SizeWithin(e, Size{W: 300, H: 500})
 	e.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 500})
 
 	// The state flips at once, mid-animation included: focus traversal
@@ -124,8 +124,8 @@ func TestExpanderRemembersStateWhileHidden(t *testing.T) {
 	t0 := c.now()
 	child := &fixedWidget{sz: Size{W: 100, H: 40}}
 	e := NewExpander(face, "Details", child)
-	con := Constraints{Max: Size{W: 300, H: 500}}
-	e.Measure(con)
+	con := Size{W: 300, H: 500}
+	SizeWithin(e, con)
 
 	// Toggled while out of the tree: settles instantly, no timer.
 	e.SetOpen(true)
@@ -137,9 +137,9 @@ func TestExpanderRemembersStateWhileHidden(t *testing.T) {
 	}
 
 	// Shown later: full height at once, still no re-animation.
-	e.Measure(con)
+	SizeWithin(e, con)
 	e.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 500})
-	if got := e.Measure(con); got.H != e.headerH()+40 {
+	if got := SizeWithin(e, con); got.H != e.headerH()+40 {
 		t.Errorf("shown height = %d, want fully open %d", got.H, e.headerH()+40)
 	}
 	if animActiveNow(t) {
@@ -166,9 +166,9 @@ func TestExpanderClickAndKeyToggle(t *testing.T) {
 	c := pinAnimClock(t)
 	child := &fixedWidget{sz: Size{W: 100, H: 40}}
 	e := NewExpander(face, "Details", child)
-	con := Constraints{Max: Size{W: 300, H: 500}}
+	con := Size{W: 300, H: 500}
 	relayout := func() {
-		e.Measure(con)
+		SizeWithin(e, con)
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 500})
 	}
 	relayout()
@@ -225,9 +225,9 @@ func TestExpanderPaint(t *testing.T) {
 	c := pinAnimClock(t)
 	child := &fixedWidget{sz: Size{W: 100, H: 40}}
 	e := NewExpander(face, "Details", child)
-	con := Constraints{Max: Size{W: 300, H: 500}}
+	con := Size{W: 300, H: 500}
 	relayout := func() {
-		e.Measure(con)
+		SizeWithin(e, con)
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 500})
 	}
 	w, h := 300, 200

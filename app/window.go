@@ -811,11 +811,10 @@ func (w *hostWindow) draw() bool {
 			w.scaleApplied = true
 		}
 	}
-	// Measure (cached per widget: a static tree costs nothing) and
-	// arrange; Arrange invalidates the old rect of anything that moved,
+	// Arrange (measures are cached per widget: a static tree costs
+	// nothing); Arrange invalidates the old rect of anything that moved,
 	// so the drain below sees moves from this frame too. All tree
 	// coordinates are logical pixels.
-	w.router.Root.Measure(widget.Constraints{Max: widget.Size{W: bw, H: bh}})
 	w.router.Root.Arrange(render.Rect{X: 0, Y: 0, W: bw, H: bh})
 	// Arranging a new subtree parents it, and a widget first measured
 	// without ancestors resolved no scoped stylesheet: settle the layout
@@ -824,7 +823,6 @@ func (w *hostWindow) draw() bool {
 		if !widget.LayoutPending(w.router.Root) {
 			break
 		}
-		w.router.Root.Measure(widget.Constraints{Max: widget.Size{W: bw, H: bh}})
 		w.router.Root.Arrange(render.Rect{X: 0, Y: 0, W: bw, H: bh})
 	}
 	if report := widget.MeasureMissReport(); report != "" {

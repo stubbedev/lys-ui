@@ -30,12 +30,12 @@ func NewFader(child Widget) *Fader {
 // Child returns the wrapped widget.
 func (f *Fader) Child() Widget { return f.child }
 
-// Measure reports the child's natural size, clamped to con.
-func (f *Fader) Measure(con Constraints) Size {
-	if sz, ok := f.measureHit(con); ok {
+// Measure reports the child's request.
+func (f *Fader) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := f.measureHit(axis, forSize); ok {
 		return sz
 	}
-	return f.measureStore(con, clampSize(measureChild(f, f.child, con), con))
+	return f.measureStore(axis, forSize, measureChild(f, f.child, axis, forSize))
 }
 
 // Arrange passes the rect straight through to the child.

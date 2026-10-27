@@ -97,7 +97,7 @@ func TestIMESync(t *testing.T) {
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 30})
 		b := widget.NewButton(widget.NewLabel(face, 13, "go", render.RGB(255, 255, 255)), 8, 4)
 		box := widget.NewBox(widget.Row, 4, 0).Append(e, true).Append(b, false)
-		box.Measure(widget.Constraints{Max: widget.Size{W: 300, H: 60}})
+		widget.SizeWithin(box, widget.Size{W: 300, H: 60})
 		box.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 60})
 		r := &widget.Router{Root: box}
 		ep := e.Bounds()

@@ -133,7 +133,7 @@ func TestEntryRTLDirection(t *testing.T) {
 
 	t.Run("short text hugs the right edge of the field", func(t *testing.T) {
 		e := newRTL("hello")
-		e.Measure(Constraints{Max: Size{W: 300, H: 40}})
+		SizeWithin(e, Size{W: 300, H: 40})
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 40})
 		sh := e.shape(e.displayText())
 		lx := e.lineX(sh)
@@ -146,7 +146,7 @@ func TestEntryRTLDirection(t *testing.T) {
 	t.Run("auto keeps the same text left-hugging", func(t *testing.T) {
 		e := NewEntry(bidiFace(t), 14, render.RGB(255, 255, 255))
 		e.SetText("hello")
-		e.Measure(Constraints{Max: Size{W: 300, H: 40}})
+		SizeWithin(e, Size{W: 300, H: 40})
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 40})
 		if got := e.lineX(e.shape(e.displayText())); got != e.bounds.X+entryPad.Left {
 			t.Errorf("auto LTR line origin = %d, want %d", got, e.bounds.X+entryPad.Left)
@@ -277,7 +277,7 @@ func TestBoxDirection(t *testing.T) {
 		a, c := newStub(10, 5), newStub(8, 4)
 		b.Append(a, false)
 		b.Append(c, false)
-		b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(b, Size{W: 100, H: 100})
 		b.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 20})
 		if a.rect.X != 40-1-10 {
 			t.Errorf("first child x = %d, want rightmost %d", a.rect.X, 40-1-10)
@@ -291,7 +291,7 @@ func TestBoxDirection(t *testing.T) {
 		a, c := newStub(10, 5), newStub(8, 4)
 		b.Append(a, false)
 		b.Append(c, false)
-		b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(b, Size{W: 100, H: 100})
 		b.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 20})
 		if a.rect != (render.Rect{X: 1, Y: 1, W: 10, H: 18}) {
 			t.Errorf("first child rect = %v", a.rect)

@@ -76,7 +76,7 @@ func TestSwatchPickerCustom(t *testing.T) {
 func TestColorSwatchSizesFromCSS(t *testing.T) {
 	sw := NewColorSwatch(render.RGB(1, 2, 3))
 	loadCSS(t, `colorswatch { min-width: 40px; min-height: 12px; }`)
-	if got := sw.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 40, H: 12}) {
+	if got := SizeWithin(sw, Size{W: 100, H: 100}); got != (Size{W: 40, H: 12}) {
 		t.Errorf("swatch measures %v, want 40x12", got)
 	}
 }
@@ -136,14 +136,14 @@ func TestInscriptionSizesByCountsNotContent(t *testing.T) {
 	short := NewInscription(testFace(t), 12, "x", 0)
 	short.SetNatChars(5)
 	short.SetNatLines(2)
-	a := in.Measure(Constraints{Max: Size{W: 1000, H: 1000}})
-	b := short.Measure(Constraints{Max: Size{W: 1000, H: 1000}})
+	a := SizeWithin(in, Size{W: 1000, H: 1000})
+	b := SizeWithin(short, Size{W: 1000, H: 1000})
 	if a != b || a.W == 0 || a.H != 2*in.lineH {
 		t.Errorf("long text measured %v, short %v: the size must come from the counts", a, b)
 	}
 	in.SetMinChars(8)
-	if got := in.Measure(Constraints{Max: Size{W: 1000, H: 1000}}).W; got < in.MinSize().W {
-		t.Errorf("natural width %d below the minimum %d", got, in.MinSize().W)
+	if got := SizeWithin(in, Size{W: 1000, H: 1000}).W; got < minWidth(in) {
+		t.Errorf("natural width %d below the minimum %d", got, minWidth(in))
 	}
 	in.Arrange(render.Rect{W: a.W, H: a.H})
 	in.Paint(render.New(make([]uint8, a.W*a.H*4+4096), a.W*4, a.W, a.H))

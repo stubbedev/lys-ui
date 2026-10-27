@@ -35,9 +35,6 @@ type gridChild struct {
 	col, row         int
 	colSpan, rowSpan int
 	hAlign, vAlign   Align
-	// nat is the child's last measured natural size; the align pass
-	// reads it the way Box reads childEntry.nat.
-	nat Size
 }
 
 // Grid is a rows-and-columns container. Children are attached to cells -
@@ -55,10 +52,10 @@ type gridChild struct {
 // Box only overflows: tracks shrink in proportion to their extents down
 // to per-track floors, and only when every floor is reached does the
 // content overflow and the painter's clip decide visibility. A floor is
-// the largest MinSize among the track's single-cell children (spanning
-// children are not floor sources — their need spreads, it does not pin);
-// widgets without a MinSize have none, and the grid itself reports the
-// sum of its floors so nested grids squeeze coherently.
+// the largest minimum among the track's single-cell children (spanning
+// children are not floor sources — their need spreads, it does not pin),
+// and the grid itself reports the sum of its floors as its minimum so
+// nested grids squeeze coherently.
 //
 // Children carry no expand flags: surplus and deficit both spread
 // uniformly over the tracks (earlier tracks take the remainder), the one
@@ -80,10 +77,9 @@ type Grid struct {
 	rowHomog   bool
 	child      []*gridChild
 
-	// colW/rowH are the per-track extents Measure computed; colMin/
-	// rowMin the per-track floors (see the type comment); Arrange
-	// expands or squeezes the extents into the final rect. Box keeps
-	// the same measure-then-arrange contract through childEntry.nat.
+	// colW/rowH are the per-track extents the last sizing computed;
+	// colMin/rowMin the per-track floors (see the type comment); Arrange
+	// expands or squeezes the extents into the final rect.
 	colW, rowH     []int
 	colMin, rowMin []int
 }
@@ -277,81 +273,93 @@ func (g *Grid) SetEnabled(enabled bool) {
 	invalidateTree(g)
 }
 
-// Measure measures every child and derives the tracks: single-cell
-// children set their track's maximum (and, for MinSizer children, its
-// floor), then spanning children grow a run of tracks by whatever their
-// natural size exceeds the run's current maxima plus internal spacing -
-// the deficit spreads equally over the run, earlier tracks taking the
-// remainder. The result is cached until an InvalidateLayout anywhere in
-// the subtree or a different constraint arrives.
-func (g *Grid) Measure(con Constraints) Size {
-	if sz, ok := g.measureHit(con); ok {
+// Measure derives the tracks from the children's requests: across, the
+// columns' naturals and floors; down, the rows' at the width given, the
+// columns fitted into it first (at their naturals for none).
+func (g *Grid) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := g.measureHit(axis, forSize); ok {
 		return sz
 	}
 	cols, rows := g.extents()
-	g.colW = make([]int, cols)
-	g.rowH = make([]int, rows)
-	g.colMin = make([]int, cols)
-	g.rowMin = make([]int, rows)
-	for _, c := range g.child {
-		c.nat = measureChild(g, c.w, Constraints{Max: con.Max})
+	g.sizeColumns(cols)
+	if axis == Row {
+		return g.measureStore(axis, forSize, tracksRequest(g.colMin, g.colW, g.colSpacing))
 	}
+	if forSize != Unknown {
+		fitTracks(g.colW, g.colMin, g.colSpacing, forSize)
+	}
+	g.sizeRows(rows)
+	return g.measureStore(axis, forSize, tracksRequest(g.rowMin, g.rowH, g.rowSpacing))
+}
+
+// tracksRequest is a run of tracks' request: the floors' sum and the
+// extents', with the spacing between.
+func tracksRequest(floors, tracks []int, spacing int) Sizes {
+	gaps := spacing * max(0, len(tracks)-1)
+	return Sizes{Min: trackSum(floors) + gaps, Nat: trackSum(tracks) + gaps}
+}
+
+// sizeColumns derives the columns from the children's width requests:
+// single-cell children set their track's maximum and floor, then
+// spanning children grow a run of tracks by whatever their natural
+// width exceeds the run's current maxima plus internal spacing - the
+// deficit spreads equally over the run, earlier tracks taking the
+// remainder.
+func (g *Grid) sizeColumns(cols int) {
+	g.colW, g.colMin = resetTracks(g.colW, cols), resetTracks(g.colMin, cols)
 	for _, c := range g.child {
+		req := measureChild(g, c.w, Row, Unknown)
 		if c.colSpan == 1 {
-			g.colW[c.col] = max(g.colW[c.col], c.nat.W)
-			g.colMin[c.col] = max(g.colMin[c.col], minSizeOf(c.w).W)
-		}
-		if c.rowSpan == 1 {
-			g.rowH[c.row] = max(g.rowH[c.row], c.nat.H)
-			g.rowMin[c.row] = max(g.rowMin[c.row], minSizeOf(c.w).H)
+			g.colW[c.col] = max(g.colW[c.col], req.Nat)
+			g.colMin[c.col] = max(g.colMin[c.col], req.Min)
 		}
 	}
 	for _, c := range g.child {
-		growTracks(g.colW, g.colSpacing, c.col, c.colSpan, c.nat.W)
-		growTracks(g.rowH, g.rowSpacing, c.row, c.rowSpan, c.nat.H)
+		growTracks(g.colW, g.colSpacing, c.col, c.colSpan, measureChild(g, c.w, Row, Unknown).Nat)
 	}
-	// A floor is a minimum: a constraint-clamped measurement (a
-	// wrapping label measured under a tiny width clips its rows below
-	// its own token floor) must not pull a track under it, or the
-	// squeeze pass would have nothing to defend.
-	for i := range g.colW {
-		g.colW[i] = max(g.colW[i], g.colMin[i])
-	}
-	for i := range g.rowH {
-		g.rowH[i] = max(g.rowH[i], g.rowMin[i])
-	}
-	if g.colHomog {
-		evenTracks(g.colW)
-		evenTracks(g.colMin)
-	}
-	if g.rowHomog {
-		evenTracks(g.rowH)
-		evenTracks(g.rowMin)
-	}
-	nat := Size{
-		W: trackSum(g.colW) + g.colSpacing*(cols-1),
-		H: trackSum(g.rowH) + g.rowSpacing*(rows-1),
-	}
-	return g.measureStore(con, clampSize(nat, con))
+	settleTracks(g.colW, g.colMin, g.colHomog)
 }
 
-// MinSize implements MinSizer: the sum of the track floors plus
-// spacing, so a nested grid squeezes coherently instead of reporting
-// no floor and collapsing under its parent's negotiation.
-func (g *Grid) MinSize() Size {
-	cols, rows := g.extents()
-	return Size{
-		W: trackSum(g.colMin) + g.colSpacing*max(0, cols-1),
-		H: trackSum(g.rowMin) + g.rowSpacing*max(0, rows-1),
+// sizeRows derives the rows as sizeColumns the columns, each child's
+// height requested at its column span's current width.
+func (g *Grid) sizeRows(rows int) {
+	g.rowH, g.rowMin = resetTracks(g.rowH, rows), resetTracks(g.rowMin, rows)
+	for _, c := range g.child {
+		if c.rowSpan == 1 {
+			req := measureChild(g, c.w, Column, g.spanWidth(c))
+			g.rowH[c.row] = max(g.rowH[c.row], req.Nat)
+			g.rowMin[c.row] = max(g.rowMin[c.row], req.Min)
+		}
 	}
+	for _, c := range g.child {
+		growTracks(g.rowH, g.rowSpacing, c.row, c.rowSpan, measureChild(g, c.w, Column, g.spanWidth(c)).Nat)
+	}
+	settleTracks(g.rowH, g.rowMin, g.rowHomog)
 }
 
-// minSizeOf reports w's floor, zero for widgets without one.
-func minSizeOf(w Widget) Size {
-	if m, ok := w.(MinSizer); ok {
-		return m.MinSize()
+// spanWidth is the current width of c's column span.
+func (g *Grid) spanWidth(c *gridChild) int {
+	_, w := trackExtent(g.colW, g.colSpacing, c.col, c.colSpan)
+	return w
+}
+
+// resetTracks is tracks resized to n zeroed extents.
+func resetTracks(tracks []int, n int) []int {
+	tracks = slices.Grow(tracks[:0], n)[:n]
+	clear(tracks)
+	return tracks
+}
+
+// settleTracks holds every track at least at its floor, and evens the
+// extents and the floors when homogeneous.
+func settleTracks(tracks, floors []int, homogeneous bool) {
+	for i := range tracks {
+		tracks[i] = max(tracks[i], floors[i])
 	}
-	return Size{}
+	if homogeneous {
+		evenTracks(tracks)
+		evenTracks(floors)
+	}
 }
 
 // growTracks widens the run of n tracks starting at i so want fits: the
@@ -411,23 +419,15 @@ func (g *Grid) Arrange(r render.Rect) {
 	if cols == 0 {
 		return
 	}
-	if len(g.colW) != cols || len(g.rowH) != rows {
-		// Arrange follows Measure the way Box reads childEntry.nat;
-		// without measured tracks there is nothing sane to place, so
-		// the children park at empty rects instead of panicking on
-		// the missing slices.
-		for _, c := range g.child {
-			c.w.Arrange(render.Rect{})
-		}
-		return
-	}
+	g.sizeColumns(cols)
 	fitTracks(g.colW, g.colMin, g.colSpacing, r.W)
+	g.sizeRows(rows)
 	fitTracks(g.rowH, g.rowMin, g.rowSpacing, r.H)
 	for _, c := range g.child {
 		x, cw := trackExtent(g.colW, g.colSpacing, c.col, c.colSpan)
 		y, ch := trackExtent(g.rowH, g.rowSpacing, c.row, c.rowSpan)
 		cell := render.Rect{X: r.X + x, Y: r.Y + y, W: cw, H: ch}
-		arrangeChild(c.w, alignRect(cell, c.nat, c.hAlign, c.vAlign))
+		arrangeChild(c.w, alignRect(cell, alignedNatural(g, c.w, cw, c.hAlign), c.hAlign, c.vAlign))
 	}
 	setParents(g, g.Children()...)
 }
@@ -531,6 +531,16 @@ func trackExtent(tracks []int, spacing, i, n int) (off, size int) {
 	}
 	size += spacing * (n - 1)
 	return off, size
+}
+
+// alignedNatural is child's natural size as parent's child aligned h
+// across a cell width wide: a filling child's height at that width, the
+// others' at their natural width.
+func alignedNatural(parent, child Widget, width int, h Align) Size {
+	if h != AlignFill {
+		width = measureChild(parent, child, Row, Unknown).Nat
+	}
+	return Size{W: width, H: measureChild(parent, child, Column, width).Nat}
 }
 
 // alignRect fits a child of natural size nat into its cell per the

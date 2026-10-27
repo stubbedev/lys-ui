@@ -76,11 +76,11 @@ const richPx = 13.0
 
 func TestRichLabelMeasure(t *testing.T) {
 	face := testFace(t)
-	con := Constraints{Max: Size{W: 500, H: 100}}
+	con := Size{W: 500, H: 100}
 
 	t.Run("plain markup measures like a Label", func(t *testing.T) {
-		plain := NewLabel(face, richPx, "hello world", render.RGB(255, 255, 255)).Measure(con)
-		rich := NewRichLabel(face, richPx, "hello world", render.RGB(255, 255, 255)).Measure(con)
+		plain := SizeWithin(NewLabel(face, richPx, "hello world", render.RGB(255, 255, 255)), con)
+		rich := SizeWithin(NewRichLabel(face, richPx, "hello world", render.RGB(255, 255, 255)), con)
 		if rich.W != plain.W || rich.H != plain.H {
 			t.Errorf("rich %v != plain label %v", rich, plain)
 		}
@@ -89,8 +89,8 @@ func TestRichLabelMeasure(t *testing.T) {
 	t.Run("downgraded bold measures like plain", func(t *testing.T) {
 		// The documented downgrade: without variants, <b> renders with
 		// the base face and cannot change the metrics.
-		plain := NewLabel(face, richPx, "hello world", render.RGB(255, 255, 255)).Measure(con)
-		rich := NewRichLabel(face, richPx, "<b>hello</b> world", render.RGB(255, 255, 255)).Measure(con)
+		plain := SizeWithin(NewLabel(face, richPx, "hello world", render.RGB(255, 255, 255)), con)
+		rich := SizeWithin(NewRichLabel(face, richPx, "<b>hello</b> world", render.RGB(255, 255, 255)), con)
 		if rich.W != plain.W || rich.H != plain.H {
 			t.Errorf("downgraded rich %v != plain %v", rich, plain)
 		}
@@ -106,14 +106,14 @@ func TestRichLabelMeasure(t *testing.T) {
 			return face
 		})
 		want := face.Shape("ab", richPx).Advance() + bold.Shape("cd", richPx).Advance()
-		if got := l.Measure(con).W; math.Abs(float64(got)-want) > 1 {
+		if got := SizeWithin(l, con).W; math.Abs(float64(got)-want) > 1 {
 			t.Errorf("width = %d, want %.2f (regular ab + bold cd)", got, want)
 		}
 	})
 
 	t.Run("empty markup keeps the font line height", func(t *testing.T) {
-		plain := NewLabel(face, richPx, "", render.RGB(255, 255, 255)).Measure(con)
-		rich := NewRichLabel(face, richPx, "", render.RGB(255, 255, 255)).Measure(con)
+		plain := SizeWithin(NewLabel(face, richPx, "", render.RGB(255, 255, 255)), con)
+		rich := SizeWithin(NewRichLabel(face, richPx, "", render.RGB(255, 255, 255)), con)
 		if rich.W != 0 || rich.H != plain.H {
 			t.Errorf("empty rich = %v, want width 0 and the label height %v", rich, plain)
 		}
@@ -126,8 +126,8 @@ func TestRichLabelMeasure(t *testing.T) {
 func TestRichLabelRunSplitting(t *testing.T) {
 	face := testFace(t)
 	l := NewRichLabel(face, richPx, "ab<b>cd</b>ef", render.RGB(255, 255, 255))
-	con := Constraints{Max: Size{W: 500, H: 100}}
-	l.Measure(con)
+	con := Size{W: 500, H: 100}
+	SizeWithin(l, con)
 	l.Arrange(render.Rect{X: 4, Y: 2, W: l.natural.W, H: l.natural.H})
 
 	if len(l.shaped) != 3 {
@@ -170,8 +170,8 @@ func TestRichLabelRunSplitting(t *testing.T) {
 func TestRichLabelClustersAcrossRuns(t *testing.T) {
 	face := testFace(t)
 	l := NewRichLabel(face, richPx, "a\u0301<b>b</b>", render.RGB(255, 255, 255))
-	con := Constraints{Max: Size{W: 500, H: 100}}
-	l.Measure(con)
+	con := Size{W: 500, H: 100}
+	SizeWithin(l, con)
 	l.Arrange(render.Rect{X: 0, Y: 0, W: l.natural.W, H: l.natural.H})
 
 	if got := l.Text(); got != "a\u0301b" {
@@ -202,7 +202,7 @@ func TestRichLabelMixedMetrics(t *testing.T) {
 	loadCSS(t, `label { line-height: normal; }`)
 	face := testFace(t)
 	tall := tallFace(t)
-	con := Constraints{Max: Size{W: 500, H: 100}}
+	con := Size{W: 500, H: 100}
 
 	reg, tallSh := face.Shape("yg", richPx), tall.Shape("yg", richPx)
 	if tallSh.LineHeight() <= reg.LineHeight() {
@@ -216,12 +216,12 @@ func TestRichLabelMixedMetrics(t *testing.T) {
 		}
 		return face
 	})
-	got := l.Measure(con)
+	got := SizeWithin(l, con)
 	wantH := int(math.Ceil(math.Max(reg.Ascent(), tallSh.Ascent()) + math.Max(reg.Descent(), tallSh.Descent())))
 	if got.H != wantH {
 		t.Errorf("mixed line height = %d, want max over runs %d", got.H, wantH)
 	}
-	if single := NewLabel(face, richPx, "yg yg", render.RGB(255, 255, 255)).Measure(con); got.H <= single.H {
+	if single := SizeWithin(NewLabel(face, richPx, "yg yg", render.RGB(255, 255, 255)), con); got.H <= single.H {
 		t.Errorf("mixed height %d did not exceed the single-face height %d", got.H, single.H)
 	}
 	if sum := reg.LineHeight() + tallSh.LineHeight(); got.H >= sum {
@@ -259,7 +259,7 @@ func TestRichLabelMixedMetrics(t *testing.T) {
 // parser rejects paints as raw text, unmolested.
 func TestRichLabelMalformedRendersLiterally(t *testing.T) {
 	face := testFace(t)
-	con := Constraints{Max: Size{W: 500, H: 100}}
+	con := Size{W: 500, H: 100}
 	for _, in := range []string{"<b>hi", "a < b & c", "&nbsp;", "<b><i>deep</b>"} {
 		l := NewRichLabel(face, richPx, in, render.RGB(255, 255, 255))
 		if got := l.Text(); got != in {
@@ -269,7 +269,7 @@ func TestRichLabelMalformedRendersLiterally(t *testing.T) {
 			t.Errorf("%q: runs = %+v, want one plain run", in, l.runs)
 		}
 		want := face.Shape(in, richPx).Advance()
-		if got := l.Measure(con).W; math.Abs(float64(got)-want) > 1 {
+		if got := SizeWithin(l, con).W; math.Abs(float64(got)-want) > 1 {
 			t.Errorf("%q: width %d, want the raw text advance %.2f", in, got, want)
 		}
 	}
@@ -281,8 +281,8 @@ func TestRichLabelMalformedRendersLiterally(t *testing.T) {
 func TestRichLabelSelectionBands(t *testing.T) {
 	face := testFace(t)
 	l := NewRichLabel(face, richPx, "ab<b>cd</b>ef", render.RGB(255, 255, 255))
-	con := Constraints{Max: Size{W: 500, H: 100}}
-	size := l.Measure(con)
+	con := Size{W: 500, H: 100}
+	size := SizeWithin(l, con)
 	box := render.Rect{X: 40, Y: 7, W: l.natural.W + 12, H: size.H}
 	l.Arrange(box)
 
@@ -350,8 +350,8 @@ func TestRichLabelSelectionPaint(t *testing.T) {
 	cv := render.New(data, stride, 200, 32)
 
 	l := NewRichLabel(face, richPx, "selected", render.RGB(255, 255, 255))
-	con := Constraints{Max: Size{W: 500, H: 100}}
-	size := l.Measure(con)
+	con := Size{W: 500, H: 100}
+	size := SizeWithin(l, con)
 	l.Arrange(render.Rect{X: 3, Y: 2, W: size.W, H: size.H})
 	l.Paint(cv)
 	if ink := countInk(data, stride, 200, 32); ink == 0 {
@@ -401,10 +401,10 @@ func countInk(data []byte, stride, w, h int) int {
 // identical mutations do not.
 func TestRichLabelDamage(t *testing.T) {
 	face := testFace(t)
-	con := Constraints{Max: Size{W: 500, H: 100}}
+	con := Size{W: 500, H: 100}
 	l := NewRichLabel(face, richPx, "before", Current().Text)
 	root := NewBox(Column, 4, 0).Append(l, false)
-	root.Measure(con)
+	SizeWithin(root, con)
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 60})
 	warmDamage(root)
 
@@ -422,9 +422,9 @@ func TestRichLabelDamage(t *testing.T) {
 		t.Error("setting the same markup invalidated")
 	}
 
-	before := l.Measure(con).W
+	before := SizeWithin(l, con).W
 	l.SetVariants(BaseVariants(face))
-	if after := l.Measure(con).W; after != before {
+	if after := SizeWithin(l, con).W; after != before {
 		t.Errorf("downgraded variants changed the width: %d -> %d", before, after)
 	}
 }
@@ -433,9 +433,9 @@ func TestRichLabelDamage(t *testing.T) {
 // hand cursor.
 func TestRichLabelLinks(t *testing.T) {
 	face := testFace(t)
-	con := Constraints{Max: Size{W: 500, H: 100}}
+	con := Size{W: 500, H: 100}
 	l := NewRichLabel(face, richPx, `see <a href="https://example.com">here</a>!`, render.RGB(255, 255, 255))
-	size := l.Measure(con)
+	size := SizeWithin(l, con)
 	l.Arrange(render.Rect{X: 10, Y: 5, W: size.W + 20, H: size.H})
 	_, baseline, ok := l.lineGeom()
 	if !ok {
@@ -500,7 +500,7 @@ func TestRichLabelDecorationRuns(t *testing.T) {
 	white := render.RGB(255, 255, 255)
 	inkRows := func(markup string) map[int]bool {
 		l := NewRichLabel(face, richPx, markup, white)
-		size := l.Measure(Constraints{Max: Size{W: 500, H: 100}})
+		size := SizeWithin(l, Size{W: 500, H: 100})
 		l.Arrange(render.Rect{W: size.W, H: size.H})
 		stride := render.Stride(size.W)
 		data := make([]byte, stride*size.H)
@@ -543,7 +543,7 @@ func TestRichLabelFollowsTheCSSFontSize(t *testing.T) {
 		host := NewBox(Row, 0, 0)
 		host.Append(w, false)
 		arrangeTree(t, host, 600, 200)
-		return w.Measure(Constraints{Max: Size{W: 600, H: 200}})
+		return SizeWithin(w, Size{W: 600, H: 200})
 	}
 	plain := measure(NewRichLabel(face, 30, "Body text", 0))
 	if want := measure(NewLabel(face, 30, "Body text", 0)); plain != want {
@@ -584,7 +584,7 @@ func TestRichLabelCSSBox(t *testing.T) {
 		t.Errorf("rich label inks from x=%d, label from x=%d; want both inset by the 40px padding", r, p)
 	}
 	plain := NewRichLabel(face, 14, "Hello <b>x</b>", 0)
-	if got, want := rl.Measure(unbounded).W, plain.Measure(unbounded).W+80; got != want {
+	if got, want := naturalSize(rl).W, naturalSize(plain).W+80; got != want {
 		t.Errorf("padded rich label measures %d wide, want %d", got, want)
 	}
 }

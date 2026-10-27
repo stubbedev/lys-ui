@@ -127,7 +127,7 @@ func TestIconRotationStatic(t *testing.T) {
 		data := make([]byte, render.Stride(20)*20)
 		cv := render.NewScaled(data, render.Stride(20), 20, 20, 1, 1)
 		cv.Clear(cv.Rect(), 0)
-		w.Measure(Constraints{Max: Size{W: 20, H: 20}})
+		SizeWithin(w, Size{W: 20, H: 20})
 		w.Arrange(render.Rect{X: 4, Y: 4, W: 6, H: 6})
 		w.Paint(cv)
 		return data

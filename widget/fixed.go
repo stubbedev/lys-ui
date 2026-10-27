@@ -7,13 +7,11 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 )
 
-// fixedChild is one Fixed child: the widget, its position in logical
-// pixels, and its last measured natural size, which Arrange reads the
-// way Grid reads gridChild.nat.
+// fixedChild is one Fixed child: the widget and its position in
+// logical pixels.
 type fixedChild struct {
 	w    Widget
 	x, y int
-	nat  Size
 }
 
 // Fixed places its children at explicit coordinates, GTK's Fixed:
@@ -124,30 +122,26 @@ func (f *Fixed) SetEnabled(enabled bool) {
 }
 
 // Measure measures every child at its natural size and reports the
-// union of their extents from their coordinates, clamped to con. The
-// result is cached until an InvalidateLayout anywhere in the subtree or
-// a different constraint arrives.
-func (f *Fixed) Measure(con Constraints) Size {
-	if sz, ok := f.measureHit(con); ok {
+// union of their extents from their coordinates. The result is cached
+// until an InvalidateLayout anywhere in the subtree.
+func (f *Fixed) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := f.measureHit(axis, forSize); ok {
 		return sz
 	}
 	left, top, right, bottom := math.MaxInt, math.MaxInt, math.MinInt, math.MinInt
-	for i, c := range f.child {
+	for _, c := range f.child {
 		if !IsVisible(c.w) {
-			f.child[i].nat = Size{}
 			setParents(f, c.w)
 			continue
 		}
-		nat := measureChild(f, c.w, Constraints{Max: con.Max})
-		f.child[i].nat = nat
+		nat := naturalChild(f, c.w)
 		left, top = min(left, c.x), min(top, c.y)
 		right, bottom = max(right, c.x+nat.W), max(bottom, c.y+nat.H)
 	}
 	if left > right || top > bottom {
-		return f.measureStore(con, clampSize(Size{}, con))
+		return f.measureStore(axis, forSize, Sizes{})
 	}
-	nat := Size{W: right - left, H: bottom - top}
-	return f.measureStore(con, clampSize(nat, con))
+	return f.measureStore(axis, forSize, FixedSizes(Size{W: right - left, H: bottom - top}.Along(axis)))
 }
 
 // Arrange places every child at its coordinates at its natural size,
@@ -155,8 +149,9 @@ func (f *Fixed) Measure(con Constraints) Size {
 func (f *Fixed) Arrange(r render.Rect) {
 	f.ArrangeRoot(r)
 	for _, c := range f.child {
+		nat := naturalChild(f, c.w)
 		arrangeChild(c.w, render.Rect{
-			X: r.X + c.x, Y: r.Y + c.y, W: c.nat.W, H: c.nat.H,
+			X: r.X + c.x, Y: r.Y + c.y, W: nat.W, H: nat.H,
 		})
 	}
 	setParents(f, f.Children()...)

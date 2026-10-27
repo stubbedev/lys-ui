@@ -10,7 +10,7 @@ import (
 // height and scrolls in what its holder gives it; with it, it asks for
 // its content's height and gives way when its holder is short.
 func TestScrollPropagateNaturalHeight(t *testing.T) {
-	con := Constraints{Max: Size{W: 200, H: 4000}}
+	con := Size{W: 200, H: 4000}
 	build := func(propagate bool) (*Box, *Scroll) {
 		card := NewBox(Column, 0, 0)
 		card.Append(NewSpacer(100, 50), false)
@@ -24,11 +24,11 @@ func TestScrollPropagateNaturalHeight(t *testing.T) {
 	// GTK's scrolled window without propagate-natural-height asks for
 	// no height: a card sized 512 stays 512 and its list scrolls.
 	col, sc := build(false)
-	if got := col.Measure(con).H; got != 512 {
+	if got := SizeWithin(col, con).H; got != 512 {
 		t.Errorf("a 512 card holding a plain scroll measures %d tall, want 512", got)
 	}
-	if sc.Shrinkable() != 0 {
-		t.Errorf("a plain scroll offers %d px to give way, asking for none", sc.Shrinkable())
+	if heightGive(sc) != 0 {
+		t.Errorf("a plain scroll offers %d px to give way, asking for none", heightGive(sc))
 	}
 	arrangeTree(t, col, 200, 512)
 	if got := sc.Bounds().H; got != 462 {
@@ -38,14 +38,14 @@ func TestScrollPropagateNaturalHeight(t *testing.T) {
 	// Propagating, it asks for its content's height and gives way down
 	// to its floor when its holder is short.
 	col, sc = build(true)
-	if got := col.Measure(con).H; got != 2050 {
+	if got := SizeWithin(col, con).H; got != 2050 {
 		t.Errorf("a card holding a propagating scroll measures %d tall, want the content's 2050", got)
 	}
-	if got := sc.Shrinkable(); got != 2000-scrollFloor {
+	if got := heightGive(sc); got != 2000-scrollFloor {
 		t.Errorf("a propagating scroll offers %d px to give way, want all above its floor, %d", got, 2000-scrollFloor)
 	}
 	sc.SetMaxContentHeight(300)
-	if got := col.Measure(con).H; got != 512 {
+	if got := SizeWithin(col, con).H; got != 512 {
 		t.Errorf("a card holding a scroll capped at 300 measures %d, want its 512 request", got)
 	}
 }
@@ -58,7 +58,7 @@ func TestScrollMaxContentHeightPropagates(t *testing.T) {
 	if !sc.PropagateNaturalHeight {
 		t.Fatal("SetMaxContentHeight left PropagateNaturalHeight off")
 	}
-	if got := sc.Measure(Constraints{Max: Size{W: 400, H: 4000}}).H; got != 250 {
+	if got := SizeWithin(sc, Size{W: 400, H: 4000}).H; got != 250 {
 		t.Errorf("a capped scroll measures %d tall, want 250", got)
 	}
 }
@@ -76,12 +76,12 @@ func TestScrollPropagateNaturalWidth(t *testing.T) {
 		sc.PropagateNaturalWidth = propagate
 		return sc
 	}
-	con := Constraints{Max: Size{W: 2000, H: 300}}
-	natural := NewLabel(entryFace(t), 12, "a long line that would widen any panel it sits in", 0).Measure(con).W
-	if w := build(false).Measure(con).W; w >= natural/2 {
+	con := Size{W: 2000, H: 300}
+	natural := SizeWithin(NewLabel(entryFace(t), 12, "a long line that would widen any panel it sits in", 0), con).W
+	if w := SizeWithin(build(false), con).W; w >= natural/2 {
 		t.Errorf("never-policy scroll asks %dpx for a %dpx line, want its minimum", w, natural)
 	}
-	if w := build(true).Measure(con).W; w < natural {
+	if w := SizeWithin(build(true), con).W; w < natural {
 		t.Errorf("propagating scroll asks %dpx, want the %dpx natural width", w, natural)
 	}
 }
@@ -91,16 +91,16 @@ func TestScrollPropagateNaturalWidth(t *testing.T) {
 // than that token; a single-line one keeps its width.
 func TestWrappingRichLabelMinContent(t *testing.T) {
 	text := "words that wrap onto several lines when the panel is narrow"
-	con := Constraints{Max: Size{W: 2000, H: 300}}
+	con := Size{W: 2000, H: 300}
 	wrapping := NewRichLabel(entryFace(t), 12, text, 0)
 	wrapping.SetWrap(true)
-	full := wrapping.Measure(con).W
-	if got, want := wrapping.ShrinkableWidth(), full-wrapping.MinSize().W; got != want || got <= 0 {
+	full := SizeWithin(wrapping, con).W
+	if got, want := widthGive(wrapping), full-minWidth(wrapping); got != want || got <= 0 {
 		t.Errorf("wrapping shrinkable %d, want %d down to the widest token", got, want)
 	}
 	single := NewRichLabel(entryFace(t), 12, text, 0)
-	single.Measure(con)
-	if single.ShrinkableWidth() != 0 {
+	SizeWithin(single, con)
+	if widthGive(single) != 0 {
 		t.Error("a single-line rich label offered to shrink")
 	}
 	col := NewBox(Column, 0, 0)
@@ -109,7 +109,7 @@ func TestWrappingRichLabelMinContent(t *testing.T) {
 	col.Append(body, false)
 	sc := NewScroll(col)
 	sc.VerticalOnly = true
-	if w := sc.Measure(con).W; w >= full/2 {
+	if w := SizeWithin(sc, con).W; w >= full/2 {
 		t.Errorf("never-policy scroll asks %dpx for a %dpx wrapping line, want about its widest token", w, full)
 	}
 }
@@ -131,7 +131,7 @@ func TestVerticalScrollGutterOnlyWhenOverflowing(t *testing.T) {
 		}
 		s := NewScroll(content)
 		s.VerticalOnly, s.ShowBars = true, tc.bars
-		s.Measure(Constraints{Max: Size{W: 200, H: 100}})
+		SizeWithin(s, Size{W: 200, H: 100})
 		s.Arrange(render.Rect{W: 200, H: 100})
 		if got := content.Bounds().W; got != tc.want {
 			t.Errorf("%s: content %dpx wide, want %d", tc.name, got, tc.want)

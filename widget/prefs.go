@@ -46,7 +46,7 @@ func NewPreferencesGroup(face render.Font, sizePx float64, title string) *Prefer
 	}
 	column.Append(g.rows, false)
 	g.initComposite(g, column)
-	g.fillWidth = true
+	g.SetHExpand(true)
 	g.surfaceRadius = 12
 	return g
 }

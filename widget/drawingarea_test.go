@@ -28,7 +28,7 @@ func TestGoldenDrawingArea(t *testing.T) {
 		}
 	}
 	r := &Router{Root: area}
-	area.Measure(Constraints{Max: Size{W: 220, H: 80}})
+	SizeWithin(area, Size{W: 220, H: 80})
 	area.Arrange(render.Rect{W: 220, H: 80})
 	for i := range 21 {
 		x := 10 + i*10

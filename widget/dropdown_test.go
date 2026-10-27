@@ -21,7 +21,7 @@ func hostDropdown(t *testing.T, dd *Dropdown) (*Dropdown, *fakeSurfaceHost) {
 	t.Helper()
 	host := &fakeSurfaceHost{}
 	SetSurfaceHost(dd, host)
-	sz := dd.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	sz := SizeWithin(dd, Size{W: 400, H: 100})
 	dd.Arrange(render.Rect{X: 10, Y: 20, W: sz.W, H: sz.H})
 	return dd, host
 }
@@ -431,7 +431,7 @@ func TestFocusRingIsCoveredByLaterSiblings(t *testing.T) {
 	focused := &fillSpy{nat: Size{W: 100, H: 100}, color: render.RGB(0, 255, 0)}
 	card := &fillSpy{nat: Size{W: 100, H: 100}, color: blue}
 	ov := NewOverlay().Append(focused).Append(card)
-	ov.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(ov, Size{W: 100, H: 100})
 	ov.Arrange(render.Rect{W: 100, H: 100})
 	ring := func(cv *render.Canvas) { cv.BorderRect(render.Rect{X: 10, Y: 10, W: 50, H: 50}, 2, red) }
 	paint := func(card bool) render.Color {
@@ -537,7 +537,7 @@ func TestDropdownSetItemsReplacesTheList(t *testing.T) {
 	fired := 0
 	dd.OnSelect = func(int) { fired++ }
 	dd.ClickAt(facePoint(dd))
-	dd.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	SizeWithin(dd, Size{W: 400, H: 100})
 	dd.SetItems([]string{"Default", "Headset", "Built-in microphone, wide"}, 2)
 	if dd.Opened() || host.closed != 1 {
 		t.Error("replacing the items left the old list open")
@@ -546,7 +546,7 @@ func TestDropdownSetItemsReplacesTheList(t *testing.T) {
 		t.Errorf("selected %d %q, OnSelect fired %d; want the new row, silently", dd.Selected(), dd.Selection(), fired)
 	}
 	narrow, _ := newDropdown(t, "Default")
-	if !LayoutPending(dd) || dd.Measure(Constraints{Max: Size{W: 400, H: 100}}).W <= narrow.Bounds().W {
+	if !LayoutPending(dd) || SizeWithin(dd, Size{W: 400, H: 100}).W <= narrow.Bounds().W {
 		t.Error("a wider item did not relayout and widen the face")
 	}
 	dd.Arrange(render.Rect{X: 10, Y: 20, W: 300, H: dd.Bounds().H})
@@ -623,12 +623,12 @@ func TestDropdownShrinksAndEllipsizes(t *testing.T) {
 	long := NewDropdown(face, 14, []string{"Creative Live! Cam Sync 4K Analog Stereo"}, 0)
 	it := NewItem(face, "Source", "")
 	it.AddAction(long)
-	h := it.Measure(Constraints{Max: Size{W: 220, H: 200}}).H
+	h := SizeWithin(it, Size{W: 220, H: 200}).H
 	it.Arrange(render.Rect{W: 220, H: h})
 	content := it.row.Bounds()
 	db := long.Bounds()
 	solo := NewDropdown(face, 14, []string{"Creative Live! Cam Sync 4K Analog Stereo"}, 0)
-	natural := solo.Measure(Constraints{Max: Size{W: 400, H: 100}}).W
+	natural := SizeWithin(solo, Size{W: 400, H: 100}).W
 	if db.X+db.W > content.X+content.W || db.W >= natural {
 		t.Fatalf("dropdown %v ends past the item's content %v (natural %d)", db, content, natural)
 	}
@@ -645,8 +645,8 @@ func TestDropdownShrinksAndEllipsizes(t *testing.T) {
 	short := NewDropdown(face, 14, []string{"Default"}, 0)
 	row := NewBox(Row, 0, 0)
 	row.Append(short, false)
-	nat := short.Measure(Constraints{Max: Size{W: 400, H: 100}}).W
-	row.Measure(Constraints{Max: Size{W: 326, H: 100}})
+	nat := SizeWithin(short, Size{W: 400, H: 100}).W
+	SizeWithin(row, Size{W: 326, H: 100})
 	row.Arrange(render.Rect{W: 326, H: 36})
 	if got := short.Bounds().W; got != nat {
 		t.Errorf("short dropdown %dpx wide, want its natural %d", got, nat)

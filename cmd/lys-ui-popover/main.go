@@ -158,7 +158,6 @@ func run() error {
 		traced = true
 		ww, wh := w.Size()
 		app.Trace("demo", "mapped %dx%d", ww, wh)
-		root.Measure(widget.Constraints{Max: widget.Size{W: ww, H: wh}})
 		root.Arrange(render.Rect{W: ww, H: wh})
 		b := button.Bounds()
 		app.Trace("demo", "control open center (%d,%d)", b.X+b.W/2, b.Y+b.H/2)

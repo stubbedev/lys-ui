@@ -901,6 +901,13 @@ var confLayout = []confCase{
 			wantPixel(255, 70, layRed), wantPixel(285, 70, layBlue), wantPixel(295, 70, layWhite), wantPixel(255, 85, layWhite),
 		},
 	},
+	{
+		name: "a programmatic container lets an oversized child overflow",
+		spec: "CSS2 §10.2, css-overflow-3 §2",
+		css:  `#c { width: 50px; height: 50px; } #k { width: 100px; height: 100px; }`,
+		tree: nBox("#c", nBox("#k")),
+		want: []confCheck{wantRect("k", 0, 0, 100, 100)},
+	},
 }
 
 // confExceptionsLayout are the Layout group's deliberate deviations.
@@ -975,15 +982,6 @@ var confExceptionsLayout = []confException{
 		want:   []confCheck{wantRect("root", 0, 0, 400, 300)},
 		reason: "the window's root widget is the viewport, which the window size fixes",
 		doc:    "The window's root widget takes the window size; CSS sizes on it do",
-	},
-	{
-		name:   "a programmatic container clamps an oversized child",
-		spec:   "CSS2 §10.2, css-overflow-3 §2",
-		css:    `#c { width: 50px; height: 50px; } #k { width: 100px; height: 100px; }`,
-		tree:   nBox("#c", nBox("#k")),
-		want:   []confCheck{wantRect("k", 0, 0, 50, 50)},
-		reason: "a widget's measure lies within its constraints, and a Box without display keeps its programmatic layout",
-		doc:    "- Inside a programmatic container a widget never outgrows the slot it",
 	},
 }
 

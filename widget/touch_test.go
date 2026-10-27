@@ -14,9 +14,11 @@ type gestureProbe struct {
 	got  []Gesture
 }
 
-func (g *gestureProbe) Measure(con Constraints) Size { return clampSize(Size{W: 100, H: 100}, con) }
-func (g *gestureProbe) HitTest(p Point) Widget       { return g.HitLeaf(g, p) }
-func (g *gestureProbe) Paint(*render.Canvas)         {}
+func (g *gestureProbe) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(Size{W: 100, H: 100}.Along(axis))
+}
+func (g *gestureProbe) HitTest(p Point) Widget { return g.HitLeaf(g, p) }
+func (g *gestureProbe) Paint(*render.Canvas)   {}
 func (g *gestureProbe) Gesture(e Gesture) bool {
 	if e.Kind != g.kind {
 		return false
@@ -27,7 +29,7 @@ func (g *gestureProbe) Gesture(e Gesture) bool {
 
 // touchFixture lays root out at 200x200 behind a tracker.
 func touchFixture(root Widget) *TouchTracker {
-	root.Measure(Constraints{Max: Size{W: 200, H: 200}})
+	SizeWithin(root, Size{W: 200, H: 200})
 	root.Arrange(render.Rect{W: 200, H: 200})
 	return &TouchTracker{Router: &Router{Root: root}}
 }
@@ -123,7 +125,7 @@ func TestCarouselSwipe(t *testing.T) {
 		car.Append(NewSpacer(200, 100))
 	}
 	r := &Router{Root: car}
-	car.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(car, Size{W: 200, H: 100})
 	car.Arrange(render.Rect{W: 200, H: 100})
 	at := Point{X: 100, Y: 50}
 	r.Gesture(Gesture{Kind: GestureSwipe, Phase: GestureBegin, At: at, Fingers: 3})

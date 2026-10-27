@@ -38,17 +38,20 @@ func (c *Clamp) SetMaximum(max int) {
 // Maximum reports the cap.
 func (c *Clamp) Maximum() int { return c.max }
 
-// Measure measures the child capped.
-func (c *Clamp) Measure(con Constraints) Size {
-	if sz, ok := c.measureHit(con); ok {
+// Measure is the child's request with its natural width capped, and
+// its height at the capped width.
+func (c *Clamp) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := c.measureHit(axis, forSize); ok {
 		return sz
 	}
-	inner := con
-	if c.max > 0 {
-		inner.Max.W = min(inner.Max.W, c.max)
+	if axis == Column && forSize != Unknown && c.max > 0 {
+		forSize = min(forSize, c.max)
 	}
-	sz := measureChild(c, c.root, inner)
-	return c.measureStore(con, clampSize(Size{W: con.Max.W, H: sz.H}, con))
+	req := measureChild(c, c.root, axis, forSize)
+	if axis == Row && c.max > 0 {
+		req.Nat = max(req.Min, min(req.Nat, c.max))
+	}
+	return c.measureStore(axis, forSize, req)
 }
 
 // Arrange centers the child's rect inside r.
@@ -195,7 +198,7 @@ func NewViewSwitcher(face render.Font, sizePx float64, stack *Stack, titles, ico
 	v := &ViewSwitcher{ToggleGroup: NewToggleGroup(), stack: stack, face: face, sizePx: sizePx, titles: titles, icons: icons}
 	v.self = v
 	v.SetElement("viewswitcher")
-	v.fillWidth = true
+	v.SetHExpand(true)
 	v.OnChanged = func(i int) { v.stack.Show(v.names[i]) }
 	v.Sync()
 	return v
@@ -366,19 +369,17 @@ func (c *Carousel) SetPage(i int) {
 	}
 }
 
-// Measure wants each page's height at the full width, the tallest
-// wins.
-func (c *Carousel) Measure(con Constraints) Size {
-	if sz, ok := c.measureHit(con); ok {
+// Measure wants the widest page's request: each page lays out at the
+// carousel's full width, the tallest at that width wins.
+func (c *Carousel) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := c.measureHit(axis, forSize); ok {
 		return sz
 	}
-	best := Size{}
+	var req Sizes
 	for _, p := range c.pages {
-		s := p.Measure(con)
-		best.H = max(best.H, s.H)
+		req = req.widest(measureChild(c, p, axis, forSize))
 	}
-	best.W = con.Max.W
-	return c.measureStore(con, clampSize(best, con))
+	return c.measureStore(axis, forSize, req)
 }
 
 // Arrange lays the pages side by side at the carousel's width (each

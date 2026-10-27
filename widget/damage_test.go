@@ -20,7 +20,7 @@ func warmDamage(root Widget) {
 // cached measure, arrange, damage drain, region-clipped paint. It
 // returns the pixels actually written and the damage rects.
 func paintFrame(cv *render.Canvas, root Widget, w, h int, bg render.Color, stale render.Rect) (int, []render.Rect) {
-	root.Measure(Constraints{Max: Size{W: w, H: h}})
+	SizeWithin(root, Size{W: w, H: h})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
 	rects, _ := CollectDamage(root)
 	if !stale.Empty() {
@@ -36,17 +36,13 @@ func paintFrame(cv *render.Canvas, root Widget, w, h int, bg render.Color, stale
 	return painted, rects
 }
 
-// measureEntries sums the Measure invocations over the given widgets,
-// excluding the tree root itself: the app calls root.Measure once per
-// frame unconditionally, and the pin is that nothing below it recurses.
-func measureEntries(ws []Widget) int {
+// measureComputes sums the measures the given widgets computed past
+// their caches.
+func measureComputes(ws []Widget) int {
 	total := 0
-	for i, w := range ws {
-		if i == 0 {
-			continue
-		}
-		if n, ok := w.(interface{ measureCalls() int }); ok {
-			total += n.measureCalls()
+	for _, w := range ws {
+		if n, ok := w.(interface{ measureMissCount() int }); ok {
+			total += n.measureMissCount()
 		}
 	}
 	return total
@@ -59,7 +55,7 @@ func TestCollectDamage(t *testing.T) {
 		lbl := NewLabel(face, 14, "before", Current().Text)
 		root := NewBox(Column, 4, 0)
 		root.Append(lbl, false)
-		root.Measure(Constraints{Max: Size{W: 400, H: 300}})
+		SizeWithin(root, Size{W: 400, H: 300})
 		root.Arrange(render.Rect{X: 0, Y: 0, W: 400, H: 300})
 		warmDamage(root)
 
@@ -81,7 +77,7 @@ func TestCollectDamage(t *testing.T) {
 		lbl := NewLabel(face, 14, "stable", Current().Text)
 		root := NewBox(Row, 0, 0)
 		root.Append(lbl, false)
-		root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(root, Size{W: 100, H: 100})
 		root.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 100})
 		warmDamage(root)
 		if _, any := CollectDamage(root); any {
@@ -138,7 +134,7 @@ func TestCollectDamage(t *testing.T) {
 		nb := NewNotebook(face)
 		nb.AppendTab("a", p0)
 		nb.AppendTab("b", NewSpacer(10, 10))
-		nb.Measure(Constraints{Max: Size{W: 300, H: 200}})
+		SizeWithin(nb, Size{W: 300, H: 200})
 		nb.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 200})
 		warmDamage(nb)
 
@@ -167,7 +163,7 @@ func TestMutationDamageRects(t *testing.T) {
 
 	arranged := func(w Widget, x, y, wd, ht int) {
 		t.Helper()
-		w.Measure(Constraints{Max: Size{W: 640, H: 470}})
+		SizeWithin(w, Size{W: 640, H: 470})
 		w.Arrange(render.Rect{X: x, Y: y, W: wd, H: ht})
 		warmDamage(w)
 	}
@@ -263,7 +259,7 @@ func TestThemeChangeDamagesTree(t *testing.T) {
 	lbl := NewLabel(face, 14, "themed", Current().Text)
 	root := NewBox(Column, 0, 0)
 	root.Append(lbl, false)
-	root.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(root, Size{W: 200, H: 100})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 100})
 	warmDamage(root)
 
@@ -352,8 +348,6 @@ func buildShowcase(tb testing.TB) showcase {
 	root.Append(header, false)
 	root.Append(columns, true)
 	root.Append(status, false)
-	// Root first: measureEntries skips index 0, the one unconditional
-	// root.Measure call the frame loop makes.
 	all = append([]Widget{root}, all...)
 
 	return showcase{root: root, progress: progress, widgets: all}
@@ -389,32 +383,31 @@ func TestProgressOnlyFramePaintsBelowFivePercent(t *testing.T) {
 	}
 }
 
-func TestStaticTreeZeroMeasureRecursion(t *testing.T) {
+func TestStaticTreeComputesNoMeasures(t *testing.T) {
 	show := buildShowcase(t)
-	con := Constraints{Max: Size{W: showW, H: showH}}
+	con := Size{W: showW, H: showH}
 
-	show.root.Measure(con)
+	SizeWithin(show.root, con)
 	// Layout pass on a static tree: bounds settle, nothing moves. The
 	// first arrange parents the tree, which owes one more pass, as a
 	// window's draw runs before painting.
 	show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
 	for LayoutPending(show.root) {
-		show.root.Measure(con)
+		SizeWithin(show.root, con)
 		show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
 	}
 	CollectDamage(show.root)
-	baseline := measureEntries(show.widgets)
+	baseline := measureComputes(show.widgets)
 
-	// Frame two on the same tree: the root cache hit must short-circuit
-	// the whole recursion.
-	show.root.Measure(con)
+	// Frame two on the same tree: every measure comes from the caches.
+	SizeWithin(show.root, con)
 	show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
-	if got := measureEntries(show.widgets) - baseline; got != 0 {
-		t.Fatalf("static tree needed %d Measure calls on the second frame, want 0", got)
+	if got := measureComputes(show.widgets) - baseline; got != 0 {
+		t.Fatalf("static tree computed %d measures on the second frame, want 0", got)
 	}
 
 	// A label change drops the cache along its ancestor chain; the
-	// remeasure frame may recurse into that branch, and the frame after
+	// remeasure frame recomputes that branch, and the frame after
 	// converges back to zero.
 	for _, w := range show.widgets {
 		if l, ok := w.(*Label); ok && l.Text() == "clicked 0 times" {
@@ -422,12 +415,13 @@ func TestStaticTreeZeroMeasureRecursion(t *testing.T) {
 			break
 		}
 	}
-	show.root.Measure(con)
+	SizeWithin(show.root, con)
 	show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
-	baseline = measureEntries(show.widgets)
-	show.root.Measure(con)
-	if got := measureEntries(show.widgets) - baseline; got != 0 {
-		t.Fatalf("after the remeasure frame, %d Measure calls remained, want 0", got)
+	baseline = measureComputes(show.widgets)
+	SizeWithin(show.root, con)
+	show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
+	if got := measureComputes(show.widgets) - baseline; got != 0 {
+		t.Fatalf("after the remeasure frame, %d measures were computed, want 0", got)
 	}
 }
 
@@ -452,13 +446,13 @@ func BenchmarkProgressOnlyFrame(b *testing.B) {
 
 func BenchmarkStaticTreeMeasure(b *testing.B) {
 	show := buildShowcase(b)
-	con := Constraints{Max: Size{W: showW, H: showH}}
-	show.root.Measure(con)
-	baseline := measureEntries(show.widgets)
+	con := Size{W: showW, H: showH}
+	SizeWithin(show.root, con)
+	baseline := measureComputes(show.widgets)
 	b.ResetTimer()
 	for range b.N {
-		show.root.Measure(con)
+		SizeWithin(show.root, con)
 	}
 	b.StopTimer()
-	b.ReportMetric(float64(measureEntries(show.widgets)-baseline)/float64(b.N), "Measure-calls/op")
+	b.ReportMetric(float64(measureComputes(show.widgets)-baseline)/float64(b.N), "Measure-computes/op")
 }

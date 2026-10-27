@@ -34,9 +34,9 @@ func TestRichLabelEllipsize(t *testing.T) {
 		{EllipsizeMiddle, "Fir", "one"},
 	} {
 		l := NewRichLabel(face, 13, markup, white)
-		natural := l.Measure(Constraints{Max: Size{W: 2000, H: 100}})
+		natural := SizeWithin(l, Size{W: 2000, H: 100})
 		l.SetEllipsize(tc.mode)
-		if got := l.Measure(Constraints{Max: Size{W: 2000, H: 100}}); got != natural {
+		if got := SizeWithin(l, Size{W: 2000, H: 100}); got != natural {
 			t.Errorf("mode %d: natural %v changed to %v", tc.mode, natural, got)
 		}
 		l.Arrange(render.Rect{W: natural.W / 2, H: natural.H})
@@ -60,7 +60,7 @@ func TestRichLabelEllipsize(t *testing.T) {
 	// The end ellipsis inside a bold run is bold.
 	l := NewRichLabel(face, 13, "<b>bold bold bold bold</b>", white)
 	l.SetEllipsize(EllipsizeEnd)
-	n := l.Measure(Constraints{Max: Size{W: 2000, H: 100}})
+	n := SizeWithin(l, Size{W: 2000, H: 100})
 	l.Arrange(render.Rect{W: n.W / 2, H: n.H})
 	if last := l.shaped[len(l.shaped)-1]; !last.style.Bold {
 		t.Error("the ellipsis lost the bold run's style")
@@ -68,7 +68,7 @@ func TestRichLabelEllipsize(t *testing.T) {
 
 	// Truncation off: the line overflows whole.
 	off := NewRichLabel(face, 13, markup, white)
-	m := off.Measure(Constraints{Max: Size{W: 2000, H: 100}})
+	m := SizeWithin(off, Size{W: 2000, H: 100})
 	off.Arrange(render.Rect{W: m.W / 2, H: m.H})
 	if strings.Contains(shapedText(off), "…") {
 		t.Error("an unset ellipsize truncated")

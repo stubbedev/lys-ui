@@ -28,10 +28,9 @@ const (
 // through its transition (none by default).
 type Stack struct {
 	node
-	kids     map[string]Widget
-	order    []string
-	visible  string
-	measured map[string]Size
+	kids    map[string]Widget
+	order   []string
+	visible string
 
 	transition StackTransition
 	duration   time.Duration
@@ -50,10 +49,7 @@ type Stack struct {
 
 // NewStack returns an empty stack.
 func NewStack() *Stack {
-	return &Stack{
-		kids:     make(map[string]Widget),
-		measured: make(map[string]Size),
-	}
+	return &Stack{kids: make(map[string]Widget)}
 }
 
 // Add puts a child under name; adding an existing name replaces it.
@@ -113,7 +109,6 @@ func (s *Stack) Remove(name string) bool {
 	notifyRemoved(w)
 	delete(s.kids, name)
 	s.order = slices.DeleteFunc(s.order, func(n string) bool { return n == name })
-	delete(s.measured, name)
 	if s.visible == name {
 		s.visible = ""
 	}
@@ -258,27 +253,24 @@ func (s *Stack) Visible() string {
 	return s.visible
 }
 
-// Measure measures every child once and reports the largest - or,
-// sized to its visible page, that page, tweened from the page leaving
-// while an interpolating switch runs - inside the stack's CSS box
-// (GtkStack's padding, border and min sizes), clamped to con.
-func (s *Stack) Measure(con Constraints) Size {
-	if sz, ok := s.measureHit(con); ok {
+// Measure reports the widest request of its children - or, sized to
+// its visible page, that page's, tweened from the page leaving while an
+// interpolating switch runs - inside the stack's CSS box (GtkStack's
+// padding, border and min sizes).
+func (s *Stack) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := s.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := s.style(s)
-	return s.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		best := Size{}
-		for _, name := range s.order {
-			nat := measureChild(s, s.kids[name], inner)
-			s.measured[name] = nat
-			best.W = max(best.W, nat.W)
-			best.H = max(best.H, nat.H)
-		}
+	return s.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
 		if s.heterogeneous {
-			best = s.visibleSize()
+			return s.visibleRequest(axis, forSize)
 		}
-		return clampSize(best, inner)
+		var req Sizes
+		for _, name := range s.order {
+			req = req.widest(measureChild(s, s.kids[name], axis, forSize))
+		}
+		return req
 	}))
 }
 
@@ -359,9 +351,6 @@ type Overlay struct {
 	// aligns holds the per-axis alignment of each child (index-matched
 	// with kids); AlignFill on both axes is a plain Append.
 	aligns [][2]Align
-	// nats is each child's height at the last Measure, zero for a
-	// hidden one (index-matched with kids), for Shrinkable.
-	nats []int
 }
 
 // NewOverlay returns an empty overlay.
@@ -384,27 +373,21 @@ func (o *Overlay) AppendAligned(w Widget, h, v Align) *Overlay {
 	return o
 }
 
-// Measure reports the largest child inside the overlay's CSS box:
-// padding, border and min sizes, clamped to con.
-func (o *Overlay) Measure(con Constraints) Size {
-	if sz, ok := o.measureHit(con); ok {
+// Measure reports the widest request of its visible children inside
+// the overlay's CSS box: padding, border and min sizes.
+func (o *Overlay) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := o.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := o.style(o)
-	return o.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		best := Size{}
-		o.nats = slices.Grow(o.nats[:0], len(o.kids))[:len(o.kids)]
-		for i, k := range o.kids {
-			o.nats[i] = 0
-			if !IsVisible(k) {
-				continue
+	return o.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		var req Sizes
+		for _, k := range o.kids {
+			if IsVisible(k) {
+				req = req.widest(measureChild(o, k, axis, forSize))
 			}
-			nat := measureChild(o, k, inner)
-			o.nats[i] = nat.H
-			best.W = max(best.W, nat.W)
-			best.H = max(best.H, nat.H)
 		}
-		return clampSize(best, inner)
+		return req
 	}))
 }
 
@@ -416,8 +399,7 @@ func (o *Overlay) Arrange(r render.Rect) {
 	for i, k := range o.kids {
 		cell := inner
 		if a := o.aligns[i]; a != [2]Align{} {
-			nat := measureChild(o, k, Constraints{Max: Size{W: inner.W, H: inner.H}})
-			cell = alignRect(inner, nat, a[0], a[1])
+			cell = alignRect(inner, childWithin(o, k, Size{W: inner.W, H: inner.H}), a[0], a[1])
 		}
 		arrangeChild(k, cell)
 		setParents(o, k)
@@ -463,7 +445,6 @@ type Scroll struct {
 	node
 	child      Widget
 	nat        Size
-	measured   Size // the size Measure last returned, for Shrinkable
 	offX, offY int
 	// arrOffX, arrOffY are the offset the child was last arranged at:
 	// its descendants' bounds sit there until the next arrange, so
@@ -471,7 +452,6 @@ type Scroll struct {
 	// offset.
 	arrOffX, arrOffY int
 	maxH             int
-	measuredAt       int // the width a VerticalOnly child was last measured at
 
 	// ShowBars enables the auto-hiding scrollbar indicators.
 	ShowBars bool
@@ -543,6 +523,10 @@ type Scroll struct {
 
 // gutter is the scrollbar strip width reserved inside the viewport.
 const gutter = 8
+
+// scrollFloor is the least height a Scroll gives way to: room for the
+// bar to still read as one.
+const scrollFloor = 4 * gutter
 
 // barInset keeps a bar's track off the viewport's outer edge and off
 // both ends of its axis.
@@ -729,78 +713,89 @@ func (s *Scroll) invalidateBars() {
 	}
 }
 
-// Measure reports the child's natural size clamped to the offered
-// constraints. The viewport itself is sized by Arrange (expanding
-// children and cross stretch), so the reported natural size must stay
-// bounded: an unbounded appetite here would blow up natural measurement
-// in parent boxes and lay children out past the window edge.
-func (s *Scroll) Measure(con Constraints) Size {
-	if sz, ok := s.measureHit(con); ok {
+// Measure reports the scroll's request inside its CSS box. Across, a
+// scroll that pans sideways asks for its child's natural width and
+// needs none; a VerticalOnly one needs its child's minimum and asks for
+// it too, or for the natural width under PropagateNaturalWidth (GTK's
+// never policy). Down, it asks for nothing of its own unless
+// PropagateNaturalHeight, then for its child's height up to the
+// SetMaxContentHeight cap, needing only scrollFloor: a short parent
+// gets the rest back and the scroll scrolls it.
+func (s *Scroll) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := s.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := s.style(s)
-	s.measured = measureBox(v, boxOf(v, render.Insets{}), con, s.measureContent)
-	return s.measureStore(con, s.measured)
+	return s.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, s.measureContent))
 }
 
 // measureContent is Measure inside the CSS box.
-func (s *Scroll) measureContent(con Constraints) Size {
-	s.nat = Size{}
-	overflows := false
-	if s.child != nil {
-		w := math.MaxInt
-		if s.VerticalOnly {
-			w = con.Max.W
-		}
-		s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
-		if s.VerticalOnly {
-			// The bar's column is reserved only once the content
-			// overflows the height on offer and only for a bar that
-			// shows: a list that fits, or one without bars, keeps its
-			// full width and its insets even.
-			limit := con.Max.H
-			if s.maxH > 0 {
-				limit = min(limit, s.maxH)
-			}
-			if overflows = s.ShowBars && s.nat.H > limit; overflows {
-				w = max(0, w-gutter)
-				s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
-			}
-			s.measuredAt = w
-		}
+func (s *Scroll) measureContent(axis Axis, forSize int) Sizes {
+	if s.child == nil {
+		return Sizes{}
 	}
-	want := s.nat
-	if s.VerticalOnly && !s.PropagateNaturalWidth && s.child != nil {
-		// GTK's never-policy scroll without propagate-natural-width
-		// asks for its child's minimum width: a long line wraps or
-		// ellipsizes at the width it is given instead of widening it.
-		want.W = minContentOf(s.child, Row, s.nat)
+	gutters := s.stableGutters()
+	if axis == Column {
+		if !s.PropagateNaturalHeight {
+			return Sizes{}
+		}
+		width := forSize
+		if width == Unknown {
+			width = s.measureContent(Row, Unknown).Nat
+		}
+		h := s.contentAt(max(0, width-gutters)).H
+		if s.maxH > 0 {
+			h = min(h, s.maxH)
+		}
+		return Sizes{Min: min(h, scrollFloor), Nat: h}
 	}
-	stable, both := s.gutterStable()
-	if stable {
-		// scrollbar-gutter: stable reserves the bar's column up front,
-		// both-edges a matching one on the far side, so content does not
-		// reflow when a bar appears.
-		want.W += gutter
-		if both {
-			want.W += gutter
+	child := measureChild(s, s.child, Row, Unknown)
+	req := Sizes{Nat: child.Nat}
+	if s.VerticalOnly {
+		req = FixedSizes(child.Min)
+		if s.PropagateNaturalWidth {
+			req.Nat = child.Nat
 		}
 	}
-	if overflows {
-		want.W += gutter
-	}
-	switch {
-	case !s.PropagateNaturalHeight:
-		want.H = 0
-	case s.maxH > 0 && want.H > s.maxH:
+	if s.capOverflows(req.Nat) {
 		// Capped, the content overflows: the vertical bar's gutter
 		// comes on top of the content width, not out of it.
-		if !s.VerticalOnly && !stable && s.ShowBars {
-			want.W += gutter
-		}
-		want.H = s.maxH
+		req = req.grow(gutter)
 	}
-	return clampSize(want, con)
+	return req.grow(gutters)
+}
+
+// stableGutters is the width scrollbar-gutter reserves up front: stable
+// the bar's column, both-edges a matching one on the far side, so
+// content does not reflow when a bar appears.
+func (s *Scroll) stableGutters() int {
+	stable, both := s.gutterStable()
+	switch {
+	case both:
+		return 2 * gutter
+	case stable:
+		return gutter
+	}
+	return 0
+}
+
+// capOverflows reports whether content laid out at width runs past the
+// SetMaxContentHeight cap with a bar that shows and has no stable
+// gutter yet.
+func (s *Scroll) capOverflows(width int) bool {
+	if !s.ShowBars || s.maxH == 0 || !s.PropagateNaturalHeight || s.stableGutters() > 0 {
+		return false
+	}
+	return s.contentAt(width).H > s.maxH
+}
+
+// contentAt is the child's size laid out at width: that width, or its
+// natural one when it pans sideways, and its natural height for it.
+func (s *Scroll) contentAt(width int) Size {
+	if !s.VerticalOnly {
+		return naturalChild(s, s.child)
+	}
+	return Size{W: width, H: measureChild(s, s.child, Column, width).Nat}
 }
 
 // SetMaxContentHeight caps the height the scroll asks for (GTK's
@@ -830,8 +825,12 @@ func (s *Scroll) Arrange(r render.Rect) {
 	s.ArrangeRoot(border)
 	s.view = inner
 	r = inner
-	gutterV, gutterH := 0, 0
 	stable, both := s.gutterStable()
+	s.nat = Size{}
+	if s.child != nil {
+		s.nat = s.contentAt(r.W - s.stableGutters())
+	}
+	gutterV, gutterH := 0, 0
 	if s.ShowBars && s.nat.H > r.H && r.H > 40 || stable {
 		gutterV = gutter
 	}
@@ -843,21 +842,12 @@ func (s *Scroll) Arrange(r render.Rect) {
 		if stable {
 			gutterV = gutter
 		}
-		if s.child != nil {
-			w := r.W - gutterV
-			if w != s.measuredAt {
-				s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
-				s.measuredAt = w
-			}
-			if gutterV == 0 && s.ShowBars && s.nat.H > r.H {
-				// Overflowing, the bar takes its column; the content
-				// keeps the narrower width even if it now fits, so the
-				// layout cannot flip back and forth.
-				gutterV = gutter
-				w = max(0, r.W-gutter)
-				s.nat = measureChild(s, s.child, Constraints{Max: Size{W: w, H: math.MaxInt}})
-				s.measuredAt = w
-			}
+		if s.child != nil && gutterV == 0 && s.ShowBars && s.nat.H > r.H {
+			// Overflowing, the bar takes its column; the content keeps
+			// the narrower width even if it now fits, so the layout
+			// cannot flip back and forth.
+			gutterV = gutter
+			s.nat = s.contentAt(max(0, r.W-gutter))
 		}
 	}
 	s.viewW = r.W - gutterV
@@ -1093,15 +1083,24 @@ func (s *Scroll) ClickAt(p Point) {
 	}
 }
 
-// visibleSize is the visible page's last measured size, tweened from
-// the page leaving while an interpolating switch runs.
-func (s *Stack) visibleSize() Size {
-	to := s.measured[s.visible]
-	from, ok := s.measured[s.prev]
-	if !ok || s.prev == "" || !s.interpolate {
+// visibleRequest is the visible page's request, tweened from the page
+// leaving while an interpolating switch runs.
+func (s *Stack) visibleRequest(axis Axis, forSize int) Sizes {
+	to := s.pageRequest(s.visible, axis, forSize)
+	if s.prev == "" || !s.interpolate {
 		return to
 	}
-	return Size{W: s.lerp(from.W, to.W), H: s.lerp(from.H, to.H)}
+	from := s.pageRequest(s.prev, axis, forSize)
+	return Sizes{Min: s.lerp(from.Min, to.Min), Nat: s.lerp(from.Nat, to.Nat)}
+}
+
+// pageRequest is the named page's request, none for no page.
+func (s *Stack) pageRequest(name string, axis Axis, forSize int) Sizes {
+	page, ok := s.kids[name]
+	if !ok {
+		return Sizes{}
+	}
+	return measureChild(s, page, axis, forSize)
 }
 
 // lerp is a at the switch's start to b at its end.

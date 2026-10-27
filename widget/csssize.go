@@ -7,8 +7,8 @@ package widget
 // gets them whatever its type, and a widget whose cascade declares
 // none takes the plain path untouched. Percentages resolve against the
 // containing block: the content box a CSS layout pass hands its items,
-// and elsewhere the space the container offers in the measure
-// constraint.
+// and the parent's content box at Arrange. A measure that has none
+// treats a percentage as auto, CSS's rule for intrinsic contributions.
 
 import (
 	"math"
@@ -18,21 +18,13 @@ import (
 	"github.com/stubbedev/lys-ui/internal/style"
 )
 
-// indefinite is the available extent of an unbounded axis, the
-// constraint Scroll measures its content under. A percentage of it
-// resolves as auto, and no layout pass stretches into it.
+// indefinite is the extent of an axis a layout pass does not know. A
+// percentage of it resolves as auto, and no layout pass stretches into
+// it.
 const indefinite = math.MaxInt
 
 // finite reports whether an available extent is definite.
 func finite(n int) bool { return n < indefinite }
-
-// extent is s along a.
-func extent(s Size, a Axis) int {
-	if a == Row {
-		return s.W
-	}
-	return s.H
-}
 
 // withExtent is s with its extent along a set to v.
 func withExtent(s Size, a Axis, v int) Size {
@@ -135,14 +127,13 @@ func sizingOn(l *style.Layout, a Axis) (size, lo, hi style.Sizing) {
 }
 
 // resolveAxis resolves w's sizing properties along a against basis, the
-// containing block's extent there (indefinite when unknown); cross is
-// the extent available across for the measures the content keywords
-// take. Auto, an indefinite percentage and the block-axis (height)
-// content keywords leave the size indefinite — CSS reads min-content,
-// max-content and fit-content as auto in the block axis.
-func resolveAxis(w Widget, v *style.Values, a Axis, basis, cross int) axisSizes {
+// containing block's extent there (indefinite when unknown). Auto, an
+// indefinite percentage and the block-axis (height) content keywords
+// leave the size indefinite — CSS reads min-content, max-content and
+// fit-content as auto in the block axis.
+func resolveAxis(w Widget, v *style.Values, a Axis, basis int) axisSizes {
 	size, lo, hi := sizingOn(&v.Layout, a)
-	in := intrinsic{w: w, a: a, cross: cross, basis: basis, ax: boxAxisOf(w, v, a)}
+	in := intrinsic{w: w, a: a, basis: basis, ax: boxAxisOf(w, v, a)}
 	out := axisSizes{ax: in.ax, max: indefinite}
 	out.size, out.definite = in.resolve(size)
 	if n, ok := in.resolve(lo); ok {
@@ -160,20 +151,19 @@ type intrinsic struct {
 	w        Widget
 	a        Axis
 	basis    int
-	cross    int
 	ax       boxAxis
 	measured bool
-	nat      Size
+	req      Sizes
 }
 
-// natural is the widget's max-content size: its plain measure, the
-// axis unbounded.
-func (in *intrinsic) natural() Size {
+// content is the widget's min-content and max-content widths, its
+// margin box's: the content keywords read them, the block axis never.
+func (in *intrinsic) content() Sizes {
 	if !in.measured {
-		in.nat = measureMargin(in.w, Constraints{Max: withExtent(Size{W: in.cross, H: in.cross}, in.a, indefinite)})
+		in.req = measureMargin(in.w, Row, Unknown)
 		in.measured = true
 	}
-	return in.nat
+	return in.req
 }
 
 // resolve returns s in outer pixels, ok false when it leaves the size
@@ -192,108 +182,91 @@ func (in *intrinsic) resolve(s style.Sizing) (int, bool) {
 	default:
 		return 0, false
 	}
-	nat := in.natural()
-	maxc := extent(nat, in.a)
-	minc := minContentOf(in.w, in.a, nat)
+	c := in.content()
 	switch s.Kind {
 	case style.SizingMinContent:
-		return minc, true
+		return c.Min, true
 	case style.SizingMaxContent:
-		return maxc, true
+		return c.Nat, true
 	}
-	limit := maxc
+	limit := c.Nat
 	if !s.Len.Relative() || finite(in.basis) {
 		limit = s.Len.Resolve(in.basis) + in.ax.out()
 	}
-	return min(maxc, max(minc, limit)), true
+	return min(c.Nat, max(c.Min, limit)), true
 }
 
-// minContentOf is w's min-content extent along a, its floor: the
-// natural extent less what the widget can give up (Shrinker,
-// WidthShrinker), lowered further to a MinSizer's reported floor — a
-// wrapping label's widest word. nat is its natural measure.
-func minContentOf(w Widget, a Axis, nat Size) int {
-	n := extent(nat, a)
-	if a == Row {
-		n -= shrinkableWidthOf(w)
-	} else {
-		n -= shrinkableOf(w)
-	}
-	if m, ok := w.(MinSizer); ok {
-		lm := layoutMarginOf(w)
-		floor := m.MinSize()
-		floor.W += lm.Left + lm.Right
-		floor.H += lm.Top + lm.Bottom
-		n = min(n, extent(floor, a))
-	}
-	return max(0, n)
-}
-
-// measureOuter measures w's margin box under con, programmatic margin
-// and CSS sizing included: the one measure every layout pass takes of
-// an in-flow widget.
-func measureOuter(w Widget, con Constraints) Size {
+// measureOuter measures w's margin box along axis at forSize, its
+// margin-box extent across: programmatic margin and CSS sizing
+// included, the one measure every layout pass takes of an in-flow
+// widget. basis is the containing block's extent along each axis,
+// indefinite where the caller has none.
+func measureOuter(w Widget, axis Axis, forSize int, basis Size) Sizes {
 	if n := nodeOf(w); n != nil {
 		if v := n.style(w); cssSized(v) {
-			return sizedMeasure(w, n, v, con)
+			return sizedMeasure(w, v, axis, forSize, basis)
 		}
 	}
-	return measureMargin(w, con)
+	return measureMargin(w, axis, forSize)
 }
 
 // sizedMeasure is measureOuter for a widget with CSS sizes: a definite
-// size pins its axis, the min/max bounds narrow the constraints the
-// widget measures under, and aspect-ratio transfers a definite size —
-// or, with both auto, the measured width — to the other axis. The
-// bounds are recorded for arrangeChild, which holds a stretched slot
-// to them.
-func sizedMeasure(w Widget, n *node, v *style.Values, con Constraints) Size {
-	ws := resolveAxis(w, v, Row, con.Max.W, con.Max.H)
-	hs := resolveAxis(w, v, Column, con.Max.H, con.Max.W)
-	ratio := v.Layout.AspectRatio
-	transfer := func(from axisSizes, to *axisSizes, scale float64) {
-		box := float64(max(0, from.clamp(from.size)-from.ax.out()))
-		to.size, to.definite = int(math.Round(box*scale))+to.ax.out(), true
+// size pins its axis to one extent, the min/max bounds hold both of the
+// widget's sizes, and aspect-ratio transfers a definite size, or the
+// extent across when the other axis is auto, to the axis measured.
+func sizedMeasure(w Widget, v *style.Values, axis Axis, forSize int, basis Size) Sizes {
+	s := resolveAxis(w, v, axis, basis.Along(axis))
+	across := resolveAxis(w, v, otherAxis(axis), basis.Along(otherAxis(axis)))
+	if across.definite {
+		forSize = across.clamp(across.size)
+	} else if forSize != Unknown {
+		forSize = across.clamp(forSize)
 	}
-	if ratio > 0 && ws.definite && !hs.definite {
-		transfer(ws, &hs, 1/ratio)
-	} else if ratio > 0 && hs.definite && !ws.definite {
-		transfer(hs, &ws, ratio)
-	}
-	inner := con
-	pin := func(s axisSizes, lo, hi *int) {
-		if s.definite {
-			*lo = min(max(s.clamp(s.size), *lo), *hi)
-			*hi = *lo
-			return
+	if ratio := v.Layout.AspectRatio; ratio > 0 && !s.definite {
+		scale := ratio
+		if axis == Column {
+			scale = 1 / ratio
 		}
-		*hi = min(*hi, max(s.max, *lo))
-		*lo = min(max(*lo, s.min), *hi)
+		if forSize != Unknown {
+			box := float64(max(0, forSize-across.ax.out()))
+			return FixedSizes(s.clamp(int(math.Round(box*scale)) + s.ax.out()))
+		}
 	}
-	pin(ws, &inner.Min.W, &inner.Max.W)
-	pin(hs, &inner.Min.H, &inner.Max.H)
-	sz := measureMargin(w, inner)
-	if ratio > 0 && !ws.definite && !hs.definite {
-		box := float64(max(0, sz.W-ws.ax.out()))
-		sz.H = min(max(hs.clamp(int(math.Round(box/ratio))+hs.ax.out()), con.Min.H), con.Max.H)
+	if s.definite {
+		return FixedSizes(s.clamp(s.size))
 	}
-	n.cssMin, n.cssMax = Size{W: ws.min, H: hs.min}, Size{W: ws.max, H: hs.max}
-	if ws.definite {
-		n.cssMin.W, n.cssMax.W = sz.W, sz.W
-	}
-	if hs.definite || ratio > 0 {
-		n.cssMin.H, n.cssMax.H = sz.H, sz.H
-	}
-	return clampSize(sz, con)
+	req := measureMargin(w, axis, forSize)
+	return Sizes{Min: s.clamp(req.Min), Nat: s.clamp(req.Nat)}
 }
 
-// holdSlot fits a container's slot r for w — its margin box — to the
-// bounds the last sized measure recorded: a slot wider than a definite
-// width or a max-width narrows to it, one narrower than a min-width
-// widens, and the narrowed box sits by the widget's alignment (fill
-// reads as start, the CSS block placement).
-func holdSlot(n *node, r render.Rect, h, v Align) render.Rect {
-	return fitSlot(r, n.cssMin, n.cssMax, h, v)
+// holdSlot fits a container's slot r for w — its margin box — to its
+// CSS sizes, resolved against cb, the containing block: a slot wider
+// than a definite width or a max-width narrows to it, one narrower than
+// a min-width widens, and the narrowed box sits by the widget's
+// alignment (fill reads as start, the CSS block placement).
+func holdSlot(w Widget, v *style.Values, r render.Rect, cb Size, h, al Align) render.Rect {
+	ws := resolveAxis(w, v, Row, cb.W)
+	hs := resolveAxis(w, v, Column, cb.H)
+	lo, hi := Size{W: ws.min, H: hs.min}, Size{W: ws.max, H: hs.max}
+	if ws.definite {
+		lo.W = ws.clamp(ws.size)
+		hi.W = lo.W
+	}
+	ratio := v.Layout.AspectRatio
+	switch {
+	case hs.definite:
+		lo.H = hs.clamp(hs.size)
+		hi.H = lo.H
+		if !ws.definite && ratio > 0 {
+			lo.W = ws.clamp(int(math.Round(float64(max(0, lo.H-hs.ax.out()))*ratio)) + ws.ax.out())
+			hi.W = lo.W
+		}
+	case ratio > 0:
+		width := ws.clamp(min(max(r.W, lo.W), hi.W))
+		lo.H = hs.clamp(int(math.Round(float64(max(0, width-ws.ax.out()))/ratio)) + hs.ax.out())
+		hi.H = lo.H
+	}
+	return fitSlot(r, lo, hi, h, al)
 }
 
 // fitSlot holds r between lo and hi on each axis, a narrowed axis

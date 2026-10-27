@@ -53,7 +53,7 @@ func TestGPUAreaAttachesOnScreenAndDetachesOnRemoval(t *testing.T) {
 	}
 	root := NewBox(Column, 0, 0)
 	root.Append(area, true)
-	root.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(root, Size{W: 200, H: 100})
 	root.Arrange(render.Rect{W: 200, H: 100})
 	root.Arrange(render.Rect{W: 200, H: 100})
 	if len(surfaces) != 1 {
@@ -71,7 +71,7 @@ func TestGPUAreaAttachesOnScreenAndDetachesOnRemoval(t *testing.T) {
 		t.Error("removing the area left its surface open")
 	}
 	root.Append(area, true)
-	root.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(root, Size{W: 200, H: 100})
 	root.Arrange(render.Rect{W: 200, H: 100})
 	if len(surfaces) != 2 {
 		t.Error("an area back on screen did not get a new surface")
@@ -86,7 +86,7 @@ func TestGPUAreaPaintsAHoleForItsSurface(t *testing.T) {
 	area := NewGPUArea()
 	root := NewOverlay()
 	root.Append(area)
-	root.Measure(Constraints{Max: Size{W: 8, H: 8}})
+	SizeWithin(root, Size{W: 8, H: 8})
 	root.Arrange(render.Rect{W: 8, H: 8})
 	data := make([]byte, render.Stride(8)*8)
 	cv := render.New(data, render.Stride(8), 8, 8)

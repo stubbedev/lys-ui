@@ -36,8 +36,8 @@ func newPaintProbe(col render.Color) *paintProbe {
 	return &paintProbe{col: col}
 }
 
-func (p *paintProbe) Measure(con Constraints) Size {
-	return clampSize(Size{W: 10, H: 10}, con)
+func (p *paintProbe) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(Size{W: 10, H: 10}.Along(axis))
 }
 
 func (p *paintProbe) Arrange(r render.Rect) { p.node.Arrange(r) }
@@ -51,7 +51,7 @@ func (p *paintProbe) HitTest(at Point) Widget { return p.HitLeaf(p, at) }
 
 // arrangeWidget measures and arranges w at rect, the way a frame does.
 func arrangeWidget(w Widget, rect render.Rect) {
-	w.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(w, Size{W: 100, H: 100})
 	w.Arrange(rect)
 }
 
@@ -106,7 +106,7 @@ func TestFaderModulatesSubtree(t *testing.T) {
 		probe := newPaintProbe(render.RGB(1, 2, 3))
 		f := NewFader(probe)
 		rect := render.Rect{X: 3, Y: 4, W: 10, H: 10}
-		if got := f.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 10, H: 10}) {
+		if got := SizeWithin(f, Size{W: 100, H: 100}); got != (Size{W: 10, H: 10}) {
 			t.Errorf("Measure = %v, want the child's natural size", got)
 		}
 		f.Arrange(rect)

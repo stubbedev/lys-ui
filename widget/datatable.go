@@ -95,7 +95,7 @@ func NewDataTable[T any](face render.Font, model ColumnModel[T], cols []TableCol
 	col := NewBox(Column, 16, 0)
 	col.Append(toolbar, false).Append(t.view, true).Append(footer, false)
 	t.initComposite(t, col)
-	t.fillWidth = true
+	t.SetHExpand(true)
 	t.boxed = true
 	t.showPage(1)
 	return t

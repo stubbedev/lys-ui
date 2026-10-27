@@ -86,11 +86,11 @@ func (o *Overlay) Children() []widget.Widget {
 }
 
 // Measure implements widget.Widget, passing through to the root.
-func (o *Overlay) Measure(con widget.Constraints) widget.Size {
+func (o *Overlay) Measure(axis widget.Axis, forSize int) widget.Sizes {
 	if o.root == nil {
-		return widget.Size{}
+		return widget.Sizes{}
 	}
-	return o.root.Measure(con)
+	return o.root.Measure(axis, forSize)
 }
 
 // Arrange implements widget.Widget, passing through to the root and

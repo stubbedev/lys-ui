@@ -9,9 +9,9 @@ import "github.com/stubbedev/lys-lib/render"
 // type carries the tree shape and the cascade resolves per part.
 type stylePart struct{ node }
 
-func (*stylePart) Measure(con Constraints) Size { return clampSize(Size{}, con) }
-func (*stylePart) Paint(*render.Canvas)         {}
-func (*stylePart) HitTest(Point) Widget         { return nil }
+func (*stylePart) Measure(axis Axis, forSize int) Sizes { return Sizes{} }
+func (*stylePart) Paint(*render.Canvas)                 {}
+func (*stylePart) HitTest(Point) Widget                 { return nil }
 
 // styleParter is a style part: a node of its owner's own tree, which
 // restyles with the owner rather than as a child of its own.

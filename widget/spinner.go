@@ -60,12 +60,12 @@ func (s *Spinner) Arrange(r render.Rect) {
 	s.spin.arranged(r)
 }
 
-// Measure wants a size×size square, clamped to con.
-func (s *Spinner) Measure(con Constraints) Size {
-	if sz, ok := s.measureHit(con); ok {
+// Measure wants a size×size square.
+func (s *Spinner) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := s.measureHit(axis, forSize); ok {
 		return sz
 	}
-	return s.measureStore(con, clampSize(Size{W: s.size, H: s.size}, con))
+	return s.measureStore(axis, forSize, FixedSizes(s.size))
 }
 
 // Paint draws the open ring at the current angle.

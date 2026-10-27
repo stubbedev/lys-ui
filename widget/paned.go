@@ -22,7 +22,7 @@ const (
 // live, one frame per position change.
 //
 // The position is a request the arrangement clamps: each pane holds at
-// least its MinSizer minimum (a pane without one has no floor), so the
+// least its minimum, so the
 // divider never starves a pane past what it declared it needs; when a
 // resize makes the request impossible, the position re-normalizes to
 // the nearest clamp — GTK's keep-child-one semantics. Position reports
@@ -44,9 +44,6 @@ type Paned struct {
 	// a drag, or a keyboard nudge. Until one arrives, the arrangement
 	// opens at the start pane's natural size (GTK's default split).
 	positionSet bool
-	// startNat is the start pane's last measured natural size; the
-	// first arrangement splits there.
-	startNat    Size
 	arranged    int
 	arrangedSet bool
 	hovered     bool
@@ -111,7 +108,7 @@ func (p *Paned) Position() int { return p.arranged }
 
 // SetPosition asks for a divider position in pixels from the start
 // edge; the next arrangement clamps it between the panes' minimums
-// (MinSizer floors) and under SetMaxPosition, and fires
+// and under SetMaxPosition, and fires
 // OnPositionChanged when the arranged position moved.
 func (p *Paned) SetPosition(pos int) {
 	p.position, p.positionSet = pos, true
@@ -129,49 +126,23 @@ func (p *Paned) SetMaxPosition(pos int) {
 	p.InvalidateLayout()
 }
 
-// mainOf returns s's extent along the axis.
-func (p *Paned) mainOf(s Size) int {
-	if p.axis == Column {
-		return s.H
-	}
-	return s.W
-}
-
-// withMain replaces s's main-axis extent with v.
-func (p *Paned) withMain(s Size, v int) Size {
-	if p.axis == Column {
-		s.H = v
-	} else {
-		s.W = v
-	}
-	return s
-}
-
-// crossOf returns s's extent across the axis.
-func (p *Paned) crossOf(s Size) int {
-	if p.axis == Column {
-		return s.W
-	}
-	return s.H
-}
-
 // availMain is the dividable extent inside r: the main size minus the
 // divider slot.
 func (p *Paned) availMain(r render.Rect) int {
-	return max(0, p.mainOf(Size{W: r.W, H: r.H})-p.sepSlot())
+	return max(0, Size{W: r.W, H: r.H}.Along(p.axis)-p.sepSlot())
 }
 
-// clampPos clamps a requested position between the panes' MinSizer
-// floors inside r.
+// clampPos clamps a requested position between the panes' minimums
+// inside r.
 func (p *Paned) clampPos(pos int, r render.Rect) int {
 	avail := p.availMain(r)
 	lo := 0
 	if p.start != nil {
-		lo = min(p.mainOf(minSizeOf(p.start)), avail)
+		lo = min(p.paneRequest(p.start).Min, avail)
 	}
 	hi := avail
 	if p.end != nil {
-		hi = max(lo, avail-min(p.mainOf(minSizeOf(p.end)), avail))
+		hi = max(lo, avail-min(p.paneRequest(p.end).Min, avail))
 	}
 	if p.maxPos > 0 {
 		hi = max(lo, min(hi, p.maxPos))
@@ -203,56 +174,42 @@ func (p *Paned) applyPos(pos int, r render.Rect) {
 	}
 }
 
-// Measure wants the two panes' naturals plus the handle along the
-// axis, the larger cross extent across, clamped to con.
-func (p *Paned) Measure(con Constraints) Size {
-	if sz, ok := p.measureHit(con); ok {
+// Measure wants the two panes' requests plus the handle along the
+// axis, so a Paned nested in a squeezing container (a Grid) keeps both
+// panes alive; across, the larger pane's request at its natural extent
+// along.
+func (p *Paned) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := p.measureHit(axis, forSize); ok {
 		return sz
 	}
-	main := p.sepSlot()
-	cross := 0
-	if p.start != nil {
-		s := measureChild(p, p.start, con)
-		p.startNat = s
-		main += p.mainOf(s)
-		cross = max(cross, p.crossOf(s))
+	var req Sizes
+	for _, pane := range [2]Widget{p.start, p.end} {
+		switch {
+		case pane == nil:
+		case axis == p.axis:
+			req = req.plus(p.paneRequest(pane))
+		default:
+			req = req.widest(measureChild(p, pane, axis, Unknown))
+		}
 	}
-	if p.end != nil {
-		s := measureChild(p, p.end, con)
-		main += p.mainOf(s)
-		cross = max(cross, p.crossOf(s))
+	if axis == p.axis {
+		req = req.grow(p.sepSlot())
 	}
-	return p.measureStore(con, clampSize(p.withMain(Size{W: cross, H: cross}, main), con))
+	return p.measureStore(axis, forSize, req)
 }
 
-// MinSize implements MinSizer: the panes' floors plus the handle along
-// the axis, so a Paned nested in a squeezing container (a Grid) keeps
-// both panes alive.
-func (p *Paned) MinSize() Size {
-	main := p.sepSlot()
-	cross := 0
-	if p.start != nil {
-		m := minSizeOf(p.start)
-		main += p.mainOf(m)
-		cross = max(cross, p.crossOf(m))
-	}
-	if p.end != nil {
-		m := minSizeOf(p.end)
-		main += p.mainOf(m)
-		cross = max(cross, p.crossOf(m))
-	}
-	return p.withMain(Size{W: cross, H: cross}, main)
-}
+// paneRequest is a pane's request along the axis.
+func (p *Paned) paneRequest(pane Widget) Sizes { return measureChild(p, pane, p.axis, Unknown) }
 
 // Arrange clamps the requested position, lays the panes around it, and
 // keeps the parent links current for the walks.
 func (p *Paned) Arrange(r render.Rect) {
 	p.node.Arrange(r)
 	req := p.position
-	if !p.positionSet {
+	if !p.positionSet && p.start != nil {
 		// No request yet: open at the start pane's natural size, GTK's
 		// default split.
-		req = p.mainOf(p.startNat)
+		req = p.paneRequest(p.start).Nat
 	}
 	p.applyPos(req, r)
 	p.placePanes()

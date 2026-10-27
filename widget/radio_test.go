@@ -84,7 +84,7 @@ func TestToggleButtonCheckedFillAndA11y(t *testing.T) {
 	SetTheme(th)
 	t.Cleanup(func() { SetTheme(prev) })
 	paintAt := func(b *ToggleButton) render.Color {
-		b.Measure(Constraints{Max: Size{W: 60, H: 30}})
+		SizeWithin(b, Size{W: 60, H: 30})
 		b.Arrange(render.Rect{W: 60, H: 30})
 		stride := render.Stride(60)
 		data := make([]byte, stride*30)

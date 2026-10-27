@@ -203,13 +203,13 @@ func (i *Icon) natural() Size {
 
 // Measure returns the icon's pixel size inside the CSS box, clamped to
 // con.
-func (i *Icon) Measure(con Constraints) Size {
-	if sz, ok := i.measureHit(con); ok {
+func (i *Icon) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := i.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := i.style(i)
-	return i.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		return clampSize(i.natural(), inner)
+	return i.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		return FixedSizes(i.natural().Along(axis))
 	}))
 }
 

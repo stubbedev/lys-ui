@@ -9,17 +9,16 @@ import (
 func TestButtonMeasure(t *testing.T) {
 	t.Run("pads the child on every side", func(t *testing.T) {
 		b := NewButton(newStub(10, 6), 4, 2)
-		got := b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		got := SizeWithin(b, Size{W: 100, H: 100})
 		if got != (Size{W: 18, H: 14}) {
 			t.Errorf("button measure = %v, want 18x14", got)
 		}
 	})
 
-	t.Run("clamps to constraints", func(t *testing.T) {
+	t.Run("overflows a smaller host rather than squeeze", func(t *testing.T) {
 		b := NewButton(newStub(50, 50), 4, 2)
-		got := b.Measure(Constraints{Max: Size{W: 20, H: 20}})
-		if got != (Size{W: 20, H: 20}) {
-			t.Errorf("button measure = %v, want clamped 20x20", got)
+		if got := SizeWithin(b, Size{W: 20, H: 20}); got != (Size{W: 58, H: 58}) {
+			t.Errorf("button measure = %v, want its 58x58 minimum", got)
 		}
 	})
 }
@@ -27,7 +26,7 @@ func TestButtonMeasure(t *testing.T) {
 func TestButtonArrange(t *testing.T) {
 	child := newStub(10, 6)
 	b := NewButton(child, 4, 2)
-	b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(b, Size{W: 100, H: 100})
 	b.Arrange(render.Rect{X: 10, Y: 5, W: 30, H: 20})
 
 	if got := b.Bounds(); got != (render.Rect{X: 10, Y: 5, W: 30, H: 20}) {
@@ -51,7 +50,7 @@ func TestButtonPaintStates(t *testing.T) {
 		b.BgPressed = render.RGB(30, 30, 30)
 		b.Pressed = pressed
 		b.Hovered = hovered
-		b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(b, Size{W: 100, H: 100})
 		b.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 40})
 		b.Paint(cv)
 		return render.ColorFromBytes(data[20*stride+20*4 : 20*stride+20*4+4])
@@ -78,7 +77,7 @@ func TestButtonPaintStates(t *testing.T) {
 
 func TestButtonHitTest(t *testing.T) {
 	b := NewButton(newStub(10, 6), 4, 2)
-	b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(b, Size{W: 100, H: 100})
 	b.Arrange(render.Rect{X: 10, Y: 5, W: 30, H: 20})
 
 	t.Run("inside returns the button, not its child", func(t *testing.T) {
@@ -121,7 +120,7 @@ func TestButtonBgExplicit(t *testing.T) {
 		cv.FillRect(render.Rect{W: cvSize, H: cvSize}, backdrop)
 		b := NewButton(newStub(0, 0), 0, 0)
 		setup(b)
-		b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(b, Size{W: 100, H: 100})
 		b.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 40})
 		b.Paint(cv)
 		return render.ColorFromBytes(data[20*stride+20*4 : 20*stride+20*4+4])

@@ -111,7 +111,7 @@ func newTypedTestList(spy *recycleSpy, n int) (*TypedList[int], *TypedItems[int]
 func TestTypedListRecyclesRows(t *testing.T) {
 	spy := newRecycleSpy()
 	l, _ := newTypedTestList(spy, 10_000)
-	l.Measure(Constraints{Max: Size{W: 200, H: 1 << 20}})
+	SizeWithin(l, Size{W: 200, H: 1 << 20})
 	l.Arrange(render.Rect{W: 200, H: 60})
 	cv := render.New(make([]uint8, 200*60*4), 200*4, 200, 60)
 	l.Paint(cv)
@@ -150,7 +150,7 @@ func TestTypedListItemChangedRebinds(t *testing.T) {
 	spy := newRecycleSpy()
 	l, items := newTypedTestList(spy, 3)
 	items.SetItemRefresh(l.ItemChanged)
-	l.Measure(Constraints{Max: Size{W: 200, H: 1 << 20}})
+	SizeWithin(l, Size{W: 200, H: 1 << 20})
 	l.Arrange(render.Rect{W: 200, H: 60})
 	cv := render.New(make([]uint8, 200*60*4), 200*4, 200, 60)
 	l.Paint(cv)
@@ -284,7 +284,7 @@ func TestTypedListTypedSelection(t *testing.T) {
 func TestTypedGridFlowsAndStyles(t *testing.T) {
 	spy := newRecycleSpy()
 	g := NewTypedGrid[int](NewTypedItems(spread(100)...), spy.factory(), 50, 40)
-	g.Measure(Constraints{Max: Size{W: 250, H: 200}})
+	SizeWithin(g, Size{W: 250, H: 200})
 	g.Arrange(render.Rect{W: 250, H: 200})
 	cv := render.New(make([]uint8, 250*200*4), 250*4, 250, 200)
 	g.Paint(cv)

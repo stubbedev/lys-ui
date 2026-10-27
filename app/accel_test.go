@@ -326,7 +326,7 @@ func TestScopedAccelCoversItsSubtreeAndInnerScopesWin(t *testing.T) {
 	pane.Append(entry, false)
 	window := widget.NewBox(widget.Column, 0, 0)
 	window.Append(pane, false)
-	window.Measure(widget.Constraints{Max: widget.Size{W: 200, H: 60}})
+	widget.SizeWithin(window, widget.Size{W: 200, H: 60})
 	window.Arrange(render.Rect{W: 200, H: 60})
 	r := &widget.Router{Root: window}
 	r.Press(widget.BTNLeft, widget.Point{X: 5, Y: 5}, 0)

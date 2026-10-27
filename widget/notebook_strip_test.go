@@ -12,7 +12,7 @@ func stripNotebook(t *testing.T, n int) *Notebook {
 	for i := range n {
 		nb.AppendTab(string(rune('a'+i)), NewSpacer(10, 10))
 	}
-	nb.Measure(Constraints{Max: Size{W: 250, H: 100}})
+	SizeWithin(nb, Size{W: 250, H: 100})
 	nb.Arrange(render.Rect{W: 250, H: 100})
 	return nb
 }
@@ -137,7 +137,7 @@ func TestNotebookNaturalWidthHoldsItsTabs(t *testing.T) {
 	n := NewNotebook(face)
 	n.AppendTab("Account", NewLabel(face, 14, "x", 0))
 	n.AppendTab("Password", NewLabel(face, 14, "y", 0))
-	got := n.Measure(Constraints{Max: Size{W: 1000, H: 400}})
+	got := SizeWithin(n, Size{W: 1000, H: 400})
 	if strip := n.layoutStrip(render.Rect{W: 1000}); got.W < strip.total {
 		t.Errorf("natural width %d, narrower than its tabs' %d", got.W, strip.total)
 	}

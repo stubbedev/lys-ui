@@ -186,56 +186,82 @@ func layoutMarginOf(w Widget) render.Insets {
 	return render.Insets{}
 }
 
-// measureWithMargin measures a container's child as a flow participant:
-// its margin box, CSS sizing included, and nothing for an absolutely
-// or fixed positioned child, which leaves the flow (csspos.go).
-func measureWithMargin(w Widget, con Constraints) Size {
+// measureWithMargin measures a container's child as a flow participant
+// along axis at forSize, its margin-box extent across: its margin box,
+// CSS sizing included, and nothing for an absolutely or fixed
+// positioned child, which leaves the flow (csspos.go). A plain measure
+// knows no containing block, so percentage sizes read as auto.
+func measureWithMargin(w Widget, axis Axis, forSize int) Sizes {
 	if outOfFlow(w) {
-		return Size{}
+		return Sizes{}
 	}
-	return measureOuter(w, con)
+	return measureOuter(w, axis, forSize, indefiniteSize)
 }
 
 // MeasureAsChild measures w as a container measures its child: its
 // size request, programmatic margin and CSS sizes apply. A host that
 // owns a tree's top (a popover around its content) measures through it
 // so the top's own size request counts, as GTK honors a popover's.
-func MeasureAsChild(w Widget, con Constraints) Size { return measureWithMargin(w, con) }
+func MeasureAsChild(w Widget, axis Axis, forSize int) Sizes {
+	return measureWithMargin(w, axis, forSize)
+}
+
+// SizeWithinAsChild is SizeWithin for w measured as a child: a host
+// sizing a tree's top by MeasureAsChild.
+func SizeWithinAsChild(w Widget, avail Size) Size {
+	return sizeWithin(func(axis Axis, forSize int) Sizes { return MeasureAsChild(w, axis, forSize) }, avail)
+}
 
 // ArrangeAsChild arranges w in r as a container arranges its child:
 // inside its margin, held to its CSS bounds. MeasureAsChild's pair.
 func ArrangeAsChild(w Widget, r render.Rect) { arrangeChild(w, r) }
 
 // measureMargin is the widget's own Measure inside its programmatic
-// margin, with no CSS sizing around it.
-func measureMargin(w Widget, con Constraints) Size {
-	var m render.Insets
-	var req Size
-	hi := Size{W: indefinite, H: indefinite}
-	if l := layoutOf(w); l != nil {
-		m, req, hi = l.margin, l.request, l.capped()
+// margin, held to its size request and maximum, with no CSS sizing
+// around it. forSize is the margin-box extent across.
+func measureMargin(w Widget, axis Axis, forSize int) Sizes {
+	l := layoutOf(w)
+	if l == nil || (l.margin.Zero() && l.request == (Size{}) && l.maximum == (Size{})) {
+		return w.Measure(axis, forSize)
 	}
-	if m.Zero() && req == (Size{}) && hi == (Size{W: indefinite, H: indefinite}) {
-		return w.Measure(con)
+	along, across := insetsAlong(l.margin, axis), insetsAlong(l.margin, otherAxis(axis))
+	hi := l.capped()
+	if forSize != Unknown {
+		forSize = min(max(0, forSize-across), hi.Along(otherAxis(axis)))
 	}
-	mw, mh := m.Left+m.Right, m.Top+m.Bottom
-	maxW, maxH := min(max(0, con.Max.W-mw), hi.W), min(max(0, con.Max.H-mh), hi.H)
-	inner := Constraints{
-		Min: Size{W: min(max(0, con.Min.W-mw, min(req.W, con.Max.W-mw)), maxW), H: min(max(0, con.Min.H-mh, min(req.H, con.Max.H-mh)), maxH)},
-		Max: Size{W: maxW, H: maxH},
+	s := w.Measure(axis, forSize)
+	if limit := hi.Along(axis); finite(limit) {
+		s = Sizes{Min: min(s.Min, limit), Nat: min(s.Nat, limit)}
 	}
-	s := w.Measure(inner)
-	s = Size{W: min(max(s.W, min(req.W, inner.Max.W)), maxW), H: min(max(s.H, min(req.H, inner.Max.H)), maxH)}
-	return Size{W: min(s.W+mw, con.Max.W), H: min(s.H+mh, con.Max.H)}
+	return s.atLeast(l.request.Along(axis)).grow(along)
+}
+
+// parentBlock is the containing block w's percentages resolve against
+// at arrange: its parent's content box, indefinite without a parent.
+func parentBlock(w Widget) Size {
+	p := parentOf(w)
+	if p == nil {
+		return indefiniteSize
+	}
+	box := contentBoxOf(p)
+	return Size{W: box.W, H: box.H}
+}
+
+// insetsAlong is m's total along axis.
+func insetsAlong(m render.Insets, axis Axis) int {
+	if axis == Row {
+		return m.Left + m.Right
+	}
+	return m.Top + m.Bottom
 }
 
 // arrangeChild arranges a container's child inside r with its margin
 // and alignment: the margin shrinks r, and a non-fill alignment keeps
-// the child's natural size at the start, center or end of what is left.
-// CSS applies around it: an out-of-flow child is placed against its
-// containing block from r's corner (its static position), a sized one
-// holds r to its definite size and min/max bounds, and a relative or
-// sticky one shifts by its offsets.
+// the child's natural size, never more than r, at the start, center or
+// end of what is left. CSS applies around it: an out-of-flow child is
+// placed against its containing block from r's corner (its static
+// position), a sized one holds r to its sizes against the parent's
+// content box, and a relative or sticky one shifts by its offsets.
 func arrangeChild(w Widget, r render.Rect) {
 	n := nodeOf(w)
 	var v *style.Values
@@ -252,11 +278,9 @@ func arrangeChild(w Widget, r render.Rect) {
 		h, va = l.halign, l.valign
 	}
 	if v != nil && cssSized(v) {
-		r = holdSlot(n, r, h, va)
+		r = holdSlot(w, v, r, parentBlock(w), h, va)
 	}
 	if l == nil || (l.margin.Zero() && l.maximum == (Size{}) && l.halign == AlignFill && l.valign == AlignFill) {
-		// A size request only floors the measure: a fill child takes
-		// its slot, which the container sized from that measure.
 		arrangeAt(w, v, r)
 		return
 	}
@@ -265,11 +289,13 @@ func arrangeChild(w Widget, r render.Rect) {
 		r = fitSlot(r, Size{}, l.capped(), h, va)
 	}
 	if h != AlignFill || va != AlignFill {
-		nat := w.Measure(Constraints{Max: Size{W: r.W, H: r.H}})
-		nat = Size{W: max(nat.W, min(l.request.W, r.W)), H: max(nat.H, min(l.request.H, r.H))}
-		if v != nil && cssSized(v) {
-			// The CSS size the measure resolved, not the content's.
-			nat = Size{W: max(min(nat.W, n.cssMax.W), n.cssMin.W), H: max(min(nat.H, n.cssMax.H), n.cssMin.H)}
+		cb, mw, mh := parentBlock(w), insetsAlong(l.margin, Row), insetsAlong(l.margin, Column)
+		nat := Size{W: r.W, H: r.H}
+		if h != AlignFill {
+			nat.W = min(measureOuter(w, Row, Unknown, cb).Nat-mw, r.W)
+		}
+		if va != AlignFill {
+			nat.H = min(measureOuter(w, Column, nat.W+mw, cb).Nat-mh, r.H)
 		}
 		if h == AlignBaseline {
 			h = AlignStart

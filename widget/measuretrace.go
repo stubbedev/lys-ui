@@ -15,11 +15,12 @@ import (
 // widget type.
 var measureMisses = map[string]int{}
 
-// noteMeasureMiss records why n's measure missed its cache.
-func noteMeasureMiss(n *node, con Constraints) {
+// noteMeasureMiss records why n's measure along axis at forSize missed
+// its cache.
+func noteMeasureMiss(n *node, axis Axis, forSize int) {
 	var reason string
 	switch {
-	case !n.measureSeen:
+	case !n.measureFresh:
 		reason = "uncached"
 	case n.measureDirty:
 		reason = "dirty"
@@ -30,13 +31,13 @@ func noteMeasureMiss(n *node, con Constraints) {
 	case n.subStyle:
 		reason = "substyle"
 	default:
-		was := []string{fmt.Sprint(n.measureIn.Max)}
-		for _, e := range n.measureOld {
+		var seen []string
+		for _, e := range n.measures {
 			if e.ok {
-				was = append(was, fmt.Sprint(e.in.Max))
+				seen = append(seen, fmt.Sprintf("%v@%d", e.axis, e.forSize))
 			}
 		}
-		reason = fmt.Sprintf("constraints(%v, was %s)", con.Max, strings.Join(was, " | "))
+		reason = fmt.Sprintf("new size (%v@%d, cached %s)", axis, forSize, strings.Join(seen, " | "))
 	}
 	kind := "unparented"
 	if n.self != nil {

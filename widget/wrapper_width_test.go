@@ -26,20 +26,20 @@ func longEllipsizing(t *testing.T) (*Label, int) {
 func TestButtonGivesWayToItsEllipsizingLabel(t *testing.T) {
 	label, ell := longEllipsizing(t)
 	b := NewButton(label, 6, 4)
-	if got := MinWidth(b); got != ell+12 {
+	if got := minWidth(b); got != ell+12 {
 		t.Errorf("button minimum %d, want the ellipsis %d and its padding", got, ell+12)
 	}
 	side := NewBox(Column, 0, 0)
 	side.Append(b, false)
 	s := NewScroll(side)
 	s.VerticalOnly = true
-	if got := s.Measure(Constraints{Max: Size{W: 2000, H: 400}}).W; got >= 200 {
+	if got := SizeWithin(s, Size{W: 2000, H: 400}).W; got >= 200 {
 		t.Errorf("the scroll asks for %d, want the sidebar's minimum", got)
 	}
 	row := NewBox(Row, 0, 0)
 	row.Append(b, false)
 	row.Append(newStub(100, 20), false)
-	row.Measure(Constraints{Max: Size{W: 300, H: 40}})
+	SizeWithin(row, Size{W: 300, H: 40})
 	row.Arrange(render.Rect{W: 300, H: 40})
 	if got := b.Bounds().W; got > 200 || got <= ell+12 {
 		t.Errorf("button in a 300px row beside 100px is %d wide, want the 200 left, ellipsized", got)
@@ -59,12 +59,12 @@ func TestRevealerGivesWayToItsChild(t *testing.T) {
 		page := NewBox(Column, 0, 0)
 		page.Append(newStub(40, 20), false)
 		page.Append(r, false)
-		if got, want := MinWidth(page), max(40, ell); got != want {
+		if got, want := minWidth(page), max(40, ell); got != want {
 			t.Errorf("revealed %v: page minimum %d, want %d", revealed, got, want)
 		}
 		s := NewScroll(page)
 		s.VerticalOnly = true
-		s.Measure(Constraints{Max: Size{W: 300, H: 400}})
+		SizeWithin(s, Size{W: 300, H: 400})
 		s.Arrange(render.Rect{W: 300, H: 400})
 		if got := label.Bounds().W; revealed && got > 300 {
 			t.Errorf("the revealed row is %d wide in a 300px scroll", got)
@@ -76,7 +76,7 @@ func TestRevealerGivesWayToItsChild(t *testing.T) {
 	r.SetTransition(RevealSlideRight)
 	r.SetCollapse(true)
 	r.SetRevealed(true)
-	if got, nat := MinWidth(r), r.Measure(unbounded).W; got != nat {
+	if got, nat := minWidth(r), naturalSize(r).W; got != nat {
 		t.Errorf("sideways slide minimum %d, want its natural %d", got, nat)
 	}
 }
@@ -93,11 +93,11 @@ func TestWrappersPassTheirChildsMinimumThrough(t *testing.T) {
 	} {
 		label, ell := longEllipsizing(t)
 		w := wrap(label)
-		extra := w.Measure(unbounded).W - label.Measure(unbounded).W
-		if got := MinWidth(w); got != ell+extra {
+		extra := naturalSize(w).W - naturalSize(label).W
+		if got := minWidth(w); got != ell+extra {
 			t.Errorf("%s: minimum %d, want the ellipsis %d plus its own %d", name, got, ell, extra)
 		}
-		if ws, ok := w.(WidthShrinker); !ok || ws.ShrinkableWidth() == 0 {
+		if widthGive(w) == 0 {
 			t.Errorf("%s gives up no width around an ellipsizing label", name)
 		}
 	}
@@ -113,13 +113,13 @@ func TestWrappingLabelGivesWayToASibling(t *testing.T) {
 	row := NewBox(Row, 8, 0)
 	row.Append(l, true)
 	row.Append(btn, false)
-	sz := row.Measure(Constraints{Max: Size{W: 300, H: 400}})
+	sz := SizeWithin(row, Size{W: 300, H: 400})
 	row.Arrange(render.Rect{W: 300, H: sz.H})
 	if b := btn.Bounds(); b.X+b.W > 300 {
 		t.Errorf("button ends at %d, want inside the 300px row", b.X+b.W)
 	}
 	lb := l.Bounds()
-	if need := l.Measure(Constraints{Max: Size{W: lb.W, H: 400}}).H; lb.H < need {
+	if need := SizeWithin(l, Size{W: lb.W, H: 400}).H; lb.H < need {
 		t.Errorf("label %dx%d, want the %d it needs wrapped at its width", lb.W, lb.H, need)
 	}
 }
@@ -129,20 +129,20 @@ func TestWrappingLabelGivesWayToASibling(t *testing.T) {
 func TestBadgeGivesWay(t *testing.T) {
 	face := goldenFace(t)
 	b := NewBadge(face, "configured by the user's own file")
-	nat := b.Measure(Constraints{Max: Size{W: 1000, H: 100}}).W
-	if min := MinWidth(b); min >= nat/2 {
+	nat := SizeWithin(b, Size{W: 1000, H: 100}).W
+	if min := minWidth(b); min >= nat/2 {
 		t.Errorf("badge minimum %d of its natural %d, want down to the ellipsis", min, nat)
 	}
 	row := NewBox(Row, 0, 0)
 	title := newStub(200, 20)
 	row.Append(title, true)
 	row.Append(b, false)
-	row.Measure(Constraints{Max: Size{W: 260, H: 40}})
+	SizeWithin(row, Size{W: 260, H: 40})
 	row.Arrange(render.Rect{W: 260, H: 40})
 	if r := b.Bounds(); r.X+r.W > 260 || r.W >= nat {
 		t.Errorf("badge %v in a 260px row beside a 200px title, want it narrowed inside the row", r)
 	}
-	row.Measure(Constraints{Max: Size{W: 1000, H: 40}})
+	SizeWithin(row, Size{W: 1000, H: 40})
 	row.Arrange(render.Rect{W: 1000, H: 40})
 	if got := b.Bounds().W; got != nat {
 		t.Errorf("with room the badge is %d wide, want its natural %d", got, nat)

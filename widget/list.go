@@ -432,32 +432,42 @@ func (l *List) measureRowH() {
 	setParents(l, l.probe)
 	w := l.view.W
 	if w <= 0 {
-		w = unboundedPx // not arranged yet: the natural width
+		w = Unknown // not arranged yet: the natural width
 	}
-	s := l.probe.Measure(Constraints{Max: Size{W: w, H: unboundedPx}})
-	l.rowH = max(1, s.H)
+	l.rowH = max(1, l.probe.Measure(Column, w).Nat)
 }
 
-// Measure reports the offered width by the full content height inside
-// the list's CSS box, clamped to the constraints: the list is the
-// viewport, not the content.
-func (l *List) Measure(con Constraints) Size {
-	if sz, ok := l.measureHit(con); ok {
+// Measure reports a cell's width (or 120 for rows) by the full content
+// height at the width given, held to the max height, inside the list's
+// CSS box: the list is the viewport, not the content. It needs one row:
+// a short parent gets the rest back and the list scrolls it.
+func (l *List) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := l.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := l.style(l)
-	return l.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		lines, w := l.model.len(), 120
+	return l.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		w := 120
 		if l.cellW > 0 {
-			c := l.fitColumns(inner.Max.W)
-			lines, w = (lines+c-1)/c, l.cellW
+			w = l.cellW
+		}
+		if axis == Row {
+			return FixedSizes(w)
+		}
+		if forSize != Unknown {
+			w = forSize
+		}
+		lines := l.model.len()
+		if l.cellW > 0 {
+			c := l.fitColumns(w)
+			lines = (lines + c - 1) / c
 		}
 		l.measureRowH()
 		h := l.contentH(lines)
 		if l.maxH > 0 {
 			h = min(h, l.maxH)
 		}
-		return clampSize(Size{W: w, H: h}, inner)
+		return Sizes{Min: min(h, l.rowH), Nat: h}
 	}))
 }
 
@@ -960,24 +970,21 @@ type listRow struct {
 // Measure wraps the row widget in the row's CSS box: margin, border,
 // and padding around the row's natural size. The row is parented first
 // so it measures as styled.
-func (r *listRow) Measure(con Constraints) Size {
+func (r *listRow) Measure(axis Axis, forSize int) Sizes {
 	setParents(r, r.row)
 	v := r.style(r)
-	return measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		return r.row.Measure(inner)
+	return measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		return r.row.Measure(axis, forSize)
 	})
 }
 
 // Arrange records the proxy's border box and lays the row widget out
 // in the content box, linking it below the proxy for the ancestor
-// walks. The row is measured first: no Measure pass reaches it (the
-// list measures as a viewport), and containers arrange from what they
-// measured.
+// walks.
 func (r *listRow) Arrange(rect render.Rect) {
 	border, inner := boxRects(boxOf(r.style(r), render.Insets{}), rect)
 	r.node.Arrange(border)
 	setParents(r, r.row)
-	r.row.Measure(Constraints{Max: Size{W: inner.W, H: inner.H}})
 	r.row.Arrange(inner)
 }
 

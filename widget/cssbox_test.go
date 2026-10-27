@@ -32,7 +32,7 @@ func TestBoxModelMarginBorderPadding(t *testing.T) {
 	box := NewBox(Row, 0, 0)
 	box.Append(child, false)
 	box.AddClass("b")
-	sz := box.Measure(Constraints{Max: Size{W: 200, H: 200}})
+	sz := SizeWithin(box, Size{W: 200, H: 200})
 	if want := (Size{W: 10 + 2 + 4 + 2 + 6 + 8, H: 10 + 1 + 3 + 2 + 5 + 7}); sz != want {
 		t.Fatalf("measure = %+v, want %+v (content + margin + border + padding)", sz, want)
 	}
@@ -54,11 +54,11 @@ func TestBoxModelMarginBorderPadding(t *testing.T) {
 	plain := NewBox(Row, 0, 0)
 	plain.Append(NewSpacer(10, 10), false)
 	plain.SetPadding(render.Insets{Top: 1, Right: 2, Bottom: 3, Left: 4})
-	if got := plain.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 16, H: 14}) {
+	if got := SizeWithin(plain, Size{W: 100, H: 100}); got != (Size{W: 16, H: 14}) {
 		t.Errorf("programmatic per-side padding: %+v", got)
 	}
 	loadCSS(t, `box { padding-left: 20px; }`)
-	if got := plain.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 32, H: 14}) {
+	if got := SizeWithin(plain, Size{W: 100, H: 100}); got != (Size{W: 32, H: 14}) {
 		t.Errorf("stylesheet padding-left over programmatic: %+v", got)
 	}
 }
@@ -67,12 +67,12 @@ func TestMinSizeFloorsTheContentBox(t *testing.T) {
 	loadCSS(t, `box { min-width: 40px; min-height: 20px; padding: 2px; }`)
 	box := NewBox(Row, 0, 0)
 	box.Append(NewSpacer(10, 10), false)
-	if got := box.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 44, H: 24}) {
+	if got := SizeWithin(box, Size{W: 100, H: 100}); got != (Size{W: 44, H: 24}) {
 		t.Errorf("min size floors the content box, padding outside: %+v", got)
 	}
-	// The floor never beats the constraints.
-	if got := box.Measure(Constraints{Max: Size{W: 30, H: 100}}); got.W != 30 {
-		t.Errorf("min-width overflowed the constraint: %+v", got)
+	// The floor is a minimum: a smaller host overflows.
+	if got := SizeWithin(box, Size{W: 30, H: 100}); got.W != 44 {
+		t.Errorf("min-width gave way to a 30px host: %+v", got)
 	}
 }
 
@@ -82,21 +82,21 @@ func TestBorderSpacing(t *testing.T) {
 	row.Append(NewSpacer(10, 10), false)
 	row.Append(NewSpacer(10, 10), false)
 	// The CSS spacing adds to the constructor's, as in GTK 4.
-	if got := row.Measure(Constraints{Max: Size{W: 100, H: 100}}).W; got != 28 {
+	if got := SizeWithin(row, Size{W: 100, H: 100}).W; got != 28 {
 		t.Errorf("row = %d total, want the gap 1 + 7", got)
 	}
 	col := NewBox(Column, 1, 0)
 	col.Append(NewSpacer(10, 10), false)
 	col.Append(NewSpacer(10, 10), false)
-	if got := col.Measure(Constraints{Max: Size{W: 100, H: 100}}).H; got != 24 {
+	if got := SizeWithin(col, Size{W: 100, H: 100}).H; got != 24 {
 		t.Errorf("column = %d total, want the gap 1 + 3", got)
 	}
 	loadCSS(t, `* { border-spacing: 0; }`)
-	if got := row.Measure(Constraints{Max: Size{W: 100, H: 100}}).W; got != 21 {
+	if got := SizeWithin(row, Size{W: 100, H: 100}).W; got != 21 {
 		t.Errorf("a zero border-spacing erased the constructor spacing: %d", got)
 	}
 	LoadStylesheet("")
-	if got := row.Measure(Constraints{Max: Size{W: 100, H: 100}}).W; got != 21 {
+	if got := SizeWithin(row, Size{W: 100, H: 100}).W; got != 21 {
 		t.Errorf("without a sheet the constructor spacing applies: %d", got)
 	}
 }
@@ -314,7 +314,7 @@ func TestIconSizeAndTintFromStylesheet(t *testing.T) {
 	box := NewBox(Row, 0, 0)
 	box.Append(ic, false)
 	arrangeTree(t, box, 50, 50)
-	if got := ic.Measure(Constraints{Max: Size{W: 50, H: 50}}); got != (Size{W: 24, H: 24}) {
+	if got := SizeWithin(ic, Size{W: 50, H: 50}); got != (Size{W: 24, H: 24}) {
 		t.Errorf("inherited -gtk-icon-size: %+v", got)
 	}
 	b := ic.Bounds()
@@ -336,10 +336,10 @@ func TestLabelTextTransform(t *testing.T) {
 	upper := NewLabel(face, 14, "HELLO WORLD", render.RGB(1, 1, 1))
 	arrangeTree(t, lbl, 300, 30)
 	arrangeTree(t, upper, 300, 30)
-	plainW := lbl.Measure(Constraints{Max: Size{W: 300, H: 30}}).W
+	plainW := SizeWithin(lbl, Size{W: 300, H: 30}).W
 	lbl.AddClass("up")
 	CollectDamage(lbl)
-	if got, want := lbl.Measure(Constraints{Max: Size{W: 300, H: 30}}).W, upper.Measure(Constraints{Max: Size{W: 300, H: 30}}).W; got != want || got == plainW {
+	if got, want := SizeWithin(lbl, Size{W: 300, H: 30}).W, SizeWithin(upper, Size{W: 300, H: 30}).W; got != want || got == plainW {
 		t.Errorf("uppercase width %d, want %d (plain %d)", got, want, plainW)
 	}
 	if lbl.Text() != "hello world" {
@@ -429,14 +429,14 @@ func TestSetRootFontSize(t *testing.T) {
 	loadCSS(t, `box { padding: 1rem; }`)
 	t.Cleanup(func() { SetRootFontSize(16) })
 	box := NewBox(Row, 0, 0)
-	if got := box.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 32, H: 32}) {
+	if got := SizeWithin(box, Size{W: 100, H: 100}); got != (Size{W: 32, H: 32}) {
 		t.Fatalf("1rem at 16px: %+v", got)
 	}
 	SetRootFontSize(10)
 	if RootFontSize() != 10 {
 		t.Fatal("RootFontSize")
 	}
-	if got := box.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 20, H: 20}) {
+	if got := SizeWithin(box, Size{W: 100, H: 100}); got != (Size{W: 20, H: 20}) {
 		t.Errorf("1rem at 10px: %+v", got)
 	}
 	SetRootFontSize(-1) // ignored
@@ -468,7 +468,7 @@ func TestAttachedStylesheetStylesItsSubtreeOnly(t *testing.T) {
 	if lb.style(lb).Has(style.PropColor) || b.style(b).Has(style.PropPaddingTop) {
 		t.Error("an attached sheet leaked into another tree")
 	}
-	if got, want := a.Measure(Constraints{Max: Size{W: 100, H: 100}}).H, la.Measure(Constraints{Max: Size{W: 100, H: 100}}).H; got != want {
+	if got, want := SizeWithin(a, Size{W: 100, H: 100}).H, SizeWithin(la, Size{W: 100, H: 100}).H; got != want {
 		t.Errorf("the sheet's padding: 0 did not override the programmatic padding: %d, want %d", got, want)
 	}
 	// Selectors see the full ancestry.
@@ -552,12 +552,12 @@ func TestFirstLayoutResolvesScopedStyles(t *testing.T) {
 	root.AttachStylesheet(NewStylesheet(`label { font-size: 40px; }`, StylePriorityUser))
 	label := NewLabel(face, 10, "Big", render.RGBA(0, 0, 0, 255))
 	root.Append(label, false)
-	con := Constraints{Max: Size{W: 400, H: 400}}
+	con := Size{W: 400, H: 400}
 	// The label is parented as it measures: the first measure is
 	// already styled, and one arrange settles the tree.
-	first := root.Measure(con)
+	first := SizeWithin(root, con)
 	root.Arrange(render.Rect{W: 400, H: 400})
-	unstyled := NewLabel(face, 10, "Big", render.RGBA(0, 0, 0, 255)).Measure(con)
+	unstyled := SizeWithin(NewLabel(face, 10, "Big", render.RGBA(0, 0, 0, 255)), con)
 	if first.H <= unstyled.H || label.Bounds().H != first.H {
 		t.Errorf("first %v (unstyled %v), label %v: the scoped font-size did not take on the first pass", first, unstyled, label.Bounds())
 	}
@@ -569,17 +569,17 @@ func TestFirstLayoutResolvesScopedStyles(t *testing.T) {
 // passthrough is a cache-less wrapper, as the inspector overlay is.
 type passthrough struct{ child Widget }
 
-func (p passthrough) Measure(c Constraints) Size { return p.child.Measure(c) }
-func (p passthrough) Arrange(r render.Rect)      { p.child.Arrange(r) }
-func (p passthrough) Paint(cv *render.Canvas)    { p.child.Paint(cv) }
-func (p passthrough) HitTest(pt Point) Widget    { return p.child.HitTest(pt) }
-func (p passthrough) Children() []Widget         { return []Widget{p.child} }
+func (p passthrough) Measure(axis Axis, forSize int) Sizes { return p.child.Measure(axis, forSize) }
+func (p passthrough) Arrange(r render.Rect)                { p.child.Arrange(r) }
+func (p passthrough) Paint(cv *render.Canvas)              { p.child.Paint(cv) }
+func (p passthrough) HitTest(pt Point) Widget              { return p.child.HitTest(pt) }
+func (p passthrough) Children() []Widget                   { return []Widget{p.child} }
 
 func TestLayoutPendingSeesThroughWrappers(t *testing.T) {
 	root := NewBox(Column, 0, 0)
 	root.Append(NewSpacer(10, 10), false)
 	wrapped := passthrough{root}
-	wrapped.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(wrapped, Size{W: 100, H: 100})
 	wrapped.Arrange(render.Rect{W: 100, H: 100})
 	// A style change inside makes layout pending.
 	root.AttachStylesheet(NewStylesheet(`box { padding: 3px; }`, StylePriorityUser))
@@ -587,7 +587,7 @@ func TestLayoutPendingSeesThroughWrappers(t *testing.T) {
 		t.Fatal("a wrapper hid its root's pending layout")
 	}
 	for LayoutPending(wrapped) {
-		wrapped.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(wrapped, Size{W: 100, H: 100})
 		wrapped.Arrange(render.Rect{W: 100, H: 100})
 	}
 	if LayoutPending(wrapped) {
@@ -602,7 +602,7 @@ type uncached struct {
 	child Widget
 }
 
-func (u *uncached) Measure(c Constraints) Size { return u.child.Measure(c) }
+func (u *uncached) Measure(axis Axis, forSize int) Sizes { return u.child.Measure(axis, forSize) }
 func (u *uncached) Arrange(r render.Rect) {
 	u.ArrangeSelf(r)
 	u.child.Arrange(r)
@@ -619,17 +619,17 @@ func TestInvalidationClimbsPastAnUncachedWidget(t *testing.T) {
 	inner.Append(label, false)
 	root := NewBox(Column, 0, 0)
 	root.Append(&uncached{child: inner}, false)
-	con := Constraints{Max: Size{W: 400, H: 400}}
+	con := Size{W: 400, H: 400}
 	for range 3 {
-		root.Measure(con)
+		SizeWithin(root, con)
 		root.Arrange(render.Rect{W: 400, H: 400})
 	}
-	before := root.Measure(con)
+	before := SizeWithin(root, con)
 	label.SetText("a much longer label than before")
 	if !LayoutPending(root) {
 		t.Fatal("a label change below an uncached widget left the root clean")
 	}
-	if after := root.Measure(con); after.W <= before.W {
+	if after := SizeWithin(root, con); after.W <= before.W {
 		t.Errorf("root still measures %v after the label grew (was %v)", after, before)
 	}
 }
@@ -641,11 +641,11 @@ func TestInvalidationClimbsPastAnUncachedWidget(t *testing.T) {
 func TestEntryHonorsItsMargin(t *testing.T) {
 	face := testFace(t)
 	plain := NewEntry(face, 13, render.RGB(255, 255, 255))
-	base := plain.Measure(Constraints{Max: Size{W: 500, H: 100}})
+	base := SizeWithin(plain, Size{W: 500, H: 100})
 	loadCSS(t, `.m { margin: 1px 12px 8px 4px; }`)
 	e := NewEntry(face, 13, render.RGB(255, 255, 255))
 	e.AddClass("m")
-	if got, want := e.Measure(Constraints{Max: Size{W: 500, H: 100}}), (Size{W: base.W + 16, H: base.H + 9}); got != want {
+	if got, want := SizeWithin(e, Size{W: 500, H: 100}), (Size{W: base.W + 16, H: base.H + 9}); got != want {
 		t.Errorf("measure = %+v, want %+v (the field plus its margin)", got, want)
 	}
 	e.Arrange(render.Rect{W: 300, H: 40})
@@ -668,7 +668,7 @@ switch.hot { --knob: #ffff00; }
 switch slider { background-color: var(--knob, #0000ff); }`)
 	t.Cleanup(anim.SetInstant(true))
 	s := NewSwitch(false)
-	if sz := s.Measure(Constraints{Max: Size{W: 200, H: 200}}); sz != (Size{W: 50, H: 30}) {
+	if sz := SizeWithin(s, Size{W: 200, H: 200}); sz != (Size{W: 50, H: 30}) {
 		t.Fatalf("measure = %v, want the 50x30 min size", sz)
 	}
 	s.Arrange(render.Rect{W: 50, H: 30})
@@ -717,7 +717,7 @@ func TestTransformOnScaledOutput(t *testing.T) {
 		b.AddClass("t")
 		root := NewBox(Column, 0, 0)
 		root.Append(b, false)
-		root.Measure(Constraints{Max: Size{W: 60, H: 30}})
+		SizeWithin(root, Size{W: 60, H: 30})
 		root.Arrange(render.Rect{W: 60, H: 30})
 		w, h := 60*num, 30*num
 		data := make([]byte, render.Stride(w)*h)

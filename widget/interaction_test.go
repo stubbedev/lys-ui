@@ -53,7 +53,7 @@ func TestCSSCursorOf(t *testing.T) {
 	inner := NewLabel(face, 14, "inherited", render.RGB(255, 255, 255))
 	box := NewBox(Row, 0, 0)
 	box.Append(inner, true)
-	box.Measure(Constraints{Max: Size{W: 100, H: 30}})
+	SizeWithin(box, Size{W: 100, H: 30})
 	box.Arrange(render.Rect{W: 100, H: 30})
 	if got := CSSCursorOf(inner); got != "crosshair" {
 		t.Errorf("inherited css cursor = %q, want crosshair", got)
@@ -75,7 +75,7 @@ func TestPointerEventsNone(t *testing.T) {
 	root := NewStack()
 	root.Add("behind", behind)
 	root.Add("ghost", ghost)
-	root.Measure(Constraints{Max: Size{W: 100, H: 40}})
+	SizeWithin(root, Size{W: 100, H: 40})
 	root.Arrange(render.Rect{W: 100, H: 40})
 	if hit := root.HitTest(Point{X: 50, Y: 20}); hit == nil {
 		t.Fatal("unstyled stack hit nothing")
@@ -168,7 +168,7 @@ func TestTouchActionGatesAxisPixels(t *testing.T) {
 			tall.Append(newStub(50, 20), false)
 		}
 		s := NewScroll(tall)
-		s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+		SizeWithin(s, Size{W: 60, H: 60})
 		s.Arrange(render.Rect{W: 60, H: 60})
 		return s, &Router{Root: s}
 	}
@@ -180,7 +180,7 @@ func TestTouchActionGatesAxisPixels(t *testing.T) {
 		tall.Append(st, false)
 	}
 	s := NewScroll(tall)
-	s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+	SizeWithin(s, Size{W: 60, H: 60})
 	s.Arrange(render.Rect{W: 60, H: 60})
 	r := &Router{Root: s}
 	loadCSS(t, `.gated { touch-action: pan-x; }`)

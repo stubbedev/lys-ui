@@ -60,23 +60,21 @@ func (b *CenterBox) along(s Size) (main, cross int) {
 
 // Measure sizes to the three naturals end to end along the axis, as
 // thick as the thickest.
-func (b *CenterBox) Measure(con Constraints) Size {
-	if sz, ok := b.measureHit(con); ok {
+func (b *CenterBox) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := b.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := b.style(b)
-	return b.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		var main, cross int
+	return b.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		var req Sizes
 		for _, c := range b.Children() {
-			m, x := b.along(measureChild(b, c, Constraints{Max: inner.Max}))
-			main += m
-			cross = max(cross, x)
+			if axis == b.axis {
+				req = req.plus(measureChild(b, c, axis, forSize))
+				continue
+			}
+			req = req.widest(measureChild(b, c, axis, measureChild(b, c, b.axis, Unknown).Nat))
 		}
-		sz := Size{W: main, H: cross}
-		if b.axis == Column {
-			sz = Size{W: cross, H: main}
-		}
-		return clampSize(sz, inner)
+		return req
 	}))
 }
 
@@ -89,13 +87,12 @@ func (b *CenterBox) ArrangeRoot(r render.Rect) { b.node.Arrange(r) }
 func (b *CenterBox) Arrange(r render.Rect) {
 	border, inner := boxRects(boxOf(b.style(b), render.Insets{}), r)
 	b.ArrangeRoot(border)
-	size, _ := b.along(Size{W: inner.W, H: inner.H})
+	size, cross := b.along(Size{W: inner.W, H: inner.H})
 	extent := func(w Widget) int {
 		if w == nil {
 			return 0
 		}
-		m, _ := b.along(measureChild(b, w, Constraints{Max: Size{W: inner.W, H: inner.H}}))
-		return m
+		return min(measureChild(b, w, b.axis, cross).Nat, size)
 	}
 	ss, cs, es := extent(b.start), extent(b.center), extent(b.end)
 	cpos := centerPos(size, ss, cs, es)

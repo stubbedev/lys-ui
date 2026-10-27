@@ -19,7 +19,7 @@ func paintCard(t *testing.T, th *Theme) []byte {
 	SetTheme(th)
 	child := NewBox(Column, 4, 4)
 	e := NewElevation(child).WithPlate(render.RGB(200, 60, 60))
-	e.Measure(Constraints{Max: Size{W: 300, H: 300}})
+	SizeWithin(e, Size{W: 300, H: 300})
 	e.Arrange(render.Rect{X: 20, Y: 20, W: 40, H: 30})
 	data := make([]byte, render.Stride(80)*80)
 	e.Paint(render.New(data, render.Stride(80), 80, 80))
@@ -138,7 +138,7 @@ func TestElevationHitTestExcludesGutter(t *testing.T) {
 
 	child := NewBox(Column, 2, 2)
 	e := NewElevation(child)
-	e.Measure(Constraints{Max: Size{W: 300, H: 300}})
+	SizeWithin(e, Size{W: 300, H: 300})
 	e.Arrange(render.Rect{X: 20, Y: 20, W: 40, H: 30})
 
 	if hit := e.HitTest(Point{X: 15, Y: 35}); hit != nil {
@@ -157,7 +157,7 @@ func TestElevationRingDamage(t *testing.T) {
 	SetTheme(DarkTheme()) // blur 16
 
 	e := NewElevation(NewBox(Column, 0, 0)).WithPlate(render.RGB(10, 10, 10))
-	e.Measure(Constraints{Max: Size{W: 300, H: 300}})
+	SizeWithin(e, Size{W: 300, H: 300})
 	e.Arrange(render.Rect{X: 20, Y: 20, W: 40, H: 30})
 
 	rects, any := CollectDamage(e)
@@ -214,7 +214,7 @@ func TestToastShadowHitTestAndRing(t *testing.T) {
 	pinAnimClock(t)
 
 	toast := NewToast(testFace(t), "Saved", 0)
-	toast.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	SizeWithin(toast, Size{W: 400, H: 100})
 	toast.Arrange(render.Rect{X: 40, Y: 40, W: 120, H: 32})
 
 	// Clicks just outside the logical rect pass through, even though

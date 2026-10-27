@@ -158,20 +158,21 @@ func ownContainingBlock(w Widget, v *style.Values) render.Rect {
 // from its side, left and top first; with neither set the box keeps its
 // static position, the corner the container's flow left for it.
 func placeOutOfFlow(w Widget, v *style.Values, static Point, cb render.Rect) {
-	ws := resolveAxis(w, v, Row, cb.W, cb.H)
-	hs := resolveAxis(w, v, Column, cb.H, cb.W)
+	ws := resolveAxis(w, v, Row, cb.W)
+	hs := resolveAxis(w, v, Column, cb.H)
 	left, hasL := insetOf(v, 3, cb.W)
 	right, hasR := insetOf(v, 1, cb.W)
 	top, hasT := insetOf(v, 0, cb.H)
 	bottom, hasB := insetOf(v, 2, cb.H)
 	availW := max(0, cb.W-left-right)
 	availH := max(0, cb.H-top-bottom)
+	basis := Size{W: cb.W, H: cb.H}
 	width := ws.clamp(ws.size)
 	if !ws.definite {
 		if hasL && hasR {
 			width = ws.clamp(availW)
 		} else {
-			width = measureOuter(w, Constraints{Max: Size{W: availW, H: availH}}).W
+			width = measureOuter(w, Row, Unknown, basis).Within(availW)
 		}
 	}
 	height := hs.clamp(hs.size)
@@ -179,7 +180,7 @@ func placeOutOfFlow(w Widget, v *style.Values, static Point, cb render.Rect) {
 		if hasT && hasB {
 			height = hs.clamp(availH)
 		} else {
-			height = measureOuter(w, Constraints{Min: Size{W: width}, Max: Size{W: width, H: availH}}).H
+			height = measureOuter(w, Column, width, basis).Within(availH)
 		}
 	}
 	auto := v.MarginAuto
@@ -207,10 +208,6 @@ func placeOutOfFlow(w Widget, v *style.Values, static Point, cb render.Rect) {
 		W: width,
 		H: height,
 	}
-	// A widget always measures before it arranges: a definite size on
-	// both axes skipped the shrink-to-fit measures, and a container's
-	// arrange places its children from what its measure recorded.
-	measureOuter(w, Constraints{Min: Size{W: width, H: height}, Max: Size{W: width, H: height}})
 	w.Arrange(layoutMarginOf(w).Shrink(r))
 }
 

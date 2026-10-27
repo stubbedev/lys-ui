@@ -10,7 +10,7 @@ func TestEntryClickToCaret(t *testing.T) {
 	face := entryFace(t)
 	e := NewEntry(face, 13, render.RGB(255, 255, 255))
 	e.SetText("hello")
-	e.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(e, Size{W: 200, H: 100})
 	e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 
 	t.Run("clicking past the end puts the caret at the end", func(t *testing.T) {

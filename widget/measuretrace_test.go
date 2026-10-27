@@ -16,14 +16,14 @@ func TestMeasureMissReport(t *testing.T) {
 	inner.Append(newStub(10, 10), false)
 	root := NewBox(Column, 0, 0)
 	root.Append(inner, false)
-	root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(root, Size{W: 100, H: 100})
 	MeasureMissReport()
-	root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(root, Size{W: 100, H: 100})
 	if report := MeasureMissReport(); report != "" {
 		t.Errorf("a cached layout reported %q", report)
 	}
 	inner.Append(newStub(10, 10), false)
-	root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(root, Size{W: 100, H: 100})
 	report := MeasureMissReport()
 	if !debug.Enabled {
 		if report != "" {
@@ -46,44 +46,39 @@ type computeCounter struct {
 	computed int
 }
 
-func (c *computeCounter) Measure(con Constraints) Size {
-	if s, ok := c.measureHit(con); ok {
+func (c *computeCounter) Measure(axis Axis, forSize int) Sizes {
+	if s, ok := c.measureHit(axis, forSize); ok {
 		return s
 	}
 	c.computed++
-	return c.measureStore(con, Size{W: min(con.Max.W, 50), H: c.computed})
+	return c.measureStore(axis, forSize, FixedSizes(c.computed))
 }
 func (c *computeCounter) Paint(*render.Canvas) {}
 func (c *computeCounter) HitTest(Point) Widget { return nil }
 
-// A page in a vertical scroll beside a sidebar meets four constraint
-// sets each frame (the row's whole width and the width the sidebar
-// leaves, each with and without the scrollbar gutter): all four stay
-// cached, and a fifth evicts the least recently used (#397).
-func TestMeasureCacheHoldsFourConstraintSets(t *testing.T) {
+// A page in a vertical scroll beside a sidebar is asked its height at
+// four widths each frame (the row's whole width and the width the
+// sidebar leaves, each with and without the scrollbar gutter): all four
+// stay cached, and a fifth evicts the least recently used (#397).
+func TestMeasureCacheHoldsFourQueries(t *testing.T) {
 	c := &computeCounter{}
-	sets := []Constraints{
-		{Max: Size{W: 1812, H: unboundedPx}},
-		{Max: Size{W: 1820, H: unboundedPx}},
-		{Max: Size{W: 1556, H: unboundedPx}},
-		{Max: Size{W: 1564, H: unboundedPx}},
-	}
+	widths := []int{1812, 1820, 1556, 1564}
 	for range 3 {
-		for _, con := range sets {
-			c.Measure(con)
+		for _, w := range widths {
+			c.Measure(Column, w)
 		}
 	}
 	if c.computed != 4 {
-		t.Fatalf("three passes over four constraint sets computed %d times, want 4", c.computed)
+		t.Fatalf("three passes over four widths computed %d times, want 4", c.computed)
 	}
-	c.Measure(Constraints{Max: Size{W: 900, H: 600}})
-	c.Measure(sets[3])
-	c.Measure(sets[2])
-	c.Measure(sets[1])
+	c.Measure(Column, 900)
+	c.Measure(Column, widths[3])
+	c.Measure(Column, widths[2])
+	c.Measure(Column, widths[1])
 	if c.computed != 5 {
-		t.Errorf("computed %d times, want 5: the most recent sets kept", c.computed)
+		t.Errorf("computed %d times, want 5: the most recent widths kept", c.computed)
 	}
-	c.Measure(sets[0])
+	c.Measure(Column, widths[0])
 	if c.computed != 6 {
 		t.Errorf("computed %d times, want 6: the least recently used set evicted", c.computed)
 	}
@@ -93,13 +88,12 @@ func TestMeasureCacheHoldsFourConstraintSets(t *testing.T) {
 // sizes the other widths were measured at under the old style (#391).
 func TestMeasureCacheDropsEveryEntryOnAStyleChange(t *testing.T) {
 	c := &computeCounter{}
-	a, b := Constraints{Max: Size{W: 100, H: 100}}, Constraints{Max: Size{W: 200, H: 100}}
-	c.Measure(a)
-	c.Measure(b)
+	c.Measure(Column, 100)
+	c.Measure(Column, 200)
 	styleGen++
-	c.Measure(a)
-	if got := c.Measure(b); got.H != 4 {
-		t.Errorf("width b after the style change returned the old size %v, want a fresh measure", got)
+	c.Measure(Column, 100)
+	if got := c.Measure(Column, 200); got.Nat != 4 {
+		t.Errorf("width 200 after the style change returned the old request %v, want a fresh measure", got)
 	}
 }
 

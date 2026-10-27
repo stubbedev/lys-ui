@@ -37,7 +37,7 @@ func newDumpFixture(t *testing.T) *dumpFixture {
 		Append(button, false).
 		Append(entry, false).
 		Append(slider, false)
-	column.Measure(Constraints{Max: Size{W: 400, H: 300}})
+	SizeWithin(column, Size{W: 400, H: 300})
 	column.Arrange(render.Rect{X: 0, Y: 0, W: 400, H: 300})
 	r := &Router{Root: column}
 	// Hover the button and hold the press - a Button is a hit-test

@@ -35,7 +35,7 @@ func TestIconButtonSize(t *testing.T) {
 		}
 	}
 	label := NewLabel(testFace(t), 14, "Archive", 0)
-	textW := label.Measure(unbounded).W
+	textW := naturalSize(label).W
 	if got := measure(label, css.Ghost); got.W != textW+32 {
 		t.Errorf("labelled ghost button %v wide, want the label %d plus 16px padding each side", got.W, textW)
 	}

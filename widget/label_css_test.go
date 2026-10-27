@@ -12,7 +12,7 @@ import (
 )
 
 func measureLabel(l *Label, w int) Size {
-	return l.Measure(Constraints{Max: Size{W: w, H: 1 << 20}})
+	return SizeWithin(l, Size{W: w, H: 1 << 20})
 }
 
 func TestCSSWhiteSpaceNowrapOverridesWrap(t *testing.T) {

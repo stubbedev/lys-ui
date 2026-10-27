@@ -52,7 +52,7 @@ func TestDrawSurfacePixelsPersist(t *testing.T) {
 
 func TestDrawSurfaceDamageLimitedToRect(t *testing.T) {
 	s := NewDrawSurface(100, 80)
-	s.Measure(Constraints{Max: Size{W: 100, H: 80}})
+	SizeWithin(s, Size{W: 100, H: 80})
 	s.Arrange(render.Rect{X: 5, Y: 7, W: 100, H: 80})
 	warmDamage(s)
 

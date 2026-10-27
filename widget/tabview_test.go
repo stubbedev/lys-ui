@@ -75,7 +75,7 @@ func TestTabBarFollowsItsViewAndDropsMovePages(t *testing.T) {
 	a := v.Append(NewSpacer(10, 10), "a")
 	b := v.Append(NewSpacer(10, 10), "b")
 	bar := NewTabBar(face, 12, v)
-	bar.Measure(Constraints{Max: Size{W: 400, H: 40}})
+	SizeWithin(bar, Size{W: 400, H: 40})
 	bar.Arrange(render.Rect{W: 400, H: 40})
 	tabs := bar.Tabs()
 	if len(tabs) != 2 || !tabs[0].(*tabWidget).HasState(StateSelected) {
@@ -109,7 +109,7 @@ func TestTabOverviewSnapshotsPagesAndSelects(t *testing.T) {
 	v.Append(NewSpacer(50, 50), "one")
 	two := v.Append(NewSpacer(50, 50), "two")
 	o := NewTabOverview(face, 12, v, v)
-	o.Measure(Constraints{Max: Size{W: 640, H: 480}})
+	SizeWithin(o, Size{W: 640, H: 480})
 	o.Arrange(render.Rect{W: 640, H: 480})
 	o.SetOpen(true)
 	if !o.Open() || o.grid.Len() != 2 {

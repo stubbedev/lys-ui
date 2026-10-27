@@ -28,7 +28,7 @@ func TestProgressRingValue(t *testing.T) {
 // The ring's min sizes set the diameter, and the child centers in it.
 func TestProgressRingSizesFromCSS(t *testing.T) {
 	r := NewProgressRing(0.5)
-	if sz := r.Measure(Constraints{Max: Size{W: 200, H: 200}}); sz != (Size{W: progressRingSize, H: progressRingSize}) {
+	if sz := SizeWithin(r, Size{W: 200, H: 200}); sz != (Size{W: progressRingSize, H: progressRingSize}) {
 		t.Errorf("unstyled ring measures %v, want %d square", sz, progressRingSize)
 	}
 	loadCSS(t, `progressring { min-width: 48px; }`)

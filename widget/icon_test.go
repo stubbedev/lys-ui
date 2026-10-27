@@ -85,7 +85,7 @@ func paintIcon(w *Icon, box, num, denom int) ([]byte, int) {
 	data := make([]byte, render.Stride(dev)*dev)
 	cv := render.NewScaled(data, render.Stride(dev), dev, dev, num, denom)
 	cv.Clear(cv.Rect(), render.RGB(0, 0, 0))
-	w.Measure(Constraints{Max: Size{W: box, H: box}})
+	SizeWithin(w, Size{W: box, H: box})
 	w.Arrange(render.Rect{X: 0, Y: 0, W: box, H: box})
 	w.Paint(cv)
 	return data, dev
@@ -118,7 +118,7 @@ func TestNewIconStatic(t *testing.T) {
 	w := NewIcon(ic)
 
 	t.Run("natural size is the raster size", func(t *testing.T) {
-		sz := w.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		sz := SizeWithin(w, Size{W: 100, H: 100})
 		if sz.W != 16 || sz.H != 16 {
 			t.Errorf("Measure = %v, want 16x16", sz)
 		}
@@ -311,7 +311,7 @@ func TestIconMeasureWantsLogicalSize(t *testing.T) {
 		{NewThemeIcon("flag", 16), Size{W: 16, H: 16}},
 		{NewSVGIcon([]byte(testBlueSVG), 24), Size{W: 24, H: 24}},
 	} {
-		sz := tc.w.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		sz := SizeWithin(tc.w, Size{W: 100, H: 100})
 		if sz != tc.want {
 			t.Errorf("Measure = %v, want %v", sz, tc.want)
 		}
@@ -382,7 +382,7 @@ func TestIconPaintsCentered(t *testing.T) {
 	}
 	ink := func(w, h int) render.Rect {
 		icon := NewIcon(ic)
-		icon.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(icon, Size{W: w, H: h})
 		icon.Arrange(render.Rect{W: w, H: h})
 		buf := make([]byte, render.Stride(w)*h)
 		icon.Paint(render.New(buf, render.Stride(w), w, h))

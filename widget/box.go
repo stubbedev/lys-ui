@@ -23,7 +23,6 @@ const (
 type childEntry struct {
 	w      Widget
 	expand bool
-	nat    Size
 	// cross places the child across the box (AppendAligned);
 	// AlignFill stretches it.
 	cross Align
@@ -56,12 +55,10 @@ func (c *childEntry) crossAlign() Align {
 // height (Row) or width (Column) of the box, unless a child was added
 // with AppendAligned.
 //
-// Leftover main-axis space is distributed equally among expanding children
-// (the remainder is dropped). A column short of room takes the shortfall
-// from its expanding Shrinker children (a Scroll, or a box holding one),
-// down to their floors; a row takes it from any WidthShrinker child (an
-// entry, an ellipsizing label, a flow box), measuring those again at the
-// width they get. Past the floors the natural sizes overflow the box and
+// Every child gets its minimum; the room up to the naturals goes to the
+// children furthest below theirs last, and what is left past every
+// natural is shared equally among the expanding children (GTK's box
+// allocation). Short of the minimums the children overflow the box and
 // the painter's clip decides what is visible.
 //
 // A row's start/end semantics mirror with the box's direction: an RTL
@@ -91,9 +88,10 @@ type Box struct {
 	// relative to the content box, when cssHasBase.
 	cssBase    int
 	cssHasBase bool
-	// cssDefH is whether the last CSS flow measure found the content
-	// box's height definite: the arrange resolves the items'
-	// percentage heights against it exactly when the measure did.
+	// cssDefH is whether the parent's CSS pass sized the box's height
+	// definitely (a flex or grid item, a flow item with a definite
+	// height) for the arrange it is about to run, which resolves the
+	// items' percentage heights against it.
 	cssDefH bool
 	// departing are the removed children still painting their way out
 	// (departure.go).
@@ -285,172 +283,213 @@ func (b *Box) SetEnabled(enabled bool) {
 	invalidateTree(b)
 }
 
-// main returns the extent of s along the box's main axis.
-func (b *Box) main(s Size) int {
-	if b.axis == Row {
-		return s.W
-	}
-	return s.H
-}
-
-// withMain returns s with the main axis extent set to v.
-func (b *Box) withMain(s Size, v int) Size {
-	if b.axis == Row {
-		s.W = v
-	} else {
-		s.H = v
-	}
-	return s
-}
-
-// crossOf returns the extent of s along the box's cross axis.
-func (b *Box) crossOf(s Size) int {
-	if b.axis == Row {
-		return s.H
-	}
-	return s.W
-}
-
-// crossMax returns the cross-axis ceiling from con.
-func (b *Box) crossMax(con Constraints) int {
-	if b.axis == Row {
-		return con.Max.H
-	}
-	return con.Max.W
-}
-
-// Measure measures every child and reports the box's natural size: the
-// sum of child sizes plus spacing along the main axis, the largest child
-// across, all inside the CSS box (padding, border, margin, min sizes).
+// Measure reports the box's request inside its CSS box (padding,
+// border, margin, min sizes): along its axis the children's requests
+// end to end with the spacing between, every child the largest one's
+// when homogeneous; across, the largest child's at the share of the
+// main extent each would get, which Arrange hands out the same way.
 // The result is cached until an InvalidateLayout anywhere in the
-// subtree or a different constraint arrives, so a static tree costs no
-// recursion on later frames.
-func (b *Box) Measure(con Constraints) Size {
-	if sz, ok := b.measureHit(con); ok {
+// subtree, so a static tree costs no recursion on later frames.
+func (b *Box) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := b.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := b.style(b)
 	if mode := layoutModeOf(v); mode != modeBox {
-		return b.measureStore(con, measureBox(v, b.box(v), con, func(inner Constraints) Size {
-			return b.cssMeasure(v, mode, inner)
+		return b.measureStore(axis, forSize, measureBox(v, b.box(v), axis, forSize, func(axis Axis, forSize int) Sizes {
+			return b.cssMeasure(v, mode, axis, forSize)
 		}))
 	}
-	spacing := b.gap(v)
-	return b.measureStore(con, measureBox(v, b.box(v), con, func(inner Constraints) Size {
-		innerCross := b.crossMax(inner)
-		availMain := b.main(inner.Max)
-		count := 0
-		for _, c := range b.child {
-			// Parented first: whether a child flows is its cascade's
-			// call, which resolves only under its ancestors.
-			setParents(b, c.w)
-			if flows(c.w) {
-				count++
-			}
+	return b.measureStore(axis, forSize, measureBox(v, b.box(v), axis, forSize, func(axis Axis, forSize int) Sizes {
+		if axis == b.axis {
+			return b.mainRequest(v, forSize)
 		}
-		if count > 0 {
-			availMain -= spacing * (count - 1)
-		}
-		availMain = max(0, availMain)
-		total, cross, shown := 0, 0, 0
-		for i, c := range b.child {
-			if !flows(c.w) {
-				b.child[i].nat = Size{}
-				setParents(b, c.w)
-				continue
-			}
-			nat := measureChild(b, c.w, Constraints{Max: b.withMain(Size{W: innerCross, H: innerCross}, availMain)})
-			b.child[i].nat = nat
-			total += b.main(nat) + spacing
-			cross = max(cross, b.crossOf(nat))
-			shown++
-		}
-		if shown > 0 {
-			total -= spacing
-		}
-		// Homogeneous: every child carries the largest child's main size
-		// in its natural (gtk_box_layout's homogeneous), which Arrange
-		// lays out.
-		if b.homogeneous {
-			biggest := 0
-			for _, c := range b.child {
-				if flows(c.w) {
-					biggest = max(biggest, b.main(c.nat))
-				}
-			}
-			for i, c := range b.child {
-				if flows(c.w) {
-					b.child[i].nat = b.withMain(c.nat, biggest)
-				}
-			}
-			total = biggest*shown + spacing*max(shown-1, 0)
-		}
-		// Height for width: a row too narrow for its children narrows
-		// those that can give, and measures them again at the width
-		// they get, a wrapping child growing taller.
-		if b.axis == Row && total-spacing*max(shown-1, 0) > availMain {
-			buf := shrinkBufs.push(2 * len(b.child))
-			defer shrinkBufs.pop()
-			if takes := b.shrinkTakes(buf, total-spacing*max(shown-1, 0)-availMain); takes != nil {
-				total, cross = 0, 0
-				for i, c := range b.child {
-					if !flows(c.w) {
-						continue
-					}
-					if takes[i] > 0 {
-						b.child[i].nat = measureChild(b, c.w, Constraints{Max: Size{W: c.nat.W - takes[i], H: innerCross}})
-					}
-					total += b.child[i].nat.W + spacing
-					cross = max(cross, b.child[i].nat.H)
-				}
-				total -= spacing
-			}
-		}
-		if above, below, ok := b.baselineGroup(); ok {
-			cross = max(cross, above+below)
-		}
-		return b.withMain(Size{W: cross, H: cross}, total)
+		return b.crossRequest(v, forSize)
 	}))
 }
 
-// baselineGroup spans a row's baseline-aligned children: the most any
-// reaches above the shared baseline and below it.
-func (b *Box) baselineGroup() (above, below int, ok bool) {
+// mainRequest is the content's request along the axis at cross, its
+// extent across: the flowing children end to end with the spacing.
+func (b *Box) mainRequest(v *style.Values, cross int) Sizes {
+	var sum, largest Sizes
+	shown := 0
+	for _, c := range b.child {
+		// Parented first: whether a child flows is its cascade's call,
+		// which resolves only under its ancestors.
+		setParents(b, c.w)
+		if !flows(c.w) {
+			continue
+		}
+		r := measureChild(b, c.w, b.axis, cross)
+		sum, largest = sum.plus(r), largest.widest(r)
+		shown++
+	}
+	if shown == 0 {
+		return Sizes{}
+	}
+	if b.homogeneous {
+		sum = Sizes{Min: largest.Min * shown, Nat: largest.Nat * shown}
+	}
+	return sum.grow(b.gap(v) * (shown - 1))
+}
+
+// crossRequest is the content's request across at main, its extent
+// along the axis (Unknown for none): the largest child's at its share,
+// and a row's baseline group's span.
+func (b *Box) crossRequest(v *style.Values, main int) Sizes {
+	shares := boxShares.push(len(b.child))
+	defer boxShares.pop()
+	b.split(v, main, Unknown, shares)
+	cross := otherAxis(b.axis)
+	var req Sizes
+	above, below, grouped := 0, 0, false
+	for i, c := range b.child {
+		setParents(b, c.w)
+		if !flows(c.w) {
+			continue
+		}
+		r := measureChild(b, c.w, cross, shares[i])
+		req = req.widest(r)
+		if b.axis == Row && c.crossAlign() == AlignBaseline {
+			if base, ok := baselineOf(c.w); ok {
+				above, below, grouped = max(above, base), max(below, r.Nat-base), true
+			}
+		}
+	}
+	if grouped {
+		req = req.atLeast(above + below)
+	}
+	return req
+}
+
+// boxShares holds split's main-axis shares per layout depth: a box
+// keeps its level while it measures or arranges its children, whose
+// own splits run a level deeper.
+var (
+	boxShares  depthStack[int]
+	boxReqs    depthStack[Sizes]
+	boxExpands depthStack[bool]
+)
+
+// split hands out main, the content's extent along the axis, among the
+// flowing children as Arrange does, writing each one's share to out
+// (Unknown when main is): homogeneous, an equal share each; otherwise
+// allocate's split of their requests at cross, the extent across, the
+// expanders sharing what is left past every natural.
+func (b *Box) split(v *style.Values, main, cross int, out []int) {
+	shown := 0
+	for _, c := range b.child {
+		if flows(c.w) {
+			shown++
+		}
+	}
+	if main == Unknown || shown == 0 {
+		for i := range out {
+			out[i] = Unknown
+		}
+		return
+	}
+	avail := max(0, main-b.gap(v)*(shown-1))
+	if b.homogeneous {
+		k := 0
+		for i, c := range b.child {
+			if flows(c.w) {
+				out[i] = avail/shown + btoi(k < avail%shown)
+				k++
+			}
+		}
+		return
+	}
+	reqs := boxReqs.push(shown)
+	defer boxReqs.pop()
+	expand := boxExpands.push(shown)
+	defer boxExpands.pop()
+	shares := boxShares.push(shown)
+	defer boxShares.pop()
+	k := 0
+	for _, c := range b.child {
+		if flows(c.w) {
+			reqs[k] = measureChild(b, c.w, b.axis, cross)
+			expand[k] = b.expands(c)
+			k++
+		}
+	}
+	allocate(reqs, expand, avail, shares)
+	k = 0
+	for i, c := range b.child {
+		if flows(c.w) {
+			out[i] = shares[k]
+			k++
+		}
+	}
+}
+
+// baselineGroup spans a row's baseline-aligned children at the
+// heights tall gives them: the most any reaches above the shared
+// baseline and below it.
+func (b *Box) baselineGroup(tall []int) (above, below int, ok bool) {
 	if b.axis != Row {
 		return 0, 0, false
 	}
-	for _, c := range b.child {
+	for i, c := range b.child {
 		if c.crossAlign() != AlignBaseline || !flows(c.w) {
 			continue
 		}
 		if base, has := baselineOf(c.w); has {
-			above, below, ok = max(above, base), max(below, c.nat.H-base), true
+			above, below, ok = max(above, base), max(below, tall[i]-base), true
 		}
 	}
 	return above, below, ok
 }
 
+// crossExtents writes each flowing child's natural extent across at
+// its share of main, the content's extent along the axis, to out.
+func (b *Box) crossExtents(v *style.Values, main int, out []int) {
+	shares := boxShares.push(len(b.child))
+	defer boxShares.pop()
+	b.split(v, main, Unknown, shares)
+	for i, c := range b.child {
+		if flows(c.w) {
+			out[i] = measureChild(b, c.w, otherAxis(b.axis), shares[i]).Nat
+		}
+	}
+}
+
 // Baseline implements Baseliner. A row's is its baseline group's,
 // centered across the row as Arrange places it, else its first child
 // with a baseline where its alignment puts it; a column's is its first
-// child's.
+// child's. The children sit at their shares of the box's arranged
+// width, or of its natural width before it is arranged.
 func (b *Box) Baseline() (int, bool) {
 	v := b.style(b)
-	top := b.box(v).outer().Top
+	box := b.box(v)
+	top := box.outer().Top
 	if layoutModeOf(v) != modeBox {
 		return top + b.cssBase, b.cssHasBase
 	}
+	// bounds is the border box, the measure the margin box.
+	main := b.bounds.W - insetsAlong(box.border, Row) - insetsAlong(box.padding, Row)
+	if b.bounds.Empty() {
+		main = b.Measure(Row, Unknown).Nat - insetsAlong(box.outer(), Row)
+	}
+	main = max(0, main)
+	if b.axis == Column {
+		main = Unknown
+	}
+	tall := boxShares.push(len(b.child))
+	defer boxShares.pop()
+	b.crossExtents(v, main, tall)
 	cross := 0
-	for _, c := range b.child {
+	for i, c := range b.child {
 		if flows(c.w) {
-			cross = max(cross, b.crossOf(c.nat))
+			cross = max(cross, tall[i])
 		}
 	}
-	if above, below, ok := b.baselineGroup(); ok {
+	if above, below, ok := b.baselineGroup(tall); ok {
 		cross = max(cross, above+below)
 		return top + (cross-above-below)/2 + above, true
 	}
-	for _, c := range b.child {
+	for i, c := range b.child {
 		if !flows(c.w) {
 			continue
 		}
@@ -464,9 +503,9 @@ func (b *Box) Baseline() (int, bool) {
 		switch c.crossAlign() {
 		case AlignStart:
 		case AlignEnd:
-			base += cross - c.nat.H
+			base += cross - tall[i]
 		default: // stretched or centered text sits centered
-			base += (cross - c.nat.H) / 2
+			base += (cross - tall[i]) / 2
 		}
 		return top + base, true
 	}
@@ -528,13 +567,6 @@ func (b *Box) Spacing() int { return b.spacing }
 // orders them for paint and hit testing by their stacking keys. r is
 // the margin box; Bounds records the border box.
 func (b *Box) Arrange(r render.Rect) {
-	// The children lay out from the last measure; one taken under other
-	// constraints (a popover's sizing probe, a parent's earlier pass)
-	// would place them for a size the box no longer has. Measure at the
-	// arranged size first, as GTK sizes children for their allocation.
-	if size := (Size{W: r.W, H: r.H}); !b.measureSeen || b.measureOut != size {
-		b.Measure(Constraints{Max: size})
-	}
 	v := b.style(b)
 	border, inner := boxRects(b.box(v), r)
 	b.ArrangeRoot(border)
@@ -559,60 +591,33 @@ func (b *Box) Arrange(r render.Rect) {
 	b.restack(mode)
 }
 
-// expandShare is the k-th of n expanders' share of free leftover
-// pixels, gtk_box_size_allocate's split: an equal share each, the
-// first free % n of them one pixel more, so the shares fill free
-// exactly. Nothing is shared when there is no leftover.
-func expandShare(free, n, k int) int {
-	if free <= 0 || n <= 0 {
-		return 0
-	}
-	share := free / n
-	if k < free%n {
-		share++
-	}
-	return share
-}
-
-// arrangeBox is the programmatic box layout: expanding children share
-// the leftover main-axis space, the first of them a pixel more each
-// until none is left (gtk_box_size_allocate), and every child stretches
-// across the cross axis. Out-of-flow children take no space; they are
-// placed from where the flow reached.
+// arrangeBox is the programmatic box layout: the children split the
+// main axis as split hands it out (gtk_box_size_allocate), each stretched
+// across the cross axis unless its alignment keeps its natural extent
+// there. Out-of-flow children take no space; they are placed from where
+// the flow reached.
 func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 	spacing := b.gap(v)
-
-	sum := 0
-	shown := 0
-	for _, c := range b.child {
-		if !flows(c.w) {
-			continue
-		}
-		sum += b.main(c.nat)
-		shown++
-	}
-	avail := inner.W
+	main, cross := inner.W, inner.H
 	if b.axis == Column {
-		avail = inner.H
+		main, cross = inner.H, inner.W
 	}
-	free := avail - spacing*(shown-1) - sum
-	expanders := 0
-	for _, c := range b.child {
-		if b.expands(c) && flows(c.w) {
-			expanders++
+	sizes := boxShares.push(len(b.child))
+	defer boxShares.pop()
+	b.split(v, main, cross, sizes)
+	tall := boxArranged.push(len(b.child))
+	defer boxArranged.pop()
+	if b.axis == Row {
+		for i, c := range b.child {
+			if flows(c.w) {
+				tall[i] = min(measureChild(b, c.w, Column, sizes[i]).Nat, inner.H)
+			}
 		}
-	}
-	shared := 0
-	var takes []int
-	if free < 0 {
-		buf := shrinkBufs.push(2 * len(b.child))
-		defer shrinkBufs.pop()
-		takes = b.shrinkTakes(buf, -free)
 	}
 
 	pos := 0
 	rtl := b.axis == Row && b.dir == DirectionRTL
-	above, below, grouped := b.baselineGroup()
+	above, below, grouped := b.baselineGroup(tall)
 	groupTop := inner.Y + (inner.H-above-below)/2
 	for i, c := range b.child {
 		if !flows(c.w) {
@@ -630,14 +635,7 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 			setParents(b, c.w)
 			continue
 		}
-		size := b.main(c.nat)
-		if b.expands(c) {
-			size += expandShare(free, expanders, shared)
-			shared++
-		}
-		if takes != nil {
-			size -= takes[i]
-		}
+		size := sizes[i]
 		var rect render.Rect
 		if b.axis == Row {
 			x := inner.X + pos
@@ -645,8 +643,8 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 				x = inner.X + inner.W - pos - size // the row flows from the right edge
 			}
 			rect = render.Rect{X: x, Y: inner.Y, W: size, H: inner.H}
-			natural := Size{W: size, H: min(c.nat.H, inner.H)}
-			switch cross := c.crossAlign(); cross {
+			natural := Size{W: size, H: tall[i]}
+			switch al := c.crossAlign(); al {
 			case AlignFill:
 			case AlignBaseline:
 				if base, ok := baselineOf(c.w); grouped && ok {
@@ -655,12 +653,12 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 					rect = alignRect(rect, natural, AlignFill, AlignCenter)
 				}
 			default:
-				rect = alignRect(rect, natural, AlignFill, cross)
+				rect = alignRect(rect, natural, AlignFill, al)
 			}
 		} else {
 			rect = render.Rect{X: inner.X, Y: inner.Y + pos, W: inner.W, H: size}
-			if cross := c.crossAlign(); cross != AlignFill {
-				rect = alignRect(rect, Size{W: min(c.nat.W, inner.W), H: size}, cross, AlignFill)
+			if al := c.crossAlign(); al != AlignFill {
+				rect = alignRect(rect, Size{W: min(measureChild(b, c.w, Row, size).Nat, inner.W), H: size}, al, AlignFill)
 			}
 		}
 		arrangeChild(c.w, rect)
@@ -668,6 +666,9 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 		pos += size + spacing
 	}
 }
+
+// boxArranged holds arrangeBox's cross extents per layout depth.
+var boxArranged depthStack[int]
 
 // ArrangeRoot records the box's own rect.
 func (b *Box) ArrangeRoot(r render.Rect) {

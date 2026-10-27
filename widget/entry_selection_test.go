@@ -144,7 +144,7 @@ func TestEntrySelection(t *testing.T) {
 
 	t.Run("selection paints a highlight", func(t *testing.T) {
 		e := newEntry()
-		e.Measure(Constraints{Max: Size{W: 200, H: 100}})
+		SizeWithin(e, Size{W: 200, H: 100})
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 		e.MoveCursorExtending(4)
 		data := make([]byte, render.Stride(200)*30)

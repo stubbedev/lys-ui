@@ -19,7 +19,7 @@ func TestTabletBridge(t *testing.T) {
 	row := widget.NewBox(widget.Row, 0, 0)
 	row.Append(area, false)
 	row.Append(widget.NewSpacer(100, 100), false)
-	row.Measure(widget.Constraints{Max: widget.Size{W: 200, H: 100}})
+	widget.SizeWithin(row, widget.Size{W: 200, H: 100})
 	row.Arrange(render.Rect{W: 200, H: 100})
 	r := &widget.Router{Root: row}
 	in := Input{Tracker: widget.TouchTracker{Router: r}}

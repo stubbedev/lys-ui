@@ -107,9 +107,9 @@ func NewGolden(t *testing.T, w Widget, name string, opts ...goldenOption) {
 
 	frame := cfg.frame
 	if frame == (Size{}) {
-		frame = w.Measure(Constraints{Max: Size{W: 4096, H: 4096}})
+		frame = SizeWithin(w, Size{W: 4096, H: 4096})
 	} else {
-		w.Measure(Constraints{Max: Size{W: frame.W, H: frame.H}})
+		SizeWithin(w, Size{W: frame.W, H: frame.H})
 	}
 	w.Arrange(render.Rect{X: goldenPad, Y: goldenPad, W: frame.W, H: frame.H})
 	if cfg.afterArrange != nil {
@@ -440,7 +440,9 @@ func TestGoldenGridSqueeze(t *testing.T) {
 	wrap.SetWrap(true)
 	grid := NewGrid(8, 8)
 	grid.Attach(wrap, 0, 0, 1, 1)
-	grid.Attach(NewLabel(face, 12, "shrinks freely", th.Text), 1, 0, 1, 1)
+	shrinks := NewLabel(face, 12, "shrinks freely", th.Text)
+	shrinks.SetEllipsize(EllipsizeEnd)
+	grid.Attach(shrinks, 1, 0, 1, 1)
 	grid.Attach(NewLabel(face, 12, "spans the squeezed run", th.Text), 0, 1, 2, 1)
 	NewGolden(t, grid, "grid-squeeze", goldenTheme(th), goldenFrame(150, 70))
 }

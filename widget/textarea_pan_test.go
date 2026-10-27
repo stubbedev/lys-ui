@@ -13,7 +13,7 @@ func newUnwrappedArea(t *testing.T, s string) *TextArea {
 	t.Helper()
 	ta := newTextArea(t, s)
 	ta.SetWrap(false)
-	ta.Measure(Constraints{Max: Size{W: 5000, H: 1000}})
+	SizeWithin(ta, Size{W: 5000, H: 1000})
 	ta.Arrange(render.Rect{X: 3, Y: 0, W: 80, H: 80})
 	return ta
 }
@@ -205,7 +205,7 @@ func TestTextAreaMeasureCapsNaturalWidth(t *testing.T) {
 	t.Run("uncapped, the long line widens the natural width", func(t *testing.T) {
 		ta := newTextArea(t, paste)
 		ta.SetWrap(false)
-		if got := ta.Measure(Constraints{Max: Size{W: 5000, H: 1000}}); got.W < 1000 {
+		if got := SizeWithin(ta, Size{W: 5000, H: 1000}); got.W < 1000 {
 			t.Errorf("natural width = %d, want the content-hugging width (large)", got.W)
 		}
 	})
@@ -214,7 +214,7 @@ func TestTextAreaMeasureCapsNaturalWidth(t *testing.T) {
 		ta := newTextArea(t, paste)
 		ta.SetWrap(false)
 		ta.MaxWidth = 200
-		if got := ta.Measure(Constraints{Max: Size{W: 5000, H: 1000}}); got.W != 200 {
+		if got := SizeWithin(ta, Size{W: 5000, H: 1000}); got.W != 200 {
 			t.Errorf("capped width = %d, want 200 after a 500-rune paste", got.W)
 		}
 	})

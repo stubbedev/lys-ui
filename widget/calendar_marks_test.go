@@ -27,7 +27,7 @@ func TestCalendarMarksAndDetail(t *testing.T) {
 		return ""
 	}
 	c.SetTooltip("calendar")
-	c.Measure(Constraints{Max: Size{W: 400, H: 400}})
+	SizeWithin(c, Size{W: 400, H: 400})
 	c.Arrange(render.Rect{W: 400, H: 400})
 	c.HoverMove(center(t, c, day(14)))
 	if got := c.TooltipText(); got != "Release" {

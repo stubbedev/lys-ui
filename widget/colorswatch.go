@@ -55,9 +55,9 @@ func (s *ColorSwatch) SetSelected(on bool) { s.SetState(StateSelected, on) }
 func (s *ColorSwatch) Selected() bool { return s.HasState(StateSelected) }
 
 // Measure wants the min-width by min-height border box.
-func (s *ColorSwatch) Measure(con Constraints) Size {
+func (s *ColorSwatch) Measure(axis Axis, forSize int) Sizes {
 	v := s.style(s)
-	return clampSize(Size{W: picki(v, style.PropMinWidth, swatchSize), H: picki(v, style.PropMinHeight, swatchSize)}, con)
+	return FixedSizes(Size{W: picki(v, style.PropMinWidth, swatchSize), H: picki(v, style.PropMinHeight, swatchSize)}.Along(axis))
 }
 
 // Paint draws the box, then the color over a checkerboard inside the

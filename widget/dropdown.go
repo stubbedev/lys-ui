@@ -33,14 +33,11 @@ import (
 // instead of failing later, in shaping.
 type Dropdown struct {
 	node
-	face   render.Font
-	sizePx float64
-	// measuredW is the width Measure last returned, what
-	// ShrinkableWidth gives up from.
-	measuredW int
-	dir       Direction
-	items     []string
-	selected  int
+	face     render.Font
+	sizePx   float64
+	dir      Direction
+	items    []string
+	selected int
 	// entries are the rich rows (their labels mirrored in items);
 	// faceIcon is the selected row's icon on the face, built for
 	// faceFor.
@@ -318,33 +315,28 @@ const (
 // Measure wants the widest item plus arrow and padding, and one row
 // height; the closed face keeps its width whatever the selection, so a
 // change never relayouts the surrounding tree. 80px is the width
-// floor.
-func (d *Dropdown) Measure(con Constraints) Size {
-	if sz, ok := d.measureHit(con); ok {
+// floor. It needs the label start, the icon slot, an ellipsis and the
+// chevron, the selection ellipsizing into what is left.
+func (d *Dropdown) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := d.measureHit(axis, forSize); ok {
 		return sz
 	}
+	if axis == Column {
+		// The face button's min-height floors the height, as it does a
+		// button's: 36px unstyled, an entry's height.
+		h := max(d.face.Shape("lg", d.sizePx).LineHeight()+12, picki(d.faceBtn.style(&d.faceBtn), style.PropMinHeight, entryMinHeight))
+		return d.measureStore(axis, forSize, FixedSizes(h))
+	}
 	w := dropdownMinW
-	// The face button's min-height floors the height, as it does a
-	// button's: 36px unstyled, an entry's height.
-	h := max(d.face.Shape("lg", d.sizePx).LineHeight()+12, picki(d.faceBtn.style(&d.faceBtn), style.PropMinHeight, entryMinHeight))
 	slot := d.iconSlot()
 	for _, label := range d.items {
 		if adv := int(d.face.Shape(label, d.sizePx).Advance()+0.5) + 14 + 24 + slot; adv > w {
 			w = adv
 		}
 	}
-	sz := clampSize(Size{W: w, H: h}, con)
-	d.measuredW = sz.W
-	return d.measureStore(con, sz)
-}
-
-// ShrinkableWidth implements WidthShrinker: the face gives up its
-// width down to the label start, the icon slot, an ellipsis and the
-// chevron (80px at least), the selection ellipsizing into what is left.
-func (d *Dropdown) ShrinkableWidth() int {
 	ell := int(math.Ceil(d.face.Shape(render.Ellipsis, d.sizePx).Advance()))
-	floor := max(dropdownMinW, dropdownLabelX+d.iconSlot()+ell+dropdownChevronW)
-	return max(0, d.measuredW-floor)
+	least := max(dropdownMinW, dropdownLabelX+slot+ell+dropdownChevronW)
+	return d.measureStore(axis, forSize, Sizes{Min: min(least, w), Nat: w})
 }
 
 // Paint draws the face — surface, selection, chevron — in its pressed
@@ -379,7 +371,7 @@ func (d *Dropdown) Paint(cv *render.Canvas) {
 	lx := d.bounds.X + dropdownLabelX
 	if ic := d.selectedIcon(); ic != nil {
 		setParents(d, ic)
-		sz := ic.Measure(Constraints{Max: Size{W: d.bounds.W, H: d.bounds.H}})
+		sz := SizeWithin(ic, Size{W: d.bounds.W, H: d.bounds.H})
 		ic.Arrange(render.Rect{X: lx, Y: d.bounds.Y + (d.bounds.H-sz.H)/2, W: sz.W, H: sz.H})
 		PaintChild(cv, ic)
 		lx += sz.W + dropdownIconGap
@@ -543,7 +535,7 @@ func (d *Dropdown) iconSlot() int {
 	}
 	w := 0
 	for _, ic := range d.slotIcons {
-		w = max(w, ic.Measure(Constraints{Max: Size{W: 1 << 10, H: 1 << 10}}).W+dropdownIconGap)
+		w = max(w, ic.Measure(Row, Unknown).Nat+dropdownIconGap)
 	}
 	return w
 }

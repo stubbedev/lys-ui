@@ -21,7 +21,7 @@ func TestMaximumSizeCapsMeasureAndSlot(t *testing.T) {
 	face := goldenFace(t)
 	label := NewLabel(face, 14, strings.Repeat("wide ", 40), 0)
 	label.SetMaximumSize(50, 0)
-	if sz := MeasureAsChild(label, Constraints{Max: Size{W: 600, H: 100}}); sz.W != 50 {
+	if sz := SizeWithinAsChild(label, Size{W: 600, H: 100}); sz.W != 50 {
 		t.Errorf("measured %d wide, want the 50 cap", sz.W)
 	}
 	col := NewBox(Column, 0, 0)

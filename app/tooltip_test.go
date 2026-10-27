@@ -72,15 +72,7 @@ type tipTarget struct {
 
 func newTipTarget(text string) *tipTarget { return &tipTarget{tooltip: text} }
 
-func (t *tipTarget) Measure(con widget.Constraints) widget.Size {
-	if con.Max.W < 8 {
-		return con.Max
-	}
-	if con.Max.H < 8 {
-		return con.Max
-	}
-	return widget.Size{W: 8, H: 8}
-}
+func (t *tipTarget) Measure(widget.Axis, int) widget.Sizes { return widget.Sizes{Nat: 8} }
 
 func (t *tipTarget) Arrange(r render.Rect)   { t.bounds = r }
 func (t *tipTarget) Paint(cv *render.Canvas) {}
@@ -162,7 +154,7 @@ func TestTooltipGhostOnRemove(t *testing.T) {
 	box := widget.NewBox(widget.Row, 0, 0)
 	target := newTipTarget("hover text")
 	box.Append(target, false)
-	box.Measure(widget.Constraints{Max: widget.Size{W: 100, H: 20}})
+	widget.SizeWithin(box, widget.Size{W: 100, H: 20})
 	box.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 20})
 	router := &widget.Router{Root: box}
 

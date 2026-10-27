@@ -53,7 +53,7 @@ func TestGoldenControls(t *testing.T) {
 			toggles.Append(NewCheckButton(false), false).Append(NewCheckButton(true), false).
 				Append(NewSwitch(false), false).Append(NewSwitch(true), false)
 			inputs.Append(toggles, false).Append(NewSlider(0, 100, 1, 40), false).Append(NewProgressBar(0.6), false)
-			h := inputs.Measure(Constraints{Max: Size{W: 260, H: 4096}}).H
+			h := SizeWithin(inputs, Size{W: 260, H: 4096}).H
 			NewGolden(t, inputs, "inputs-"+tc.name, goldenTheme(tc.th), goldenFrame(260, h), goldenFocus(focused))
 		})
 	}

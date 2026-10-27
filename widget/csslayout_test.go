@@ -20,7 +20,7 @@ func cssTree(t *testing.T, css string, root Widget, w, h int) {
 func settle(t *testing.T, root Widget, w, h int) {
 	t.Helper()
 	for range 6 {
-		root.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(root, Size{W: w, H: h})
 		root.Arrange(render.Rect{W: w, H: h})
 		if !LayoutPending(root) {
 			return
@@ -594,7 +594,7 @@ func TestFloats(t *testing.T) {
 	}
 	only := cssBox(Column, "c", item(50, 50, "fl"))
 	loadCSS(t, `.c { display: block; } .fl { float: left; }`)
-	if sz := only.Measure(Constraints{Max: Size{W: 300, H: 300}}); sz.H != 50 {
+	if sz := SizeWithin(only, Size{W: 300, H: 300}); sz.H != 50 {
 		t.Errorf("container height %d, want the float's 50", sz.H)
 	}
 }
@@ -823,7 +823,7 @@ func TestCSSLayoutSteadyFrameAllocatesNothing(t *testing.T) {
 		.fl { order: -1; } .ib { display: inline-block; }`, root, 300, 200)
 	frame := func() {
 		styleGen++
-		root.Measure(Constraints{Max: Size{W: 300, H: 200}})
+		SizeWithin(root, Size{W: 300, H: 200})
 		root.Arrange(render.Rect{W: 300, H: 200})
 	}
 	frame()

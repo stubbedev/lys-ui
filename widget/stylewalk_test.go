@@ -54,7 +54,7 @@ func TestStyleWalkReachesEveryParentedWidget(t *testing.T) {
 		root.Append(w, false)
 	}
 	for range 2 {
-		root.Measure(Constraints{Max: Size{W: 400, H: 2000}})
+		SizeWithin(root, Size{W: 400, H: 2000})
 		root.Arrange(render.Rect{W: 400, H: 2000})
 		data := make([]byte, render.Stride(400)*2000)
 		root.Paint(render.New(data, render.Stride(400), 400, 2000))
@@ -82,7 +82,7 @@ func TestStyleWalkReachesComposites(t *testing.T) {
 	root.Append(NewCalendar(face, 12, Date{2026, 10, 2}), false)
 	root.Append(NewColorChooser(face, 12, render.RGB(1, 2, 3)), false)
 	for range 2 {
-		root.Measure(Constraints{Max: Size{W: 400, H: 1200}})
+		SizeWithin(root, Size{W: 400, H: 1200})
 		root.Arrange(render.Rect{W: 400, H: 1200})
 		data := make([]byte, render.Stride(400)*1200)
 		root.Paint(render.New(data, render.Stride(400), 400, 1200))
@@ -130,8 +130,8 @@ func TestFirstMeasureIsStyled(t *testing.T) {
 		host := NewBox(Column, 0, 0)
 		host.AddClass("host")
 		host.Append(wrap(inner), false)
-		host.Measure(Constraints{Max: Size{W: 200, H: 200}})
-		if got := inner.Measure(Constraints{Max: Size{W: 200, H: 200}}); got.H != 30 {
+		SizeWithin(host, Size{W: 200, H: 200})
+		if got := SizeWithin(inner, Size{W: 200, H: 200}); got.H != 30 {
 			t.Errorf("%s: first measure %v, want the styled 30 tall", name, got)
 		}
 	}

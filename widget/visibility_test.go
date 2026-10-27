@@ -12,7 +12,7 @@ func TestBoxSkipsInvisibleChildren(t *testing.T) {
 	b := NewLabel(testFace(t), 12, "bb", 0xFF000000)
 	row.Append(a, false)
 	row.Append(b, false)
-	row.Measure(Constraints{Max: Size{W: 200, H: 40}})
+	SizeWithin(row, Size{W: 200, H: 40})
 	row.Arrange(render.Rect{W: 100, H: 40})
 	if row.Bounds().W < 40 {
 		t.Fatalf("row = %+v, want both labels sized", row.Bounds())
@@ -20,7 +20,7 @@ func TestBoxSkipsInvisibleChildren(t *testing.T) {
 
 	// Hiding the first label collapses its slot; the sibling slides in.
 	a.SetVisible(false)
-	row.Measure(Constraints{Max: Size{W: 200, H: 40}})
+	SizeWithin(row, Size{W: 200, H: 40})
 	row.Arrange(render.Rect{W: 100, H: 40})
 	if got := b.Bounds(); got.X != row.Bounds().X {
 		t.Errorf("hidden label left a gap: b at %+v", got)
@@ -39,7 +39,7 @@ func TestBoxSkipsInvisibleChildren(t *testing.T) {
 
 	// Showing it again restores the layout.
 	a.SetVisible(true)
-	row.Measure(Constraints{Max: Size{W: 200, H: 40}})
+	SizeWithin(row, Size{W: 200, H: 40})
 	row.Arrange(render.Rect{W: 100, H: 40})
 	if got := b.Bounds(); got.X == row.Bounds().X {
 		t.Errorf("b never moved back: %+v", got)
@@ -52,7 +52,7 @@ func TestIsVisibleFoldsAncestors(t *testing.T) {
 	leaf := NewLabel(testFace(t), 12, "x", 0xFF000000)
 	root.Append(inner, false)
 	inner.Append(leaf, false)
-	root.Measure(Constraints{Max: Size{W: 200, H: 40}})
+	SizeWithin(root, Size{W: 200, H: 40})
 	root.Arrange(render.Rect{W: 100, H: 40})
 
 	// The leaf's own flag stays true while only its ancestor is hidden;

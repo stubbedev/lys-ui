@@ -209,6 +209,17 @@ func NewStatusPage(face render.Font, iconName, title, description string) *Statu
 	return p
 }
 
+// Measure is the page's content request, wanting the column's full
+// width: a page fills the space it gets up to statusPageWidth, its
+// content centered in it, aligned or not.
+func (p *StatusPage) Measure(axis Axis, forSize int) Sizes {
+	req := p.composite.Measure(axis, forSize)
+	if axis == Row {
+		req.Nat = max(req.Nat, statusPageWidth+insetsAlong(p.insets().outer(), Row))
+	}
+	return req
+}
+
 // SetIcon shows w (an icon, typically 24px) centered on the muted
 // tile above the title; nil drops the tile.
 func (p *StatusPage) SetIcon(w Widget) {
@@ -277,7 +288,7 @@ func NewBanner(face render.Font, sizePx float64, title, buttonLabel string) *Ban
 	b.reveal.SetDuration(200 * time.Millisecond)
 	b.reveal.SetRevealed(false)
 	b.initComposite(b, b.reveal)
-	b.fillWidth = true
+	b.SetHExpand(true)
 	b.surface = func(th *Theme) Color { return th.HoverSurface() }
 	return b
 }
@@ -340,8 +351,8 @@ func (a *Avatar) Initials() string {
 }
 
 // Measure wants the avatar's square.
-func (a *Avatar) Measure(con Constraints) Size {
-	return clampSize(Size{W: a.size, H: a.size}, con)
+func (a *Avatar) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(a.size)
 }
 
 // Arrange records the rect.

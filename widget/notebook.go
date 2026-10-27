@@ -390,21 +390,27 @@ func (n *Notebook) SetEnabled(enabled bool) {
 	invalidateTree(n)
 }
 
-// Measure reports the tab bar height plus the largest page.
-func (n *Notebook) Measure(con Constraints) Size {
-	if sz, ok := n.measureHit(con); ok {
+// Measure reports the widest page's request, wanting the whole tab
+// strip across (it scrolls when narrower) and its height on top.
+func (n *Notebook) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := n.measureHit(axis, forSize); ok {
 		return sz
 	}
-	best := Size{}
-	for _, t := range n.tabs {
-		s := measureChild(n, t.w, con)
-		best.W = max(best.W, s.W)
-		best.H = max(best.H, s.H)
+	strip := n.layoutStrip(render.Rect{})
+	pageFor := forSize
+	if axis == Row && pageFor != Unknown {
+		pageFor = max(0, pageFor-strip.height)
 	}
-	strip := n.layoutStrip(render.Rect{W: con.Max.W})
-	best.W = max(best.W, strip.natural)
-	best.H += strip.height
-	return n.measureStore(con, clampSize(best, con))
+	var req Sizes
+	for _, t := range n.tabs {
+		req = req.widest(measureChild(n, t.w, axis, pageFor))
+	}
+	if axis == Column {
+		req = req.grow(strip.height)
+	} else {
+		req.Nat = max(req.Nat, strip.natural)
+	}
+	return n.measureStore(axis, forSize, req)
 }
 
 // Arrange lays out the tab strip and the visible page beneath it.
@@ -434,7 +440,9 @@ func (n *Notebook) layoutStrip(r render.Rect) notebookStrip {
 	for i, t := range n.tabs {
 		tv := t.part.style(t.part)
 		b := boxOf(tv, render.Insets{})
-		sz := measureBox(tv, b, unbounded, func(c Constraints) Size { return n.tabContent(t, c) })
+		sz := sizeWithin(func(axis Axis, forSize int) Sizes {
+			return measureBox(tv, b, axis, forSize, func(axis Axis, forSize int) Sizes { return n.tabContent(t, axis, forSize) })
+		}, Size{W: math.MaxInt, H: math.MaxInt})
 		if !tv.Has(style.PropMinWidth) {
 			sz.W = max(sz.W, tabWidth+b.margin.Left+b.margin.Right)
 		}
@@ -478,17 +486,18 @@ func (n *Notebook) expandTabs(s *notebookStrip) {
 			expanding++
 		}
 	}
-	free := s.row.W - s.total
-	if expanding == 0 || free <= 0 {
+	if expanding == 0 || s.row.W <= s.total {
 		return
 	}
-	x, k := 0, 0
+	req := make([]Sizes, len(n.tabs))
+	expand := make([]bool, len(n.tabs))
 	for i, t := range n.tabs {
+		req[i], expand[i] = FixedSizes(s.tabW[i]), n.tabExpands(t)
+	}
+	allocate(req, expand, s.row.W, s.tabW)
+	x := 0
+	for i := range n.tabs {
 		s.tabX[i] = x
-		if n.tabExpands(t) {
-			s.tabW[i] += expandShare(free, expanding, k)
-			k++
-		}
 		x += s.tabW[i]
 	}
 	s.total = x
@@ -514,20 +523,27 @@ func (n *Notebook) tabIndex(name string) int {
 	return slices.IndexFunc(n.tabs, func(t notebookTab) bool { return t.name == name })
 }
 
-// tabContent is a tab's content size: its label widget's natural size,
-// else its painted name's, plus the close box when Closable.
-func (n *Notebook) tabContent(t notebookTab, con Constraints) Size {
-	var sz Size
-	if t.part.label != nil {
-		sz = measureChild(t.part, t.part.label, con)
-	} else {
-		sh := n.face.Shape(t.name, tabTextPx)
-		sz = Size{W: int(math.Ceil(sh.Advance())), H: sh.LineHeight()}
-	}
+// tabContent is a tab's content request: its label widget's, else its
+// painted name's, beside the close box when Closable.
+func (n *Notebook) tabContent(t notebookTab, axis Axis, forSize int) Sizes {
+	close := 0
 	if n.Closable {
-		sz.W += tabCloseW
+		close = tabCloseW
 	}
-	return clampSize(sz, con)
+	if t.part.label == nil {
+		sh := n.face.Shape(t.name, tabTextPx)
+		if axis == Column {
+			return FixedSizes(sh.LineHeight())
+		}
+		return FixedSizes(int(math.Ceil(sh.Advance())) + close)
+	}
+	if axis == Column {
+		if forSize != Unknown {
+			forSize = max(0, forSize-close)
+		}
+		return measureChild(t.part, t.part.label, Column, forSize)
+	}
+	return measureChild(t.part, t.part.label, Row, forSize).grow(close)
 }
 
 // tabRect returns tab i's border box, scrolled.

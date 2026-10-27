@@ -93,7 +93,8 @@ func NewHeaderBar(face render.Font, sizePx float64) *HeaderBar {
 	h.row.Append(h.end, false)
 	h.row.AppendAligned(h.controlSlot, false, AlignCenter)
 	h.initComposite(h, h.row)
-	h.fillWidth, h.minHeight = true, int(sizePx)+22
+	h.SetHExpand(true)
+	h.minHeight = int(sizePx) + 22
 	h.surface = surfaceFill
 	return h
 }
@@ -263,7 +264,7 @@ func NewActionBar() *ActionBar {
 	row.Append(NewSpacer(0, 0), true)
 	row.Append(a.end, false)
 	a.initComposite(a, row)
-	a.fillWidth = true
+	a.SetHExpand(true)
 	a.surface = surfaceFill
 	return a
 }

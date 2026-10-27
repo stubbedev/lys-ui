@@ -362,15 +362,16 @@ func (t *Toast) actionWidth() int {
 }
 
 // Measure wants the text plus the action at the theme text size,
-// padded to a card; the host clamps the width.
-func (t *Toast) Measure(con Constraints) Size {
-	if sz, ok := t.measureHit(con); ok {
+// padded to a card, and needs only the action and the padding: the
+// host clamps the width and the text clips.
+func (t *Toast) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := t.measureHit(axis, forSize); ok {
 		return sz
 	}
-	w := 2 * toastPadX
+	w, text := 2*toastPadX, 0
 	h := 2 * toastPadY
 	if t.face != nil {
-		w += int(max(t.face.Shape(t.text, t.sizePx).Advance(), t.face.Shape(t.desc, t.sizePx).Advance()) + 0.5)
+		text = int(max(t.face.Shape(t.text, t.sizePx).Advance(), t.face.Shape(t.desc, t.sizePx).Advance()) + 0.5)
 		h += t.textHeight()
 	}
 	if t.action != "" {
@@ -379,7 +380,10 @@ func (t *Toast) Measure(con Constraints) Size {
 			h = max(h, t.face.Shape("lg", t.sizePx).LineHeight()+2*toastBtnPadY+2*toastPadY)
 		}
 	}
-	return t.measureStore(con, clampSize(Size{W: w, H: h}, con))
+	if axis == Column {
+		return t.measureStore(axis, forSize, FixedSizes(h))
+	}
+	return t.measureStore(axis, forSize, Sizes{Min: w, Nat: w + text})
 }
 
 // Paint draws the card, its text, and the action button at the current

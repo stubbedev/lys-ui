@@ -123,11 +123,11 @@ func (a *GPUArea) QueueFrame() {
 }
 
 // Measure claims no size of its own: the layout sizes the area.
-func (a *GPUArea) Measure(con Constraints) Size {
-	if sz, ok := a.measureHit(con); ok {
+func (a *GPUArea) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := a.measureHit(axis, forSize); ok {
 		return sz
 	}
-	return a.measureStore(con, clampSize(Size{}, con))
+	return a.measureStore(axis, forSize, Sizes{})
 }
 
 // Arrange places the area's surface over its bounds, creating it the

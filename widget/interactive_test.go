@@ -32,7 +32,7 @@ func TestIsInteractive(t *testing.T) {
 		lbl := NewLabel(face, 15, "click me", render.RGB(255, 255, 255))
 		btn := NewButton(NewBox(Row, 8, 0).Append(lbl, false), 10, 8)
 		root := NewBox(Column, 0, 0).Append(btn, false)
-		root.Measure(Constraints{Max: Size{W: 200, H: 100}})
+		SizeWithin(root, Size{W: 200, H: 100})
 		root.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 100})
 		bb := btn.Bounds()
 		over := root.HitTest(Point{X: bb.X + bb.W/2, Y: bb.Y + bb.H/2})
@@ -51,7 +51,7 @@ func TestIsInteractive(t *testing.T) {
 		}
 		sc := NewScroll(list)
 		root := NewBox(Column, 0, 0).Append(sc, true)
-		root.Measure(Constraints{Max: Size{W: 200, H: 120}})
+		SizeWithin(root, Size{W: 200, H: 120})
 		root.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 120})
 		b := sc.Bounds()
 		over := root.HitTest(Point{X: b.X + 5, Y: b.Y + 5})
@@ -66,7 +66,7 @@ func TestIsInteractive(t *testing.T) {
 func TestTogglesReceiveRouterClicks(t *testing.T) {
 	sw := NewSwitch(true)
 	root := NewBox(Column, 0, 0).Append(sw, false)
-	root.Measure(Constraints{Max: Size{W: 60, H: 40}})
+	SizeWithin(root, Size{W: 60, H: 40})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 40})
 	r := &Router{Root: root}
 	p := Point{X: sw.Bounds().X + 5, Y: sw.Bounds().Y + 5}
@@ -84,7 +84,7 @@ func TestTogglesReceiveRouterClicks(t *testing.T) {
 
 	check := NewCheckButton(false)
 	root2 := NewBox(Column, 0, 0).Append(check, false)
-	root2.Measure(Constraints{Max: Size{W: 60, H: 40}})
+	SizeWithin(root2, Size{W: 60, H: 40})
 	root2.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 40})
 	r2 := &Router{Root: root2}
 	p2 := Point{X: check.Bounds().X + 5, Y: check.Bounds().Y + 5}

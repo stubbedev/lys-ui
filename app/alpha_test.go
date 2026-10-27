@@ -27,17 +27,8 @@ type solid struct {
 	bounds  render.Rect
 }
 
-func (s *solid) Measure(con widget.Constraints) widget.Size {
-	sz := s.natural
-	if con.Max.W > 0 && sz.W > con.Max.W {
-		sz.W = con.Max.W
-	}
-	if con.Max.H > 0 && sz.H > con.Max.H {
-		sz.H = con.Max.H
-	}
-	sz.W = max(sz.W, con.Min.W)
-	sz.H = max(sz.H, con.Min.H)
-	return sz
+func (s *solid) Measure(axis widget.Axis, forSize int) widget.Sizes {
+	return widget.Sizes{Nat: s.natural.Along(axis)}
 }
 
 func (s *solid) Arrange(r render.Rect) { s.bounds = r }

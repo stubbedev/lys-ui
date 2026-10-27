@@ -177,7 +177,7 @@ func NewChipBox() *ChipBox {
 	b.SetElement("chipbox")
 	b.initComposite(b, b.flow)
 	b.boxed = true
-	b.fillWidth = true
+	b.SetHExpand(true)
 	return b
 }
 

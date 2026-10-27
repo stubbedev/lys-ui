@@ -271,8 +271,8 @@ func (l *toastLayer) syncChildren() {
 
 // Measure passes through to the wrapped root: the toasts float, the
 // window's natural size is unchanged.
-func (l *toastLayer) Measure(con widget.Constraints) widget.Size {
-	return l.root.Measure(con)
+func (l *toastLayer) Measure(axis widget.Axis, forSize int) widget.Sizes {
+	return l.root.Measure(axis, forSize)
 }
 
 // Arrange lays the root over the whole rect and stacks the toasts at
@@ -284,11 +284,11 @@ func (l *toastLayer) Arrange(r render.Rect) {
 		return
 	}
 	maxW := min(max(0, r.W-2*l.margin), toastMaxWidth)
-	con := widget.Constraints{Max: widget.Size{W: maxW, H: max(0, r.H/2)}}
+	avail := widget.Size{W: maxW, H: max(0, r.H/2)}
 	if l.pos == ToastTop {
 		y := r.Y + l.margin
 		for _, t := range slices.Backward(l.slots) {
-			rect := l.slotRect(t, con, r, y)
+			rect := l.slotRect(t, avail, r, y)
 			t.Arrange(rect)
 			y += rect.H + toastSpacing
 		}
@@ -296,18 +296,18 @@ func (l *toastLayer) Arrange(r render.Rect) {
 	}
 	y := r.Y + r.H - l.margin
 	for _, t := range slices.Backward(l.slots) {
-		rect := l.slotRect(t, con, r, y)
+		rect := l.slotRect(t, avail, r, y)
 		rect.Y -= rect.H
 		t.Arrange(rect)
 		y -= rect.H + toastSpacing
 	}
 }
 
-// slotRect measures one toast against the stack constraints and
-// centers it horizontally at baseline y (the card's top edge for a
-// top stack; the caller flips it for a bottom stack).
-func (l *toastLayer) slotRect(t *widget.Toast, con widget.Constraints, r render.Rect, y int) render.Rect {
-	nat := t.Measure(con)
+// slotRect sizes one toast within avail, the stack's room, and centers
+// it horizontally at baseline y (the card's top edge for a top stack;
+// the caller flips it for a bottom stack).
+func (l *toastLayer) slotRect(t *widget.Toast, avail widget.Size, r render.Rect, y int) render.Rect {
+	nat := widget.SizeWithin(t, avail)
 	return render.Rect{
 		X: r.X + max(0, (r.W-nat.W)/2),
 		Y: y,

@@ -33,8 +33,8 @@ const (
 // interaction behavior.
 //
 // The default is one line whose text overflows a narrow arrangement and
-// clips. SetWrap turns on word wrapping at the offered width - Measure
-// then reports one line height per wrapped row - and SetEllipsize
+// clips. SetWrap turns on word wrapping at the width it is given -
+// Measure then reports one line height per wrapped row - and SetEllipsize
 // truncates with an ellipsis instead, at the start, middle, or end.
 // With both on, wrapping fills rows and the ellipsis applies to the
 // final row only (GTK's rule): a lone unbreakable token left
@@ -63,10 +63,6 @@ type Label struct {
 	// (GTK lines); 0 is uncapped.
 	maxLines int
 	shaped   *render.ShapedText
-	natural  Size
-	// measured is the last Measure result, what ShrinkableWidth gives
-	// from.
-	measured Size
 }
 
 // NewLabel returns a label that paints text with face at sizePx
@@ -152,8 +148,9 @@ func (l *Label) SetDirection(d Direction) {
 // with.
 func (l *Label) Direction() Direction { return l.dir }
 
-// SetWrap toggles word wrapping at the offered width. Measure reports
-// the widest wrapped row, one line height tall per row, breaking at
+// SetWrap toggles word wrapping at the width the label is given.
+// Measure then needs only the widest word and reports one line height
+// per row at a width, breaking at
 // Unicode UAX #14 opportunities (spaces, hyphens, CJK); a run with no
 // opportunity before the width - an unbreakable token - keeps its own
 // row and overflows, clipped, never disappearing. Changing the mode
@@ -166,7 +163,7 @@ func (l *Label) SetWrap(on bool) {
 	l.InvalidateLayout()
 }
 
-// Wrap reports whether the label wraps at the offered width.
+// Wrap reports whether the label wraps at the width it is given.
 func (l *Label) Wrap() bool { return l.wrap }
 
 // SetEllipsize selects where an overflowing line truncates with an
@@ -238,18 +235,24 @@ func (l *Label) WidthChars() int { return l.widthChars }
 // approximate character width is its mean advance.
 const approxCharSample = "abcdefghijklmnopqrstuvwxyz0123456789"
 
-// capWidth applies the max-width-chars cap to the offered width.
-func (l *Label) capWidth(con Constraints) Constraints {
-	if l.maxChars <= 0 {
-		return con
-	}
+// charsWidth is n approximate character widths in pixels: the
+// width-chars and max-width-chars unit.
+func (l *Label) charsWidth(n int) int {
 	face, px := l.effStyle()
-	avg := face.Shape(approxCharSample, px).Advance() / float64(len(approxCharSample))
-	limit := int(math.Ceil(avg * float64(l.maxChars)))
-	if limit < con.Max.W {
-		con.Max.W = max(limit, con.Min.W)
-	}
-	return con
+	return int(math.Ceil(approxCharPx(face, px) * float64(n)))
+}
+
+// CharsWithin is how many approximate character widths fit in px, the
+// max-width-chars that holds the label's natural width to px.
+func (l *Label) CharsWithin(px int) int {
+	face, size := l.effStyle()
+	return int(float64(px) / approxCharPx(face, size))
+}
+
+// approxCharPx is face's approximate character width at px: the mean
+// advance of approxCharSample.
+func approxCharPx(face render.Font, px float64) float64 {
+	return face.Shape(approxCharSample, px).Advance() / float64(len(approxCharSample))
 }
 
 // effStyleIn resolves the paint parameters one cascade value implies:
@@ -379,7 +382,7 @@ func (l *Label) justifies(v *style.Values) bool {
 	return v.Has(style.PropTextAlign) && v.TextAlign == style.AlignJustify
 }
 
-// wrapOf is whether rows wrap at the offered width: white-space
+// wrapOf is whether rows wrap at the width given: white-space
 // nowrap and pre turn wrapping off, pre-wrap, pre-line and
 // break-spaces on; normal keeps the programmatic mode.
 func (l *Label) wrapOf(v *style.Values) bool {
@@ -488,10 +491,6 @@ func (l *Label) indentOf(v *style.Values) float64 {
 func (l *Label) retext() {
 	face, px := l.effStyle()
 	l.shaped = face.ShapeDir(l.shown(), px, l.effDirection(l.style(l)))
-	l.natural = Size{
-		W: int(math.Ceil(l.shaped.Advance())),
-		H: l.lineBox(l.style(l)),
-	}
 }
 
 // lineBox is the line height the label lays text out at: the CSS
@@ -510,101 +509,69 @@ func (l *Label) lineBox(v *style.Values) int {
 	return l.shaped.LineHeight()
 }
 
-// Measure returns the text's advance and line height inside the CSS box
-// (padding, border, margin, min sizes), clamped to con. Both layout
-// modes key off the offered width: wrapping reports the widest wrapped
-// row by one line height per row, ellipsizing the truncated advance.
-// Results memoize per constraint set, so a panel resize that changes
-// the offered width re-measures on the next frame.
-func (l *Label) Measure(con Constraints) Size {
-	if s, ok := l.measureHit(con); ok {
-		l.measured = s
+// Measure reports the text's request inside the CSS box (padding,
+// border, margin, min sizes), GTK's label measure. Across: its natural
+// width is the text unwrapped; its minimum is the ellipsis when it
+// ellipsizes, else the widest word when it wraps, else the whole text,
+// so it overflows rather than clip; max-width-chars holds
+// the natural width of one that can narrow, and width-chars floors
+// both. Down: the rows it lays out
+// at the width it is given, or at its natural width before any. Widths
+// round up: Paint ellipsizes (and wraps) against the raw advance, so a
+// width rounded to nearest would truncate a text laid out at exactly
+// its natural size.
+func (l *Label) Measure(axis Axis, forSize int) Sizes {
+	if s, ok := l.measureHit(axis, forSize); ok {
 		return s
 	}
 	v := l.style(l)
-	l.measured = measureBox(v, boxOf(v, render.Insets{}), con, l.measureNatural)
-	return l.measureStore(con, l.measured)
+	return l.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, l.textRequest))
 }
 
-// ShrinkableWidth implements WidthShrinker: a wrapping label gives up
-// its measured width down to its widest word (MinSize), wrapping onto
-// more lines, and a single-line ellipsizing one down to the ellipsis
-// and its CSS box: the minimums GTK gives them. A clipping label keeps
-// its width.
-func (l *Label) ShrinkableWidth() int {
+// textRequest is the content box's request along axis at forSize.
+func (l *Label) textRequest(axis Axis, forSize int) Sizes {
 	v := l.style(l)
-	if l.wrapOf(v) {
-		return max(0, l.measured.W-l.MinSize().W)
-	}
-	if l.ellOf(v) == EllipsizeNone {
-		return 0
-	}
-	face, px := l.effStyle()
-	o := boxOf(l.style(l), render.Insets{}).outer()
-	floor := int(math.Ceil(face.Shape(render.Ellipsis, px).Advance())) + o.Left + o.Right
-	return max(0, l.measured.W-floor)
-}
-
-// measureNatural computes the wanted content size for con from the
-// label's current text and modes. Widths round up: Paint ellipsizes
-// (and wraps) against the raw advance, so a natural width rounded to
-// nearest would truncate a text laid out at exactly its natural size.
-func (l *Label) measureNatural(con Constraints) Size {
-	sz := l.textNatural(con)
-	if f := l.widthFloor(); f > sz.W {
-		sz.W = f
-	}
-	return clampSize(sz, con)
-}
-
-// widthFloor is the width-chars floor in pixels: n approximate
-// character widths, 0 when unset.
-func (l *Label) widthFloor() int {
-	if l.widthChars <= 0 {
-		return 0
+	if axis == Column {
+		if !l.multiline(v) {
+			return FixedSizes(l.lineBox(v))
+		}
+		width := forSize
+		if width == Unknown {
+			width = l.textRequest(Row, Unknown).Nat
+		}
+		return FixedSizes(len(l.wrapped(float64(width))) * l.lineBox(v))
 	}
 	face, px := l.effStyle()
-	avg := face.Shape(approxCharSample, px).Advance() / float64(len(approxCharSample))
-	return int(math.Ceil(avg * float64(l.widthChars)))
-}
-
-// textNatural is the text's own wanted size under con, the measure
-// label's current text and modes. Widths round up: Paint ellipsizes
-// (and wraps) against the raw advance, so a natural width rounded to
-// nearest would truncate a text laid out at exactly its natural size.
-func (l *Label) textNatural(con Constraints) Size {
-	con = l.capWidth(con)
-	v := l.style(l)
-	face, px := l.effStyle()
-	lineH := l.lineBox(v)
-	ell := l.ellOf(v)
 	indent := l.indentOf(v)
-	if !l.multiline(v) {
-		if l.shaped.Advance()+indent <= float64(con.Max.W) || ell == EllipsizeNone {
-			// The whole text fits the offered width, or it overflows and
-			// clips: no mode applies. The height comes from the live line
-			// box — natural was cached before any stylesheet resolved.
-			sz := l.natural
-			sz.W = int(math.Ceil(l.shaped.Advance() + indent))
-			sz.H = lineH
-			return clampSize(sz, con)
+	natural := l.shaped.Advance() + indent
+	if l.multiline(v) {
+		natural = 0
+		for i, ln := range l.wrapped(math.Inf(1)) {
+			adv := face.Shape(ln, px).Advance()
+			if i == 0 {
+				adv += indent
+			}
+			natural = math.Max(natural, adv)
 		}
-		truncated := render.EllipsizeText(face, l.shown(), ell, float64(con.Max.W)-indent, px)
-		return clampSize(Size{
-			W: int(math.Ceil(face.Shape(truncated, px).Advance() + indent)),
-			H: lineH,
-		}, con)
 	}
-	rows := l.wrapped(float64(con.Max.W))
-	w := 0.0
-	for i, ln := range rows {
-		adv := face.Shape(ln, px).Advance()
-		if i == 0 {
-			adv += indent
+	req := FixedSizes(int(math.Ceil(natural)))
+	switch {
+	case l.ellOf(v) != EllipsizeNone:
+		req.Min = min(int(math.Ceil(face.Shape(render.Ellipsis, px).Advance()+indent)), req.Nat)
+	case l.wrapOf(v) && l.text != "":
+		widest := 0.0
+		for _, tok := range render.WrapTextOpts(face, l.shown(), 1, px, l.minContentOpts(v)) {
+			widest = math.Max(widest, face.Shape(tok, px).Advance())
 		}
-		w = math.Max(w, adv)
+		req.Min = min(int(math.Ceil(widest)), req.Nat)
 	}
-	return clampSize(Size{W: int(math.Ceil(w)), H: len(rows) * lineH}, con)
+	if l.maxChars > 0 && req.Min < req.Nat {
+		req.Nat = max(min(req.Nat, l.charsWidth(l.maxChars)), req.Min)
+	}
+	if l.widthChars > 0 {
+		req = req.atLeast(l.charsWidth(l.widthChars))
+	}
+	return req
 }
 
 // wrapped lays the text out in rows at width - soft-wrapped when the
@@ -631,29 +598,6 @@ func (l *Label) wrapped(width float64) []string {
 		lines[last] = render.EllipsizeText(face, lines[last], ell, w, px)
 	}
 	return lines
-}
-
-// MinSize implements MinSizer: a wrapping label's floor is its widest
-// unbreakable token — wrapping narrower than that clips tokens, the
-// one thing wrapping promised not to do — and one line height, the
-// height below which nothing paints. Without wrap there is no width
-// floor: clipping and ellipsizing own the narrow rects by design. The
-// CSS box adds around the floor.
-func (l *Label) MinSize() Size {
-	face, px := l.effStyle()
-	v := l.style(l)
-	o := boxOf(v, render.Insets{}).outer()
-	floor := Size{H: l.lineBox(v)}
-	if l.wrapOf(v) && l.text != "" {
-		w := 0.0
-		for _, tok := range render.WrapTextOpts(face, l.shown(), 1, px, l.minContentOpts(v)) {
-			w = math.Max(w, face.Shape(tok, px).Advance())
-		}
-		floor.W = int(math.Ceil(w))
-	}
-	floor.W = max(floor.W, picki(v, style.PropMinWidth, 0)) + o.Left + o.Right
-	floor.H = max(floor.H, picki(v, style.PropMinHeight, 0)) + o.Top + o.Bottom
-	return floor
 }
 
 // Arrange records the border box inside r, the margin box.

@@ -174,11 +174,11 @@ const (
 )
 
 // Measure wants the natural plot size.
-func (c *Chart) Measure(con Constraints) Size {
-	if sz, ok := c.measureHit(con); ok {
+func (c *Chart) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := c.measureHit(axis, forSize); ok {
 		return sz
 	}
-	return c.measureStore(con, clampSize(Size{W: chartWidth, H: chartHeight}, con))
+	return c.measureStore(axis, forSize, FixedSizes(Size{W: chartWidth, H: chartHeight}.Along(axis)))
 }
 
 // niceMax is the axis top for a largest value v: chartTicks steps of

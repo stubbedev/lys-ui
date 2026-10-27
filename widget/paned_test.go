@@ -6,29 +6,21 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 )
 
-// flooredPane is a stub pane with a MinSizer floor, for the clamp pins.
-type flooredPane struct {
-	stub
-	floor Size
-}
-
-func (s *flooredPane) MinSize() Size { return s.floor }
-
 // panedFrame measures and arranges a paned into w x h and returns it.
 func panedFrame(p *Paned, w, h int) *Paned {
-	p.Measure(Constraints{Max: Size{W: w, H: h}})
+	SizeWithin(p, Size{W: w, H: h})
 	p.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
 	return p
 }
 
 // TestPanedDragMovesDividerAndClamps pins the pointer half of #71: a
 // drag inside the handle's hit zone (slop included) moves the divider
-// live, the panes relayout around it, and the MinSizer floors clamp
+// live, the panes relayout around it, and the minimums clamp
 // both ends — never starving a pane past its declared minimum.
 func TestPanedDragMovesDividerAndClamps(t *testing.T) {
-	start := &flooredPane{floor: Size{W: 40, H: 0}}
+	start := &flooredStub{floor: Size{W: 40, H: 0}}
 	start.nat = Size{W: 120, H: 30}
-	end := &flooredPane{floor: Size{W: 50, H: 0}}
+	end := &flooredStub{floor: Size{W: 50, H: 0}}
 	end.nat = Size{W: 120, H: 30}
 	var positions []int
 	p := NewPaned(Row, start, end)
@@ -90,9 +82,9 @@ func TestPanedDragMovesDividerAndClamps(t *testing.T) {
 // extremes, the cross-axis arrows do nothing, and the floors own the
 // extremes when they must.
 func TestPanedKeyboardNudges(t *testing.T) {
-	start := &flooredPane{floor: Size{W: 40, H: 0}}
+	start := &flooredStub{floor: Size{W: 40, H: 0}}
 	start.nat = Size{W: 100, H: 30}
-	end := &flooredPane{floor: Size{W: 50, H: 0}}
+	end := &flooredStub{floor: Size{W: 50, H: 0}}
 	end.nat = Size{W: 100, H: 30}
 	p := NewPaned(Row, start, end)
 	panedFrame(p, 306, 60)
@@ -127,8 +119,8 @@ func TestPanedKeyboardNudges(t *testing.T) {
 // it to the nearest clamp when it does not — growing never stretches
 // the start pane back.
 func TestPanedResizeRenormalizes(t *testing.T) {
-	start := newStub(100, 30)
-	end := newStub(100, 30)
+	start := squeezable(100, 30)
+	end := squeezable(100, 30)
 	p := NewPaned(Row, start, end)
 	panedFrame(p, 400, 60)
 
@@ -154,8 +146,8 @@ func TestPanedResizeRenormalizes(t *testing.T) {
 // paned lays out through the same arrangement, and a missing pane
 // collapses to the other taking everything.
 func TestPanedNestingAndNilPanes(t *testing.T) {
-	inner := NewPaned(Column, newStub(50, 40), newStub(50, 40))
-	outer := NewPaned(Row, inner, newStub(80, 100))
+	inner := NewPaned(Column, squeezable(50, 40), squeezable(50, 40))
+	outer := NewPaned(Row, inner, squeezable(80, 100))
 	panedFrame(outer, 300, 100)
 
 	innerRect := inner.Bounds()
@@ -167,7 +159,7 @@ func TestPanedNestingAndNilPanes(t *testing.T) {
 		t.Fatalf("inner start pane = %+v, want the column split", innerStart)
 	}
 
-	only := NewPaned(Row, newStub(30, 30), nil)
+	only := NewPaned(Row, squeezable(30, 30), nil)
 	panedFrame(only, 200, 50)
 	if got := only.Children()[0].(interface{ Bounds() render.Rect }).Bounds(); got != (render.Rect{W: 200, H: 50}) {
 		t.Errorf("lone pane = %+v, want the whole 200x50", got)
@@ -181,8 +173,8 @@ func TestPanedNestingAndNilPanes(t *testing.T) {
 // zone: hits in the panes reach the panes (their own interactive
 // widgets), and the Paned joins focus traversal through Children.
 func TestPanedChildrenKeepTheirInput(t *testing.T) {
-	start := NewButton(newStub(20, 20), 4, 4)
-	end := newStub(40, 40)
+	start := NewButton(squeezable(20, 20), 4, 4)
+	end := squeezable(40, 40)
 	p := NewPaned(Row, start, end)
 	panedFrame(p, 300, 60)
 
@@ -206,9 +198,9 @@ func TestPanedChildrenKeepTheirInput(t *testing.T) {
 // SetMaxPosition caps every way the divider moves, never under the
 // start pane's floor; zero lifts the cap.
 func TestPanedMaxPosition(t *testing.T) {
-	start := &flooredPane{floor: Size{W: 40}}
+	start := &flooredStub{floor: Size{W: 40}}
 	start.nat = Size{W: 120, H: 30}
-	end := &flooredPane{}
+	end := &flooredStub{}
 	end.nat = Size{W: 120, H: 30}
 	p := NewPaned(Row, start, end)
 	p.SetMaxPosition(100)
@@ -253,16 +245,16 @@ func TestPanedPanesTakeTheStylesheetAbove(t *testing.T) {
 	root := NewBox(Column, 0, 0)
 	hdr := NewBox(Row, 0, 0)
 	hdr.AddClass("x")
-	hdr.Append(newStub(12, 17), false)
+	hdr.Append(squeezable(12, 17), false)
 	side := NewBox(Column, 0, 0)
 	side.Append(hdr, false)
 	root.Append(NewPaned(Row, side, NewBox(Row, 0, 0)), true)
 	root.AttachStylesheet(NewStylesheet(".x { padding: 20px; }", StylePriorityUser))
 	for range 2 {
-		root.Measure(Constraints{Max: Size{W: 900, H: 650}})
+		SizeWithin(root, Size{W: 900, H: 650})
 		root.Arrange(render.Rect{W: 900, H: 650})
 	}
-	if got := hdr.Measure(Constraints{Max: Size{W: 900, H: 650}}); got != (Size{W: 52, H: 57}) {
+	if got := SizeWithin(hdr, Size{W: 900, H: 650}); got != (Size{W: 52, H: 57}) {
 		t.Errorf("styled pane child measures %v, want the 20px padding around 12x17", got)
 	}
 }
@@ -303,7 +295,7 @@ func TestButtonContentRestylesWithItsButton(t *testing.T) {
 	root := NewBox(Column, 0, 0)
 	root.Append(NewPaned(Row, side, NewBox(Row, 0, 0)), true)
 	frame := func() {
-		root.Measure(Constraints{Max: Size{W: 200, H: 100}})
+		SizeWithin(root, Size{W: 200, H: 100})
 		root.Arrange(render.Rect{W: 200, H: 100})
 	}
 	frame()
@@ -323,12 +315,12 @@ func TestButtonContentRestylesWithItsButton(t *testing.T) {
 // its background paints it.
 func TestPanedSeparatorNode(t *testing.T) {
 	loadCSS(t, `paned > separator { min-width: 3; margin-left: -3; background-color: #010203; }`)
-	p := NewPaned(Row, newStub(30, 20), newStub(30, 20))
+	p := NewPaned(Row, squeezable(30, 20), squeezable(30, 20))
 	host := NewBox(Row, 0, 0)
 	host.Append(p, true)
 	frame(t, host, 100, 40)
 
-	if got := p.Measure(Constraints{Max: Size{W: 100, H: 40}}); got.W != 60 {
+	if got := SizeWithin(p, Size{W: 100, H: 40}); got.W != 60 {
 		t.Errorf("paned width %d, want the panes' 60 (the negative margin emptied the slot)", got.W)
 	}
 	sv := p.sep.style(&p.sep)
@@ -342,7 +334,7 @@ func TestPanedSeparatorNode(t *testing.T) {
 
 // Unstyled, the divider is the 6px theme handle it always was.
 func TestPanedSeparatorDefaults(t *testing.T) {
-	p := NewPaned(Column, newStub(30, 20), newStub(30, 20))
+	p := NewPaned(Column, squeezable(30, 20), squeezable(30, 20))
 	host := NewBox(Column, 0, 0)
 	host.Append(p, true)
 	frame(t, host, 100, 100)

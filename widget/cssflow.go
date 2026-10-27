@@ -74,44 +74,47 @@ func (b *Box) contentsBox() *Box { return b }
 // visible and not out of flow.
 func flows(w Widget) bool { return ownVisible(w) && !outOfFlow(w) }
 
-// flowAxis is the axis the box lays its children along: the box axis,
-// the flex main axis, or the block axis (a column) of CSS flow.
-func (b *Box) flowAxis() Axis {
-	v := b.style(b)
-	switch layoutModeOf(v) {
-	case modeFlow:
-		return Column
-	case modeFlex:
-		main, _ := b.flexDirection(v)
-		return main
-	}
-	return b.axis
-}
-
-// cssMeasure measures the box's content under inner by its CSS layout.
-// A flex container's main size is definite when the constraint pins it
-// or, along a row, bounds it (a block-level box fills the width it is
-// offered); its cross size likewise, a column's width being definite
-// when bounded. A grid's are gridMeasure's.
-func (b *Box) cssMeasure(v *style.Values, mode layoutMode, inner Constraints) Size {
+// cssMeasure is the box's content request along axis at forSize by
+// its CSS layout. Every extent a measure is given is definite; none
+// else is, so percentages of the height read as auto.
+func (b *Box) cssMeasure(v *style.Values, mode layoutMode, axis Axis, forSize int) Sizes {
 	p := b.beginPass(v, mode, true)
 	defer p.end()
-	var sz Size
+	var req Sizes
 	switch mode {
 	case modeFlex:
-		main, _ := b.flexDirection(v)
-		sz = p.flex(inner.Max, pinned(inner, main) || main == Row && finite(inner.Max.W),
-			pinned(inner, otherAxis(main)) || main == Column && finite(inner.Max.W))
+		req = p.flexMeasure(axis, forSize)
 	case modeGrid:
-		sz = p.gridMeasure(inner)
+		req = p.gridMeasure(axis, forSize)
 	default:
-		b.cssDefH = pinned(inner, Column)
-		sz = p.flow(inner.Max.W, definiteOr(inner.Max.H, b.cssDefH))
+		req = p.flowMeasure(axis, forSize)
 	}
-	p.keepNaturals()
 	b.cssBase, b.cssHasBase = p.base, p.hasBase
-	return sz
+	return req
 }
+
+// flowMeasure is normal flow's request: across, the widest item's
+// minimum and the run's natural width; down, the run's height at the
+// width given, or at its natural width.
+func (p *cssPass) flowMeasure(axis Axis, forSize int) Sizes {
+	if axis == Column {
+		width := forSize
+		if width == Unknown {
+			width = indefinite
+		}
+		return FixedSizes(p.flow(width, indefinite).H)
+	}
+	least := 0
+	for i := range p.items {
+		if it := &p.items[i]; it.kind == itemFlow {
+			least = max(least, measureOuter(it.w, Row, Unknown, indefiniteSize).Min)
+		}
+	}
+	return Sizes{Min: least, Nat: max(least, p.flow(indefinite, indefinite).W)}
+}
+
+// indefiniteSize is a containing block with neither extent definite.
+var indefiniteSize = Size{W: indefinite, H: indefinite}
 
 // definiteOr is n when def holds, else indefinite.
 func definiteOr(n int, def bool) int {
@@ -121,23 +124,22 @@ func definiteOr(n int, def bool) int {
 	return indefinite
 }
 
-// pinned reports whether the constraint pins its extent along a.
-func pinned(con Constraints, a Axis) bool {
-	return extent(con.Min, a) == extent(con.Max, a) && finite(extent(con.Max, a))
-}
-
 // cssArrange lays the box's children out in its content box inner by
-// its CSS layout.
+// its CSS layout. The content box's height is definite when the parent
+// pass sized it (cssDefH) or the box's own height says so.
 func (b *Box) cssArrange(v *style.Values, mode layoutMode, inner render.Rect) {
 	p := b.beginPass(v, mode, false)
 	defer p.end()
+	defH := b.cssDefH || resolveAxis(b, v, Column, indefinite).definite
+	b.cssDefH = false
 	switch mode {
 	case modeFlex:
 		p.flex(Size{W: inner.W, H: inner.H}, true, true)
 	case modeGrid:
 		p.grid(Size{W: inner.W, H: inner.H}, [2]gridSizing{sizeDefinite, sizeDefinite})
 	default:
-		p.flow(inner.W, definiteOr(inner.H, b.cssDefH))
+		p.height = definiteOr(inner.H, defH)
+		p.flow(inner.W, p.height)
 	}
 	p.arrange(Point{X: inner.X, Y: inner.Y})
 	b.cssBase, b.cssHasBase = p.base, p.hasBase
@@ -207,6 +209,9 @@ type cssPass struct {
 	items     []cssItem
 	rtl       bool
 	measuring bool
+	// height is a flow's content box height when definite, the basis
+	// of its items' percentage heights; indefinite otherwise.
+	height int
 	// base is the run's first baseline, relative to the content box.
 	base    int
 	hasBase bool
@@ -217,7 +222,7 @@ var cssItems depthStack[cssItem]
 
 // beginPass collects the box's children for a pass; the caller ends it.
 func (b *Box) beginPass(v *style.Values, mode layoutMode, measuring bool) cssPass {
-	p := cssPass{b: b, v: v, mode: mode, measuring: measuring, rtl: b.rtl(v)}
+	p := cssPass{b: b, v: v, mode: mode, measuring: measuring, rtl: b.rtl(v), height: indefinite}
 	p.items = cssItems.push(countItems(b))
 	n := 0
 	p.collect(b, &n)
@@ -279,22 +284,6 @@ func (b *Box) rtl(v *style.Values) bool {
 	return b.dir == DirectionRTL
 }
 
-// keepNaturals records each direct child's natural size on its entry,
-// which Baseline and the shrink queries read.
-func (p *cssPass) keepNaturals() {
-	for i := range p.items {
-		it := &p.items[i]
-		if it.host != p.b {
-			continue
-		}
-		if it.kind == itemFlow {
-			it.entry.nat = it.nat
-		} else {
-			it.entry.nat = Size{}
-		}
-	}
-}
-
 // arrange arranges every item at origin, the content box's corner:
 // flow items in their rects, hidden ones empty, out-of-flow ones
 // against their containing blocks (a grid item's grid area, where the
@@ -310,6 +299,9 @@ func (p *cssPass) arrange(origin Point) {
 			r := it.rect
 			r.X += origin.X
 			r.Y += origin.Y
+			if h, ok := it.w.(contentsHost); ok {
+				h.contentsBox().cssDefH = p.mode != modeFlow || resolveAxis(it.w, it.v, Column, p.height).definite
+			}
 			arrangeAt(it.w, it.v, layoutMarginOf(it.w).Shrink(r))
 		case itemOut:
 			cb := ownContainingBlock(it.w, it.v)
@@ -511,7 +503,7 @@ func (p *cssPass) flowNaturalWidth() int {
 		if it.kind != itemFlow {
 			continue
 		}
-		w := measureOuter(it.w, Constraints{Max: Size{W: indefinite, H: indefinite}}).W
+		w := measureOuter(it.w, Row, Unknown, indefiniteSize).Nat
 		switch {
 		case floatSideOf(it, p.rtl) != 0:
 			floats += w
@@ -602,7 +594,7 @@ func (f *flowState) block(i int) {
 	if f.havePrev {
 		top -= f.prevMB + mt - collapseMargins(f.prevMB, mt)
 	}
-	ws := resolveAxis(it.w, it.v, Row, f.width, indefinite)
+	ws := resolveAxis(it.w, it.v, Row, f.width)
 	need := ws.min
 	if ws.definite {
 		need = ws.clamp(ws.size)
@@ -623,11 +615,11 @@ func (f *flowState) block(i int) {
 	case !autoL && !autoR && f.p.rtl:
 		x += free
 	}
-	h := f.measure(it, Constraints{Min: Size{W: w}, Max: Size{W: w, H: indefinite}}).H
+	h := measureOuter(it.w, Column, w, f.basis()).Nat
 	it.rect = render.Rect{X: x, Y: top, W: w, H: h}
 	natW := w
 	if f.p.measuring && !ws.definite {
-		natW = f.measure(it, Constraints{Max: Size{W: band, H: indefinite}}).W
+		natW = measureOuter(it.w, Row, Unknown, f.basis()).Within(band)
 	}
 	it.nat = Size{W: natW, H: h}
 	f.extent = max(f.extent, left+natW+f.width-right)
@@ -638,36 +630,23 @@ func (f *flowState) block(i int) {
 	f.prevMB, f.havePrev = mb, true
 }
 
-// measure measures an item under con, its percentage heights resolved
-// against the content box's definite height (CSS 2 §10.5): a definite
-// height pins the block axis, as the flex and grid passes pin their
-// items, and percentage bounds clamp the measured height. Against an
-// indefinite height the percentages read as auto.
-func (f *flowState) measure(it *cssItem, con Constraints) Size {
-	l := &it.v.Layout
-	if !finite(f.height) || !relativeSizing(l.Height) && !relativeSizing(l.MinHeight) && !relativeSizing(l.MaxHeight) {
-		return measureOuter(it.w, con)
-	}
-	hs := resolveAxis(it.w, it.v, Column, f.height, con.Max.W)
-	if hs.definite {
-		h := hs.clamp(hs.size)
-		con.Min.H, con.Max.H = h, h
-		return measureOuter(it.w, con)
-	}
-	con.Min.H = max(con.Min.H, hs.min)
-	sz := measureOuter(it.w, con)
-	sz.H = hs.clamp(sz.H)
-	return sz
-}
+// basis is the containing block the items' percentages resolve
+// against: the content box's width, and its height when definite (CSS
+// 2 §10.5); against an indefinite height they read as auto.
+func (f *flowState) basis() Size { return Size{W: f.width, H: f.height} }
 
-// relativeSizing reports a sizing value that depends on its basis.
-func relativeSizing(s style.Sizing) bool { return s.Kind == style.SizingLength && s.Len.Relative() }
+// shrinkToFit is an item's size at the line's width: its natural width
+// held within it, and its natural height there.
+func (f *flowState) shrinkToFit(it *cssItem) Size {
+	w := measureOuter(it.w, Row, Unknown, f.basis()).Within(f.width)
+	return Size{W: w, H: measureOuter(it.w, Column, w, f.basis()).Nat}
+}
 
 // inline adds one inline-level item to the line, ending the line first
 // when the item does not fit beside what it holds.
 func (f *flowState) inline(i int) {
 	it := &f.p.items[i]
-	it.nat = f.measure(it, Constraints{Max: Size{W: f.width, H: indefinite}})
+	it.nat = f.shrinkToFit(it)
 	if f.line.n > 0 {
 		left, right := f.band(f.line.y, f.line.y+max(f.line.h, it.nat.H))
 		if f.line.w+it.nat.W > right-left {
@@ -686,7 +665,7 @@ func (f *flowState) inline(i int) {
 // float places one float: beside the line in progress when it fits
 // there, after the line otherwise.
 func (f *flowState) float(it *cssItem) {
-	it.nat = f.measure(it, Constraints{Max: Size{W: f.width, H: indefinite}})
+	it.nat = f.shrinkToFit(it)
 	if f.line.n == 0 {
 		f.placeFloat(it, f.y)
 		return

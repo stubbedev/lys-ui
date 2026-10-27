@@ -34,14 +34,14 @@ func NewScreenPick(img image.Image) *ScreenPick {
 	return s
 }
 
-// Measure wants the image's natural size, clamped to the constraint -
-// the dialog scales it down to fit.
-func (s *ScreenPick) Measure(con Constraints) Size {
-	if sz, ok := s.measureHit(con); ok {
+// Measure is the image's pictureRequest: the dialog scales it down to
+// fit.
+func (s *ScreenPick) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := s.measureHit(axis, forSize); ok {
 		return sz
 	}
 	b := s.img.Bounds()
-	return s.measureStore(con, clampSize(Size{W: b.Dx(), H: b.Dy()}, con))
+	return s.measureStore(axis, forSize, pictureRequest(Size{W: b.Dx(), H: b.Dy()}, axis, forSize))
 }
 
 // Arrange records the rect; the drawn fit is computed in Paint from

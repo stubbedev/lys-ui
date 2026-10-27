@@ -11,7 +11,7 @@ func TestGridMeasure(t *testing.T) {
 		g := NewGrid(2, 1)
 		g.Attach(newStub(10, 5), 0, 0, 1, 1)
 		g.Attach(newStub(8, 4), 1, 0, 1, 1)
-		got := g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		got := SizeWithin(g, Size{W: 100, H: 100})
 		if got.W != 10+2+8 {
 			t.Errorf("width = %d, want 20", got.W)
 		}
@@ -24,7 +24,7 @@ func TestGridMeasure(t *testing.T) {
 		g := NewGrid(0, 3)
 		g.Attach(newStub(10, 5), 0, 0, 1, 1)
 		g.Attach(newStub(8, 7), 0, 1, 1, 1)
-		got := g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		got := SizeWithin(g, Size{W: 100, H: 100})
 		if got.H != 5+3+7 {
 			t.Errorf("height = %d, want 15", got.H)
 		}
@@ -40,7 +40,7 @@ func TestGridMeasure(t *testing.T) {
 		// The singles make the run 10+2+8 = 20 wide; a 25-wide spanner
 		// is 5 short, split as 2+1 (remainder to the earlier track).
 		g.Attach(newStub(25, 4), 0, 1, 2, 1)
-		got := g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		got := SizeWithin(g, Size{W: 100, H: 100})
 		if got.W != 13+2+10 {
 			t.Errorf("width = %d, want 25 (columns 13 and 10)", got.W)
 		}
@@ -53,30 +53,29 @@ func TestGridMeasure(t *testing.T) {
 		g := NewGrid(2, 0)
 		g.Attach(newStub(10, 5), 0, 0, 1, 1)
 		g.Attach(newStub(8, 7), 1, 0, 1, 1)
-		nat := g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		nat := SizeWithin(g, Size{W: 100, H: 100})
 		if nat != (Size{W: 20, H: 7}) {
 			t.Fatalf("natural = %v, want 20x7", nat)
 		}
 		g.SetColumnHomogeneous(true).SetRowHomogeneous(true)
-		got := g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		got := SizeWithin(g, Size{W: 100, H: 100})
 		if got != (Size{W: 10 + 2 + 10, H: 7}) {
 			t.Errorf("homogeneous = %v, want 22x7", got)
 		}
 	})
 
 	t.Run("an empty grid measures zero", func(t *testing.T) {
-		got := NewGrid(4, 4).Measure(Constraints{Max: Size{W: 100, H: 100}})
+		got := SizeWithin(NewGrid(4, 4), Size{W: 100, H: 100})
 		if got != (Size{}) {
 			t.Errorf("empty grid = %v, want 0x0", got)
 		}
 	})
 
-	t.Run("clamps to constraints", func(t *testing.T) {
+	t.Run("overflows a smaller host rather than squeeze", func(t *testing.T) {
 		g := NewGrid(2, 0)
 		g.Attach(newStub(50, 5), 0, 0, 1, 1)
-		got := g.Measure(Constraints{Max: Size{W: 30, H: 3}})
-		if got.W != 30 || got.H != 3 {
-			t.Errorf("measured %v, want clamped to 30x3", got)
+		if got := SizeWithin(g, Size{W: 30, H: 3}); got != (Size{W: 50, H: 5}) {
+			t.Errorf("measured %v, want its 50x5 minimum", got)
 		}
 	})
 }
@@ -88,7 +87,7 @@ func TestGridArrange(t *testing.T) {
 		c := newStub(8, 4)
 		g.Attach(a, 0, 0, 1, 1)
 		g.Attach(c, 1, 0, 1, 1)
-		g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(g, Size{W: 100, H: 100})
 		g.Arrange(render.Rect{X: 0, Y: 0, W: 20, H: 5})
 
 		if a.rect != (render.Rect{X: 0, Y: 0, W: 10, H: 5}) {
@@ -105,7 +104,7 @@ func TestGridArrange(t *testing.T) {
 		c := newStub(8, 5)
 		g.Attach(a, 0, 0, 1, 1)
 		g.Attach(c, 1, 0, 1, 1)
-		g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(g, Size{W: 100, H: 100})
 		g.Arrange(render.Rect{X: 0, Y: 0, W: 41, H: 5})
 
 		// Natural 20 in a 41 rect leaves 21: +11 and +10.
@@ -127,7 +126,7 @@ func TestGridArrange(t *testing.T) {
 		g.Attach(c, 1, 0, 1, 1)
 		g.Attach(d, 2, 0, 1, 1)
 		g.Attach(span, 0, 1, 2, 1)
-		g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(g, Size{W: 100, H: 100})
 		g.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 12})
 
 		// Natural 30 in a 60 rect doubles every column, so the two
@@ -143,17 +142,17 @@ func TestGridArrange(t *testing.T) {
 
 	t.Run("a smaller rect squeezes the tracks proportionally", func(t *testing.T) {
 		g := NewGrid(2, 0)
-		a := newStub(10, 5)
-		c := newStub(8, 5)
+		a := squeezable(10, 5)
+		c := squeezable(8, 5)
 		g.Attach(a, 0, 0, 1, 1)
 		g.Attach(c, 1, 0, 1, 1)
-		g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(g, Size{W: 100, H: 100})
 		g.Arrange(render.Rect{X: 0, Y: 0, W: 15, H: 5})
 
 		// Natural 20 (10 + 2 spacing + 8) in a 15 rect: the 5px deficit
 		// splits by weight - 10:8 - with the rounding pixel to the
 		// earlier track, so 7 + 2 + 6 = 15 exactly. Overflow only at the
-		// floors, and stubs have none.
+		// floors, and these stubs have none.
 		if a.rect != (render.Rect{X: 0, Y: 0, W: 7, H: 5}) {
 			t.Errorf("first child = %v, want the squeezed 7-wide rect", a.rect)
 		}
@@ -167,7 +166,7 @@ func TestGridArrange(t *testing.T) {
 			g := NewGrid(0, 0)
 			g.Attach(newStub(10, 5), 0, 0, 1, 1)
 			g.SetAlign(g.Children()[0], h, v)
-			g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+			SizeWithin(g, Size{W: 100, H: 100})
 			return g
 		}
 
@@ -240,7 +239,7 @@ func TestGridAttachConflict(t *testing.T) {
 		if len(got) != 1 || got[0] != Widget(b) {
 			t.Fatalf("children = %v, want only the later attach", got)
 		}
-		if sz := g.Measure(Constraints{Max: Size{W: 100, H: 100}}); sz != (Size{W: 8, H: 4}) {
+		if sz := SizeWithin(g, Size{W: 100, H: 100}); sz != (Size{W: 8, H: 4}) {
 			t.Errorf("measure = %v, want the last child's 8x4", sz)
 		}
 		g.Arrange(render.Rect{X: 0, Y: 0, W: 8, H: 4})
@@ -263,7 +262,7 @@ func TestGridAttachConflict(t *testing.T) {
 		}
 		// Column 0 is empty, so it is zero wide; the widget sits in
 		// column 1 after the spacing.
-		if sz := g.Measure(Constraints{Max: Size{W: 100, H: 100}}); sz.W != 0+2+10 {
+		if sz := SizeWithin(g, Size{W: 100, H: 100}); sz.W != 0+2+10 {
 			t.Errorf("width = %d, want 12", sz.W)
 		}
 	})
@@ -280,7 +279,7 @@ func TestGridAttachConflict(t *testing.T) {
 		if len(got) != 1 || got[0] != Widget(a) {
 			t.Fatalf("children = %v, want only a after the move", got)
 		}
-		if sz := g.Measure(Constraints{Max: Size{W: 100, H: 100}}); sz != (Size{W: 10, H: 5}) {
+		if sz := SizeWithin(g, Size{W: 100, H: 100}); sz != (Size{W: 10, H: 5}) {
 			t.Errorf("measure = %v, want a's 10x5", sz)
 		}
 	})
@@ -295,20 +294,20 @@ func TestGridAttachConflict(t *testing.T) {
 		if len(g.Children()) != 2 {
 			t.Fatalf("children = %d, want both", len(g.Children()))
 		}
-		g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(g, Size{W: 100, H: 100})
 		g.Arrange(render.Rect{X: 0, Y: 0, W: 20, H: 5})
 		if got := g.HitTest(Point{X: 15, Y: 2}); got != Widget(top) {
 			t.Errorf("hit = %v, want the later attach on top", got)
 		}
 	})
 
-	t.Run("arranging before any measure parks the children and survives", func(t *testing.T) {
+	t.Run("arranging before any measure lays the children out", func(t *testing.T) {
 		g := NewGrid(0, 0)
 		a := newStub(10, 5)
 		g.Attach(a, 0, 0, 1, 1)
 		g.Arrange(render.Rect{X: 0, Y: 0, W: 50, H: 50})
-		if a.rect != (render.Rect{}) {
-			t.Errorf("unmeasured child arranged at %v, want an empty rect", a.rect)
+		if a.rect != (render.Rect{W: 50, H: 50}) {
+			t.Errorf("unmeasured child arranged at %v, want the whole cell", a.rect)
 		}
 	})
 }
@@ -319,7 +318,7 @@ func TestGridRemove(t *testing.T) {
 	c := newStub(8, 4)
 	g.Attach(a, 0, 0, 1, 1)
 	g.Attach(c, 1, 0, 1, 1)
-	if sz := g.Measure(Constraints{Max: Size{W: 100, H: 100}}); sz.W != 20 {
+	if sz := SizeWithin(g, Size{W: 100, H: 100}); sz.W != 20 {
 		t.Fatalf("width before removal = %d, want 20", sz.W)
 	}
 
@@ -329,7 +328,7 @@ func TestGridRemove(t *testing.T) {
 	if g.Remove(a) {
 		t.Error("second Remove reported true")
 	}
-	if sz := g.Measure(Constraints{Max: Size{W: 100, H: 100}}); sz.W != 0+2+8 {
+	if sz := SizeWithin(g, Size{W: 100, H: 100}); sz.W != 0+2+8 {
 		// The survivor keeps its explicit cell (column 1), so the grid
 		// stays two tracks wide with an empty first column - and the
 		// stale cached 20 is gone.
@@ -346,7 +345,7 @@ func TestGridHitTest(t *testing.T) {
 	c := newStub(8, 4)
 	g.Attach(a, 0, 0, 1, 1)
 	g.Attach(c, 1, 0, 1, 1)
-	g.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(g, Size{W: 100, H: 100})
 	g.Arrange(render.Rect{X: 0, Y: 0, W: 20, H: 5})
 
 	t.Run("over a child returns the child", func(t *testing.T) {

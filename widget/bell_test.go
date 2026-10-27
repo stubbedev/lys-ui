@@ -18,7 +18,7 @@ func TestErrorBell(t *testing.T) {
 	e := NewEntry(face, 14, render.RGB(0, 0, 0))
 	box := NewBox(Row, 0, 0)
 	box.Append(e, false)
-	box.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(box, Size{W: 200, H: 100})
 	box.Arrange(render.Rect{W: 200, H: 100}) // parent links form in Arrange
 	e.InsertRune('a')
 	if len(rang) != 0 {

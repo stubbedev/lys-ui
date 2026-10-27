@@ -37,7 +37,7 @@ func TestLabelTextDecoration(t *testing.T) {
 		data := make([]byte, render.Stride(80)*30)
 		cv := render.NewScaled(data, render.Stride(80), 80, 30, 1, 1)
 		cv.Clear(cv.Rect(), 0)
-		host.Measure(Constraints{Max: Size{W: 80, H: 30}})
+		SizeWithin(host, Size{W: 80, H: 30})
 		host.Arrange(render.Rect{W: 80, H: 30})
 		host.Paint(cv)
 		return data

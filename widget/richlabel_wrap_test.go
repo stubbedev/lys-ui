@@ -13,12 +13,12 @@ import (
 // the laid-out rows).
 func TestRichLabelWrap(t *testing.T) {
 	l := NewRichLabel(entryFace(t), 14, "the quick brown fox jumps over the lazy dog", 0)
-	one := l.Measure(Constraints{Max: Size{W: 600, H: 400}})
+	one := SizeWithin(l, Size{W: 600, H: 400})
 	l.SetWrap(true)
 	if !l.Wrap() {
 		t.Fatal("wrap did not stick")
 	}
-	tall := l.Measure(Constraints{Max: Size{W: 120, H: 400}})
+	tall := SizeWithin(l, Size{W: 120, H: 400})
 	if tall.H <= one.H {
 		t.Fatalf("wrapped height %d, want more than the single line's %d", tall.H, one.H)
 	}
@@ -59,7 +59,7 @@ func TestRichLabelWrapMaxLines(t *testing.T) {
 	l.SetWrap(true)
 	l.SetEllipsize(EllipsizeEnd)
 	l.SetMaxLines(2)
-	sz := l.Measure(Constraints{Max: Size{W: 100, H: 400}})
+	sz := SizeWithin(l, Size{W: 100, H: 400})
 	arrangeTree(t, l, 100, sz.H)
 	if len(l.lines) != 2 {
 		t.Fatalf("rows = %d, want the 2-line cap", len(l.lines))
@@ -81,7 +81,7 @@ func TestRichLabelWrapMaxLines(t *testing.T) {
 func TestRichLabelWrapKeepsStyles(t *testing.T) {
 	l := NewRichLabel(entryFace(t), 14, "plain <b>boldword</b> plain plain plain", 0)
 	l.SetWrap(true)
-	sz := l.Measure(Constraints{Max: Size{W: 90, H: 400}})
+	sz := SizeWithin(l, Size{W: 90, H: 400})
 	arrangeTree(t, l, 90, sz.H)
 	bold := 0
 	for _, line := range l.lines {
@@ -102,9 +102,9 @@ func TestRichLabelWrapKeepsStyles(t *testing.T) {
 func TestRichLabelMaxWidthChars(t *testing.T) {
 	long := NewRichLabel(entryFace(t), 14, "the quick brown fox jumps over the lazy dog again and again", 0)
 	long.SetWrap(true)
-	wide := long.Measure(Constraints{Max: Size{W: 2000, H: 400}})
+	wide := SizeWithin(long, Size{W: 2000, H: 400})
 	long.SetMaxWidthChars(12)
-	capped := long.Measure(Constraints{Max: Size{W: 2000, H: 400}})
+	capped := SizeWithin(long, Size{W: 2000, H: 400})
 	if capped.W >= wide.W || capped.H <= wide.H {
 		t.Errorf("capped %v, want narrower and taller than the free %v", capped, wide)
 	}
@@ -112,22 +112,28 @@ func TestRichLabelMaxWidthChars(t *testing.T) {
 		t.Error("MaxWidthChars did not stick")
 	}
 	long.SetMaxWidthChars(0)
-	if got := long.Measure(Constraints{Max: Size{W: 2000, H: 400}}); got != wide {
+	if got := SizeWithin(long, Size{W: 2000, H: 400}); got != wide {
 		t.Errorf("after clearing %v, want the free %v", got, wide)
 	}
 
 	short := NewRichLabel(entryFace(t), 14, "hi", 0)
-	bare := short.Measure(Constraints{Max: Size{W: 400, H: 40}}).W
+	bare := SizeWithin(short, Size{W: 400, H: 40}).W
 	short.SetMaxWidthChars(24)
-	if got := short.Measure(Constraints{Max: Size{W: 400, H: 40}}).W; got != bare {
+	if got := SizeWithin(short, Size{W: 400, H: 40}).W; got != bare {
 		t.Errorf("a short text under the cap measured %d, want its own %d", got, bare)
 	}
 
+	// GTK's max-width-chars sizes a label that can narrow: a line that
+	// neither wraps nor ellipsizes keeps its width.
 	line := NewRichLabel(entryFace(t), 14, "a single line that runs past the cap", 0)
-	free := line.Measure(Constraints{Max: Size{W: 2000, H: 40}}).W
+	free := SizeWithin(line, Size{W: 2000, H: 40}).W
 	line.SetMaxWidthChars(6)
-	if got := line.Measure(Constraints{Max: Size{W: 2000, H: 40}}).W; got >= free {
-		t.Errorf("a single line under the cap measured %d, want less than %d", got, free)
+	if got := SizeWithin(line, Size{W: 2000, H: 40}).W; got != free {
+		t.Errorf("a single line under the cap measured %d, want its own %d", got, free)
+	}
+	line.SetEllipsize(EllipsizeEnd)
+	if got := SizeWithin(line, Size{W: 2000, H: 40}).W; got >= free {
+		t.Errorf("an ellipsizing line under the cap measured %d, want less than %d", got, free)
 	}
 }
 
@@ -143,7 +149,7 @@ func TestRichLabelPaintsTheCascadeColor(t *testing.T) {
 		root.Append(l, false)
 		SetStyleRoot(root)
 		for range 2 {
-			root.Measure(Constraints{Max: Size{W: 200, H: 40}})
+			SizeWithin(root, Size{W: 200, H: 40})
 			root.Arrange(render.Rect{W: 200, H: 40})
 		}
 		data := make([]byte, render.Stride(200)*40)

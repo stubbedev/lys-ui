@@ -185,42 +185,25 @@ var (
 
 var inf = math.Inf(1)
 
-// gridMeasure sizes a grid container's content under inner: the
-// columns into a bounded width — the width a block-level grid fills,
-// and the most an inline-level grid takes, shrinking to its
-// max-content width when that fits — else under a max-content
-// constraint; the rows into a pinned height, else to their content.
-func (p *cssPass) gridMeasure(inner Constraints) Size {
-	rows := sizeMaxContent
-	if pinned(inner, Column) {
-		rows = sizeDefinite
+// gridMeasure is a grid container's request along axis at forSize:
+// across, the columns sized under a min-content and a max-content
+// constraint; down, the rows sized so at the width given (the columns
+// sized into it), or at the max-content width.
+func (p *cssPass) gridMeasure(axis Axis, forSize int) Sizes {
+	size, cols := indefiniteSize, sizeMaxContent
+	if axis == Column && forSize != Unknown {
+		size.W, cols = forSize, sizeDefinite
 	}
-	if !finite(inner.Max.W) {
-		return p.grid(inner.Max, [2]gridSizing{sizeMaxContent, rows})
-	}
-	if p.v.Layout.Display == style.DisplayInlineGrid && !pinned(inner, Row) {
-		if sz := p.grid(inner.Max, [2]gridSizing{sizeMaxContent, rows}); sz.W <= inner.Max.W {
-			return sz
+	if axis == Row {
+		return Sizes{
+			Min: p.grid(size, [2]gridSizing{sizeMinContent, sizeMaxContent}).W,
+			Nat: p.grid(size, [2]gridSizing{sizeMaxContent, sizeMaxContent}).W,
 		}
 	}
-	return p.grid(inner.Max, [2]gridSizing{sizeDefinite, rows})
-}
-
-// gridShrinkable is how much of its last measured extent along a the
-// grid can give up: down to its min-content width, or to its
-// min-content height at its last measured content width.
-func (b *Box) gridShrinkable(a Axis) int {
-	v := b.style(b)
-	o := b.box(v).outer()
-	last := Size{W: b.measureOut.W - o.Left - o.Right, H: b.measureOut.H - o.Top - o.Bottom}
-	p := b.beginPass(v, modeGrid, true)
-	defer p.end()
-	size := Size{W: indefinite, H: indefinite}
-	sizing := [2]gridSizing{sizeMinContent, sizeMaxContent}
-	if a == Column {
-		size.W, sizing = last.W, [2]gridSizing{sizeDefinite, sizeMinContent}
+	return Sizes{
+		Min: p.grid(size, [2]gridSizing{cols, sizeMinContent}).H,
+		Nat: p.grid(size, [2]gridSizing{cols, sizeMaxContent}).H,
 	}
-	return max(0, extent(last, a)-extent(p.grid(size, sizing), a))
 }
 
 // grid lays the items out as a grid container whose content box is
@@ -231,7 +214,7 @@ func (p *cssPass) grid(size Size, sizing [2]gridSizing) Size {
 	g := gridPass{items: p.items, b: p.b, v: p.v, rtl: p.rtl, flow: l.GridAutoFlow, areas: l.GridTemplateAreas}
 	for _, a := range [2]Axis{Row, Column} {
 		ax := &g.ax[a]
-		ax.sizing, ax.size = sizing[a], extent(size, a)
+		ax.sizing, ax.size = sizing[a], size.Along(a)
 		ax.tpl, ax.auto = l.GridTemplateColumns, l.GridAutoColumns
 		areas := 0
 		if g.areas != nil {
@@ -278,8 +261,8 @@ func (p *cssPass) grid(size Size, sizing [2]gridSizing) Size {
 				}
 				it.grid.self[a] = gridSelf(p.selfAlignOf(it, a, a == otherAxis(p.b.axis), self, items), it, a, p.rtl)
 			}
-			it.nat = measureOuter(it.w, Constraints{Max: Size{W: indefinite, H: indefinite}})
-			g.contribute(it, Row, it.nat.W, minContentOf(it.w, Row, it.nat))
+			req := measureOuter(it.w, Row, Unknown, indefiniteSize)
+			g.contribute(it, Row, req.Nat, req.Min)
 		}
 	}
 	g.sizeTracks(Row)
@@ -317,7 +300,7 @@ func (g *gridPass) repetitions(a Axis) int {
 	if ax.sizing == sizeDefinite {
 		space = ax.size
 	} else {
-		s := resolveAxis(g.b, g.v, a, indefinite, indefinite)
+		s := resolveAxis(g.b, g.v, a, indefinite)
 		switch {
 		case finite(s.max):
 			space = s.ax.content(s.max)
@@ -759,11 +742,7 @@ func (g *gridPass) contribute(it *cssItem, a Axis, maxC, minC int) {
 		fixedMax = fixedMax && t.maxK == style.TrackLength
 		capSum += t.maxPx
 	}
-	cross := indefinite
-	if a == Column {
-		cross = gi.width
-	}
-	s := resolveAxis(it.w, it.v, a, indefinite, cross)
+	s := resolveAxis(it.w, it.v, a, indefinite)
 	c := &gi.contrib[a]
 	if s.definite {
 		n := float64(s.clamp(s.size))
@@ -797,12 +776,12 @@ func (g *gridPass) contributeRows() {
 		gi := &it.grid
 		_, area := cols.areaOf(gi.area[Row])
 		gi.width = g.itemWidth(it, area)
-		sz := measureOuter(it.w, Constraints{Min: Size{W: gi.width}, Max: Size{W: gi.width, H: indefinite}})
-		gi.height = sz.H
-		g.contribute(it, Column, sz.H, minContentOf(it.w, Column, sz))
+		req := measureOuter(it.w, Column, gi.width, indefiniteSize)
+		gi.height = req.Nat
+		g.contribute(it, Column, req.Nat, req.Min)
 		gi.baseline, gi.hasBaseline = baselineIn(it)
 		if !gi.hasBaseline {
-			gi.baseline = sz.H
+			gi.baseline = req.Nat
 		}
 		switch gi.self[Column].Kind {
 		case style.BoxBaseline:
@@ -810,7 +789,7 @@ func (g *gridPass) contributeRows() {
 			t.above = math.Max(t.above, float64(gi.baseline))
 		case style.BoxLastBaseline:
 			t := &rows[gi.area[Column].end-1]
-			t.below = math.Max(t.below, float64(sz.H-gi.baseline))
+			t.below = math.Max(t.below, float64(req.Nat-gi.baseline))
 		}
 	}
 	for i := range g.items {
@@ -844,7 +823,7 @@ func stretches(it *cssItem, a Axis, s axisSizes) bool {
 // its max-content width within its min-content width and the area —
 // all inside its min and max widths.
 func (g *gridPass) itemWidth(it *cssItem, area int) int {
-	ws := resolveAxis(it.w, it.v, Row, area, indefinite)
+	ws := resolveAxis(it.w, it.v, Row, area)
 	switch {
 	case ws.definite:
 		return ws.clamp(ws.size)
@@ -1398,7 +1377,7 @@ func (g *gridPass) placeItems(width int) {
 		gi := &it.grid
 		cs, cw := cols.areaOf(gi.area[Row])
 		rs, rh := rows.areaOf(gi.area[Column])
-		hs := resolveAxis(it.w, it.v, Column, rh, gi.width)
+		hs := resolveAxis(it.w, it.v, Column, rh)
 		h := gi.height
 		switch {
 		case hs.definite:

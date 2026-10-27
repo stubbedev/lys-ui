@@ -28,7 +28,7 @@ func TestEntryEcho(t *testing.T) {
 
 	t.Run("the caret stays on logical runes under masking", func(t *testing.T) {
 		e := newEntry()
-		e.Measure(Constraints{Max: Size{W: 200, H: 100}})
+		SizeWithin(e, Size{W: 200, H: 100})
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 		e.SetEcho(EchoPassword)
 		sh := e.face.Shape(e.displayText(), 14)
@@ -131,7 +131,7 @@ func TestEntryEcho(t *testing.T) {
 	t.Run("every mode paints", func(t *testing.T) {
 		for _, mode := range []Echo{EchoNormal, EchoPassword, EchoNone} {
 			e := newEntry()
-			e.Measure(Constraints{Max: Size{W: 200, H: 100}})
+			SizeWithin(e, Size{W: 200, H: 100})
 			e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 30})
 			e.SetEcho(mode)
 			e.MoveCursorExtending(3)

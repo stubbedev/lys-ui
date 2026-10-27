@@ -21,14 +21,14 @@ func TestLabelMeasure(t *testing.T) {
 	face := testFace(t)
 
 	t.Run("nonempty text wants positive space", func(t *testing.T) {
-		got := NewLabel(face, 14, "lys-ui", render.RGB(255, 255, 255)).Measure(Constraints{Max: Size{W: 500, H: 100}})
+		got := SizeWithin(NewLabel(face, 14, "lys-ui", render.RGB(255, 255, 255)), Size{W: 500, H: 100})
 		if got.W <= 0 || got.H <= 0 {
 			t.Errorf("measure = %v, want positive", got)
 		}
 	})
 
 	t.Run("empty text keeps zero width and the font line height", func(t *testing.T) {
-		got := NewLabel(face, 14, "", render.RGB(255, 255, 255)).Measure(Constraints{Max: Size{W: 500, H: 100}})
+		got := SizeWithin(NewLabel(face, 14, "", render.RGB(255, 255, 255)), Size{W: 500, H: 100})
 		if got.W != 0 {
 			t.Errorf("empty label width = %d, want 0", got.W)
 		}
@@ -38,25 +38,25 @@ func TestLabelMeasure(t *testing.T) {
 	})
 
 	t.Run("wider text wants more width", func(t *testing.T) {
-		short := NewLabel(face, 14, "g", render.RGB(255, 255, 255)).Measure(Constraints{Max: Size{W: 500, H: 100}})
-		long := NewLabel(face, 14, "lysland", render.RGB(255, 255, 255)).Measure(Constraints{Max: Size{W: 500, H: 100}})
+		short := SizeWithin(NewLabel(face, 14, "g", render.RGB(255, 255, 255)), Size{W: 500, H: 100})
+		long := SizeWithin(NewLabel(face, 14, "lysland", render.RGB(255, 255, 255)), Size{W: 500, H: 100})
 		if long.W <= short.W {
 			t.Errorf("long %d <= short %d", long.W, short.W)
 		}
 	})
 
-	t.Run("clamps to the constraint ceiling", func(t *testing.T) {
-		got := NewLabel(face, 14, "lys-ui is great", render.RGB(255, 255, 255)).Measure(Constraints{Max: Size{W: 20, H: 8}})
-		if got.W != 20 || got.H != 8 {
-			t.Errorf("measure = %v, want clamped to 20x8", got)
+	t.Run("overflows a smaller host rather than squeeze", func(t *testing.T) {
+		l := NewLabel(face, 14, "lys-ui is great", render.RGB(255, 255, 255))
+		if got, want := SizeWithin(l, Size{W: 20, H: 8}), naturalSize(l); got != want {
+			t.Errorf("measure = %v, want its natural %v", got, want)
 		}
 	})
 
 	t.Run("SetText retakes the measurement", func(t *testing.T) {
 		l := NewLabel(face, 14, "a", render.RGB(255, 255, 255))
-		before := l.Measure(Constraints{Max: Size{W: 500, H: 100}})
+		before := SizeWithin(l, Size{W: 500, H: 100})
 		l.SetText("a much longer label")
-		after := l.Measure(Constraints{Max: Size{W: 500, H: 100}})
+		after := SizeWithin(l, Size{W: 500, H: 100})
 		if after.W <= before.W {
 			t.Errorf("after SetText width %d <= before %d", after.W, before.W)
 		}
@@ -81,7 +81,7 @@ func TestLabelPaint(t *testing.T) {
 		data := make([]byte, render.Stride(200)*32)
 		cv := render.New(data, render.Stride(200), 200, 32)
 		l := NewLabel(face, 16, "ink", render.RGB(255, 255, 255))
-		l.Measure(Constraints{Max: Size{W: 500, H: 100}})
+		SizeWithin(l, Size{W: 500, H: 100})
 		l.Arrange(render.Rect{X: 4, Y: 0, W: 100, H: 32})
 		l.Paint(cv)
 		ink := 0
@@ -107,7 +107,7 @@ func TestLabelNaturalHeightPaints(t *testing.T) {
 		// DejaVu) measured a box their own painter rejected.
 		const px = 13.0
 		l := NewLabel(face, px, "server-01.example", render.RGB(255, 255, 255))
-		got := l.Measure(Constraints{Max: Size{W: 500, H: 100}})
+		got := SizeWithin(l, Size{W: 500, H: 100})
 		stride := render.Stride(200)
 		data := make([]byte, stride*40)
 		cv := render.New(data, stride, 200, 40)
@@ -144,13 +144,13 @@ func TestLabelFitsItsNaturalWidth(t *testing.T) {
 			checked++
 			l := NewLabel(face, px, text, render.RGB(255, 255, 255))
 			l.SetEllipsize(EllipsizeEnd)
-			nat := l.Measure(Constraints{Max: Size{W: 1000, H: 100}})
+			nat := SizeWithin(l, Size{W: 1000, H: 100})
 			if float64(nat.W) < adv {
 				t.Errorf("%q at %vpx: natural width %d is short of its %.2f advance", text, px, nat.W, adv)
 			}
 			w := NewLabel(face, px, text+" "+text, render.RGB(255, 255, 255))
 			w.SetWrap(true)
-			wn := w.Measure(Constraints{Max: Size{W: 1000, H: 100}})
+			wn := SizeWithin(w, Size{W: 1000, H: 100})
 			if rows := w.wrapped(float64(wn.W)); len(rows) != 1 {
 				t.Errorf("%q at %vpx: wrapping at its natural width %d broke into %d rows", text, px, wn.W, len(rows))
 			}
@@ -176,7 +176,7 @@ func TestRowGivesWayToAnEllipsizingLabel(t *testing.T) {
 		b := NewBox(Row, 0, 0)
 		b.Append(l, true)
 		b.Append(cell, false)
-		b.Measure(Constraints{Max: Size{W: 1000, H: 100}})
+		SizeWithin(b, Size{W: 1000, H: 100})
 		b.Arrange(render.Rect{W: 150, H: 20})
 		return b, l, cell
 	}
@@ -207,10 +207,10 @@ func TestRowGivesWayToAnEllipsizingLabel(t *testing.T) {
 	wrapped := NewLabel(face, 13, "wraps instead", render.RGB(255, 255, 255))
 	wrapped.SetWrap(true)
 	wrapped.SetEllipsize(EllipsizeEnd)
-	wrapped.Measure(Constraints{Max: Size{W: 1000, H: 100}})
+	SizeWithin(wrapped, Size{W: 1000, H: 100})
 	// A wrapping label gives way down to its widest word, wrapping
 	// taller; the row measures it again at the width it gets.
-	if got, want := wrapped.ShrinkableWidth(), wrapped.Measure(Constraints{Max: Size{W: 1000, H: 100}}).W-wrapped.MinSize().W; got != want || got == 0 {
+	if got, want := widthGive(wrapped), SizeWithin(wrapped, Size{W: 1000, H: 100}).W-minWidth(wrapped); got != want || got == 0 {
 		t.Errorf("a wrapping label offers %dpx of width, want %d, down to its widest word", got, want)
 	}
 }
@@ -222,7 +222,7 @@ func TestLabelWidthChars(t *testing.T) {
 	nat := func(text string, chars int) int {
 		l := NewLabel(face, 13, text, 0)
 		l.SetWidthChars(chars)
-		return l.Measure(Constraints{Max: Size{W: 300, H: 40}}).W
+		return SizeWithin(l, Size{W: 300, H: 40}).W
 	}
 	wide, plain, free := nat("100%", 6), nat("1%", 6), nat("1%", 0)
 	if wide != plain {
@@ -240,13 +240,13 @@ func TestLabelLineHeight(t *testing.T) {
 	face := goldenFace(t)
 	const px = 14
 	natural := face.Shape("Hamburgefonstiv", px).LineHeight()
-	con := Constraints{Max: Size{W: 400, H: 400}}
+	con := Size{W: 400, H: 400}
 
 	root := NewBox(Column, 0, 0)
 	root.AttachStylesheet(NewStylesheet(`label { line-height: 2; }`, StylePriorityUser))
 	l := NewLabel(face, px, "Hamburgefonstiv", render.RGBA(0, 0, 0, 255))
 	root.Append(l, false)
-	got := root.Measure(con)
+	got := SizeWithin(root, con)
 	// The unitless number scales the size the label paints at: its
 	// constructor 14px, which no font-size rule overrides here, not the
 	// 16px root default the cascade would otherwise read.
@@ -258,7 +258,7 @@ func TestLabelLineHeight(t *testing.T) {
 	wrapped := NewLabel(face, px, "one two three four five six", render.RGBA(0, 0, 0, 255))
 	wrapped.SetWrap(true)
 	wrapped.AttachStylesheet(NewStylesheet(`label { line-height: 40px; }`, StylePriorityUser))
-	sz := wrapped.Measure(Constraints{Max: Size{W: 60, H: 400}})
+	sz := SizeWithin(wrapped, Size{W: 60, H: 400})
 	rows := len(wrapped.wrapped(60))
 	if rows < 2 {
 		t.Fatalf("the sample did not wrap into rows (%d)", rows)
@@ -269,7 +269,7 @@ func TestLabelLineHeight(t *testing.T) {
 
 	// Unstyled labels keep the font's own box.
 	plain := NewLabel(face, px, "Hamburgefonstiv", render.RGBA(0, 0, 0, 255))
-	if got := plain.Measure(con); got.H != natural {
+	if got := SizeWithin(plain, con); got.H != natural {
 		t.Errorf("unstyled measured %v, want the natural %v", got.H, natural)
 	}
 }
@@ -282,7 +282,7 @@ func TestLabelTabularFeature(t *testing.T) {
 	root.AttachStylesheet(NewStylesheet(`label { font-feature-settings: "tnum"; }`, StylePriorityUser))
 	l := NewLabel(face, 14, "0123456789", render.RGBA(0, 0, 0, 255))
 	root.Append(l, false)
-	root.Measure(Constraints{Max: Size{W: 400, H: 400}})
+	SizeWithin(root, Size{W: 400, H: 400})
 	if got, _ := l.effStyle(); got == render.Font(face) {
 		t.Error("the tnum declaration did not switch the label to the tabular face")
 	}

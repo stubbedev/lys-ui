@@ -100,17 +100,14 @@ func (r *ProgressRing) diameter() int {
 }
 
 // Measure wants the diameter square inside the ring's CSS box.
-func (r *ProgressRing) Measure(con Constraints) Size {
-	if sz, ok := r.measureHit(con); ok {
+func (r *ProgressRing) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := r.measureHit(axis, forSize); ok {
 		return sz
 	}
 	d := r.diameter()
 	v := r.style(r)
-	return r.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		if r.child != nil {
-			measureChild(r, r.child, inner)
-		}
-		return clampSize(Size{W: d, H: d}, inner)
+	return r.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		return FixedSizes(d)
 	}))
 }
 
@@ -126,8 +123,7 @@ func (r *ProgressRing) Arrange(rect render.Rect) {
 	if r.child == nil {
 		return
 	}
-	nat := measureChild(r, r.child, Constraints{Max: Size{W: sq.W, H: sq.H}})
-	arrangeChild(r.child, alignRect(sq, nat, AlignCenter, AlignCenter))
+	arrangeChild(r.child, alignRect(sq, childWithin(r, r.child, Size{W: sq.W, H: sq.H}), AlignCenter, AlignCenter))
 	setParents(r, r.child)
 }
 

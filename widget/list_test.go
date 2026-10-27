@@ -33,7 +33,7 @@ func (m *countingModel) distinct() int { return len(m.called) }
 func TestListVirtualization(t *testing.T) {
 	model := newCountingModel(10000)
 	l := NewList(model, 20)
-	l.Measure(Constraints{Max: Size{W: 200, H: 1 << 20}})
+	SizeWithin(l, Size{W: 200, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 60}) // 3 rows of 20px
 
 	cv := render.New(make([]uint8, 200*60*4), 200*4, 200, 60)
@@ -57,7 +57,7 @@ func TestListVirtualization(t *testing.T) {
 func TestListSelectionClamps(t *testing.T) {
 	model := newCountingModel(5)
 	l := NewList(model, 20)
-	l.Measure(Constraints{Max: Size{W: 100, H: 1 << 20}})
+	SizeWithin(l, Size{W: 100, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 100})
 
 	t.Run("motion clamps at the ends", func(t *testing.T) {
@@ -107,7 +107,7 @@ func TestListSelectionClamps(t *testing.T) {
 func TestListChanged(t *testing.T) {
 	model := newCountingModel(10)
 	l := NewList(model, 20)
-	l.Measure(Constraints{Max: Size{W: 100, H: 1 << 20}})
+	SizeWithin(l, Size{W: 100, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 60})
 	l.Select(8)
 
@@ -137,7 +137,7 @@ func TestListChanged(t *testing.T) {
 func TestListRowHit(t *testing.T) {
 	model := newCountingModel(6)
 	l := NewList(model, 20)
-	l.Measure(Constraints{Max: Size{W: 100, H: 1 << 20}})
+	SizeWithin(l, Size{W: 100, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 60})
 	cv := render.New(make([]uint8, 100*60*4), 100*4, 100, 60)
 	l.Paint(cv)
@@ -156,7 +156,7 @@ func paintedList(t *testing.T, mode SelectionMode) (*List, *countingModel) {
 	model := newCountingModel(10)
 	l := NewList(model, 20)
 	l.SetSelectionMode(mode)
-	l.Measure(Constraints{Max: Size{W: 100, H: 1 << 20}})
+	SizeWithin(l, Size{W: 100, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 60})
 	l.Paint(render.New(make([]uint8, 100*60*4), 100*4, 100, 60))
 	return l, model
@@ -229,7 +229,7 @@ func (m boxModel) Row(int) *Box {
 // so every later row laid its children out at zero width.
 func TestListMeasuresEveryRowBeforeArranging(t *testing.T) {
 	l := NewList[*Box](boxModel{5}, 20)
-	l.Measure(Constraints{Max: Size{W: 100, H: 1 << 20}})
+	SizeWithin(l, Size{W: 100, H: 1 << 20})
 	l.Arrange(render.Rect{W: 100, H: 100})
 	l.Paint(render.New(make([]uint8, 100*100*4), 100*4, 100, 100))
 	for i := range 5 {
@@ -253,7 +253,7 @@ func TestListRowsTakeTheStylesheetAbove(t *testing.T) {
 	host.AddClass("host")
 	host.Append(l, true)
 	for range 2 {
-		host.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(host, Size{W: 100, H: 100})
 		host.Arrange(render.Rect{W: 100, H: 100})
 		data := make([]byte, render.Stride(100)*100)
 		host.Paint(render.New(data, render.Stride(100), 100, 100))
@@ -276,7 +276,7 @@ func (s staticRows) Row(i int) Widget { return s[i] }
 func frame(t *testing.T, host Widget, w, h int) {
 	t.Helper()
 	for range 2 {
-		host.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(host, Size{W: w, H: h})
 		host.Arrange(render.Rect{W: w, H: h})
 		data := make([]byte, render.Stride(w)*h)
 		host.Paint(render.New(data, render.Stride(w), w, h))
@@ -312,7 +312,7 @@ func TestListRowIsGtkRowBox(t *testing.T) {
 	if b := label.Bounds(); b.X != 8 || b.Y != 4 {
 		t.Errorf("label at (%d, %d), want inside the row's 4/8 padding", b.X, b.Y)
 	}
-	natural := NewLabel(face, 12, "x", 0).Measure(Constraints{Max: Size{W: 100, H: 100}})
+	natural := SizeWithin(NewLabel(face, 12, "x", 0), Size{W: 100, H: 100})
 	if l.rowH != natural.H+8 {
 		t.Errorf("row height %d, want the label's %d plus the padding", l.rowH, natural.H)
 	}
@@ -406,13 +406,13 @@ func TestListAutoRowHeightIsStyled(t *testing.T) {
 		host.AddClass("host")
 		host.Append(l, true)
 		for range 2 {
-			host.Measure(Constraints{Max: Size{W: 100, H: 200}})
+			SizeWithin(host, Size{W: 100, H: 200})
 			host.Arrange(render.Rect{W: 100, H: 200})
 		}
 		return l, host
 	}
-	if l, _ := mk(0); l.rowH != 30 || l.Measure(Constraints{Max: Size{W: 100, H: 200}}).H != 90 {
-		t.Errorf("auto row height %d (list %v), want the styled 30", l.rowH, l.Measure(Constraints{Max: Size{W: 100, H: 200}}))
+	if l, _ := mk(0); l.rowH != 30 || SizeWithin(l, Size{W: 100, H: 200}).H != 90 {
+		t.Errorf("auto row height %d (list %v), want the styled 30", l.rowH, SizeWithin(l, Size{W: 100, H: 200}))
 	}
 	if l, _ := mk(12); l.rowH != 12 {
 		t.Errorf("fixed row height %d, want 12", l.rowH)
@@ -425,12 +425,12 @@ func TestListMaxHeight(t *testing.T) {
 		rows = append(rows, newStub(20, 10))
 	}
 	l := NewList[Widget](rows, 10)
-	con := Constraints{Max: Size{W: 100, H: 1000}}
-	if h := l.Measure(con).H; h != 500 {
+	con := Size{W: 100, H: 1000}
+	if h := SizeWithin(l, con).H; h != 500 {
 		t.Fatalf("natural %d, want 500", h)
 	}
 	l.SetMaxHeight(120)
-	if h := l.Measure(con).H; h != 120 {
+	if h := SizeWithin(l, con).H; h != 120 {
 		t.Errorf("capped %d, want 120", h)
 	}
 	l.Arrange(render.Rect{W: 100, H: 120})
@@ -439,7 +439,7 @@ func TestListMaxHeight(t *testing.T) {
 		t.Errorf("scrolled to %d, want the 380 the cap leaves", l.offY)
 	}
 	l.SetMaxHeight(0)
-	if h := l.Measure(con).H; h != 500 {
+	if h := SizeWithin(l, con).H; h != 500 {
 		t.Errorf("uncapped %d, want 500", h)
 	}
 }
@@ -452,7 +452,7 @@ func TestListSingleClickActivate(t *testing.T) {
 	l := NewList[Widget](rows, 10)
 	var acted []int
 	l.OnActivate = func(i int) { acted = append(acted, i) }
-	l.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(l, Size{W: 100, H: 100})
 	l.Arrange(render.Rect{W: 100, H: 100})
 	click := func(y int) {
 		data := make([]byte, render.Stride(100)*100)
@@ -478,7 +478,7 @@ func TestListDragIconStacksTheRows(t *testing.T) {
 	l := NewList(newCountingModel(3), 20)
 	l.SetSelectionMode(SelectionMultiple)
 	l.DragContent = func([]int) *DragContent { return &DragContent{} }
-	l.Measure(Constraints{Max: Size{W: 100, H: 60}})
+	SizeWithin(l, Size{W: 100, H: 60})
 	l.Arrange(render.Rect{W: 100, H: 60})
 	l.Paint(render.New(make([]byte, render.Stride(100)*60), render.Stride(100), 100, 60))
 	l.SelectAll()
@@ -490,7 +490,7 @@ func TestListDragIconStacksTheRows(t *testing.T) {
 		t.Fatalf("icon %T, want a stack of 3", r.DragIcon())
 	}
 	was := r.Bounds()
-	sz := icon.Measure(Constraints{Max: Size{W: 200, H: 200}})
+	sz := SizeWithin(icon, Size{W: 200, H: 200})
 	icon.Arrange(render.Rect{W: sz.W, H: sz.H})
 	icon.Paint(render.New(make([]byte, render.Stride(sz.W)*sz.H), render.Stride(sz.W), sz.W, sz.H))
 	if r.Bounds() != was {
@@ -508,7 +508,7 @@ func TestListDragIconStacksTheRows(t *testing.T) {
 // too: rows 10px, 29px of view at offset 9 reach row 3 (#370).
 func TestListVisibleReachesThePartialBottomRow(t *testing.T) {
 	l := NewList(newCountingModel(10), 10)
-	l.Measure(Constraints{Max: Size{W: 100, H: 29}})
+	SizeWithin(l, Size{W: 100, H: 29})
 	l.Arrange(render.Rect{W: 100, H: 29})
 	l.offY = 9
 	if first, last := l.visible(); first != 0 || last != 4 {
@@ -568,7 +568,7 @@ func TestListChildrenAndTabStop(t *testing.T) {
 	before, after := newFocusTarget(), newFocusTarget()
 	root := NewBox(Column, 0, 0)
 	root.Append(before, false).Append(l, true).Append(after, false)
-	root.Measure(Constraints{Max: Size{W: 100, H: 60}})
+	SizeWithin(root, Size{W: 100, H: 60})
 	root.Arrange(render.Rect{W: 100, H: 60})
 
 	idx := func() []int {

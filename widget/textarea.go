@@ -966,40 +966,55 @@ func (t *TextArea) colForX(l int, x float64) int {
 	return t.font().ShapeRunes(t.lines[l], t.px()).CaretAt(x)
 }
 
-// Measure reports the natural widest-line size, or, when wrapping and
-// a width is offered, the offered width by the wrapped row count.
-
-// Measure reports the natural widest-line size, or, when wrapping and
-// a width is offered, the offered width by the wrapped row count, the
-// text insets (CSS box, text node, gutter) around it. Composing text
-// counts toward the widest line and the row count. MaxWidth caps the
-// reported width when not wrapping — a long line then stops widening
-// the layout at the cap and pans inside it.
-func (t *TextArea) Measure(con Constraints) Size {
-	lineH := t.lineHeight()
+// Measure reports the widest line by the line count, or, when wrapping
+// at the width given, the wrapped row count, the text insets (CSS box,
+// text node, gutter) around it and the stylesheet's min-* floors under
+// it. Composing text counts toward the widest line and the row count.
+// MaxWidth caps the wanted width — a long line then stops widening the
+// layout at the cap and pans inside it. A wrapping area needs no width
+// of its text's: it wraps into what it gets.
+func (t *TextArea) Measure(axis Axis, forSize int) Sizes {
 	v := t.style(t)
 	in, m := t.textInsets(), marginOf(v)
 	hIn, vIn := in.Left+in.Right, in.Top+in.Bottom
-	if t.wrap && con.Max.W-m.Left-m.Right > hIn {
-		t.ensureRows(con.Max.W - m.Left - m.Right - hIn)
-		h := lineH*len(t.rows) + vIn
-		return clampSize(Size{W: con.Max.W, H: max(h, picki(v, style.PropMinHeight, 0)) + m.Top + m.Bottom}, con)
+	if axis == Column {
+		rows := len(t.lines)
+		if t.wrap && forSize != Unknown && forSize-m.Left-m.Right > hIn {
+			t.ensureRows(forSize - m.Left - m.Right - hIn)
+			rows = len(t.rows)
+		}
+		h := max(t.lineHeight()*rows+vIn, picki(v, style.PropMinHeight, 0))
+		return FixedSizes(h + m.Top + m.Bottom)
 	}
 	w := 16
 	for l := range t.lines {
-		if adv := int(t.shapeLine(t.displayLine(l)).Advance() + 0.5); adv > w {
-			w = adv
-		}
+		w = max(w, int(math.Ceil(t.lineAdvance(l))))
 	}
 	w += hIn
 	if t.MaxWidth > 0 {
 		w = min(w, max(t.MaxWidth, 16))
 	}
-	h := lineH*len(t.lines) + vIn
-	// The stylesheet's min-* floors hold before the constraints clamp.
-	w = max(w, picki(v, style.PropMinWidth, 0))
-	h = max(h, picki(v, style.PropMinHeight, 0))
-	return clampSize(Size{W: w + m.Left + m.Right, H: h + m.Top + m.Bottom}, con)
+	floor := picki(v, style.PropMinWidth, 0)
+	req := FixedSizes(max(w, floor))
+	if t.wrap {
+		req.Min = min(req.Nat, max(hIn+16, floor))
+	}
+	return req.grow(m.Left + m.Right)
+}
+
+// lineAdvance is line l's width on one row as the area lays it out:
+// the runes' widths summed as the wrap sums them, the shaped advance
+// when it does not wrap.
+func (t *TextArea) lineAdvance(l int) float64 {
+	line := t.displayLine(l)
+	if !t.wrap {
+		return t.shapeLine(line).Advance()
+	}
+	w := 0.0
+	for _, r := range line {
+		w += t.runeWidth(r)
+	}
+	return w
 }
 
 // px is the effective text size: the stylesheet's font-size when
@@ -1034,16 +1049,6 @@ func (t *TextArea) textRect() render.Rect {
 	return render.Rect{
 		X: t.bounds.X + in.Left, Y: t.bounds.Y + in.Top,
 		W: max(t.bounds.W-in.Left-in.Right, 0), H: max(t.bounds.H-in.Top-in.Bottom, 0),
-	}
-}
-
-// MinSize implements MinSizer: the stylesheet's min-* floors when set,
-// no floor otherwise (the zero Size).
-func (t *TextArea) MinSize() Size {
-	v := t.style(t)
-	return Size{
-		W: picki(v, style.PropMinWidth, 0),
-		H: picki(v, style.PropMinHeight, 0),
 	}
 }
 

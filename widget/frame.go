@@ -106,26 +106,29 @@ func (a *AspectFrame) effective(nat Size) float64 {
 	return 1
 }
 
-// Measure grows the child's natural size along one axis to the ratio.
-func (a *AspectFrame) Measure(con Constraints) Size {
-	if sz, ok := a.measureHit(con); ok {
+// Measure is the child's request with its natural size grown along
+// one axis to the ratio.
+func (a *AspectFrame) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := a.measureHit(axis, forSize); ok {
 		return sz
 	}
-	nat := measureChild(a, a.root, con)
+	nat := naturalChild(a, a.root)
 	r := a.effective(nat)
-	sz := nat
+	grown := nat
 	if float64(nat.W) < float64(nat.H)*r {
-		sz.W = int(float64(nat.H)*r + 0.5)
+		grown.W = int(float64(nat.H)*r + 0.5)
 	} else {
-		sz.H = int(float64(nat.W)/r + 0.5)
+		grown.H = int(float64(nat.W)/r + 0.5)
 	}
-	return a.measureStore(con, clampSize(sz, con))
+	req := measureChild(a, a.root, axis, forSize)
+	req.Nat = max(req.Min, grown.Along(axis))
+	return a.measureStore(axis, forSize, req)
 }
 
 // Arrange fits the largest rect of the ratio inside r, centered.
 func (a *AspectFrame) Arrange(r render.Rect) {
 	a.node.Arrange(r)
-	ratio := a.effective(measureChild(a, a.root, Constraints{Max: Size{W: r.W, H: r.H}}))
+	ratio := a.effective(naturalChild(a, a.root))
 	w, h := r.W, int(float64(r.W)/ratio+0.5)
 	if h > r.H {
 		w, h = int(float64(r.H)*ratio+0.5), r.H
@@ -172,36 +175,32 @@ func (g *SizeGroup) Add(w Widget) Widget {
 // sizeMember is one wrapped member.
 type sizeMember struct {
 	composite
-	group   *SizeGroup
-	lastCon Constraints
-	seen    bool
+	group *SizeGroup
 }
 
-// Measure is the group's largest natural size along the mode's axes,
-// each peer measured under its own last constraints.
-func (m *sizeMember) Measure(con Constraints) Size {
-	if sz, ok := m.measureHit(con); ok {
+// Measure is the widest request in the group along the mode's axes, every
+// member measured for no size across (GTK's size groups); its own
+// request along the others.
+func (m *sizeMember) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := m.measureHit(axis, forSize); ok {
 		return sz
 	}
-	m.lastCon, m.seen = con, true
-	sz := measureChild(m, m.root, con)
-	for _, o := range m.group.members {
-		if o == m {
-			continue
-		}
-		oc := con
-		if o.seen {
-			oc = o.lastCon
-		}
-		os := measureChild(o, o.root, oc)
-		if m.group.mode&SizeGroupHorizontal != 0 {
-			sz.W = max(sz.W, os.W)
-		}
-		if m.group.mode&SizeGroupVertical != 0 {
-			sz.H = max(sz.H, os.H)
-		}
+	if !m.group.equalizes(axis) {
+		return m.measureStore(axis, forSize, measureChild(m, m.root, axis, forSize))
 	}
-	return m.measureStore(con, clampSize(sz, con))
+	var req Sizes
+	for _, o := range m.group.members {
+		req = req.widest(measureChild(o, o.root, axis, Unknown))
+	}
+	return m.measureStore(axis, forSize, req)
+}
+
+// equalizes reports whether the group's mode covers axis.
+func (g *SizeGroup) equalizes(axis Axis) bool {
+	if axis == Row {
+		return g.mode&SizeGroupHorizontal != 0
+	}
+	return g.mode&SizeGroupVertical != 0
 }
 
 // markMeasureDirty relayouts every peer with this member: their size

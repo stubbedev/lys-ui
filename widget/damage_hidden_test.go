@@ -8,7 +8,7 @@ import (
 
 func drained(t *testing.T, root Widget) {
 	t.Helper()
-	root.Measure(Constraints{Max: Size{W: 300, H: 200}})
+	SizeWithin(root, Size{W: 300, H: 200})
 	root.Arrange(render.Rect{W: 300, H: 200})
 	CollectDamage(root)
 	if _, any := CollectDamage(root); any {

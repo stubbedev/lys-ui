@@ -10,16 +10,12 @@ import (
 // receives so the test can pin the contract.
 type probe struct {
 	Base
-	measured widgetConstraints
 	arranged render.Rect
 	painted  int
 }
 
-type widgetConstraints struct{ min, max Size }
-
-func (p *probe) Measure(con Constraints) Size {
-	p.measured = widgetConstraints{min: con.Min, max: con.Max}
-	return Size{W: 10, H: 5}
+func (p *probe) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(Size{W: 10, H: 5}.Along(axis))
 }
 
 func (p *probe) Arrange(r render.Rect) {

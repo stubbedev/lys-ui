@@ -70,11 +70,11 @@ func (s *SwipeDismiss) Offset() float64 { return s.dx }
 func (s *SwipeDismiss) Children() []Widget { return []Widget{s.child} }
 
 // Measure is the child's size.
-func (s *SwipeDismiss) Measure(con Constraints) Size {
-	if sz, ok := s.measureHit(con); ok {
+func (s *SwipeDismiss) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := s.measureHit(axis, forSize); ok {
 		return sz
 	}
-	return s.measureStore(con, measureChild(s, s.child, con))
+	return s.measureStore(axis, forSize, measureChild(s, s.child, axis, forSize))
 }
 
 // Arrange places the child at r, shifted by the swipe.

@@ -30,7 +30,7 @@ func TestEntryTrailingIcon(t *testing.T) {
 	if got := CascadeColor(ic); got != render.RGB(0, 255, 0) {
 		t.Errorf("trailing icon color = %v, want the rule's #00ff00", got)
 	}
-	if sz := ic.Measure(Constraints{Max: Size{W: 200, H: 40}}); sz.W != 12 || sz.H != 12 {
+	if sz := SizeWithin(ic, Size{W: 200, H: 40}); sz.W != 12 || sz.H != 12 {
 		t.Errorf("trailing icon size %v, want the -gtk-icon-size 12", sz)
 	}
 	// The text area ends before the icon: typing past it pans instead

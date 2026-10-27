@@ -13,15 +13,15 @@ func gridList(t *testing.T) (*List, *countingModel) {
 	model := newCountingModel(10)
 	l := NewList(model, 20)
 	l.SetCellWidth(50)
-	l.Measure(Constraints{Max: Size{W: 160, H: 1 << 20}})
+	SizeWithin(l, Size{W: 160, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 160, H: 40})
 	return l, model
 }
 
 func TestListGridLaysCellsOutInLines(t *testing.T) {
 	l, _ := gridList(t)
-	if got := l.Measure(Constraints{Max: Size{W: 160, H: 1 << 20}}); got.H != 80 {
-		t.Errorf("grid content height = %d, want 4 lines of 20 = 80", got.H)
+	if got := l.Measure(Column, 160).Nat; got != 80 {
+		t.Errorf("grid content height = %d, want 4 lines of 20 = 80", got)
 	}
 	// The width's remainder goes to the last column: 53, 53, 54.
 	for i, want := range []render.Rect{
@@ -52,7 +52,7 @@ func TestListGridVirtualizesByLine(t *testing.T) {
 	model := newCountingModel(3000)
 	l := NewList(model, 20)
 	l.SetCellWidth(50)
-	l.Measure(Constraints{Max: Size{W: 160, H: 1 << 20}})
+	SizeWithin(l, Size{W: 160, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 160, H: 40})
 	l.Paint(render.New(make([]uint8, 160*40*4), 160*4, 160, 40))
 	// Two visible lines plus one partial, three cells each.

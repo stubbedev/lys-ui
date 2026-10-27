@@ -43,7 +43,7 @@ func writeTemp(t *testing.T, name string, data []byte) string {
 func paintPixels(t *testing.T, w Widget, width, height int) []byte {
 	t.Helper()
 	for range 2 {
-		w.Measure(Constraints{Max: Size{W: width, H: height}})
+		SizeWithin(w, Size{W: width, H: height})
 		w.Arrange(render.Rect{W: width, H: height})
 	}
 	data := make([]byte, render.Stride(width)*height)

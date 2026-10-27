@@ -121,7 +121,7 @@ func TestEdgePressGrabsResizeInsteadOfWidgetPress(t *testing.T) {
 	btn := widget.NewButton(widget.NewLabel(face, 10, "fill", render.RGB(255, 255, 255)), 0, 0)
 	btn.OnClick = func() { clicks++ }
 	root := widget.NewBox(widget.Row, 0, 0).Append(btn, true)
-	root.Measure(widget.Constraints{Max: widget.Size{W: 300, H: 200}})
+	widget.SizeWithin(root, widget.Size{W: 300, H: 200})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 200})
 
 	t.Run("a corner press starts the resize with the press serial", func(t *testing.T) {
@@ -164,7 +164,7 @@ func TestEdgePressGrabsResizeInsteadOfWidgetPress(t *testing.T) {
 
 func TestEdgeHoverShowsResizeCursor(t *testing.T) {
 	root := widget.NewBox(widget.Row, 0, 0)
-	root.Measure(widget.Constraints{Max: widget.Size{W: 300, H: 200}})
+	widget.SizeWithin(root, widget.Size{W: 300, H: 200})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 200})
 	in, _ := resizeProbe(t, root, 300, 200)
 

@@ -18,7 +18,7 @@ func listBoxRows(n, w, h int) (*ListBox, []*solidLeaf) {
 }
 
 func layoutListBox(l *ListBox, w int) {
-	nat := l.Measure(Constraints{Max: Size{W: w, H: 10000}})
+	nat := SizeWithin(l, Size{W: w, H: 10000})
 	l.Arrange(render.Rect{W: w, H: nat.H})
 }
 
@@ -206,7 +206,7 @@ func TestListBoxFilterSortHeaders(t *testing.T) {
 			l.RowAt(0).ChildVisible(), l.RowAt(1).ChildVisible(), l.RowAt(2).ChildVisible())
 	}
 	layoutListBox(l, 100)
-	if sz := l.Measure(Constraints{Max: Size{W: 100, H: 1000}}); sz.H != 40 {
+	if sz := SizeWithin(l, Size{W: 100, H: 1000}); sz.H != 40 {
 		t.Fatalf("a filtered row still measures: %v", sz)
 	}
 	runs = 0
@@ -231,7 +231,7 @@ func TestListBoxFilterSortHeaders(t *testing.T) {
 	if headers != 3 {
 		t.Fatalf("InvalidateHeaders re-ran the header function %d times", headers)
 	}
-	if sz := l.Measure(Constraints{Max: Size{W: 100, H: 1000}}); sz.H != 20+5+20 {
+	if sz := SizeWithin(l, Size{W: 100, H: 1000}); sz.H != 20+5+20 {
 		t.Fatalf("a header grows its row: %v", sz)
 	}
 }
@@ -239,9 +239,9 @@ func TestListBoxFilterSortHeaders(t *testing.T) {
 func TestListBoxMinHeightFloorsFilteredMeasure(t *testing.T) {
 	l, _ := listBoxRows(6, 40, 20)
 	l.SetMinHeight(150)
-	full := l.Measure(Constraints{Max: Size{W: 100, H: 1000}})
+	full := SizeWithin(l, Size{W: 100, H: 1000})
 	l.SetFilterFunc(func(*ListBoxRow) bool { return false })
-	filtered := l.Measure(Constraints{Max: Size{W: 100, H: 1000}})
+	filtered := SizeWithin(l, Size{W: 100, H: 1000})
 	if filtered.H != 150 || full.H != max(full.H, 150) {
 		t.Fatalf("min height %d does not floor the measure: full %v filtered %v", 150, full, filtered)
 	}
@@ -256,7 +256,7 @@ func TestListBoxPlaceholderWhenEmpty(t *testing.T) {
 		t.Fatalf("the placeholder shows beside rows: %v", ph.Bounds())
 	}
 	l.SetFilterFunc(func(*ListBoxRow) bool { return false })
-	if sz := l.Measure(Constraints{Max: Size{W: 100, H: 1000}}); sz != (Size{W: 30, H: 10}) {
+	if sz := SizeWithin(l, Size{W: 100, H: 1000}); sz != (Size{W: 30, H: 10}) {
 		t.Fatalf("with every row filtered out: %v", sz)
 	}
 	layoutListBox(l, 100)

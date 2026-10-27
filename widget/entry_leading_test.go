@@ -57,7 +57,7 @@ func TestEntryLeadingIconClearsText(t *testing.T) {
 	e := NewEntry(goldenFace(t), 14, DarkTheme().Text)
 	e.SetLeadingIcon("system-search-symbolic", 14, nil)
 	e.SetText("query")
-	e.Measure(Constraints{Max: Size{W: 200, H: 40}})
+	SizeWithin(e, Size{W: 200, H: 40})
 	e.Arrange(render.Rect{W: 200, H: 30})
 	if ic, text := e.leadingRect(), e.contentRect(); ic.X+ic.W > text.X || ic.X < e.bounds.X {
 		t.Errorf("icon %+v overlaps text %+v", ic, text)

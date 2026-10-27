@@ -38,7 +38,7 @@ func newDragList(t *testing.T) (*widget.List, *[][]int) {
 			Write: func(string, io.Writer) error { return nil },
 		}
 	}
-	l.Measure(widget.Constraints{Max: widget.Size{W: 100, H: 80}})
+	widget.SizeWithin(l, widget.Size{W: 100, H: 80})
 	l.Arrange(render.Rect{W: 100, H: 80})
 	l.Paint(render.New(make([]byte, render.Stride(100)*80), render.Stride(100), 100, 80))
 	return l, &dragged

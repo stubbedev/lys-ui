@@ -223,7 +223,7 @@ func manyGroups(n, m int) []CommandGroup {
 func TestCommandListGrowsToItsRows(t *testing.T) {
 	face := testFace(t)
 	list := NewCommandList(face, manyGroups(6, 6)...)
-	tall := list.Measure(Constraints{Max: Size{W: 300, H: 4000}})
+	tall := SizeWithin(list, Size{W: 300, H: 4000})
 	if tall.H <= commandListHeight {
 		t.Fatalf("pick list measured %dpx tall under a 4000px ceiling, want its rows' height past %d", tall.H, commandListHeight)
 	}
@@ -232,7 +232,7 @@ func TestCommandListGrowsToItsRows(t *testing.T) {
 		t.Error("a pick list at its natural height scrolls")
 	}
 	short := NewCommandList(face, manyGroups(6, 6)...)
-	if h := short.Measure(Constraints{Max: Size{W: 300, H: 200}}).H; h != 200 {
+	if h := SizeWithin(short, Size{W: 300, H: 200}).H; h != 200 {
 		t.Errorf("pick list under a 200px ceiling measured %d, want 200", h)
 	}
 	arrangeTree(t, short, 300, 200)
@@ -241,7 +241,7 @@ func TestCommandListGrowsToItsRows(t *testing.T) {
 	}
 	var picked []string
 	palette := NewCommand(face, "Search...", append(testCommandGroups(&picked), manyGroups(6, 6)...)...)
-	if h := palette.scroll.Measure(Constraints{Max: Size{W: 300, H: 4000}}).H; h != commandListHeight {
+	if h := SizeWithin(palette.scroll, Size{W: 300, H: 4000}).H; h != commandListHeight {
 		t.Errorf("search palette list %dpx tall, want cmdk's %d", h, commandListHeight)
 	}
 }

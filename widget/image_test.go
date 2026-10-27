@@ -81,7 +81,7 @@ func paintImage(im *Image, w, h, num, denom int) ([]byte, int) {
 	data := make([]byte, render.Stride(dev)*dev)
 	cv := render.NewScaled(data, render.Stride(dev), dev, dev, num, denom)
 	cv.Clear(cv.Rect(), render.RGB(0, 0, 0))
-	im.Measure(Constraints{Max: Size{W: w, H: h}})
+	SizeWithin(im, Size{W: w, H: h})
 	im.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
 	im.Paint(cv)
 	return data, dev
@@ -295,8 +295,8 @@ func TestSetImageInvalidatesAndDropsCache(t *testing.T) {
 	if _, dirty := CollectDamage(im); !dirty {
 		t.Error("SetImage left no pending damage")
 	}
-	con := Constraints{Max: Size{W: 100, H: 100}}
-	if got := im.Measure(con); got != (Size{W: 6, H: 6}) {
+	con := Size{W: 100, H: 100}
+	if got := SizeWithin(im, con); got != (Size{W: 6, H: 6}) {
 		t.Errorf("Measure after SetImage = %v, want 6x6 (measure cache was stale)", got)
 	}
 	if imgcache.Default().HasRaster(oldRaster) {
@@ -556,13 +556,13 @@ func TestImageMeasureUnsettledThenNatural(t *testing.T) {
 	inv := newFakeInvoker(t)
 	im := NewFileImage(writePNG(t, solidPNG(t, 8, 8, color.NRGBA{A: 0xff})))
 
-	con := Constraints{Max: Size{W: 100, H: 100}}
-	if got := im.Measure(con); got != (Size{}) {
+	con := Size{W: 100, H: 100}
+	if got := SizeWithin(im, con); got != (Size{}) {
 		t.Errorf("unsettled Measure = %v, want 0x0", got)
 	}
 	paintImage(im, 6, 6, 1, 1) // kicks the load
 	inv.drain(t, 1)
-	if got := im.Measure(con); got != (Size{W: 8, H: 8}) {
+	if got := SizeWithin(im, con); got != (Size{W: 8, H: 8}) {
 		t.Errorf("Measure after the load = %v, want 8x8 (the stale 0x0 cache must be dropped)", got)
 	}
 }
@@ -621,7 +621,7 @@ func TestWidgetImagesStayTexturable(t *testing.T) {
 		{"avatar", func() Widget { a := NewAvatar(testFace(t), 16, "A B"); a.SetImage(quadImage()); return a }(), 16},
 		{"screen pick scaled", NewScreenPick(quadImage()), 16},
 	} {
-		tc.w.Measure(Constraints{Max: Size{W: tc.size, H: tc.size}})
+		SizeWithin(tc.w, Size{W: tc.size, H: tc.size})
 		tc.w.Arrange(render.Rect{W: tc.size, H: tc.size})
 		imgs := drawnImages(tc.w, tc.size, tc.size)
 		if len(imgs) == 0 {
@@ -648,7 +648,7 @@ func TestWidgetImagesStayTexturable(t *testing.T) {
 // texture paint after paint, never a fresh raster (#314).
 func TestSwatchCheckerboardStaysOneTexture(t *testing.T) {
 	s := NewColorSwatch(render.RGBA(200, 0, 0, 128))
-	s.Measure(Constraints{Max: Size{W: 24, H: 24}})
+	SizeWithin(s, Size{W: 24, H: 24})
 	s.Arrange(render.Rect{W: 24, H: 24})
 	first, second := drawnImages(s, 24, 24), drawnImages(s, 24, 24)
 	if len(first) != 1 || len(second) != 1 {
@@ -709,7 +709,7 @@ func TestFileImageKeepsADecodeTheSizeOfItsBox(t *testing.T) {
 	if b := im.img.Bounds(); b.Dx() != 64 || b.Dy() != 32 {
 		t.Errorf("a 64 px tile keeps a %dx%d decode of a 1024x512 picture, want 64x32", b.Dx(), b.Dy())
 	}
-	if got := im.Measure(Constraints{Max: Size{W: 2000, H: 2000}}); got != (Size{W: 1024, H: 512}) {
+	if got := SizeWithin(im, Size{W: 2000, H: 2000}); got != (Size{W: 1024, H: 512}) {
 		t.Errorf("the shrunk picture measures %v, want its natural 1024x512", got)
 	}
 	paintImage(im, 600, 600, 1, 1)

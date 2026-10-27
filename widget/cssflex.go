@@ -25,9 +25,12 @@ type flexItem struct {
 	// scales by.
 	inner        float64
 	grow, shrink float64
-	viol         float64
-	frozen       bool
-	collapsed    bool
+	// least is the item's main extent at its narrowest: its minimum
+	// when it shrinks, its hypothetical size when it does not.
+	least     float64
+	viol      float64
+	frozen    bool
+	collapsed bool
 	// main and mainPos are the placed main size and its offset from
 	// the line's main start; cross and crossPos the same across.
 	main, mainPos   int
@@ -78,7 +81,7 @@ func (p *cssPass) flexAxesOf(size Size) flexAxes {
 	} else {
 		f.mainFlip, f.crossFlip = f.reverse, p.rtl != f.wrapReverse
 	}
-	colGap, rowGap := p.gapAlong(Row, extent(size, Row)), p.gapAlong(Column, extent(size, Column))
+	colGap, rowGap := p.gapAlong(Row, size.Along(Row)), p.gapAlong(Column, size.Along(Column))
 	f.gapMain, f.gapCross = colGap, rowGap
 	if f.main == Column {
 		f.gapMain, f.gapCross = rowGap, colGap
@@ -217,26 +220,55 @@ func clipsMain(it *cssItem, main Axis) bool {
 	return it.v.Has(style.PropOverflowY) && it.v.Layout.OverflowY.Clips()
 }
 
+// flexMeasure is a flex container's request along axis at forSize:
+// along the main axis, the line's hypothetical sizes, at least every
+// item at its narrowest end to end (one line) or the narrowest widest
+// item (wrapping); across, the lines' extent at the main size given, or
+// at the natural one.
+func (p *cssPass) flexMeasure(axis Axis, forSize int) Sizes {
+	main, _ := p.b.flexDirection(p.v)
+	size := indefiniteSize
+	if forSize != Unknown {
+		size = withExtent(size, otherAxis(axis), forSize)
+	}
+	if axis != main {
+		return FixedSizes(p.flex(size, forSize != Unknown, false).Along(axis))
+	}
+	nat := p.flex(size, false, forSize != Unknown).Along(axis)
+	f := p.flexAxesOf(size)
+	least, shown := 0.0, 0
+	for i := range p.items {
+		it := &p.items[i]
+		if it.kind != itemFlow || it.collapsed {
+			continue
+		}
+		if f.wrap {
+			least = math.Max(least, it.least)
+		} else {
+			least += it.least
+		}
+		shown++
+	}
+	if !f.wrap {
+		least += float64(f.gapMain * max(0, shown-1))
+	}
+	return Sizes{Min: min(int(math.Ceil(least)), nat), Nat: nat}
+}
+
 // flex lays the items out as a flex container whose content box is
 // size; mainDef and crossDef say whether those extents are definite
-// (an arrange always is; a measure only where the constraint pins
-// it). It returns the content size the layout needs: the widest line's
+// (an arrange always is; a measure where it is given the extent). It returns the content size the layout needs: the widest line's
 // hypothetical sizes along the main axis, the lines and their gaps
 // across.
 func (p *cssPass) flex(size Size, mainDef, crossDef bool) Size {
 	f := p.flexAxesOf(size)
-	mainSize, crossSize := extent(size, f.main), extent(size, f.cross)
-	mainBasis, crossBasis := indefinite, indefinite
-	if mainDef {
-		mainBasis = mainSize
-	}
-	if crossDef {
-		crossBasis = crossSize
-	}
+	mainSize, crossSize := size.Along(f.main), size.Along(f.cross)
+	mainBasis, crossBasis := definiteOr(mainSize, mainDef), definiteOr(crossSize, crossDef)
+	cb := withExtent(withExtent(Size{}, f.main, mainBasis), f.cross, crossBasis)
 	flows, ordered := 0, false
 	for i := range p.items {
 		if it := &p.items[i]; it.kind == itemFlow {
-			p.flexBase(it, f, mainBasis, crossBasis, crossSize)
+			p.flexBase(it, f, cb, crossSize)
 			flows++
 			ordered = ordered || it.v.Layout.Order != 0
 		}
@@ -272,7 +304,7 @@ func (p *cssPass) flex(size Size, mainDef, crossDef bool) Size {
 	}
 	for li := range lines {
 		p.flexMainPlace(&lines[li], f, mainSize, mainDef)
-		p.flexCrossSize(&lines[li], f, crossSize, crossDef)
+		p.flexCrossSize(&lines[li], f, cb, crossSize, crossDef)
 	}
 	cross := p.flexLinesPlace(lines, f, crossSize, crossDef)
 	for li := range lines {
@@ -313,36 +345,38 @@ func (p *cssPass) flowCount(ln *flexLine) int {
 }
 
 // flexBase resolves one item's flex base size and hypothetical main
-// size (§9.2): a definite flex-basis, else a definite main size
-// property, else the content's max-content size, measured across under
-// crossAvail (or the stretched line, for a single-line container's
-// definite cross size); then the min/max main sizes, the automatic
-// minimum (the content's min-content size, capped by a definite main
-// size) standing in for min auto unless the item clips its overflow.
-func (p *cssPass) flexBase(it *cssItem, f flexAxes, mainBasis, crossBasis, crossAvail int) {
+// size (§9.2) in a container whose containing block is cb: a definite
+// flex-basis, else a definite main size property, else the content's
+// max-content size, measured at its cross size — a definite one, the
+// stretched line of a single-line container's definite cross size, or
+// its natural cross size within crossAvail; then the min/max main
+// sizes, the automatic minimum (the content's min-content size, capped
+// by a definite main size) standing in for min auto unless the item
+// clips its overflow.
+func (p *cssPass) flexBase(it *cssItem, f flexAxes, cb Size, crossAvail int) {
+	mainBasis, crossBasis := cb.Along(f.main), cb.Along(f.cross)
 	it.flexItem = flexItem{}
 	it.collapsed = it.v.Layout.Visibility == style.VisibilityCollapse
-	ms := resolveAxis(it.w, it.v, f.main, mainBasis, crossAvail)
-	cs := resolveAxis(it.w, it.v, f.cross, crossBasis, mainBasis)
+	ms := resolveAxis(it.w, it.v, f.main, mainBasis)
+	cs := resolveAxis(it.w, it.v, f.cross, crossBasis)
 	it.crossSizes = cs
 	it.align = p.alignSelfOf(it, f.cross)
 	it.grow, it.shrink = flexFactors(it, f.main)
-	con := Constraints{Max: withExtent(Size{W: crossAvail, H: crossAvail}, f.main, indefinite)}
+	across := Unknown
 	switch {
 	case cs.definite:
-		c := min(cs.clamp(cs.size), extent(con.Max, f.cross))
-		con.Min, con.Max = withExtent(con.Min, f.cross, c), withExtent(con.Max, f.cross, c)
+		across = min(cs.clamp(cs.size), crossAvail)
 	case !f.wrap && finite(crossBasis) && it.align.Kind == style.BoxStretch && !hasAutoCross(it, f.cross):
-		c := cs.clamp(crossBasis)
-		con.Min, con.Max = withExtent(con.Min, f.cross, c), withExtent(con.Max, f.cross, c)
+		across = cs.clamp(crossBasis)
+	case f.cross == Row && finite(crossAvail):
+		across = measureOuter(it.w, Row, Unknown, cb).Within(crossAvail)
 	}
-	it.nat = measureOuter(it.w, con)
-	natMain := extent(it.nat, f.main)
+	req := measureOuter(it.w, f.main, across, cb)
 	basis := style.Sizing{}
 	if it.v.Has(style.PropFlexBasis) {
 		basis = it.v.Layout.FlexBasis
 	}
-	base := natMain
+	base := req.Nat
 	switch basis.Kind {
 	case style.SizingLength:
 		if !basis.Len.Relative() || finite(mainBasis) {
@@ -353,16 +387,16 @@ func (p *cssPass) flexBase(it *cssItem, f flexAxes, mainBasis, crossBasis, cross
 			base = ms.size
 		}
 	case style.SizingMinContent:
-		base = minContentOf(it.w, f.main, it.nat)
+		base = req.Min
 	case style.SizingFitContent:
 		if finite(mainBasis) {
-			base = min(natMain, max(minContentOf(it.w, f.main, it.nat), mainBasis))
+			base = req.Within(mainBasis)
 		}
 	}
 	lo := ms.min
 	_, minSize, _ := sizingOn(&it.v.Layout, f.main)
 	if minSize.Kind == style.SizingAuto && !clipsMain(it, f.main) {
-		lo = min(minContentOf(it.w, f.main, it.nat), ms.max)
+		lo = min(req.Min, ms.max)
 		if ms.definite {
 			lo = min(lo, ms.clamp(ms.size))
 		}
@@ -371,17 +405,14 @@ func (p *cssPass) flexBase(it *cssItem, f flexAxes, mainBasis, crossBasis, cross
 	it.inner = float64(max(0, ms.ax.content(base)))
 	it.minMain, it.maxMain = float64(lo), float64(max(ms.max, lo))
 	it.hyp = math.Max(math.Min(it.base, it.maxMain), it.minMain)
-	if it.collapsed {
-		it.cross = extent(measureOuter(it.w, pinMain(con, f.main, int(math.Round(it.hyp)))), f.cross)
-		it.base, it.hyp, it.inner = 0, 0, 0
+	it.least = it.hyp
+	if it.shrink > 0 {
+		it.least = math.Min(it.hyp, it.minMain)
 	}
-}
-
-// pinMain is con with the main extent pinned to n.
-func pinMain(con Constraints, main Axis, n int) Constraints {
-	con.Min = withExtent(con.Min, main, n)
-	con.Max = withExtent(con.Max, main, n)
-	return con
+	if it.collapsed {
+		it.cross = measureOuter(it.w, f.cross, int(math.Round(it.hyp)), cb).Nat
+		it.base, it.hyp, it.inner, it.least = 0, 0, 0, 0
+	}
 }
 
 // hasAutoCross reports an auto margin across.
@@ -629,7 +660,7 @@ func btoi(b bool) int {
 // flexCrossSize measures one line's items across at their used main
 // sizes and sizes the line (§9.4): a single-line container's definite
 // cross size, else its tallest item or its baseline group.
-func (p *cssPass) flexCrossSize(ln *flexLine, f flexAxes, crossSize int, crossDef bool) {
+func (p *cssPass) flexCrossSize(ln *flexLine, f flexAxes, cb Size, crossSize int, crossDef bool) {
 	ln.cross, ln.above, ln.below = 0, 0, 0
 	for i := ln.start; i < ln.end; i++ {
 		it := &p.items[i]
@@ -638,12 +669,10 @@ func (p *cssPass) flexCrossSize(ln *flexLine, f flexAxes, crossSize int, crossDe
 		}
 		cs := it.crossSizes
 		if !it.collapsed {
-			switch {
-			case cs.definite:
+			if cs.definite {
 				it.cross = cs.clamp(cs.size)
-			default:
-				con := pinMain(Constraints{Max: withExtent(Size{}, f.cross, crossSize)}, f.main, it.main)
-				it.cross = extent(measureOuter(it.w, con), f.cross)
+			} else {
+				it.cross = measureOuter(it.w, f.cross, it.main, cb).Nat
 			}
 		}
 		ln.cross = max(ln.cross, it.cross)

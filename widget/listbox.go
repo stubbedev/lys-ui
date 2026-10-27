@@ -40,8 +40,7 @@ type ListBoxRow struct {
 	box         *ListBox
 	child       Widget
 	header      Widget
-	nat         Size
-	headNat     Size
+	headH       int
 	selectable  bool
 	activatable bool
 }
@@ -382,29 +381,36 @@ func (l *ListBox) navigate(from int, a KeyAction) (int, bool) {
 	return from, true
 }
 
-// Measure reports the offered width by the total height of the
-// visible rows (or the placeholder), clamped to the constraints.
-func (l *ListBox) Measure(con Constraints) Size {
-	if sz, ok := l.measureHit(con); ok {
+// Measure reports the widest visible row by their total height (or the
+// placeholder's request), at least the minimum height.
+func (l *ListBox) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := l.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := l.style(l)
 	box := boxOf(v, render.Insets{})
-	return l.measureStore(con, measureBox(v, box, con, func(inner Constraints) Size {
-		var out Size
-		for _, i := range l.order {
-			r := l.rows[i]
-			r.nat = measureChild(l, r, Constraints{Max: inner.Max})
-			if IsVisible(r) {
-				out.W = max(out.W, r.nat.W)
-				out.H += r.nat.H
+	return l.measureStore(axis, forSize, measureBox(v, box, axis, forSize, func(axis Axis, forSize int) Sizes {
+		var req Sizes
+		switch {
+		case l.placeholderShown():
+			req = measureChild(l, l.ph, axis, forSize)
+		case axis == Row:
+			for _, i := range l.order {
+				if r := l.rows[i]; IsVisible(r) {
+					req = req.widest(measureChild(l, r, Row, forSize))
+				}
+			}
+		default:
+			for _, i := range l.order {
+				if r := l.rows[i]; IsVisible(r) {
+					req = req.plus(measureChild(l, r, Column, forSize))
+				}
 			}
 		}
-		if l.placeholderShown() {
-			out = measureChild(l, l.ph, Constraints{Max: inner.Max})
+		if axis == Column {
+			req = req.atLeast(l.minHeight)
 		}
-		out.H = max(out.H, l.minHeight)
-		return clampSize(out, inner)
+		return req
 	}))
 }
 
@@ -418,9 +424,10 @@ func (l *ListBox) Arrange(r render.Rect) {
 		if !IsVisible(r) {
 			continue
 		}
-		r.Arrange(render.Rect{X: inner.X, Y: y, W: inner.W, H: r.nat.H})
+		h := measureChild(l, r, Column, inner.W).Nat
+		r.Arrange(render.Rect{X: inner.X, Y: y, W: inner.W, H: h})
 		setParents(l, r)
-		y += r.nat.H
+		y += h
 	}
 	if l.placeholderShown() {
 		arrangeChild(l.ph, inner)
@@ -519,29 +526,24 @@ func (r *ListBoxRow) SetActivatable(on bool) {
 // Activatable reports whether the row can be activated.
 func (r *ListBoxRow) Activatable() bool { return r.activatable }
 
-// Measure reports the offered width by the header plus child
-// natural height, clamped to the constraints.
-func (r *ListBoxRow) Measure(con Constraints) Size {
-	if sz, ok := r.measureHit(con); ok {
+// Measure reports the header (when shown) above the child: the wider
+// of the two across, their heights summed.
+func (r *ListBoxRow) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := r.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := r.style(r)
 	box := boxOf(v, render.Insets{})
-	return r.measureStore(con, measureBox(v, box, con, func(inner Constraints) Size {
-		var out Size
-		r.headNat = Size{}
-		if r.header != nil {
-			r.headNat = measureChild(r, r.header, Constraints{Max: inner.Max})
-			if !IsVisible(r.header) {
-				r.headNat.H = 0
-			}
-			out.W = max(out.W, r.headNat.W)
-			out.H += r.headNat.H
+	return r.measureStore(axis, forSize, measureBox(v, box, axis, forSize, func(axis Axis, forSize int) Sizes {
+		req := measureChild(r, r.child, axis, forSize)
+		if r.header == nil || !IsVisible(r.header) {
+			return req
 		}
-		c := measureChild(r, r.child, inner)
-		out.W = max(out.W, c.W)
-		out.H += c.H
-		return clampSize(out, inner)
+		head := measureChild(r, r.header, axis, forSize)
+		if axis == Row {
+			return req.widest(head)
+		}
+		return req.plus(head)
 	}))
 }
 
@@ -549,10 +551,14 @@ func (r *ListBoxRow) Measure(con Constraints) Size {
 func (r *ListBoxRow) Arrange(rct render.Rect) {
 	border, inner := boxRects(boxOf(r.style(r), render.Insets{}), rct)
 	r.node.Arrange(border)
-	if r.header != nil && r.headNat.H > 0 {
-		arrangeChild(r.header, render.Rect{X: inner.X, Y: inner.Y, W: inner.W, H: r.headNat.H})
-		inner.Y += r.headNat.H
-		inner.H -= r.headNat.H
+	r.headH = 0
+	if r.header != nil && IsVisible(r.header) {
+		r.headH = measureChild(r, r.header, Column, inner.W).Nat
+	}
+	if r.headH > 0 {
+		arrangeChild(r.header, render.Rect{X: inner.X, Y: inner.Y, W: inner.W, H: r.headH})
+		inner.Y += r.headH
+		inner.H -= r.headH
 	}
 	arrangeChild(r.child, inner)
 }
@@ -565,7 +571,7 @@ func (r *ListBoxRow) Paint(cv *render.Canvas) {
 		cv.RoundedRect(r.bounds, radiusOr(v, 6).TopLeft, selectedTint())
 	}
 	paintCSSBox(cv, v, r.bounds)
-	if r.header != nil && r.headNat.H > 0 {
+	if r.headH > 0 {
 		PaintChild(cv, r.header)
 	}
 	PaintChild(cv, r.child)
@@ -577,7 +583,7 @@ func (r *ListBoxRow) HitTest(p Point) Widget {
 	if hit := HitChild(r.child, p); hit != nil && (r.box == nil || r.box.mode == SelectionNone || !r.selectable || interactiveWithin(hit, r)) {
 		return hit
 	}
-	if r.header != nil && r.headNat.H > 0 {
+	if r.headH > 0 {
 		if hit := HitChild(r.header, p); hit != nil {
 			return hit
 		}

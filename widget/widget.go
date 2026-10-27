@@ -48,33 +48,31 @@ type Size struct {
 	W, H int
 }
 
+// Along is s's extent along a: its width along a Row, its height down
+// a Column.
+func (s Size) Along(a Axis) int {
+	if a == Row {
+		return s.W
+	}
+	return s.H
+}
+
 // Point is a position in pixels.
 type Point struct {
 	X, Y int
 }
 
-// Constraints bounds the size a widget may claim during layout. Max is the
-// hard ceiling; Min what the parent needs at least.
-type Constraints struct {
-	Min, Max Size
-}
-
-// MinSizer is the squeezed-layout floor: the smallest size below which
-// the widget cannot do its job and must overflow instead of shrinking
-// further. Containers that negotiate space (Grid squeezing its tracks)
-// stop at these; Box overflows by design and never asks. The zero Size
-// — what a widget without the interface reports — means no floor.
-type MinSizer interface {
-	MinSize() Size
-}
-
-// Widget is one node in the retained widget tree. The passes run in order:
-// Measure computes how much space a widget wants, Arrange assigns its final
-// rect, Paint draws it.
+// Widget is one node in the retained widget tree. Measure reports what
+// a widget asks for, Arrange gives it its final rect, Paint draws it. A
+// container measures its children where it arranges them, so a root
+// needs only Arrange.
 type Widget interface {
-	// Measure returns the size this widget wants under con. The result
-	// must lie within con.
-	Measure(con Constraints) Size
+	// Measure reports the widget's request along axis - its width for
+	// Row, its height for Column - given forSize, its extent across
+	// that axis, or Unknown: GTK's height-for-width measure. The
+	// request never depends on the room a parent will offer; the
+	// parent decides at Arrange (docs/architecture.md).
+	Measure(axis Axis, forSize int) Sizes
 	// Arrange assigns the widget's final pixel rect and recurses into
 	// children.
 	Arrange(r render.Rect)
@@ -131,28 +129,22 @@ type node struct {
 	subInvalid bool
 	extras     []render.Rect
 
-	// measure cache: measureIn/Out is the most recently used Measure
-	// once measureSeen, and measureOld the three before it, most recent
-	// first. Four slots absorb the constraint sets one frame meets: a
-	// page in a vertical scroll beside a sidebar is measured at the row's
-	// whole width and again at the width the sidebar leaves (the row's
-	// natural and shrunk passes), each with and without the scrollbar
-	// gutter, then arranged at its natural height — fewer would thrash.
-	// measureDirty forces a recompute after InvalidateLayout. The style
-	// marks join the key: a stale cascade (or one marked by a class or
-	// state change) drops every entry, since padding, font-size, and
-	// min-* change what the widget wants.
-	measureSeen  bool
+	// measure cache: the requests answered since the cache was last
+	// fresh, most recently used first, keyed by axis and forSize. Four
+	// slots hold a frame's questions: a width, and heights at the widths
+	// a container tries. measureDirty forces a recompute after
+	// InvalidateLayout. The style marks join the key: a stale cascade
+	// (or one marked by a class or state change) drops every entry,
+	// since padding, font-size, and min-* change what the widget wants.
+	measureFresh bool
 	measureDirty bool
 	// subStyle is set while a descendant's cascade is stale
 	// (markStyleDirty): the cached measure re-runs down to it.
-	subStyle   bool
-	measureIn  Constraints
-	measureOut Size
-	measureOld [3]measureEntry
-	// measureCount tallies Measure entries; the zero-recursion pin test
-	// reads it.
-	measureCount int
+	subStyle bool
+	measures [4]measureEntry
+	// measureMisses tallies the measures the cache could not answer;
+	// the static-tree pin test reads it.
+	measureMisses int
 
 	// themeSeen stamps the theme generation this widget last joined a
 	// frame with; SetTheme bumps themeGen so every widget repaints once.
@@ -281,11 +273,6 @@ type node struct {
 	// in Measure, Arrange, Paint, and HitTest, so the space reflows to
 	// the siblings; widget.IsVisible folds the ancestors in.
 	hidden bool
-
-	// cssMin and cssMax are the margin-box bounds the last CSS-sized
-	// measure resolved (csssize.go), equal on an axis with a definite
-	// size: arrangeChild holds a container's slot to them.
-	cssMin, cssMax Size
 }
 
 // SetOnHoverWithin registers fn to hear the pointer enter or leave the
@@ -586,76 +573,71 @@ func (n *node) markMeasureDirty() bool {
 	return was
 }
 
-// measureEntry is one older slot of the measure cache.
+// measureEntry is one slot of the measure cache.
 type measureEntry struct {
-	in  Constraints
-	out Size
-	ok  bool
+	axis    Axis
+	forSize int
+	out     Sizes
+	ok      bool
 }
 
 func (n *node) dropMeasureCache() {
-	n.measureSeen = false
-	n.measureIn, n.measureOut = Constraints{}, Size{}
-	n.measureOld = [3]measureEntry{}
+	n.measureFresh = false
+	n.measures = [4]measureEntry{}
 }
 
-// measureHit returns the cached natural size when it is still valid
-// for con. Widget Measures open with it to skip recomputation on the
-// static-tree fast path. A stale or marked cascade misses too: a
+// measureHit returns the cached request along axis at forSize when it
+// is still valid. Widget Measures open with it to skip recomputation on
+// the static-tree fast path. A stale or marked cascade misses too: a
 // stylesheet load relayouts the tree by stamp, with no walk.
-func (n *node) measureHit(con Constraints) (Size, bool) {
-	n.measureCount++
-	if !n.measureSeen || n.measureDirty || n.styleDirty || n.styleSeen != styleGen {
-		if debug.Enabled {
-			noteMeasureMiss(n, con)
-		}
+func (n *node) measureHit(axis Axis, forSize int) (Sizes, bool) {
+	if !n.measureFresh || n.measureDirty || n.styleDirty || n.styleSeen != styleGen {
+		n.measureMiss(axis, forSize)
 		// Every entry predates the invalidation: none may come back
 		// once the recompute below stamps the cache fresh.
 		n.dropMeasureCache()
-		return Size{}, false
+		return Sizes{}, false
 	}
 	if n.subStyle {
-		if debug.Enabled {
-			noteMeasureMiss(n, con)
-		}
-		return Size{}, false
+		n.measureMiss(axis, forSize)
+		return Sizes{}, false
 	}
-	if n.measureIn == con {
-		return n.measureOut, true
-	}
-	for i, e := range n.measureOld {
-		if e.ok && e.in == con {
-			// Most recently used first: measureOut stays the last
-			// measured size the shrink floors read.
-			copy(n.measureOld[1:i+1], n.measureOld[:i])
-			n.measureOld[0] = measureEntry{in: n.measureIn, out: n.measureOut, ok: true}
-			n.measureIn, n.measureOut = e.in, e.out
+	for i, e := range n.measures {
+		if e.ok && e.axis == axis && e.forSize == forSize {
+			copy(n.measures[1:i+1], n.measures[:i])
+			n.measures[0] = e
 			return e.out, true
 		}
 	}
-	if debug.Enabled {
-		noteMeasureMiss(n, con)
-	}
-	return Size{}, false
+	n.measureMiss(axis, forSize)
+	return Sizes{}, false
 }
 
-// measureCalls reports how many times Measure entered this widget; the
-// zero-measure-recursion pin test reads it.
-func (n *node) measureCalls() int { return n.measureCount }
-
-// measureStore records the computed size as the cache entry for con
-// and returns it, closing the measureHit pair. The entry is stamped
-// with the style generation it measured under.
-func (n *node) measureStore(con Constraints, s Size) Size {
-	if n.measureSeen && con != n.measureIn {
-		copy(n.measureOld[1:], n.measureOld[:len(n.measureOld)-1])
-		n.measureOld[0] = measureEntry{in: n.measureIn, out: n.measureOut, ok: true}
+// measureMiss counts a measure the cache could not answer, and names it
+// in a lysdebug build.
+func (n *node) measureMiss(axis Axis, forSize int) {
+	n.measureMisses++
+	if debug.Enabled {
+		noteMeasureMiss(n, axis, forSize)
 	}
-	n.measureSeen = true
+}
+
+// measureMissCount reports how many measures this widget computed past
+// its cache; the static-tree pin test reads it.
+func (n *node) measureMissCount() int { return n.measureMisses }
+
+// measureStore records s as the cache entry for axis at forSize and
+// returns it, closing the measureHit pair. The cache is stamped with the
+// style generation it measured under.
+func (n *node) measureStore(axis Axis, forSize int, s Sizes) Sizes {
+	if !n.measureFresh {
+		n.measures = [4]measureEntry{}
+	}
+	copy(n.measures[1:], n.measures[:len(n.measures)-1])
+	n.measures[0] = measureEntry{axis: axis, forSize: forSize, out: s, ok: true}
+	n.measureFresh = true
 	n.measureDirty = false
 	n.subStyle = false
-	n.measureIn = con
-	n.measureOut = s
 	n.styleSeen = styleGen
 	return s
 }
@@ -897,23 +879,6 @@ func HitChild(w Widget, p Point) Widget {
 	return w.HitTest(p)
 }
 
-// clampSize pins s to con.
-func clampSize(s Size, con Constraints) Size {
-	if s.W < con.Min.W {
-		s.W = con.Min.W
-	}
-	if s.H < con.Min.H {
-		s.H = con.Min.H
-	}
-	if con.Max.W < s.W {
-		s.W = con.Max.W
-	}
-	if con.Max.H < s.H {
-		s.H = con.Max.H
-	}
-	return s
-}
-
 // PaintChild paints a container's child and then, when the frame armed
 // it for that child, the keyboard focus ring (render.Canvas.MarkFocus),
 // so later siblings cover the ring. Containers defined outside the kit
@@ -951,9 +916,9 @@ func PaintChild(cv *render.Canvas, w Widget) {
 // measureChild measures a container's child, parented first: the
 // child's cascade reaches the stylesheets above before its first
 // measure, so a measure ahead of the first arrange is already styled.
-func measureChild(parent, child Widget, con Constraints) Size {
+func measureChild(parent, child Widget, axis Axis, forSize int) Sizes {
 	setParents(parent, child)
-	return measureWithMargin(child, con)
+	return measureWithMargin(child, axis, forSize)
 }
 
 func walkWidgets(w Widget, visit func(Widget) (descend bool)) {

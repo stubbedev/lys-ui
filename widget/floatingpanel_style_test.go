@@ -20,7 +20,7 @@ func TestFloatingPanelContentIsStyledOnTheFirstLayout(t *testing.T) {
 	root.Append(panel, true)
 	root.AttachStylesheet(NewStylesheet(`button.small { padding: 0 12px; } .hdr button.small { padding: 0; }`, StylePriorityUser))
 	SetStyleRoot(root)
-	root.Measure(Constraints{Max: Size{W: 400, H: 300}})
+	SizeWithin(root, Size{W: 400, H: 300})
 	root.Arrange(render.Rect{W: 400, H: 300})
 	if got := btn.Bounds().W; got != 20 {
 		t.Errorf("first layout: button %d wide, want 20, its padding-0 width under .hdr", got)

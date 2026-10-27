@@ -12,7 +12,7 @@ func newWrapArea(t *testing.T, s string, width int) *TextArea {
 	t.Helper()
 	ta := newTextArea(t, s)
 	ta.Arrange(render.Rect{X: 0, Y: 0, W: width, H: 300})
-	ta.Measure(Constraints{Min: Size{}, Max: Size{W: width, H: 1000}})
+	ta.Measure(Column, width)
 	return ta
 }
 

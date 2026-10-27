@@ -107,25 +107,24 @@ func (s *MenuStack) pop() {
 
 // Measure wants the largest level of the tree, so the stack's box
 // holds every submenu it can slide to.
-func (s *MenuStack) Measure(con Constraints) Size {
-	if sz, ok := s.measureHit(con); ok {
+func (s *MenuStack) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := s.measureHit(axis, forSize); ok {
 		return sz
 	}
 	root := s.path[0]
-	return s.measureStore(con, s.measureTree(root.items, "", con))
+	return s.measureStore(axis, forSize, s.measureTree(root.items, "", axis, forSize))
 }
 
-// measureTree is the max size over one level and all of its submenus.
-func (s *MenuStack) measureTree(items []MenuItem, parent string, con Constraints) Size {
-	sz := s.level(items, parent).Measure(con)
+// measureTree is the widest request over one level and all of its
+// submenus.
+func (s *MenuStack) measureTree(items []MenuItem, parent string, axis Axis, forSize int) Sizes {
+	req := s.level(items, parent).Measure(axis, forSize)
 	for _, it := range items {
-		if len(it.Items) == 0 {
-			continue
+		if len(it.Items) > 0 {
+			req = req.widest(s.measureTree(it.Items, it.Label, axis, forSize))
 		}
-		sub := s.measureTree(it.Items, it.Label, con)
-		sz.W, sz.H = max(sz.W, sub.W), max(sz.H, sub.H)
 	}
-	return sz
+	return req
 }
 
 // Arrange lays the visible level into the stack's box.

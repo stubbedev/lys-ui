@@ -48,14 +48,14 @@ func TestDropdownBuildsSlotIconsOnce(t *testing.T) {
 	d := NewDropdownRows(testFace(t), 13, rows, 0)
 	for range 5 {
 		d.InvalidateLayout()
-		d.Measure(Constraints{Max: Size{W: 300, H: 40}})
+		SizeWithin(d, Size{W: 300, H: 40})
 	}
 	slot := built
 	if slot > len(rows)+1 {
 		t.Errorf("five measures built %d icons, want one per row and the face's", slot)
 	}
 	d.SetRows(rows, 0)
-	d.Measure(Constraints{Max: Size{W: 300, H: 40}})
+	SizeWithin(d, Size{W: 300, H: 40})
 	if built == slot {
 		t.Error("new rows did not rebuild the slot icons")
 	}

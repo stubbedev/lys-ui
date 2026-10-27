@@ -13,7 +13,7 @@ import (
 func TestSpinnerNeedsSpinningAndVisible(t *testing.T) {
 	c := pinAnimClock(t)
 	s := NewSpinner(24)
-	con := Constraints{Max: Size{W: 100, H: 100}}
+	con := Size{W: 100, H: 100}
 
 	t.Run("spinning but unarranged holds no timer", func(t *testing.T) {
 		s.SetSpinning(true)
@@ -23,7 +23,7 @@ func TestSpinnerNeedsSpinningAndVisible(t *testing.T) {
 	})
 
 	t.Run("visible and spinning ticks", func(t *testing.T) {
-		s.Measure(con)
+		SizeWithin(s, con)
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 24, H: 24})
 		if !animActiveNow(t) {
 			t.Fatal("visible spinning spinner scheduled nothing")
@@ -81,7 +81,7 @@ func TestSpinnerAngleWraps(t *testing.T) {
 	c := pinAnimClock(t)
 	s := NewSpinner(24)
 	s.SetSpinning(true)
-	s.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(s, Size{W: 100, H: 100})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 24, H: 24})
 
 	// Drive a little past one revolution: the angle must have wrapped
@@ -111,7 +111,7 @@ func TestSpinnerPaint(t *testing.T) {
 
 	t.Run("at rest and mid-rotation", func(t *testing.T) {
 		s := NewSpinner(24)
-		s.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(s, Size{W: 100, H: 100})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 24, H: 24})
 		s.Paint(cv)
 		s.angle = math.Pi
@@ -120,7 +120,7 @@ func TestSpinnerPaint(t *testing.T) {
 
 	t.Run("degenerate sizes do not panic", func(t *testing.T) {
 		s := NewSpinner(2)
-		s.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(s, Size{W: 100, H: 100})
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 2, H: 2})
 		s.Paint(cv)
 		s.Arrange(render.Rect{})

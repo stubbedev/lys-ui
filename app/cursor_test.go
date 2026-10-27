@@ -31,7 +31,7 @@ func newCursorTestInput() *surfaceInput {
 	root := widget.NewBox(widget.Row, 0, 0)
 	root.Append(caretBox{Box: widget.NewBox(widget.Column, 0, 0)}, true)
 	root.Append(widget.NewBox(widget.Column, 0, 0), true)
-	root.Measure(widget.Constraints{Max: widget.Size{W: 100, H: 100}})
+	widget.SizeWithin(root, widget.Size{W: 100, H: 100})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 100})
 	return &surfaceInput{
 		router:  &widget.Router{Root: root},

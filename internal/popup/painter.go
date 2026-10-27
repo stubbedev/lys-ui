@@ -216,7 +216,6 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	}
 	w, h := p.Size()
 	_ = p.sc.Apply(pc.frac120, w, h)
-	pc.visual.Measure(widget.Constraints{Max: widget.Size{W: w, H: h}})
 	pc.visual.Arrange(render.Rect{W: w, H: h})
 	bounds := render.Rect{W: w, H: h}
 	pc.collect(bounds)

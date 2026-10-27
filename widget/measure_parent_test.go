@@ -4,12 +4,12 @@ import "testing"
 
 func TestRemeasureBeforeArrangeSeesChanges(t *testing.T) {
 	face := testFace(t)
-	con := Constraints{Max: Size{W: 400, H: 400}}
+	con := Size{W: 400, H: 400}
 
 	row := NewActionRow(face, 13, "Title", "")
-	before := row.Measure(con)
+	before := SizeWithin(row, con)
 	row.SetSubtitle("a subtitle line")
-	if after := row.Measure(con); after.H <= before.H {
+	if after := SizeWithin(row, con); after.H <= before.H {
 		t.Errorf("a composite kept its cached size after a change below it: %v then %v", before, after)
 	}
 
@@ -17,9 +17,9 @@ func TestRemeasureBeforeArrangeSeesChanges(t *testing.T) {
 	hidden.SetVisible(false)
 	box := NewBox(Column, 0, 0)
 	box.Append(NewSpacer(10, 10), false).Append(hidden, false)
-	before = box.Measure(con)
+	before = SizeWithin(box, con)
 	hidden.SetVisible(true)
-	if after := box.Measure(con); after.H != before.H+30 {
+	if after := SizeWithin(box, con); after.H != before.H+30 {
 		t.Errorf("showing a hidden child did not reach the box: %v then %v", before, after)
 	}
 }

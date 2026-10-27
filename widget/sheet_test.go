@@ -85,7 +85,7 @@ func TestGoldenSheet(t *testing.T) {
 			defer SetTheme(nil)
 			s, _, _, _ := newTestSheet(t, SheetRight)
 			s.SetOpen(true)
-			s.Measure(Constraints{Max: Size{W: 600, H: 400}})
+			SizeWithin(s, Size{W: 600, H: 400})
 			s.Arrange(render.Rect{W: 600, H: 400})
 			NewGolden(t, s, "sheet-"+tc.name, goldenTheme(tc.th), goldenFrame(600, 400))
 		})

@@ -43,7 +43,7 @@ func TestLabelWrap(t *testing.T) {
 		w := widthForLines(t, face, mixed, 3)
 		l := NewLabel(face, modePx, mixed, render.RGB(255, 255, 255))
 		l.SetWrap(true)
-		got := l.Measure(Constraints{Max: Size{W: w, H: 400}})
+		got := SizeWithin(l, Size{W: w, H: 400})
 		if got.W != w {
 			t.Errorf("wrapped width = %d, want the offered %d", got.W, w)
 		}
@@ -55,12 +55,12 @@ func TestLabelWrap(t *testing.T) {
 	t.Run("a wide constraint keeps one row", func(t *testing.T) {
 		l := NewLabel(face, modePx, mixed, render.RGB(255, 255, 255))
 		l.SetWrap(true)
-		got := l.Measure(Constraints{Max: Size{W: 4096, H: 400}})
+		got := SizeWithin(l, Size{W: 4096, H: 400})
 		if got.H != lineH {
 			t.Errorf("height = %d, want one line %d", got.H, lineH)
 		}
-		if got.W != l.natural.W {
-			t.Errorf("width = %d, want the widest row %d", got.W, l.natural.W)
+		if got.W != textWidth(l) {
+			t.Errorf("width = %d, want the widest row %d", got.W, textWidth(l))
 		}
 	})
 
@@ -68,7 +68,7 @@ func TestLabelWrap(t *testing.T) {
 		token := strings.Repeat("x", 40)
 		l := NewLabel(face, modePx, token, render.RGB(255, 255, 255))
 		l.SetWrap(true)
-		got := l.Measure(Constraints{Max: Size{W: 50, H: 400}})
+		got := SizeWithin(l, Size{W: 50, H: 400})
 		if got.H != lineH {
 			t.Errorf("height = %d, want one (overflowing) row %d", got.H, lineH)
 		}
@@ -80,7 +80,7 @@ func TestLabelWrap(t *testing.T) {
 	t.Run("hard newlines split rows", func(t *testing.T) {
 		l := NewLabel(face, modePx, "aa\nbb\nc", render.RGB(255, 255, 255))
 		l.SetWrap(true)
-		got := l.Measure(Constraints{Max: Size{W: 4096, H: 400}})
+		got := SizeWithin(l, Size{W: 4096, H: 400})
 		if want := 3 * lineH; got.H != want {
 			t.Errorf("height = %d, want %d (three hard rows)", got.H, want)
 		}
@@ -90,7 +90,7 @@ func TestLabelWrap(t *testing.T) {
 		w := widthForLines(t, face, mixed, 3)
 		l := NewLabel(face, modePx, mixed, render.RGB(255, 255, 255))
 		l.SetWrap(true)
-		l.Measure(Constraints{Max: Size{W: w, H: 3 * lineH}})
+		SizeWithin(l, Size{W: w, H: 3 * lineH})
 		const pad = 4
 		stride := render.Stride(w + 2*pad)
 		buf := make([]byte, stride*(3*lineH+2*pad))
@@ -127,9 +127,9 @@ func TestLabelEllipsize(t *testing.T) {
 	t.Run("fitting text is untouched", func(t *testing.T) {
 		l := NewLabel(face, modePx, text, render.RGB(255, 255, 255))
 		l.SetEllipsize(EllipsizeEnd)
-		got := l.Measure(Constraints{Max: Size{W: 4096, H: 100}})
-		if got.W != l.natural.W {
-			t.Errorf("width = %d, want the untruncated natural %d", got.W, l.natural.W)
+		got := SizeWithin(l, Size{W: 4096, H: 100})
+		if got.W != textWidth(l) {
+			t.Errorf("width = %d, want the untruncated natural %d", got.W, textWidth(l))
 		}
 	})
 
@@ -140,17 +140,17 @@ func TestLabelEllipsize(t *testing.T) {
 
 		full := NewLabel(face, modePx, text, render.RGB(255, 255, 255))
 		full.SetEllipsize(EllipsizeEnd)
-		if got := full.Measure(Constraints{Max: Size{W: fits, H: 100}}); got.W != full.natural.W {
-			t.Errorf("at the fitting width %d: width = %d, want natural %d", fits, got.W, full.natural.W)
+		if got := SizeWithin(full, Size{W: fits, H: 100}); got.W != textWidth(full) {
+			t.Errorf("at the fitting width %d: width = %d, want natural %d", fits, got.W, textWidth(full))
 		}
 		cut := NewLabel(face, modePx, text, render.RGB(255, 255, 255))
 		cut.SetEllipsize(EllipsizeEnd)
-		got := cut.Measure(Constraints{Max: Size{W: short, H: 100}})
+		got := SizeWithin(cut, Size{W: short, H: 100})
 		if got.W > short {
 			t.Errorf("one pixel short: width = %d, want <= %d", got.W, short)
 		}
-		if got.W >= full.natural.W {
-			t.Errorf("one pixel short: width = %d, want a truncation below %d", got.W, full.natural.W)
+		if got.W >= textWidth(full) {
+			t.Errorf("one pixel short: width = %d, want a truncation below %d", got.W, textWidth(full))
 		}
 	})
 
@@ -183,7 +183,7 @@ func TestLabelEllipsize(t *testing.T) {
 		w := int(adv) - 5
 		l := NewLabel(face, modePx, text, render.RGB(255, 255, 255))
 		l.SetEllipsize(EllipsizeMiddle)
-		got := l.Measure(Constraints{Max: Size{W: w, H: 100}})
+		got := SizeWithin(l, Size{W: w, H: 100})
 		want := render.EllipsizeText(face, text, EllipsizeMiddle, float64(w), modePx)
 		if got.W != int(face.Shape(want, modePx).Advance()+0.5) {
 			t.Errorf("width = %d, want the middle-truncated advance of %q", got.W, want)
@@ -228,7 +228,7 @@ func TestLabelWrapEllipsizeInteraction(t *testing.T) {
 		if a := face.Shape(last, modePx).Advance(); a > w {
 			t.Errorf("final row advances %v > %d; the ellipsis must fit", a, w)
 		}
-		if got := l.Measure(Constraints{Max: Size{W: w, H: 400}}); got.H != len(rows)*lineH {
+		if got := SizeWithin(l, Size{W: w, H: 400}); got.H != len(rows)*lineH {
 			t.Errorf("height = %d, want %d rows worth %d", got.H, len(rows), len(rows)*lineH)
 		}
 	})
@@ -245,12 +245,12 @@ func TestLabelWrapEllipsizeInteraction(t *testing.T) {
 
 	t.Run("both modes off overflows a single clipped line", func(t *testing.T) {
 		l := NewLabel(face, modePx, text, render.RGB(255, 255, 255))
-		got := l.Measure(Constraints{Max: Size{W: w, H: 400}})
+		got := SizeWithin(l, Size{W: w, H: 400})
 		if got.H != lineH {
 			t.Errorf("height = %d, want one line %d", got.H, lineH)
 		}
-		if got.W != w {
-			t.Errorf("width = %d, want the clamped offered %d", got.W, w)
+		if got.W != textWidth(l) {
+			t.Errorf("width = %d, want the whole line %d past the offered %d", got.W, textWidth(l), w)
 		}
 	})
 }
@@ -264,32 +264,32 @@ func TestLabelConstraintRemeasure(t *testing.T) {
 	t.Run("a narrower constraint re-wraps, a wider one reverts", func(t *testing.T) {
 		l := NewLabel(face, modePx, mixed, render.RGB(255, 255, 255))
 		l.SetWrap(true)
-		if got := l.Measure(Constraints{Max: Size{W: 4096, H: 400}}); got.H != lineH {
+		if got := SizeWithin(l, Size{W: 4096, H: 400}); got.H != lineH {
 			t.Fatalf("wide height = %d, want one row", got.H)
 		}
-		if got := l.Measure(Constraints{Max: Size{W: w, H: 400}}); got.H != 3*lineH {
+		if got := SizeWithin(l, Size{W: w, H: 400}); got.H != 3*lineH {
 			t.Fatalf("narrow height = %d, want three rows", got.H)
 		}
-		if got := l.Measure(Constraints{Max: Size{W: 4096, H: 400}}); got.H != lineH {
+		if got := SizeWithin(l, Size{W: 4096, H: 400}); got.H != lineH {
 			t.Fatalf("wide again height = %d, want one row from the per-constraint cache", got.H)
 		}
 	})
 
 	t.Run("mode changes drop the measure cache", func(t *testing.T) {
 		l := NewLabel(face, modePx, mixed, render.RGB(255, 255, 255))
-		l.Measure(Constraints{Max: Size{W: w, H: 400}})
+		SizeWithin(l, Size{W: w, H: 400})
 		l.SetWrap(true)
 		if !l.measureDirty {
 			t.Error("SetWrap left the cached measure valid")
 		}
-		if got := l.Measure(Constraints{Max: Size{W: w, H: 400}}); got.H != 3*lineH {
+		if got := SizeWithin(l, Size{W: w, H: 400}); got.H != 3*lineH {
 			t.Fatalf("after SetWrap height = %d, want three rows", got.H)
 		}
 		l.SetEllipsize(EllipsizeEnd)
 		if !l.measureDirty {
 			t.Error("SetEllipsize left the cached measure valid")
 		}
-		l.Measure(Constraints{Max: Size{W: w, H: 400}})
+		SizeWithin(l, Size{W: w, H: 400})
 		l.SetEllipsize(EllipsizeEnd)
 		if l.measureDirty {
 			t.Error("a redundant SetEllipsize dropped the cache")
@@ -305,7 +305,7 @@ func TestLabelEllipsizeTooltipCombo(t *testing.T) {
 	l := NewLabel(face, modePx, full, render.RGB(255, 255, 255))
 	l.SetEllipsize(EllipsizeEnd)
 	l.SetTooltip(full)
-	got := l.Measure(Constraints{Max: Size{W: 90, H: 100}})
+	got := SizeWithin(l, Size{W: 90, H: 100})
 	if got.W > 90 {
 		t.Errorf("measure = %d wide, want the ellipsized line within 90", got.W)
 	}
@@ -325,12 +325,12 @@ func TestLabelMaxWidthChars(t *testing.T) {
 	white := render.RGB(255, 255, 255)
 	avg := face.Shape(approxCharSample, modePx).Advance() / float64(len(approxCharSample))
 	limit := int(math.Ceil(avg * 5))
-	wide := Constraints{Max: Size{W: 4096, H: 100}}
+	wide := Size{W: 4096, H: 100}
 
 	long := NewLabel(face, modePx, "alphabetagammadeltaepsilon", white)
 	long.SetEllipsize(EllipsizeEnd)
 	long.SetMaxWidthChars(5)
-	if got := long.Measure(wide).W; got > limit || got == 0 {
+	if got := SizeWithin(long, wide).W; got > limit || got == 0 {
 		t.Errorf("capped width = %d, want within the 5-char cap %d", got, limit)
 	}
 	if long.MaxWidthChars() != 5 {
@@ -339,17 +339,17 @@ func TestLabelMaxWidthChars(t *testing.T) {
 
 	short := NewLabel(face, modePx, "ab", white)
 	short.SetMaxWidthChars(5)
-	if got := short.Measure(wide).W; got != short.natural.W {
-		t.Errorf("short text = %d, want its natural %d", got, short.natural.W)
+	if got := SizeWithin(short, wide).W; got != textWidth(short) {
+		t.Errorf("short text = %d, want its natural %d", got, textWidth(short))
 	}
 
 	long.SetMaxWidthChars(0)
-	if got := long.Measure(wide).W; got != long.natural.W {
-		t.Errorf("uncapped width = %d, want the natural %d", got, long.natural.W)
+	if got := SizeWithin(long, wide).W; got != textWidth(long) {
+		t.Errorf("uncapped width = %d, want the natural %d", got, textWidth(long))
 	}
 	// A negative count is no cap, not a zero-width label.
 	long.SetMaxWidthChars(-3)
-	if long.MaxWidthChars() != 0 || long.Measure(wide).W != long.natural.W {
+	if long.MaxWidthChars() != 0 || SizeWithin(long, wide).W != textWidth(long) {
 		t.Error("a negative cap was applied")
 	}
 }
@@ -376,7 +376,7 @@ func TestLabelMaxLines(t *testing.T) {
 		if !strings.HasSuffix(rows[1], "…") {
 			t.Errorf("last row = %q, want an ellipsis for the dropped rows", rows[1])
 		}
-		if got := l.Measure(Constraints{Max: Size{W: w, H: 400}}); got.H != 2*lineH {
+		if got := SizeWithin(l, Size{W: w, H: 400}); got.H != 2*lineH {
 			t.Errorf("height = %d, want two rows %d", got.H, 2*lineH)
 		}
 	})
@@ -407,3 +407,6 @@ func TestLabelMaxLines(t *testing.T) {
 		}
 	})
 }
+
+// textWidth is l's text on one line, rounded up as its measure rounds.
+func textWidth(l *Label) int { return int(math.Ceil(l.shaped.Advance())) }

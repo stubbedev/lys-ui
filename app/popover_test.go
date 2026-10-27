@@ -79,10 +79,10 @@ type keySpy struct {
 	onAction func(widget.KeyAction, widget.Mods)
 }
 
-func (k *keySpy) Measure(widget.Constraints) widget.Size { return widget.Size{} }
-func (k *keySpy) Arrange(render.Rect)                    {}
-func (k *keySpy) Paint(*render.Canvas)                   {}
-func (k *keySpy) HitTest(widget.Point) widget.Widget     { return nil }
+func (k *keySpy) Measure(widget.Axis, int) widget.Sizes { return widget.Sizes{} }
+func (k *keySpy) Arrange(render.Rect)                   {}
+func (k *keySpy) Paint(*render.Canvas)                  {}
+func (k *keySpy) HitTest(widget.Point) widget.Widget    { return nil }
 func (k *keySpy) KeyAction(a widget.KeyAction, m widget.Mods) {
 	k.onAction(a, m)
 }

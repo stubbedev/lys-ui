@@ -47,9 +47,7 @@ type dragStub struct {
 	pressed bool
 }
 
-func (s *dragStub) Measure(con widget.Constraints) widget.Size {
-	return clampWidgetSize(widget.Size{W: 20, H: 20}, con)
-}
+func (s *dragStub) Measure(widget.Axis, int) widget.Sizes { return widget.FixedSizes(20) }
 
 func (s *dragStub) Arrange(r render.Rect) { s.bounds = r }
 
@@ -97,9 +95,7 @@ type dropZone struct {
 	hovers       int
 }
 
-func (z *dropZone) Measure(con widget.Constraints) widget.Size {
-	return clampWidgetSize(widget.Size{W: 20, H: 20}, con)
-}
+func (z *dropZone) Measure(widget.Axis, int) widget.Sizes { return widget.FixedSizes(20) }
 
 func (z *dropZone) Arrange(r render.Rect) { z.bounds = r }
 
@@ -143,17 +139,6 @@ var (
 	_ widget.Dropper     = (*dropZone)(nil)
 )
 
-// clampWidgetSize pins s to con for the stubs.
-func clampWidgetSize(s widget.Size, con widget.Constraints) widget.Size {
-	if s.W > con.Max.W {
-		s.W = con.Max.W
-	}
-	if s.H > con.Max.H {
-		s.H = con.Max.H
-	}
-	return s
-}
-
 // newDragTestInput builds a surface input around a stub tree.
 func newDragTestInput(root widget.Widget, dnd dragController) *surfaceInput {
 	return &surfaceInput{
@@ -167,7 +152,7 @@ func newDragTestInput(root widget.Widget, dnd dragController) *surfaceInput {
 // rowOf lays one widget alone on a row at the origin.
 func rowOf(w widget.Widget) widget.Widget {
 	root := widget.NewBox(widget.Row, 0, 0).Append(w, false)
-	root.Measure(widget.Constraints{Max: widget.Size{W: 100, H: 100}})
+	widget.SizeWithin(root, widget.Size{W: 100, H: 100})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 20, H: 20})
 	return root
 }

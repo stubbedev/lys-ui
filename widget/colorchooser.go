@@ -217,8 +217,8 @@ func minf(a, b float64) float64 {
 
 // Measure wants the SV square (160) plus the strips (24 + gaps), the
 // entry row, and the two palette rows.
-func (c *ColorChooser) Measure(con Constraints) Size {
-	if sz, ok := c.measureHit(con); ok {
+func (c *ColorChooser) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := c.measureHit(axis, forSize); ok {
 		return sz
 	}
 	lineH := c.face.Shape("lg", c.sizePx).LineHeight()
@@ -227,7 +227,7 @@ func (c *ColorChooser) Measure(con Constraints) Size {
 		w += 8 + 24
 	}
 	h := 160 + 8 + lineH + 12 + 8 + (lineH+10)*2 + 12
-	return c.measureStore(con, clampSize(Size{W: w, H: h}, con))
+	return c.measureStore(axis, forSize, FixedSizes(Size{W: w, H: h}.Along(axis)))
 }
 
 // Arrange records the rect and places the hex entry and the + button.
@@ -242,8 +242,7 @@ func (c *ColorChooser) Arrange(r render.Rect) {
 	c.hex.Arrange(render.Rect{X: c.sv.X, Y: entryY, W: 160 + 8 + 24, H: entryH})
 	btnX := c.hex.Bounds().X + c.hex.Bounds().W + 8
 	if c.custom != nil {
-		nat := c.addTo.Measure(unbounded)
-		c.addTo.Arrange(render.Rect{X: btnX, Y: entryY, W: nat.W, H: entryH})
+		c.addTo.Arrange(render.Rect{X: btnX, Y: entryY, W: c.addTo.Measure(Row, Unknown).Nat, H: entryH})
 		c.addTo.OnClick = func() {
 			if c.addPick != nil {
 				c.addPick(c.Color())
@@ -252,8 +251,7 @@ func (c *ColorChooser) Arrange(r render.Rect) {
 		btnX = c.addTo.Bounds().X + c.addTo.Bounds().W + 8
 	}
 	if c.eyedrop != nil {
-		nat := c.pickFrom.Measure(unbounded)
-		c.pickFrom.Arrange(render.Rect{X: btnX, Y: entryY, W: nat.W, H: entryH})
+		c.pickFrom.Arrange(render.Rect{X: btnX, Y: entryY, W: c.pickFrom.Measure(Row, Unknown).Nat, H: entryH})
 		c.pickFrom.OnClick = c.eyedrop
 	}
 	setParents(c, c.hex)

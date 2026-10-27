@@ -102,15 +102,17 @@ func (m *Morph) paintAtRest(cv *render.Canvas) {
 }
 
 // Measure reports the child's natural size plus the plate inset on
-// every side, clamped to con.
-func (m *Morph) Measure(con Constraints) Size {
-	if sz, ok := m.measureHit(con); ok {
+// every side.
+func (m *Morph) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := m.measureHit(axis, forSize); ok {
 		return sz
 	}
 	in := 2 * m.inset
-	inner := Constraints{Max: Size{W: max(0, con.Max.W-in), H: max(0, con.Max.H-in)}}
-	sz := measureChild(m, m.child, inner)
-	return m.measureStore(con, clampSize(Size{W: sz.W + in, H: sz.H + in}, con))
+	inner := forSize
+	if inner != Unknown {
+		inner = max(0, inner-in)
+	}
+	return m.measureStore(axis, forSize, measureChild(m, m.child, axis, inner).grow(in))
 }
 
 // Arrange gives the child the content rect: r less the plate inset.

@@ -25,9 +25,11 @@ func newDragStack(front Widget, count int) *dragStack {
 }
 
 // Measure is the front item's size plus the offset of the two cards.
-func (s *dragStack) Measure(con Constraints) Size {
-	sz := s.front.Measure(con)
-	return clampSize(Size{W: sz.W + 2*dragStackOffset, H: sz.H + 2*dragStackOffset}, con)
+func (s *dragStack) Measure(axis Axis, forSize int) Sizes {
+	if forSize != Unknown {
+		forSize = max(0, forSize-2*dragStackOffset)
+	}
+	return s.front.Measure(axis, forSize).grow(2 * dragStackOffset)
 }
 
 // Arrange records the rect; Paint lays the front item out.

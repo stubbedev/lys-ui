@@ -11,7 +11,7 @@ import (
 func TestProgressBarColors(t *testing.T) {
 	const w, h = 20, 4
 	paint := func(p *ProgressBar) []byte {
-		p.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(p, Size{W: w, H: h})
 		p.Arrange(render.Rect{W: w, H: h})
 		buf := make([]byte, render.Stride(w)*h)
 		p.Paint(render.New(buf, render.Stride(w), w, h))

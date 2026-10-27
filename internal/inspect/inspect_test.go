@@ -33,7 +33,7 @@ func inspectTree(t *testing.T) (widget.Widget, *widget.Router, *widget.Button) {
 		Append(button, false).
 		Append(hint, false).
 		Append(entry, false)
-	column.Measure(widget.Constraints{Max: widget.Size{W: 300, H: 200}})
+	widget.SizeWithin(column, widget.Size{W: 300, H: 200})
 	column.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 200})
 	r := &widget.Router{Root: column}
 	bs := button.Bounds()
@@ -56,8 +56,8 @@ func TestOverlayPassthrough(t *testing.T) {
 	ov.SetOn(false)
 
 	t.Run("measure and arrange match the root", func(t *testing.T) {
-		con := widget.Constraints{Max: widget.Size{W: 300, H: 200}}
-		if got, want := ov.Measure(con), root.Measure(con); got != want {
+		con := widget.Size{W: 300, H: 200}
+		if got, want := widget.SizeWithin(ov, con), widget.SizeWithin(root, con); got != want {
 			t.Errorf("overlay measure = %v, want %v", got, want)
 		}
 		ov.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 200})
@@ -90,7 +90,7 @@ func TestOverlayPaintDrawsAnnotationsWithoutMutating(t *testing.T) {
 	cv := newCanvas(t, 300, 200)
 
 	widget.CollectDamage(root) // drain fixture invalidations
-	root.Measure(widget.Constraints{Max: widget.Size{W: 300, H: 200}})
+	widget.SizeWithin(root, widget.Size{W: 300, H: 200})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 300, H: 200})
 	before := widget.DumpTree(root, r)
 	widget.CollectDamage(root)
@@ -299,9 +299,9 @@ func TestOverlayCarriesInvalidationsToTheWindow(t *testing.T) {
 	root.Append(label, false)
 	ov := NewOverlay(root)
 	fader := widget.NewFader(ov)
-	con := widget.Constraints{Max: widget.Size{W: 400, H: 400}}
+	con := widget.Size{W: 400, H: 400}
 	for range 3 {
-		fader.Measure(con)
+		widget.SizeWithin(fader, con)
 		fader.Arrange(render.Rect{W: 400, H: 400})
 	}
 	if root.Parent() != ov {
@@ -330,11 +330,11 @@ func TestStyleRootKeepsScopedRootVariables(t *testing.T) {
 	root.AttachStylesheet(widget.NewStylesheet(`:root { --big: 40px; } label { font-size: var(--big); }`, widget.StylePriorityUser))
 	widget.SetStyleRoot(root)
 	fader := widget.NewFader(NewOverlay(root))
-	con := widget.Constraints{Max: widget.Size{W: 400, H: 400}}
-	fader.Measure(con)
+	con := widget.Size{W: 400, H: 400}
+	widget.SizeWithin(fader, con)
 	fader.Arrange(render.Rect{W: 400, H: 400})
 	for widget.LayoutPending(fader) {
-		fader.Measure(con)
+		widget.SizeWithin(fader, con)
 		fader.Arrange(render.Rect{W: 400, H: 400})
 	}
 	if h := label.Bounds().H; h < 40 {

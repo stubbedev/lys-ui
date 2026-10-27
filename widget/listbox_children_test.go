@@ -33,7 +33,7 @@ func TestListBoxChildren(t *testing.T) {
 	root.AttachStylesheet(NewStylesheet("list label { color: #102030; }", StylePriorityUser))
 	root.Append(l, false)
 	SetStyleRoot(root)
-	root.Measure(Constraints{Max: Size{W: 200, H: 200}})
+	SizeWithin(root, Size{W: 200, H: 200})
 	root.Arrange(render.Rect{W: 200, H: 200})
 	if c := CascadeColor(a); c != render.RGB(0x10, 0x20, 0x30) {
 		t.Errorf("row label color %08x, want the list rule's", uint32(c))

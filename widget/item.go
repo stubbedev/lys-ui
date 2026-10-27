@@ -62,7 +62,7 @@ func NewItem(face render.Font, title, description string) *Item {
 	it.row.AppendAligned(it.text, true, AlignCenter)
 	it.row.AppendAligned(it.actions, false, AlignCenter)
 	it.initComposite(it, it.row)
-	it.fillWidth = true
+	it.SetHExpand(true)
 	it.boxed = true
 	return it
 }
@@ -268,9 +268,9 @@ func (g *ItemGroup) Remove(w Widget) bool {
 // Measure shows a separator only between two shown items, as a GTK
 // boxed list does, then measures the stack: a hidden item takes the
 // separators beside it with it.
-func (g *ItemGroup) Measure(con Constraints) Size {
+func (g *ItemGroup) Measure(axis Axis, forSize int) Sizes {
 	g.syncSeparators()
-	return g.composite.Measure(con)
+	return g.composite.Measure(axis, forSize)
 }
 
 // syncSeparators shows the separator before an item when the item and

@@ -149,7 +149,7 @@ func (d demo) room(w, h int) demo { d.minSize = widget.Size{W: w, H: h}; return 
 // windowSize is the shot window for the demo built as root: its
 // natural size, and the room its overlay asks for.
 func (d demo) windowSize(root widget.Widget) widget.Size {
-	n := root.Measure(widget.Constraints{Max: widget.Size{W: shotMaxWidth, H: 4096}})
+	n := widget.SizeWithin(root, widget.Size{W: shotMaxWidth, H: 4096})
 	return widget.Size{W: max(n.W, d.minSize.W), H: max(n.H, d.minSize.H)}
 }
 

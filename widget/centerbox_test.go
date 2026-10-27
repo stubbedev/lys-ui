@@ -36,7 +36,7 @@ func TestCenterBoxNilSlots(t *testing.T) {
 	if got := float64(mb.X) + float64(mb.W)/2; got < 39 || got > 41 {
 		t.Errorf("center slot midpoint %v, want 40", got)
 	}
-	if cb.Measure(Constraints{Max: Size{W: 100, H: 40}}).W == 0 {
+	if SizeWithin(cb, Size{W: 100, H: 40}).W == 0 {
 		t.Error("the box measured to nothing")
 	}
 }
@@ -71,7 +71,7 @@ func TestCenterBoxColumn(t *testing.T) {
 	top, mid, bottom := NewSpacer(10, 20), NewSpacer(10, 30), NewSpacer(10, 40)
 	cb := NewCenterBox(top, mid, bottom)
 	cb.SetOrientation(Column)
-	if got := cb.Measure(Constraints{Max: Size{W: 500, H: 500}}); got != (Size{W: 10, H: 90}) {
+	if got := SizeWithin(cb, Size{W: 500, H: 500}); got != (Size{W: 10, H: 90}) {
 		t.Errorf("column measures %v, want 10x90", got)
 	}
 	arrangeTree(t, cb, 50, 300)

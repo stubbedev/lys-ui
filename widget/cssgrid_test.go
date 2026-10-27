@@ -303,7 +303,7 @@ func TestCSSGridSpanningColumnsIntrinsic(t *testing.T) {
 	if got, want := []int{b.Bounds().W, c.Bounds().X, c.Bounds().W, a.Bounds().W}, []int{110, 110, 90, 200}; !slices.Equal(got, want) {
 		t.Errorf("b w, c x, c w, a w = %v, want %v: 120px shared over 50 + 30", got, want)
 	}
-	if w := root.Measure(Constraints{Max: Size{W: indefinite, H: indefinite}}).W; w != 200 {
+	if w := SizeWithin(root, Size{W: indefinite, H: indefinite}).W; w != 200 {
 		t.Errorf("max-content width %d, want 200", w)
 	}
 }
@@ -314,11 +314,11 @@ func TestCSSGridSpanningColumnsIntrinsic(t *testing.T) {
 func TestCSSGridMeasure(t *testing.T) {
 	loadCSS(t, `.g { display: grid; grid-template-columns: 1fr 2fr; } .f { display: grid; grid-template-columns: repeat(auto-fill, 40px); }`)
 	g := cssBox(Row, "g", item(30, 20), item(30, 20))
-	if got := g.Measure(Constraints{Max: Size{W: indefinite, H: indefinite}}); got != (Size{W: 90, H: 20}) {
+	if got := SizeWithin(g, Size{W: indefinite, H: indefinite}); got != (Size{W: 90, H: 20}) {
 		t.Errorf("fr grid measures %v, want 90x20: 1fr is 30px", got)
 	}
 	f := cssBox(Row, "f", item(30, 20), item(30, 20))
-	if got := f.Measure(Constraints{Max: Size{W: indefinite, H: indefinite}}); got != (Size{W: 40, H: 40}) {
+	if got := SizeWithin(f, Size{W: indefinite, H: indefinite}); got != (Size{W: 40, H: 40}) {
 		t.Errorf("auto-fill grid measures %v, want one 40px column, two rows", got)
 	}
 }
@@ -570,8 +570,8 @@ func TestCSSGridShrinkableHeight(t *testing.T) {
 	sc := propagating(NewScroll(newStub(50, 132)))
 	g := cssBox(Row, "g", sc, item(30, 20))
 	cssTree(t, `.g { display: grid; grid-template-columns: 100px 100px; }`, cssBox(Column, "", g), 300, 300)
-	g.Measure(Constraints{Max: Size{W: 300, H: indefinite}})
-	if got := []int{shrinkableOf(sc), g.Shrinkable()}; !slices.Equal(got, []int{100, 100}) {
+	SizeWithin(g, Size{W: 300, H: indefinite})
+	if got := []int{heightGive(sc), heightGive(g)}; !slices.Equal(got, []int{100, 100}) {
 		t.Errorf("scroll and grid shrinkable %v, want [100 100]", got)
 	}
 }
@@ -610,9 +610,10 @@ func TestCSSGridInlineAndMinContent(t *testing.T) {
 	if got, want := []int{g.Bounds().W, give.Bounds().W, other.Bounds().X}, []int{70, 40, 40}; !slices.Equal(got, want) {
 		t.Errorf("grid w, first w, second x = %v, want %v", got, want)
 	}
-	g.Measure(Constraints{Max: Size{W: indefinite, H: indefinite}})
-	if s := g.ShrinkableWidth(); s != 60 {
-		t.Errorf("ShrinkableWidth %d, want 130 - 70", s)
+	auto := cssBox(Row, "auto", &widthGiver{nat: Size{W: 100, H: 20}, floor: 40}, item(30, 20))
+	cssTree(t, `.auto { display: grid; grid-template-columns: auto auto; }`, cssBox(Column, "", auto), 300, 200)
+	if got := MeasureAsChild(auto, Row, Unknown); got != (Sizes{Min: 70, Nat: 130}) {
+		t.Errorf("auto grid requests %v, want its min-content 70 and max-content 130", got)
 	}
 }
 
@@ -635,7 +636,7 @@ func TestCSSGridSteadyFrameAllocatesNothing(t *testing.T) {
 		.fill { display: grid; grid-template-columns: repeat(auto-fit, minmax(50px, 1fr)); grid-column: 1 / -1; }`, root, 400, 300)
 	frame := func() {
 		styleGen++
-		root.Measure(Constraints{Max: Size{W: 400, H: 300}})
+		SizeWithin(root, Size{W: 400, H: 300})
 		root.Arrange(render.Rect{W: 400, H: 300})
 	}
 	frame()

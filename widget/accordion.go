@@ -54,7 +54,7 @@ func NewAccordion(mode AccordionMode) *Accordion {
 	a := &Accordion{column: NewBox(Column, 0, 0), mode: mode}
 	a.SetElement("accordion")
 	a.initComposite(a, a.column)
-	a.fillWidth = true
+	a.SetHExpand(true)
 	a.boxed = true
 	return a
 }
@@ -150,7 +150,7 @@ func NewAccordionItem(face render.Font, title string, content Widget) *Accordion
 	it.column.Append(it.trigger, false)
 	it.column.Append(it.reveal, false)
 	it.initComposite(it, it.column)
-	it.fillWidth = true
+	it.SetHExpand(true)
 	it.boxed = true
 	return it
 }

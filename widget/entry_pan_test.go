@@ -13,7 +13,7 @@ func newPanEntry(t *testing.T, s string) *Entry {
 	t.Helper()
 	e := NewEntry(entryFace(t), 14, render.RGB(255, 255, 255))
 	e.SetText(s)
-	e.Measure(Constraints{Max: Size{W: 5000, H: 100}})
+	SizeWithin(e, Size{W: 5000, H: 100})
 	e.Arrange(render.Rect{X: 3, Y: 0, W: 80, H: 30})
 	return e
 }
@@ -181,7 +181,7 @@ func TestEntryPlaceholderNeverPans(t *testing.T) {
 		if ph != "" {
 			e.SetPlaceholder(ph)
 		}
-		e.Measure(Constraints{Max: Size{W: 5000, H: 100}})
+		SizeWithin(e, Size{W: 5000, H: 100})
 		e.Arrange(render.Rect{X: 0, Y: 0, W: 80, H: 30})
 		return e
 	}
@@ -223,7 +223,7 @@ func TestEntryEchoPansByDisplayWidth(t *testing.T) {
 	e := NewEntry(face, 14, render.RGB(255, 255, 255))
 	e.SetEcho(EchoPassword)
 	e.SetText(strings.Repeat("M", 40))
-	e.Measure(Constraints{Max: Size{W: 5000, H: 100}})
+	SizeWithin(e, Size{W: 5000, H: 100})
 	e.Arrange(render.Rect{X: 0, Y: 0, W: 80, H: 30})
 
 	// The pan follows the dots on show, not the runes behind them.
@@ -282,7 +282,7 @@ func TestEntryMeasureCapsNaturalWidth(t *testing.T) {
 	t.Run("uncapped, the paste widens the natural width", func(t *testing.T) {
 		e := NewEntry(face, 14, render.RGB(255, 255, 255))
 		e.SetText(paste)
-		if got := e.Measure(Constraints{Max: Size{W: 5000, H: 100}}); got.W < 1000 {
+		if got := SizeWithin(e, Size{W: 5000, H: 100}); got.W < 1000 {
 			t.Errorf("natural width = %d, want the content-hugging width (large)", got.W)
 		}
 	})
@@ -291,7 +291,7 @@ func TestEntryMeasureCapsNaturalWidth(t *testing.T) {
 		e := NewEntry(face, 14, render.RGB(255, 255, 255))
 		e.SetText(paste)
 		e.MaxWidth = 150
-		if got := e.Measure(Constraints{Max: Size{W: 5000, H: 100}}); got.W != 150 {
+		if got := SizeWithin(e, Size{W: 5000, H: 100}); got.W != 150 {
 			t.Errorf("capped width = %d, want 150 after a 500-rune paste", got.W)
 		}
 	})
@@ -304,7 +304,7 @@ func TestEntryMeasureCapsNaturalWidth(t *testing.T) {
 func TestEntryNaturalWidthNeedsNoPan(t *testing.T) {
 	e := NewEntry(entryFace(t), 14, render.RGB(255, 255, 255))
 	e.SetText("example.com")
-	size := e.Measure(Constraints{Max: Size{W: 5000, H: 100}})
+	size := SizeWithin(e, Size{W: 5000, H: 100})
 	e.Arrange(render.Rect{W: size.W, H: size.H})
 	e.MoveCursor(-1)
 	e.MoveCursor(1)
@@ -315,11 +315,11 @@ func TestEntryNaturalWidthNeedsNoPan(t *testing.T) {
 
 func TestEntryTextWidthIsFixed(t *testing.T) {
 	face := entryFace(t)
-	con := Constraints{Max: Size{W: 5000, H: 100}}
+	con := Size{W: 5000, H: 100}
 	e := NewEntry(face, 14, render.RGB(255, 255, 255))
 	in := e.textInsets()
 	pad := in.Left + in.Right
-	hug := e.Measure(con).W
+	hug := SizeWithin(e, con).W
 	if hug != pad {
 		t.Fatalf("empty content-hugging width = %d, want the padding %d", hug, pad)
 	}
@@ -327,21 +327,21 @@ func TestEntryTextWidthIsFixed(t *testing.T) {
 	if e.TextWidth() != GTKTextWidth {
 		t.Errorf("TextWidth = %d", e.TextWidth())
 	}
-	if got := e.Measure(con).W; got != GTKTextWidth+pad {
+	if got := SizeWithin(e, con).W; got != GTKTextWidth+pad {
 		t.Errorf("empty fixed width = %d, want %d", got, GTKTextWidth+pad)
 	}
 	e.SetText(strings.Repeat("M", 200))
-	if got := e.Measure(con).W; got != GTKTextWidth+pad {
+	if got := SizeWithin(e, con).W; got != GTKTextWidth+pad {
 		t.Errorf("a long text resized the fixed field to %d", got)
 	}
 	e.MaxWidth = 100
 	e.InvalidateLayout()
-	if got := e.Measure(con).W; got != 100 {
+	if got := SizeWithin(e, con).W; got != 100 {
 		t.Errorf("MaxWidth no longer caps a fixed field: %d", got)
 	}
 	e.MaxWidth = 0
 	e.SetTextWidth(0)
-	if got := e.Measure(con).W; got < 1000 {
+	if got := SizeWithin(e, con).W; got < 1000 {
 		t.Errorf("SetTextWidth(0) kept the field fixed at %d, want it hugging the text again", got)
 	}
 	e.SetTextWidth(-5)

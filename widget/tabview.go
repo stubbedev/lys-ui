@@ -317,18 +317,17 @@ func (v *TabView) Children() []Widget {
 	return []Widget{v.selected.child}
 }
 
-// Measure is the largest page's natural size, so switching tabs does
-// not resize the window.
-func (v *TabView) Measure(con Constraints) Size {
-	if sz, ok := v.measureHit(con); ok {
+// Measure is the widest page's request, so switching tabs does not
+// resize the window.
+func (v *TabView) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := v.measureHit(axis, forSize); ok {
 		return sz
 	}
-	var s Size
+	var req Sizes
 	for _, p := range v.pages {
-		c := measureChild(v, p.child, con)
-		s = Size{W: max(s.W, c.W), H: max(s.H, c.H)}
+		req = req.widest(measureChild(v, p.child, axis, forSize))
 	}
-	return v.measureStore(con, s)
+	return v.measureStore(axis, forSize, req)
 }
 
 // Arrange gives the visible page the whole rect.

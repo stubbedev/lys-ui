@@ -60,10 +60,10 @@ func TestCSSSurfaceElementNames(t *testing.T) {
 
 type unnamed struct{}
 
-func (unnamed) Measure(widget.Constraints) widget.Size { return widget.Size{} }
-func (unnamed) Arrange(render.Rect)                    {}
-func (unnamed) Paint(*render.Canvas)                   {}
-func (unnamed) HitTest(widget.Point) widget.Widget     { return nil }
+func (unnamed) Measure(widget.Axis, int) widget.Sizes { return widget.Sizes{} }
+func (unnamed) Arrange(render.Rect)                   {}
+func (unnamed) Paint(*render.Canvas)                  {}
+func (unnamed) HitTest(widget.Point) widget.Widget    { return nil }
 
 // TestCSSPollerInstalled pins the startup wiring: an Application lends
 // the widget package its timer wheel for stylesheet hot reload, the

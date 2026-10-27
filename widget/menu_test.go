@@ -16,7 +16,7 @@ func TestMenu(t *testing.T) {
 		MenuItem{Label: "Copy", OnClick: func() { clicked = "copy" }},
 		MenuItem{Label: "Disabled"},
 	)
-	sz := menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
+	sz := SizeWithin(menu, Size{W: 300, H: 300})
 	menu.Arrange(render.Rect{X: 10, Y: 20, W: 120, H: sz.H})
 	menu.OnDismiss = func() {}
 
@@ -133,7 +133,7 @@ func TestMenuPopoverNodes(t *testing.T) {
 // cursor - and yields once the pointer selects a row.
 func TestMenuKeyboardHighlightSurvivesStrayPointer(t *testing.T) {
 	m := NewMenu(testFace(t), 13, MenuItem{Label: "a", OnClick: func() {}}, MenuItem{Label: "b", OnClick: func() {}})
-	m.Measure(Constraints{Max: Size{W: 200, H: 200}})
+	SizeWithin(m, Size{W: 200, H: 200})
 	m.Arrange(render.Rect{W: 200, H: 200})
 	m.KeyAction(KeyDown, 0)
 	m.KeyAction(KeyDown, 0)

@@ -83,7 +83,7 @@ func TestContainerQueryResize(t *testing.T) {
 
 	setSize := func(w, h int) {
 		SetMediaViewportFor(root, w, h)
-		root.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(root, Size{W: w, H: h})
 		root.Arrange(render.Rect{W: w, H: h})
 	}
 	setSize(400, 300)
@@ -114,7 +114,7 @@ func TestContainerUnitResolutionWidget(t *testing.T) {
 	SetStyleRoot(root)
 	t.Cleanup(func() { SetMediaViewportFor(root, 0, 0) })
 	SetMediaViewportFor(root, 200, 100)
-	root.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(root, Size{W: 200, H: 100})
 	root.Arrange(render.Rect{W: 200, H: 100})
 	v := nodeOf(lbl).style(lbl)
 	if v.Padding != (style.Sides{Top: 10, Right: 5, Bottom: 10, Left: 5}) {

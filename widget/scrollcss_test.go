@@ -120,7 +120,7 @@ func TestScrollSnapResnapOnResize(t *testing.T) {
 	if _, offY := s.Offset(); offY != 0 {
 		t.Fatalf("initial end-aligned offset %d, want 0", offY)
 	}
-	s.Measure(Constraints{Max: Size{W: 60, H: 40}})
+	SizeWithin(s, Size{W: 60, H: 40})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 40})
 	if _, offY := s.Offset(); offY != 20 {
 		t.Fatalf("re-snapped offset %d, want the resized end alignment 20", offY)
@@ -213,7 +213,7 @@ func TestScrollbarGutterStable(t *testing.T) {
 	loadCSS(t, `scrolledwindow { scrollbar-gutter: stable; }`)
 	s := NewScroll(newStub(50, 40))
 	arrangeTree(t, s, 60, 60)
-	if got := s.Measure(Constraints{Max: Size{W: 200, H: 200}}); got.W != 58 {
+	if got := SizeWithin(s, Size{W: 200, H: 200}); got.W != 58 {
 		t.Fatalf("stable gutter measured %d wide, want 58", got.W)
 	}
 	if s.viewW != 52 {
@@ -223,14 +223,14 @@ func TestScrollbarGutterStable(t *testing.T) {
 	loadCSS(t, `scrolledwindow { scrollbar-gutter: stable both-edges; }`)
 	s2 := NewScroll(newStub(50, 40))
 	arrangeTree(t, s2, 60, 60)
-	if got := s2.Measure(Constraints{Max: Size{W: 200, H: 200}}); got.W != 66 {
+	if got := SizeWithin(s2, Size{W: 200, H: 200}); got.W != 66 {
 		t.Fatalf("both-edges gutter measured %d wide, want 66", got.W)
 	}
 
 	loadCSS(t, ``)
 	s3 := NewScroll(newStub(50, 40))
 	arrangeTree(t, s3, 60, 60)
-	if got := s3.Measure(Constraints{Max: Size{W: 200, H: 200}}); got.W != 50 {
+	if got := SizeWithin(s3, Size{W: 200, H: 200}); got.W != 50 {
 		t.Fatalf("auto gutter measured %d wide, want the bare 50", got.W)
 	}
 }
@@ -253,7 +253,7 @@ func TestScrollbarColorWidthSpec(t *testing.T) {
 	loadCSS(t, `* { scrollbar-width: none; }`)
 	b2 := NewScrollbar(s, Column)
 	arrangeTree(t, b2, 8, 60)
-	if got := b2.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{}) {
+	if got := SizeWithin(b2, Size{W: 100, H: 100}); got != (Size{}) {
 		t.Fatalf("none bar measured %v, want zero", got)
 	}
 }

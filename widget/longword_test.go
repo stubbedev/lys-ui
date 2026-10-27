@@ -30,7 +30,7 @@ func TestWrappingLabelsBreakAnOverlongWord(t *testing.T) {
 			col.Append(l, false)
 			col.SetSizeRequest(200, 0)
 			col.SetMaximumSize(200, 0)
-			if got := l.Measure(Constraints{Max: Size{W: 200, H: 400}}); got.W > 200 {
+			if got := SizeWithin(l, Size{W: 200, H: 400}); got.W > 200 {
 				t.Errorf("measures %d wide in 200", got.W)
 			}
 			const w, h = 400, 120

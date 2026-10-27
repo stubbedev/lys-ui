@@ -296,7 +296,7 @@ func TestGoldenColumnView(t *testing.T) {
 func TestColumnViewHeaderAlignsWithRows(t *testing.T) {
 	face := viewFace(t)
 	v := NewColumnView(face, 14, SliceModel[tableRow]{{"alpha", 1}, {"bravo", 2}}, tableCols(face))
-	v.Measure(Constraints{Max: Size{W: 300, H: 200}})
+	SizeWithin(v, Size{W: 300, H: 200})
 	v.Arrange(render.Rect{W: 300, H: 200})
 	// List arranges its visible rows as it paints them.
 	v.Paint(render.New(make([]byte, render.Stride(300)*200), render.Stride(300), 300, 200))
@@ -329,7 +329,7 @@ func TestColumnViewCellsAndTitles(t *testing.T) {
 	if pad := cell.Padding(); pad.Top != 8 || pad.Bottom != 8 {
 		t.Errorf("cell padding %+v, want 8 above and below", pad)
 	}
-	if w := cell.Children()[0].Measure(unbounded).W; w != headerInset || headerInset != 8 {
+	if w := naturalSize(cell.Children()[0]).W; w != headerInset || headerInset != 8 {
 		t.Errorf("cell inset %d, want 8", w)
 	}
 	head := v.header.Children()[0].(*sizedCell).root.(*Button)
@@ -349,7 +349,7 @@ func TestColumnViewRowsFitTheirCells(t *testing.T) {
 	face := viewFace(t)
 	v := NewColumnView(face, 14, SliceModel[tableRow]{{"a", 1}, {"b", 2}}, tableCols(face))
 	arrangeTree(t, v, 300, 200)
-	cell := NewLabel(face, 14, "a", 0).Measure(Constraints{Max: Size{W: 300, H: 200}})
+	cell := SizeWithin(NewLabel(face, 14, "a", 0), Size{W: 300, H: 200})
 	if want := cell.H + 2*cellInsetY + 1; v.list.rowH < want {
 		t.Errorf("rows are %d tall, want at least %d for the padded cell and its rule", v.list.rowH, want)
 	}

@@ -27,9 +27,9 @@ type dropPanel struct {
 	dropPoint    Point
 }
 
-func (p *dropPanel) Measure(con Constraints) Size { return clampSize(p.nat, con) }
-func (p *dropPanel) Paint(*render.Canvas)         {}
-func (p *dropPanel) HitTest(point Point) Widget   { return p.HitLeaf(p, point) }
+func (p *dropPanel) Measure(axis Axis, forSize int) Sizes { return FixedSizes(p.nat.Along(axis)) }
+func (p *dropPanel) Paint(*render.Canvas)                 {}
+func (p *dropPanel) HitTest(point Point) Widget           { return p.HitLeaf(p, point) }
 
 func (p *dropPanel) DragEnter(mimes []string, point Point) string {
 	p.enters++
@@ -54,7 +54,7 @@ func arrangeDropPanels() (root Widget, a, b *dropPanel) {
 	a = &dropPanel{nat: Size{W: 20, H: 20}, mime: "application/x-lys-ui-tile"}
 	b = &dropPanel{nat: Size{W: 20, H: 20}, mime: ""}
 	root = NewBox(Row, 0, 0).Append(a, false).Append(b, false)
-	root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(root, Size{W: 100, H: 100})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 20})
 	return root, a, b
 }
@@ -115,9 +115,11 @@ type plainLeaf struct {
 	node
 }
 
-func (l *plainLeaf) Measure(con Constraints) Size { return clampSize(Size{W: 20, H: 20}, con) }
-func (l *plainLeaf) Paint(*render.Canvas)         {}
-func (l *plainLeaf) HitTest(point Point) Widget   { return l.HitLeaf(l, point) }
+func (l *plainLeaf) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(Size{W: 20, H: 20}.Along(axis))
+}
+func (l *plainLeaf) Paint(*render.Canvas)       {}
+func (l *plainLeaf) HitTest(point Point) Widget { return l.HitLeaf(l, point) }
 
 // newBubbleRow builds a drop row containing a plain leaf, so hits
 // inside the row land on the leaf and must bubble to the panel.
@@ -132,7 +134,7 @@ func newBubbleRow() *dropRow {
 func TestRouterDragBubblesToAncestor(t *testing.T) {
 	panel := newBubbleRow()
 	root := NewBox(Column, 0, 0).Append(panel, false)
-	root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(root, Size{W: 100, H: 100})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 20, H: 20})
 
 	r := &Router{Root: root}
@@ -217,7 +219,7 @@ func TestRouterDropDeliversPayload(t *testing.T) {
 func TestRouterCancelPressSuppressesClick(t *testing.T) {
 	src := &inputStub{nat: Size{W: 20, H: 20}}
 	root := NewBox(Row, 0, 0).Append(src, false)
-	root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(root, Size{W: 100, H: 100})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 20, H: 20})
 	r := &Router{Root: root}
 	p := Point{X: 5, Y: 5}
@@ -258,7 +260,7 @@ func TestRouterDragAction(t *testing.T) {
 	m := &movePanel{dropPanel{nat: Size{W: 20, H: 20}, mime: "a/b"}}
 	plain := &dropPanel{nat: Size{W: 20, H: 20}, mime: "a/b"}
 	root := NewBox(Row, 0, 0).Append(m, false).Append(plain, false)
-	root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(root, Size{W: 100, H: 100})
 	root.Arrange(render.Rect{W: 40, H: 20})
 	r := &Router{Root: root}
 	both := transfer.ActionCopy | transfer.ActionMove

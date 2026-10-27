@@ -8,7 +8,7 @@ import (
 
 // chooserFrame measures and arranges a chooser and returns it.
 func chooserFrame(c *ColorChooser) *ColorChooser {
-	sz := c.Measure(Constraints{Max: Size{W: 4096, H: 4096}})
+	sz := SizeWithin(c, Size{W: 4096, H: 4096})
 	c.Arrange(render.Rect{X: 0, Y: 0, W: sz.W, H: sz.H})
 	c.Paint(render.New(make([]uint8, sz.W*sz.H*4), sz.W*4, sz.W, sz.H))
 	return c

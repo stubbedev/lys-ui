@@ -9,7 +9,7 @@ import (
 
 // calFrame measures and arranges a calendar and returns it.
 func calFrame(c *Calendar) *Calendar {
-	sz := c.Measure(Constraints{Max: Size{W: 4096, H: 4096}})
+	sz := SizeWithin(c, Size{W: 4096, H: 4096})
 	c.Arrange(render.Rect{X: 0, Y: 0, W: sz.W, H: sz.H})
 	return c
 }
@@ -285,7 +285,7 @@ func TestCalendarWeekRowsAreSpaced(t *testing.T) {
 // centered in its column. At its natural size nothing moves (#324).
 func TestCalendarFillsItsWidth(t *testing.T) {
 	c := NewCalendar(goldenFace(t), 14, Date{2026, time.September, 14})
-	nat := c.Measure(Constraints{Max: Size{W: 1000, H: 1000}})
+	nat := SizeWithin(c, Size{W: 1000, H: 1000})
 	c.Arrange(render.Rect{W: nat.W, H: nat.H})
 	if c.col() != c.cell || c.padX != 0 {
 		t.Fatalf("at its natural width: column %d (cell %d), pad %d", c.col(), c.cell, c.padX)

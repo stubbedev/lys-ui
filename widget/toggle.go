@@ -95,14 +95,14 @@ func (s *Switch) Toggle() {
 }
 
 // Measure wants the 32x18 pill, floored by the stylesheet's min size,
-// inside its CSS box, clamped to con.
-func (s *Switch) Measure(con Constraints) Size {
-	if sz, ok := s.measureHit(con); ok {
+// inside its CSS box.
+func (s *Switch) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := s.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := s.style(s)
-	return s.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		return clampSize(s.pill(v), inner)
+	return s.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		return FixedSizes(s.pill(v).Along(axis))
 	}))
 }
 
@@ -335,19 +335,24 @@ func (c *CheckButton) indicatorSize() Size {
 
 // Measure sizes the indicator and the child after it, inside the
 // checkbox's CSS box.
-func (c *CheckButton) Measure(con Constraints) Size {
-	if sz, ok := c.measureHit(con); ok {
+func (c *CheckButton) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := c.measureHit(axis, forSize); ok {
 		return sz
 	}
 	ind := c.indicatorSize()
 	v := c.style(c)
-	return c.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		sz := ind
-		if c.child != nil {
-			cs := measureChild(c, c.child, Constraints{Max: Size{W: max(0, inner.Max.W-ind.W), H: inner.Max.H}})
-			sz = Size{W: ind.W + cs.W, H: max(ind.H, cs.H)}
+	return c.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		req := FixedSizes(ind.Along(axis))
+		if c.child == nil {
+			return req
 		}
-		return clampSize(sz, inner)
+		if axis == Row {
+			return req.plus(measureChild(c, c.child, Row, forSize))
+		}
+		if forSize != Unknown {
+			forSize = max(0, forSize-ind.W)
+		}
+		return req.widest(measureChild(c, c.child, Column, forSize))
 	}))
 }
 
@@ -444,7 +449,7 @@ func (c *CheckButton) drawThemedMark(cv *render.Canvas, name string, box render.
 		c.markName, c.markTint = name, tint
 		setParents(c, c.mark)
 	}
-	sz := c.mark.Measure(Constraints{Max: Size{W: box.W, H: box.H}})
+	sz := SizeWithin(c.mark, Size{W: box.W, H: box.H})
 	c.mark.Arrange(render.Rect{X: box.X + (box.W-sz.W)/2, Y: box.Y + (box.H-sz.H)/2, W: sz.W, H: sz.H})
 	PaintChild(cv, c.mark)
 }
@@ -510,12 +515,12 @@ func NewSpacer(w, h int) *Spacer {
 	return &Spacer{nat: Size{W: w, H: h}}
 }
 
-// Measure returns the spacer's size, clamped to con.
-func (s *Spacer) Measure(con Constraints) Size {
-	if sz, ok := s.measureHit(con); ok {
+// Measure returns the spacer's size.
+func (s *Spacer) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := s.measureHit(axis, forSize); ok {
 		return sz
 	}
-	return s.measureStore(con, clampSize(s.nat, con))
+	return s.measureStore(axis, forSize, FixedSizes(s.nat.Along(axis)))
 }
 
 // Paint paints nothing.

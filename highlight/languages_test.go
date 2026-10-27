@@ -241,7 +241,7 @@ func TestGoldenSchemes(t *testing.T) {
 		ta.SetText(strings.ReplaceAll(sample, "\t", "    "))
 		ta.SetHighlighter(Markdown{}, SchemeFor(tc.th))
 		const w, h = 360, 220
-		ta.Measure(widget.Constraints{Max: widget.Size{W: w, H: h}})
+		widget.SizeWithin(ta, widget.Size{W: w, H: h})
 		ta.Arrange(render.Rect{W: w, H: h})
 		stride := render.Stride(w)
 		buf := make([]byte, stride*h)

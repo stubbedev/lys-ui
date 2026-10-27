@@ -129,7 +129,7 @@ func TestEntryCompletionClickPick(t *testing.T) {
 	e := NewEntry(face, 14, render.RGB(255, 255, 255))
 	e.Completion = func(string) []string { return []string{"one", "two", "three"} }
 	e.SetText("t")
-	e.Measure(Constraints{Max: Size{W: 200, H: 300}})
+	SizeWithin(e, Size{W: 200, H: 300})
 	e.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: e.Bounds().H + e.completionHeight()})
 	list := e.completionListRect()
 	if list.Empty() {

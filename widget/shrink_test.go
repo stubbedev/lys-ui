@@ -8,7 +8,7 @@ import (
 
 // layoutColumn measures and arranges a column in a w x h rect.
 func layoutColumn(b *Box, w, h int) {
-	b.Measure(Constraints{Max: Size{W: w, H: h}})
+	SizeWithin(b, Size{W: w, H: h})
 	b.Arrange(render.Rect{W: w, H: h})
 }
 
@@ -58,8 +58,8 @@ func TestEveryShrinkerGivesWay(t *testing.T) {
 	if fixed.Bounds().H >= 100 || plain.Bounds().H != 100 {
 		t.Errorf("heights %d, %d: want the scroll short of natural and the stub untouched", fixed.Bounds().H, plain.Bounds().H)
 	}
-	if col.Shrinkable() == 0 {
-		t.Error("shrinkable = 0, want the fixed scroll's capacity")
+	if r := col.Measure(Column, 60); r.Min >= r.Nat {
+		t.Errorf("column requests %v, want the fixed scroll's give in its minimum", r)
 	}
 }
 
@@ -85,23 +85,23 @@ func TestShrinkReachesANestedScroll(t *testing.T) {
 	if got := inner.Bounds().H; got != 140 {
 		t.Errorf("nested scroll = %d, want 140 (the page's 180 less its header)", got)
 	}
-	// The stack shrinks only as far as its least shrinkable page.
-	stack.Measure(Constraints{Max: Size{W: 60, H: 1000}})
-	if got, want := stack.Shrinkable(), 340-max(scrollFloor+40, 80); got != want {
-		t.Errorf("stack shrinkable = %d, want %d", got, want)
+	// The stack needs what its neediest page needs.
+	if got, want := stack.Measure(Column, 60), (Sizes{Min: max(scrollFloor+40, 80), Nat: 340}); got != want {
+		t.Errorf("stack requests %v, want %v", got, want)
 	}
 	row := NewBox(Row, 0, 0)
 	row.Append(propagating(NewScroll(newStub(10, 100))), false)
 	row.Append(newStub(10, 60), false)
-	row.Measure(Constraints{Max: Size{W: 100, H: 500}})
-	if got := row.Shrinkable(); got != 40 {
-		t.Errorf("row shrinkable = %d, want 40 (down to its 60 child)", got)
+	if got := row.Measure(Column, 100); got != (Sizes{Min: 60, Nat: 100}) {
+		t.Errorf("row requests %v, want down to its 60 child", got)
 	}
 }
 
-// TestShrinkSplitsByCapacity pins the split: two scrolls give in
-// proportion to what each can, and the rounding lands somewhere.
-func TestShrinkSplitsByCapacity(t *testing.T) {
+// TestShrinkSplitsNaturally pins GTK's split
+// (gtk_distribute_natural_allocation): each scroll keeps its minimum,
+// and the room above them goes in equal shares, the scroll nearest its
+// natural filled first.
+func TestShrinkSplitsNaturally(t *testing.T) {
 	a := propagating(NewScroll(newStub(50, 132))) // can give 100
 	b := propagating(NewScroll(newStub(50, 232))) // can give 200
 	col := NewBox(Column, 0, 0)
@@ -111,8 +111,8 @@ func TestShrinkSplitsByCapacity(t *testing.T) {
 	if a.Bounds().H+b.Bounds().H != 232 {
 		t.Errorf("total = %d, want the box's 232", a.Bounds().H+b.Bounds().H)
 	}
-	if ga, gb := 132-a.Bounds().H, 232-b.Bounds().H; ga != 44 || gb != 88 {
-		t.Errorf("gave %d and %d, want 44 and 88, in proportion to 100 and 200", ga, gb)
+	if ha, hb := a.Bounds().H, b.Bounds().H; ha != 116 || hb != 116 {
+		t.Errorf("heights %d and %d, want the 168 above the two 32 floors in equal shares", ha, hb)
 	}
 }
 
@@ -123,7 +123,12 @@ type widthGiver struct {
 	floor int
 }
 
-func (g *widthGiver) ShrinkableWidth() int { return g.nat.W - g.floor }
+func (g *widthGiver) Measure(axis Axis, forSize int) Sizes {
+	if axis == Row {
+		return Sizes{Min: g.floor, Nat: g.nat.W}
+	}
+	return FixedSizes(g.nat.H)
+}
 
 // TestNestedShortRowsKeepTheirTakes pins the per-depth shrink buffers:
 // a row short of room narrows its child rows, which are short of room
@@ -142,7 +147,7 @@ func TestNestedShortRowsKeepTheirTakes(t *testing.T) {
 	outer := NewBox(Row, 0, 0)
 	outer.Append(a, false)
 	outer.Append(b, false)
-	outer.Measure(Constraints{Max: Size{W: 100, H: 10}})
+	SizeWithin(outer, Size{W: 100, H: 10})
 	outer.Arrange(render.Rect{W: 100, H: 10})
 	if wa, wb := a.Bounds().W, b.Bounds().W; wa != 50 || wb != 50 {
 		t.Errorf("inner rows = %d and %d wide, want 50 and 50: the 220px deficit split by equal capacity", wa, wb)
@@ -162,7 +167,6 @@ func TestAFillingCompositeGivesWayInARow(t *testing.T) {
 		dock.SetSizeRequest(256, 0)
 		row := NewBox(Row, 0, 0)
 		row.Append(dock, false).Append(content, true)
-		row.Measure(Constraints{Min: Size{W: 900, H: 100}, Max: Size{W: 900, H: 100}})
 		row.Arrange(render.Rect{W: 900, H: 100})
 	}
 	item := NewItem(face, "x", "")
@@ -219,13 +223,11 @@ func TestOverlayShrinksItsScroll(t *testing.T) {
 		t.Errorf("footer ends at %d, want inside the 200 box", b.Y+b.H)
 	}
 	// Only as far as the child that needs the most height lets it.
-	over.Measure(Constraints{Max: Size{W: 60, H: 1000}})
-	if got, want := over.Shrinkable(), 300-scrollFloor; got != want {
-		t.Errorf("shrinkable = %d, want %d", got, want)
+	if got := over.Measure(Column, 60).Min; got != scrollFloor {
+		t.Errorf("overlay needs %d, want the scroll's floor %d", got, scrollFloor)
 	}
 	over.Append(newStub(50, 100))
-	over.Measure(Constraints{Max: Size{W: 60, H: 1000}})
-	if got, want := over.Shrinkable(), 300-100; got != want {
-		t.Errorf("shrinkable over a 100px stub = %d, want %d", got, want)
+	if got := over.Measure(Column, 60).Min; got != 100 {
+		t.Errorf("overlay over a 100px stub needs %d, want 100", got)
 	}
 }

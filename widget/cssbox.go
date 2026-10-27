@@ -37,32 +37,31 @@ func (b cssInsets) outer() render.Insets {
 	}
 }
 
-// innerOf is the content box's share of con: con less the insets.
-func (b cssInsets) innerOf(con Constraints) Constraints {
-	o := b.outer()
-	h, v := o.Left+o.Right, o.Top+o.Bottom
-	return Constraints{
-		Min: Size{W: max(0, con.Min.W-h), H: max(0, con.Min.H-v)},
-		Max: Size{W: max(0, con.Max.W-h), H: max(0, con.Max.H-v)},
-	}
+// across is the box's insets across axis: what an extent across the
+// whole box has to give up to be the content's.
+func (b cssInsets) across(axis Axis) int {
+	return insetsAlong(b.outer(), otherAxis(axis))
 }
 
-// measureBox measures a CSS box: the content measures under the
-// constraints less the insets, min-width/min-height floor the content
-// box (GTK's rule; under box-sizing: border-box they floor the border
-// box instead), and the insets add back. The result lies within con.
-func measureBox(v *style.Values, b cssInsets, con Constraints, content func(Constraints) Size) Size {
-	o := b.outer()
-	h, vv := o.Left+o.Right, o.Top+o.Bottom
-	sz := content(b.innerOf(con))
-	minW, minH := picki(v, style.PropMinWidth, 0), picki(v, style.PropMinHeight, 0)
-	if v.Layout.BoxSizing == style.BoxSizingBorder {
-		minW -= b.border.Left + b.border.Right + b.padding.Left + b.padding.Right
-		minH -= b.border.Top + b.border.Bottom + b.padding.Top + b.padding.Bottom
+// measureBox wraps a content measure along axis in the CSS box: forSize
+// is the whole box's extent across, the content measured at what is
+// left of it; the content-box min-width or min-height floors the
+// content (the border box under box-sizing: border-box), and the
+// insets add back.
+func measureBox(v *style.Values, b cssInsets, axis Axis, forSize int, content func(axis Axis, forSize int) Sizes) Sizes {
+	if forSize != Unknown {
+		forSize = max(0, forSize-b.across(axis))
 	}
-	sz.W = max(sz.W, minW)
-	sz.H = max(sz.H, minH)
-	return clampSize(Size{W: sz.W + h, H: sz.H + vv}, con)
+	s := content(axis, forSize)
+	prop, inset := style.PropMinWidth, b.border.Left+b.border.Right+b.padding.Left+b.padding.Right
+	if axis == Column {
+		prop, inset = style.PropMinHeight, b.border.Top+b.border.Bottom+b.padding.Top+b.padding.Bottom
+	}
+	floor := picki(v, prop, 0)
+	if v.Layout.BoxSizing == style.BoxSizingBorder {
+		floor -= inset
+	}
+	return s.atLeast(floor).grow(insetsAlong(b.outer(), axis))
 }
 
 // boxRects splits an arranged margin box into the border box and the

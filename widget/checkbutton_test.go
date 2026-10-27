@@ -16,7 +16,7 @@ func TestCheckButtonCheckNode(t *testing.T) {
 	loadCSS(t, `checkbutton check { min-width: 24; min-height: 26; border-width: 3; border-style: solid; border-radius: 5; background-color: #010203; }`)
 	c := NewCheckButton(false)
 	arrangeTree(t, c, 100, 40)
-	if got := c.Measure(Constraints{Max: Size{W: 100, H: 40}}); got.W != 24 || got.H != 26 {
+	if got := SizeWithin(c, Size{W: 100, H: 40}); got.W != 24 || got.H != 26 {
 		t.Errorf("checkbox %v, want the check's 24x26", got)
 	}
 	kv := c.check.style(&c.check)
@@ -122,7 +122,7 @@ func TestCheckButtonChild(t *testing.T) {
 	c.SetChild(nil)
 	frame(t, host, 300, 60)
 	b = c.Bounds()
-	nat := c.Measure(Constraints{Max: Size{W: 300, H: 60}})
+	nat := SizeWithin(c, Size{W: 300, H: 60})
 	if l.Parent() != nil || nat != (Size{W: 22, H: 22}) || c.indicator != (render.Rect{X: b.X + 3, Y: b.Y + 3, W: b.W - 6, H: b.H - 6}) {
 		t.Errorf("childless: label parent %v, natural %v, check %v in %v", l.Parent(), nat, c.indicator, b)
 	}
@@ -143,7 +143,7 @@ func TestCheckButtonGapAndFirstMeasure(t *testing.T) {
 	}
 
 	loadCSS(t, `checkbutton > check { min-width: 30px; min-height: 30px; }`)
-	if got := NewCheckButton(false).Measure(Constraints{Max: Size{W: 100, H: 100}}); got.W != 30 {
+	if got := SizeWithin(NewCheckButton(false), Size{W: 100, H: 100}); got.W != 30 {
 		t.Errorf("first measure %v, want the 30px check rule", got)
 	}
 }

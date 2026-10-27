@@ -11,9 +11,9 @@ func TestBoxHomogeneousEqualizes(t *testing.T) {
 	wide := NewLabel(entryFace(t), 10, "wide!", 0)
 	b.Append(narrow, false)
 	b.Append(wide, false)
-	sz := b.Measure(Constraints{Max: Size{W: 400, H: 40}})
-	wn := narrow.Measure(Constraints{Max: Size{W: 400, H: 40}}).W
-	ww := wide.Measure(Constraints{Max: Size{W: 400, H: 40}}).W
+	sz := SizeWithin(b, Size{W: 400, H: 40})
+	wn := SizeWithin(narrow, Size{W: 400, H: 40}).W
+	ww := SizeWithin(wide, Size{W: 400, H: 40}).W
 	if wn >= ww {
 		t.Fatalf("the wide label is not the widest (%d vs %d); the test needs distinct naturals", wn, ww)
 	}
@@ -40,7 +40,7 @@ func TestBoxHomogeneousDefaultsOff(t *testing.T) {
 	if b.Homogeneous() {
 		t.Error("a plain box is homogeneous")
 	}
-	sz := b.Measure(Constraints{Max: Size{W: 400, H: 40}})
+	sz := SizeWithin(b, Size{W: 400, H: 40})
 	arrangeTree(t, b, sz.W, sz.H)
 	wn, ww := narrow.Bounds().W, wide.Bounds().W
 	if wn == ww {

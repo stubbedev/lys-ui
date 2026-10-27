@@ -194,7 +194,7 @@ func (c *collapsingSplit) Collapsed() bool { return c.collapsed }
 // collapse never paints one frame of the old layout.
 func (c *collapsingSplit) Arrange(r render.Rect) {
 	c.bps.evaluate(r.W)
-	measureChild(c, c.root, Constraints{Max: Size{W: r.W, H: r.H}})
+	setParents(c, c.root)
 	c.composite.Arrange(r)
 }
 

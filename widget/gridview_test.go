@@ -17,7 +17,7 @@ func TestGridViewFitsColumnsWithinItsBounds(t *testing.T) {
 	} {
 		g.SetMinColumns(c.min)
 		g.SetMaxColumns(c.max)
-		g.Measure(Constraints{Max: Size{W: c.width, H: 400}})
+		SizeWithin(g, Size{W: c.width, H: 400})
 		g.Arrange(render.Rect{W: c.width, H: 400})
 		if got := g.Columns(); got != c.want {
 			t.Errorf("width %d, columns [%d,%d]: %d columns, want %d", c.width, c.min, c.max, got, c.want)
@@ -28,7 +28,7 @@ func TestGridViewFitsColumnsWithinItsBounds(t *testing.T) {
 func TestGridViewStaysVirtualizedAndNavigatesInTwoDimensions(t *testing.T) {
 	model := newCountingModel(10000)
 	g := NewGridView[Widget](model, 50, 40)
-	g.Measure(Constraints{Max: Size{W: 250, H: 200}})
+	SizeWithin(g, Size{W: 250, H: 200})
 	g.Arrange(render.Rect{W: 250, H: 200})
 	g.Paint(render.New(make([]uint8, 250*200*4), 250*4, 250, 200))
 	if g.Columns() != 5 {
@@ -50,7 +50,7 @@ func TestGridViewStaysVirtualizedAndNavigatesInTwoDimensions(t *testing.T) {
 
 func TestGridViewStylesAsGridviewWithChildCells(t *testing.T) {
 	g := NewGridView[Widget](newCountingModel(3), 50, 40)
-	g.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	SizeWithin(g, Size{W: 200, H: 100})
 	g.Arrange(render.Rect{W: 200, H: 100})
 	g.Paint(render.New(make([]uint8, 200*100*4), 200*4, 200, 100))
 	if len(g.rows) == 0 {
@@ -72,8 +72,8 @@ func TestGridViewSpacing(t *testing.T) {
 	g := NewGridView[Widget](newCountingModel(10), 50, 20)
 	g.SetColumnSpacing(5)
 	g.SetRowSpacing(4)
-	if got := g.Measure(Constraints{Max: Size{W: 160, H: 1 << 20}}); got.H != 4*20+3*4 {
-		t.Errorf("content height %d, want 4 lines of 20 and 3 gaps of 4", got.H)
+	if got := g.Measure(Column, 160).Nat; got != 4*20+3*4 {
+		t.Errorf("content height %d, want 4 lines of 20 and 3 gaps of 4", got)
 	}
 	frame(t, g, 160, 100)
 	if g.Columns() != 3 {
@@ -154,7 +154,7 @@ func TestGridViewPadding(t *testing.T) {
 	if want := g.contentH(g.lines(100)) - 76; g.scrollMax() != want {
 		t.Errorf("scroll range %d, want %d against the 76px viewport", g.scrollMax(), want)
 	}
-	if got := g.Measure(Constraints{Max: Size{W: 184, H: 1 << 20}}).H; got != g.contentH(g.lines(100))+24 {
+	if got := g.Measure(Column, 184).Nat; got != g.contentH(g.lines(100))+24 {
 		t.Errorf("natural height %d, want the content and the padding", got)
 	}
 }

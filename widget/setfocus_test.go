@@ -134,7 +134,7 @@ func TestCaretOnlyWhileFocused(t *testing.T) {
 	other := newFocusTarget()
 	root := NewBox(Column, 0, 0)
 	root.Append(e, false).Append(ta, false).Append(other, false)
-	root.Measure(Constraints{Max: Size{W: 120, H: 120}})
+	SizeWithin(root, Size{W: 120, H: 120})
 	root.Arrange(render.Rect{W: 120, H: 120})
 	r := &Router{Root: root}
 	shot := func(w Widget) []byte {
@@ -196,9 +196,11 @@ type paintRecorder struct {
 	painted bool
 }
 
-func (p *paintRecorder) Measure(con Constraints) Size { return clampSize(Size{W: 10, H: 10}, con) }
-func (p *paintRecorder) Paint(*render.Canvas)         { p.painted = true }
-func (p *paintRecorder) HitTest(Point) Widget         { return nil }
+func (p *paintRecorder) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(Size{W: 10, H: 10}.Along(axis))
+}
+func (p *paintRecorder) Paint(*render.Canvas) { p.painted = true }
+func (p *paintRecorder) HitTest(Point) Widget { return nil }
 
 // A container from outside the kit that paints every child through
 // PaintChild still paints nothing for one hidden with SetVisible.
@@ -224,8 +226,10 @@ type hitRow struct {
 	kids []Widget
 }
 
-func (r *hitRow) Measure(con Constraints) Size { return clampSize(Size{W: 20, H: 10}, con) }
-func (r *hitRow) Paint(*render.Canvas)         {}
+func (r *hitRow) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(Size{W: 20, H: 10}.Along(axis))
+}
+func (r *hitRow) Paint(*render.Canvas) {}
 func (r *hitRow) HitTest(p Point) Widget {
 	for _, k := range r.kids {
 		if hit := HitChild(k, p); hit != nil {

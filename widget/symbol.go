@@ -97,8 +97,8 @@ func (s *Symbol) SetKind(kind SymbolKind) {
 func (s *Symbol) Kind() SymbolKind { return s.kind }
 
 // Measure wants the symbol's box.
-func (s *Symbol) Measure(con Constraints) Size {
-	return clampSize(Size{W: s.size, H: s.size}, con)
+func (s *Symbol) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(s.size)
 }
 
 // Arrange records the rect.

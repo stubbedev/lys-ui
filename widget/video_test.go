@@ -72,13 +72,13 @@ func TestVideoFitsTheFrameIntoItsBounds(t *testing.T) {
 	s := testStream(t, 1)
 	v := NewVideo(testFace(t), 13, s)
 	pumpUntil(t, func() bool { return s.Frame().RGBA != nil })
-	if got := v.Measure(Constraints{Max: Size{W: 400, H: 400}}); got.W < 4 || got.H < 2 {
+	if got := SizeWithin(v, Size{W: 400, H: 400}); got.W < 4 || got.H < 2 {
 		t.Errorf("natural size %v, want at least the 4x2 frame", got)
 	}
 	const w, h = 80, 80
 	data := make([]byte, render.Stride(w)*h)
 	cv := render.New(data, render.Stride(w), w, h)
-	v.Measure(Constraints{Max: Size{W: w, H: h}})
+	SizeWithin(v, Size{W: w, H: h})
 	v.Arrange(render.Rect{W: w, H: h})
 	v.view.Paint(cv)
 	if got := pixel(data, render.Stride(w), 10, 40); got != render.RGB(255, 0, 0) {
@@ -101,7 +101,7 @@ func TestVideoFitsTheFrameIntoItsBounds(t *testing.T) {
 func TestVideoShowsItsControlsWhilePausedOrHovered(t *testing.T) {
 	s := testStream(t, 20)
 	v := NewVideo(testFace(t), 13, s)
-	v.Measure(Constraints{Max: Size{W: 300, H: 200}})
+	SizeWithin(v, Size{W: 300, H: 200})
 	if !v.reveal.Revealed() {
 		t.Error("the controls of a paused video are hidden")
 	}
@@ -126,7 +126,7 @@ func TestVideoShowsItsControlsWhilePausedOrHovered(t *testing.T) {
 func TestMediaControlsDriveTheStream(t *testing.T) {
 	s := testStream(t, 20)
 	m := NewMediaControls(testFace(t), 13, s)
-	m.Measure(Constraints{Max: Size{W: 600, H: 100}})
+	SizeWithin(m, Size{W: 600, H: 100})
 	pumpUntil(t, func() bool { return s.Frame().RGBA != nil })
 	if IsVisible(m.mute) || IsVisible(m.volume) {
 		t.Error("a silent stream shows sound controls")

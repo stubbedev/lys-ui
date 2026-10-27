@@ -12,7 +12,7 @@ func newScrollFixture(t *testing.T) *Scroll {
 	t.Helper()
 	s := NewScroll(newStub(60, 200))
 	s.ShowBars = true
-	s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+	SizeWithin(s, Size{W: 60, H: 60})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 	return s
 }
@@ -22,7 +22,7 @@ func newScrollFixture(t *testing.T) *Scroll {
 func TestScrollBarsInsetFromTheEdges(t *testing.T) {
 	s := NewScroll(newStub(200, 200))
 	s.ShowBars = true
-	s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+	SizeWithin(s, Size{W: 60, H: 60})
 	s.Arrange(render.Rect{X: 10, Y: 20, W: 60, H: 60})
 	v, _ := s.vBarGeometry()
 	if v.X+v.W != 10+60-1 || v.Y != 20+1 || v.Y+v.H != 20+s.viewH-1 {
@@ -86,7 +86,7 @@ func TestScrollPageClick(t *testing.T) {
 func TestHorizontalWheelScrolls(t *testing.T) {
 	s := NewScroll(newStub(200, 30))
 	s.ShowBars = true
-	s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+	SizeWithin(s, Size{W: 60, H: 60})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 60})
 	s.ScrollBy(2, 0)
 	if offX, _ := s.Offset(); offX != 2*wheelStep(s.viewW) {
@@ -101,14 +101,14 @@ func TestHorizontalWheelScrolls(t *testing.T) {
 // measures natural, taller content measures the cap plus the gutter
 // it scrolls behind, and no cap is the uncapped natural height.
 func TestScrollMaxContentHeight(t *testing.T) {
-	unbounded := Constraints{Max: Size{W: 500, H: 500}}
+	unbounded := Size{W: 500, H: 500}
 	s := propagating(NewScroll(newStub(60, 200)))
 	s.ShowBars = true
-	if got := s.Measure(unbounded); got != (Size{W: 60, H: 200}) {
+	if got := SizeWithin(s, unbounded); got != (Size{W: 60, H: 200}) {
 		t.Errorf("uncapped = %v, want the natural 60x200", got)
 	}
 	s.SetMaxContentHeight(80)
-	if got := s.Measure(unbounded); got != (Size{W: 60 + gutter, H: 80}) {
+	if got := SizeWithin(s, unbounded); got != (Size{W: 60 + gutter, H: 80}) {
 		t.Errorf("capped = %v, want 80 high with the gutter on the width", got)
 	}
 	s.Arrange(render.Rect{W: 60 + gutter, H: 80})
@@ -117,11 +117,11 @@ func TestScrollMaxContentHeight(t *testing.T) {
 	}
 	short := NewScroll(newStub(60, 40))
 	short.SetMaxContentHeight(80)
-	if got := short.Measure(unbounded); got != (Size{W: 60, H: 40}) {
+	if got := SizeWithin(short, unbounded); got != (Size{W: 60, H: 40}) {
 		t.Errorf("short content = %v, want its natural 60x40", got)
 	}
 	s.SetMaxContentHeight(-5)
-	if s.MaxContentHeight() != 0 || s.Measure(unbounded).H != 200 {
+	if s.MaxContentHeight() != 0 || SizeWithin(s, unbounded).H != 200 {
 		t.Error("a negative cap is no cap")
 	}
 }
@@ -137,11 +137,11 @@ func TestScrollVerticalOnly(t *testing.T) {
 	label.SetWrap(true)
 	s := NewScroll(label)
 	s.VerticalOnly, s.ShowBars = true, true
-	if got := s.Measure(Constraints{Max: Size{W: 120, H: 50}}); got.W > 120 {
+	if got := SizeWithin(s, Size{W: 120, H: 50}); got.W > 120 {
 		t.Errorf("measured %v, wider than the 120 it was given", got)
 	}
 	s.Arrange(render.Rect{W: 120, H: 50})
-	wrapped := func(w int) int { return label.Measure(Constraints{Max: Size{W: w, H: 1 << 20}}).H }
+	wrapped := func(w int) int { return SizeWithin(label, Size{W: w, H: 1 << 20}).H }
 	if lb := label.Bounds(); s.viewW != 120-gutter || lb.W != s.viewW || lb.H != wrapped(s.viewW) || lb.H <= 50 {
 		t.Errorf("label %v in a %dpx viewport: want it the viewport's width less the gutter, wrapped there", lb, s.viewW)
 	}
@@ -150,14 +150,14 @@ func TestScrollVerticalOnly(t *testing.T) {
 	}
 	// Arranged narrower than it was measured: it wraps at the width it
 	// got, not the one it was offered.
-	s.Measure(Constraints{Max: Size{W: 400, H: 50}})
+	SizeWithin(s, Size{W: 400, H: 50})
 	s.Arrange(render.Rect{W: 90, H: 50})
 	if lb := label.Bounds(); lb.W != 90-gutter || lb.H != wrapped(90-gutter) {
 		t.Errorf("re-arranged label %v, want %dx%d", lb, 90-gutter, wrapped(90-gutter))
 	}
 
 	two := NewScroll(NewLabel(face, 12, text, render.RGB(255, 255, 255)))
-	two.Measure(Constraints{Max: Size{W: 120, H: 30}})
+	SizeWithin(two, Size{W: 120, H: 30})
 	two.Arrange(render.Rect{W: 120, H: 30})
 	if mx, _ := two.scrollMax(); mx == 0 {
 		t.Error("a two-way scroll stopped scrolling sideways")
@@ -172,7 +172,7 @@ func TestAxisPixels(t *testing.T) {
 		tall.Append(newStub(50, 20), false)
 	}
 	s := NewScroll(tall)
-	s.Measure(Constraints{Max: Size{W: 60, H: 60}})
+	SizeWithin(s, Size{W: 60, H: 60})
 	s.Arrange(render.Rect{W: 60, H: 60})
 	r := &Router{Root: s}
 	r.Move(Point{X: 10, Y: 10})
@@ -186,7 +186,7 @@ func TestAxisPixels(t *testing.T) {
 		rows = append(rows, newStub(20, 10))
 	}
 	l := NewList[Widget](rows, 10)
-	l.Measure(Constraints{Max: Size{W: 100, H: 50}})
+	SizeWithin(l, Size{W: 100, H: 50})
 	l.Arrange(render.Rect{W: 100, H: 50})
 	l.ScrollPixels(0, 7.5)
 	l.ScrollPixels(0, 0.5)
@@ -220,14 +220,14 @@ func TestWheelStepIsPageTwoThirds(t *testing.T) {
 		tall.Append(newStub(50, 30), false)
 	}
 	s := NewScroll(tall)
-	s.Measure(Constraints{Max: Size{W: 60, H: 100}})
+	SizeWithin(s, Size{W: 60, H: 100})
 	s.Arrange(render.Rect{W: 60, H: 100})
 	s.ScrollBy(0, 1)
 	if _, y := s.Offset(); y != wheelStep(s.viewH) {
 		t.Errorf("one step scrolled %d, want the page's 2/3 power %d", y, wheelStep(s.viewH))
 	}
 	short := NewScroll(NewBox(Column, 0, 0))
-	short.Measure(Constraints{Max: Size{W: 30, H: 30}})
+	SizeWithin(short, Size{W: 30, H: 30})
 	short.Arrange(render.Rect{W: 30, H: 30})
 	if got := wheelStep(short.viewH); got < 1 {
 		t.Errorf("wheel step %d, want at least a pixel", got)

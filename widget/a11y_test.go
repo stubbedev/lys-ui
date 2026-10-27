@@ -10,7 +10,7 @@ import (
 func a11yRoot(t *testing.T, w Widget) Widget {
 	t.Helper()
 	root := NewBox(Column, 0, 0).Append(w, false)
-	root.Measure(Constraints{Max: Size{W: 400, H: 200}})
+	SizeWithin(root, Size{W: 400, H: 200})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 400, H: 200})
 	return root
 }

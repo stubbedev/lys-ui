@@ -229,8 +229,8 @@ func (e *Expander) bodyH(r render.Rect) int {
 	if e.child == nil || e.progress <= 0 {
 		return 0
 	}
-	nat := measureChild(e, e.child, Constraints{Max: Size{W: max(0, r.W), H: max(0, r.H-e.headerH())}})
-	return min(max(0, r.H-e.headerH()), int(float64(nat.H)*e.progress+0.5))
+	nat := measureChild(e, e.child, Column, max(0, r.W-2*bodyPadX)).Nat
+	return min(max(0, r.H-e.headerH()), int(float64(nat)*e.progress+0.5))
 }
 
 // headerRect is the clickable strip.
@@ -239,24 +239,32 @@ func (e *Expander) headerRect() render.Rect {
 }
 
 // Measure reports the header plus the revealed fraction of the child.
-func (e *Expander) Measure(con Constraints) Size {
-	if sz, ok := e.measureHit(con); ok {
+func (e *Expander) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := e.measureHit(axis, forSize); ok {
 		return sz
 	}
-	headH := e.headerH()
-	w := 2*headerPadX + chevronSize + headerGap
-	if e.face != nil {
-		w += int(e.face.Shape(e.title, e.sizePx).Advance() + 0.5)
+	if axis == Row {
+		head := 2*headerPadX + chevronSize + headerGap
+		if e.face != nil {
+			head += int(e.face.Shape(e.title, e.sizePx).Advance() + 0.5)
+		}
+		req := FixedSizes(head)
+		if e.child != nil {
+			req = req.widest(measureChild(e, e.child, Row, Unknown).grow(2 * bodyPadX))
+		}
+		return e.measureStore(axis, forSize, req)
 	}
-	body := Size{}
+	req := FixedSizes(e.headerH())
 	if e.child != nil {
-		body = measureChild(e, e.child, Constraints{
-			Max: Size{W: max(0, con.Max.W), H: max(0, con.Max.H-headH)},
-		})
-		w = max(w, body.W+2*bodyPadX)
+		width := forSize
+		if width != Unknown {
+			width = max(0, width-2*bodyPadX)
+		}
+		body := measureChild(e, e.child, Column, width)
+		shown := func(n int) int { return int(float64(n)*e.progress + 0.5) }
+		req = req.plus(Sizes{Min: shown(body.Min), Nat: shown(body.Nat)})
 	}
-	h := headH + int(float64(body.H)*e.progress+0.5)
-	return e.measureStore(con, clampSize(Size{W: w, H: h}, con))
+	return e.measureStore(axis, forSize, req)
 }
 
 // Paint draws the header — hover shade, title, chevron at the reveal

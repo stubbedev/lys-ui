@@ -32,7 +32,7 @@ func (f *fakeMenuOpener) open(parent *Popover, anchor widget.Boundser, content w
 	if parent != nil {
 		parent.children = append(parent.children, p)
 	}
-	content.Measure(widget.Constraints{Max: widget.Size{W: 200, H: 400}})
+	widget.SizeWithin(content, widget.Size{W: 200, H: 400})
 	content.Arrange(render.Rect{W: 200, H: 400})
 	f.opened = append(f.opened, fakeLevel{parent: parent, anchor: anchor.Bounds(), pop: p})
 	return p, nil

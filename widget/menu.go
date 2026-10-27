@@ -352,8 +352,8 @@ func resolveMnemonics(items []MenuItem) (rows map[rune]int, runes []int) {
 // and submenu arrow) plus the row and contents padding, and one band
 // per item — the bands sized by the styled modelbuttons, as the list
 // sizes rows.
-func (m *Menu) Measure(con Constraints) Size {
-	if sz, ok := m.measureHit(con); ok {
+func (m *Menu) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := m.measureHit(axis, forSize); ok {
 		return sz
 	}
 	w := 0
@@ -379,9 +379,9 @@ func (m *Menu) Measure(con Constraints) Size {
 	co := boxOf(cv, menuContentsPad).outer()
 	v := m.style(m)
 	rows := m.rowTop(len(m.items), m.bandH())
-	return m.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
+	return m.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
 		h := rows + co.Top + co.Bottom
-		return clampSize(Size{W: w + co.Left + co.Right, H: h}, inner)
+		return FixedSizes(Size{W: w + co.Left + co.Right, H: h}.Along(axis))
 	}))
 }
 
@@ -425,7 +425,7 @@ func (m *Menu) iconSlot() int {
 	w := 0
 	for _, it := range m.items {
 		if it.Icon != nil {
-			w = max(w, it.Icon.Measure(Constraints{Max: Size{W: m.itemH * 4, H: m.itemH}}).W)
+			w = max(w, SizeWithin(it.Icon, Size{W: m.itemH * 4, H: m.itemH}).W)
 		}
 	}
 	if w == 0 {
@@ -523,7 +523,7 @@ func (m *Menu) Paint(cv *render.Canvas) {
 			// The icon hangs off the menu for invalidation (a theme
 			// switch re-resolves it) and paints centered in its slot.
 			setParents(m, it.Icon)
-			sz := it.Icon.Measure(Constraints{Max: Size{W: slot, H: row.H}})
+			sz := SizeWithin(it.Icon, Size{W: slot, H: row.H})
 			it.Icon.Arrange(render.Rect{X: x, Y: row.Y + (row.H-sz.H)/2, W: sz.W, H: sz.H})
 			PaintChild(cv, it.Icon)
 		}

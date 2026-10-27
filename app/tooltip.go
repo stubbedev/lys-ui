@@ -251,7 +251,7 @@ func openTooltip(sess *wlsession.Session, gpu popup.Renderer, host Host, face *r
 	}
 	box := widget.NewTooltipCard(face, text, markup)
 	maxW, maxH := opts.maxSize()
-	size := box.Measure(widget.Constraints{Max: widget.Size{W: maxW, H: maxH}})
+	size := widget.SizeWithin(box, widget.Size{W: maxW, H: maxH})
 	gutter := widget.InkOutset(box).Max()
 	winW, winH := host.Size()
 	anchor := tooltipAnchor(hover, pointerX, pointerY, render.Rect{W: winW, H: winH})

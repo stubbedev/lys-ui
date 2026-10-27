@@ -13,7 +13,7 @@ import (
 func enabledRoot(t *testing.T, w Widget) *Box {
 	t.Helper()
 	root := NewBox(Column, 0, 0).Append(w, false)
-	root.Measure(Constraints{Max: Size{W: 400, H: 200}})
+	SizeWithin(root, Size{W: 400, H: 200})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: 400, H: 200})
 	return root
 }
@@ -52,7 +52,7 @@ func TestDisabledButtonSwallowsInput(t *testing.T) {
 			t.Fatalf("root = %T, want the arranging box", root)
 		}
 		box.Append(e, false)
-		box.Measure(Constraints{Max: Size{W: 400, H: 200}})
+		SizeWithin(box, Size{W: 400, H: 200})
 		box.Arrange(render.Rect{X: 0, Y: 0, W: 400, H: 200})
 		ep := Point{X: e.Bounds().X + 5, Y: e.Bounds().Y + 5}
 		r.Press(BTNLeft, ep, 0)
@@ -114,7 +114,7 @@ func TestTraversalSkipsDisabled(t *testing.T) {
 	newTargets := func() (*focusTarget, *focusTarget, *focusTarget, *Router) {
 		a, b, c := newFocusTarget(), newFocusTarget(), newFocusTarget()
 		root := NewBox(Column, 0, 0).Append(a, false).Append(b, false).Append(c, false)
-		root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(root, Size{W: 100, H: 100})
 		root.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 100})
 		return a, b, c, &Router{Root: root}
 	}
@@ -269,7 +269,7 @@ func TestDisabledTogglesSliderAndScroll(t *testing.T) {
 		}
 		sc := NewScroll(tall)
 		root := NewBox(Column, 0, 0).Append(sc, false)
-		root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(root, Size{W: 100, H: 100})
 		root.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 60})
 		sc.SetEnabled(false)
 		sc.ScrollBy(0, 2)
@@ -365,7 +365,7 @@ func TestEntryReadOnly(t *testing.T) {
 		// A narrow row keeps the field at its capped 60px width, so the
 		// text overflows and the pan matters.
 		row := NewBox(Row, 0, 0).Append(e, false)
-		row.Measure(Constraints{Max: Size{W: 400, H: 40}})
+		SizeWithin(row, Size{W: 400, H: 40})
 		row.Arrange(render.Rect{X: 0, Y: 0, W: 400, H: 40})
 		e.KeyAction(KeyHome, 0)
 		if e.Cursor() != 0 {

@@ -14,7 +14,7 @@ func TestCompositeArrangesTheRootInsideItsMargin(t *testing.T) {
 	root.SetMargin(render.Insets{Left: 5, Top: 3, Right: 5, Bottom: 3})
 	c := &composite{}
 	c.initComposite(c, root)
-	if got := c.Measure(Constraints{Max: Size{W: 100, H: 100}}); got != (Size{W: 30, H: 16}) {
+	if got := SizeWithin(c, Size{W: 100, H: 100}); got != (Size{W: 30, H: 16}) {
 		t.Fatalf("measure %v, want the root plus its margin", got)
 	}
 	c.Arrange(render.Rect{W: 30, H: 16})

@@ -175,7 +175,7 @@ func TestWrapBoxJustify(t *testing.T) {
 		for range 3 {
 			f.Append(NewSpacer(20, 10))
 		}
-		f.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(f, Size{W: 100, H: 100})
 		f.Arrange(render.Rect{W: 100, H: 100})
 		var out []render.Rect
 		for _, c := range f.Children() {
@@ -215,7 +215,7 @@ func TestBottomSheet(t *testing.T) {
 	closed := 0
 	b.OnClosed = func() { closed++ }
 	layout := func() {
-		b.Measure(Constraints{Max: Size{W: 300, H: 400}})
+		SizeWithin(b, Size{W: 300, H: 400})
 		b.Arrange(render.Rect{W: 300, H: 400})
 	}
 	layout()
@@ -299,7 +299,7 @@ func TestBottomSheetPadsAndCentersItsPanel(t *testing.T) {
 	body := NewBox(Column, 0, 0)
 	body.Append(NewSpacer(10, 40), false)
 	b := NewBottomSheet(NewSpacer(0, 0), body)
-	b.Measure(Constraints{Max: Size{W: 1000, H: 600}})
+	SizeWithin(b, Size{W: 1000, H: 600})
 	b.Arrange(render.Rect{W: 1000, H: 600})
 	b.SetOpen(true)
 	b.Arrange(render.Rect{W: 1000, H: 600})
@@ -307,5 +307,19 @@ func TestBottomSheetPadsAndCentersItsPanel(t *testing.T) {
 	want := sheetWidth
 	if got.W != want || got.X != (1000-want)/2 {
 		t.Errorf("body %v, want %dpx centered in the 1000px edge", got, want)
+	}
+}
+
+// A status page fills the width it gets up to its column's widest,
+// centered or not, as a page does: centered in a narrower column it is
+// as wide as the column, not its text.
+func TestStatusPageFillsItsWidth(t *testing.T) {
+	face := testFace(t)
+	p := NewStatusPage(face, "", "Off", "Turn it on to see devices.")
+	col := NewBox(Column, 0, 0)
+	col.AppendAligned(p, true, AlignCenter)
+	arrangeTree(t, col, 350, 400)
+	if got := p.Bounds().W; got != 350 {
+		t.Errorf("centered status page is %d wide in a 350px column, want all of it", got)
 	}
 }

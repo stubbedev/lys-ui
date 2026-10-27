@@ -29,7 +29,7 @@ func pileOf(t *testing.T, h ...int) (*Pile, []*stub) {
 func TestPileCollapsed(t *testing.T) {
 	p, cards := pileOf(t, 40, 60, 30, 50)
 	settle(t, p, 200, 400)
-	if sz := p.Measure(Constraints{Max: Size{W: 200, H: 400}}); sz != (Size{W: 200, H: 40 + 2*pilePeekOffset}) {
+	if sz := SizeWithin(p, Size{W: 200, H: 400}); sz != (Size{W: 200, H: 40 + 2*pilePeekOffset}) {
 		t.Errorf("collapsed size %v, want the front plus two steps", sz)
 	}
 	want := []render.Rect{
@@ -66,7 +66,7 @@ func TestPileExpanded(t *testing.T) {
 	p, cards := pileOf(t, 40, 60, 30)
 	p.SetExpanded(true)
 	settle(t, p, 200, 400)
-	if sz := p.Measure(Constraints{Max: Size{W: 200, H: 400}}); sz.H != 40+60+30+2*pileSpacing {
+	if sz := SizeWithin(p, Size{W: 200, H: 400}); sz.H != 40+60+30+2*pileSpacing {
 		t.Errorf("expanded height %d", sz.H)
 	}
 	if b := cards[2].Bounds(); b != (render.Rect{X: 0, Y: 40 + 60 + 2*pileSpacing, W: 200, H: 30}) {

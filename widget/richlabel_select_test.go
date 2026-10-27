@@ -14,7 +14,7 @@ func TestRichLabelSelectable(t *testing.T) {
 	if !l.Selectable() {
 		t.Fatal("selectable did not stick")
 	}
-	sz := l.Measure(Constraints{Max: Size{W: 400, H: 40}})
+	sz := SizeWithin(l, Size{W: 400, H: 40})
 	arrangeTree(t, l, sz.W, sz.H)
 
 	l.PressAt(Point{X: l.Bounds().X + 2, Y: l.Bounds().Y + 2})
@@ -32,7 +32,7 @@ func TestRichLabelSelectable(t *testing.T) {
 	}
 
 	plain := NewRichLabel(entryFace(t), 14, "not selectable", 0)
-	sz2 := plain.Measure(Constraints{Max: Size{W: 400, H: 40}})
+	sz2 := SizeWithin(plain, Size{W: 400, H: 40})
 	arrangeTree(t, plain, sz2.W, sz2.H)
 	plain.PressAt(Point{X: plain.Bounds().X + 2, Y: plain.Bounds().Y + 2})
 	plain.DragMove(Point{X: plain.Bounds().X + sz2.W - 2, Y: plain.Bounds().Y + 2})
@@ -46,7 +46,7 @@ func TestRichLabelSelectableWrapped(t *testing.T) {
 	l := NewRichLabel(entryFace(t), 14, "alpha bravo charlie delta echo foxtrot golf hotel", 0)
 	l.SetSelectable(true)
 	l.SetWrap(true)
-	sz := l.Measure(Constraints{Max: Size{W: 110, H: 200}})
+	sz := SizeWithin(l, Size{W: 110, H: 200})
 	arrangeTree(t, l, 110, sz.H)
 	if len(l.lines) < 2 {
 		t.Fatalf("rows = %d, the test needs a wrap", len(l.lines))

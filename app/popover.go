@@ -275,8 +275,8 @@ type popoverKeyRoot struct {
 // Measure measures the content as its container would, so the
 // content's own size request (GtkPopover's width and height requests)
 // floors the popover.
-func (r *popoverKeyRoot) Measure(con widget.Constraints) widget.Size {
-	return widget.MeasureAsChild(r.content, con)
+func (r *popoverKeyRoot) Measure(axis widget.Axis, forSize int) widget.Sizes {
+	return widget.MeasureAsChild(r.content, axis, forSize)
 }
 
 // Arrange lays the content out at its measured size inside the
@@ -285,7 +285,7 @@ func (r *popoverKeyRoot) Measure(con widget.Constraints) widget.Size {
 // content springs down to.
 func (r *popoverKeyRoot) Arrange(rect render.Rect) {
 	r.bounds = rect
-	nat := widget.MeasureAsChild(r.content, widget.Constraints{Max: widget.Size{W: rect.W, H: rect.H}})
+	nat := widget.SizeWithinAsChild(r.content, widget.Size{W: rect.W, H: rect.H})
 	rect.W, rect.H = min(rect.W, nat.W), min(rect.H, nat.H)
 	widget.ArrangeAsChild(r.content, rect)
 }
@@ -385,7 +385,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 			widget.SetStyleAnchor(cfg.Content, nil)
 		}
 	}
-	size := widget.MeasureAsChild(cfg.Content, widget.Constraints{Max: popoverCeiling(a.outputs(), cfg.MaxWidth, cfg.MaxHeight)})
+	size := widget.SizeWithinAsChild(cfg.Content, popoverCeiling(a.outputs(), cfg.MaxWidth, cfg.MaxHeight))
 	// The positioner anchors to the anchor widget's rect on the gravity
 	// side and the compositor flips or slides it against the output (a
 	// bar is never tall enough to judge room by). The shadow gutter rides
@@ -682,7 +682,7 @@ func (op *openPopover) fitContent(outputs []*wlsession.Output) {
 	if op.pop.Dismissed() {
 		return
 	}
-	size := op.keyRoot.Measure(widget.Constraints{Max: popoverCeiling(outputs, op.keyRoot.maxW, op.keyRoot.maxH)})
+	size := widget.SizeWithin(op.keyRoot, popoverCeiling(outputs, op.keyRoot.maxW, op.keyRoot.maxH))
 	g := op.pop.Gutter()
 	w, h := size.W+2*g, size.H+2*g
 	rw, rh := op.pop.RequestedSize()

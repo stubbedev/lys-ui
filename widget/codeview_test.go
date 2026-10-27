@@ -10,7 +10,7 @@ import (
 
 // areaShot lays ta out at w x h and paints it over black.
 func areaShot(ta *TextArea, w, h int) ([]byte, int) {
-	ta.Measure(Constraints{Max: Size{W: w, H: h}})
+	SizeWithin(ta, Size{W: w, H: h})
 	ta.Arrange(render.Rect{W: w, H: h})
 	stride := render.Stride(w)
 	data := make([]byte, stride*h)

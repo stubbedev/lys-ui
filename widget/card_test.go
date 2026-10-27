@@ -127,7 +127,7 @@ func TestCardActionKeepsItsWidthBesideWrappingText(t *testing.T) {
 		c.SetSizeRequest(420, 0)
 		c.SetMaximumSize(420, 0)
 		arrangeTree(t, NewBox(Column, 0, 0).Append(c, false), 800, 600)
-		want := caption.Measure(Constraints{Max: Size{W: 800, H: 100}}).W
+		want := SizeWithin(caption, Size{W: 800, H: 100}).W
 		cb, ab, lb := c.Bounds(), action.Bounds(), caption.Bounds()
 		if lb.W < want {
 			t.Errorf("ellipsize %v: caption %d wide, want its natural %d", ellipsize, lb.W, want)

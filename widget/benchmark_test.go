@@ -17,14 +17,14 @@ import (
 // from scratch. The warm path is pinned by BenchmarkStaticTreeMeasure.
 func BenchmarkShowcaseMeasure(b *testing.B) {
 	show := buildShowcase(b)
-	conA := Constraints{Max: Size{W: showW, H: showH}}
-	conB := Constraints{Max: Size{W: showW - 1, H: showH}}
+	conA := Size{W: showW, H: showH}
+	conB := Size{W: showW - 1, H: showH}
 	b.ResetTimer()
 	for i := range b.N {
 		if i%2 == 0 {
-			show.root.Measure(conA)
+			SizeWithin(show.root, conA)
 		} else {
-			show.root.Measure(conB)
+			SizeWithin(show.root, conB)
 		}
 	}
 }
@@ -35,7 +35,7 @@ func BenchmarkShowcaseMeasure(b *testing.B) {
 func BenchmarkShowcaseArrange(b *testing.B) {
 	show := buildShowcase(b)
 	rect := render.Rect{X: 0, Y: 0, W: showW, H: showH}
-	show.root.Measure(Constraints{Max: Size{W: showW, H: showH}})
+	SizeWithin(show.root, Size{W: showW, H: showH})
 	show.root.Arrange(rect)
 	for b.Loop() {
 		show.root.Arrange(rect)

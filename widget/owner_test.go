@@ -17,10 +17,10 @@ func TestWrappedWidgetStylesAsItself(t *testing.T) {
 	measure := func(w widget.Widget) widget.Size {
 		root := widget.NewBox(widget.Row, 0, 0)
 		root.Append(w, false)
-		con := widget.Constraints{Max: widget.Size{W: 300, H: 100}}
-		root.Measure(con)
+		con := widget.Size{W: 300, H: 100}
+		widget.SizeWithin(root, con)
 		root.Arrange(render.Rect{W: 300, H: 100})
-		return widget.MeasureAsChild(w, con)
+		return widget.SizeWithinAsChild(w, con)
 	}
 	plain := measure(wrapSwitch{widget.NewSwitch(false)})
 	if bare := measure(widget.NewSwitch(false)); plain != bare {
@@ -39,7 +39,7 @@ func TestWrappedWidgetStylesAsItself(t *testing.T) {
 	row.AddClass("setting-control")
 	row.Append(sw, false)
 	measure(row)
-	if got := widget.MeasureAsChild(sw, widget.Constraints{Max: widget.Size{W: 300, H: 100}}); got != (widget.Size{W: 52, H: 30}) {
+	if got := widget.SizeWithinAsChild(sw, widget.Size{W: 300, H: 100}); got != (widget.Size{W: 52, H: 30}) {
 		t.Errorf("wrapped switch in a classed row %v, want the calc() 52x30", got)
 	}
 }

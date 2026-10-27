@@ -131,7 +131,6 @@ func dumpFrame(path string) error {
 	data := make([]byte, render.Stride(w)*h)
 	cv := render.New(data, render.Stride(w), w, h)
 	cv.Clear(cv.Rect(), bgColor)
-	root.Measure(widget.Constraints{Max: widget.Size{W: w, H: h}})
 	root.Arrange(render.Rect{W: w, H: h})
 	root.Paint(cv)
 	img := render.NRGBA(data, render.Stride(w), w, h)

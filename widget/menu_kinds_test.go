@@ -13,8 +13,8 @@ func TestMenuKeyboard(t *testing.T) {
 		{Label: "copy", OnClick: func() {}},
 	}
 	menu := NewMenu(entryFace(t), 13, items...)
-	menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
-	menu.Arrange(render.Rect{X: 10, Y: 20, W: 120, H: menu.Measure(Constraints{Max: Size{W: 400, H: 400}}).H})
+	SizeWithin(menu, Size{W: 300, H: 300})
+	menu.Arrange(render.Rect{X: 10, Y: 20, W: 120, H: SizeWithin(menu, Size{W: 400, H: 400}).H})
 
 	t.Run("arrows move and clamp at the ends (pinned)", func(t *testing.T) {
 		menu.KeyAction(KeyDown, 0)
@@ -67,8 +67,8 @@ func TestMenuKinds(t *testing.T) {
 		{Label: "sort b", Kind: ItemRadio, Group: "sort", OnClick: func() {}},
 	}
 	menu := NewMenu(entryFace(t), 13, items...)
-	menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
-	menu.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: menu.Measure(Constraints{Max: Size{W: 400, H: 400}}).H})
+	SizeWithin(menu, Size{W: 300, H: 300})
+	menu.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: SizeWithin(menu, Size{W: 400, H: 400}).H})
 
 	t.Run("check rows toggle on activate", func(t *testing.T) {
 		menu.ClickAt(rowCenter(menu, 0))
@@ -99,8 +99,8 @@ func TestMenuSubmenu(t *testing.T) {
 		{Label: "quit", OnClick: func() {}},
 	}
 	menu := NewMenu(entryFace(t), 13, items...)
-	menu.Measure(Constraints{Max: Size{W: 300, H: 300}})
-	menu.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: menu.Measure(Constraints{Max: Size{W: 400, H: 400}}).H})
+	SizeWithin(menu, Size{W: 300, H: 300})
+	menu.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: SizeWithin(menu, Size{W: 400, H: 400}).H})
 
 	t.Run("activating a submenu row fires OnSubmenu without dismissing", func(t *testing.T) {
 		var got []MenuItem

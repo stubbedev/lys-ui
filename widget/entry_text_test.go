@@ -12,7 +12,7 @@ import (
 // entryShot paints e arranged at its natural size on a black canvas.
 func entryShot(t *testing.T, e *Entry) ([]byte, int, Size) {
 	t.Helper()
-	sz := e.Measure(Constraints{Max: Size{W: 400, H: 100}})
+	sz := SizeWithin(e, Size{W: 400, H: 100})
 	e.Arrange(render.Rect{W: sz.W, H: sz.H})
 	stride := render.Stride(sz.W)
 	data := make([]byte, stride*sz.H)
@@ -147,13 +147,13 @@ func TestSpinButtonTextNode(t *testing.T) {
 func TestEntryTextMinHeightFloorsTheLine(t *testing.T) {
 	loadCSS(t, `entry { padding: 0px; } entry > text { min-height: 40px; }`)
 	e := NewEntry(entryFace(t), 14, 0)
-	if h := e.Measure(Constraints{Max: Size{W: 400, H: 100}}).H; h != 40 {
+	if h := SizeWithin(e, Size{W: 400, H: 100}).H; h != 40 {
 		t.Errorf("height %d, want the text node's 40px floor", h)
 	}
 	loadCSS(t, `entry { padding: 0px; min-height: 0px; } entry > text { min-height: 2px; }`)
 	e = NewEntry(entryFace(t), 14, 0)
 	lg := entryFace(t).Shape("lg", 14)
-	if h := e.Measure(Constraints{Max: Size{W: 400, H: 100}}).H; h != int(lg.Ascent()+lg.Descent()+0.5) {
+	if h := SizeWithin(e, Size{W: 400, H: 100}).H; h != int(lg.Ascent()+lg.Descent()+0.5) {
 		t.Errorf("height %d, want the line over a smaller floor", h)
 	}
 }
@@ -170,10 +170,10 @@ func TestEntriesShrinkInATightRow(t *testing.T) {
 	row := NewBox(Row, 0, 0)
 	row.Append(a, true)
 	row.Append(b, true)
-	nat := a.Measure(Constraints{Max: Size{W: 1000, H: 100}}).W
-	row.Measure(Constraints{Max: Size{W: 1000, H: 100}})
-	if a.ShrinkableWidth() != nat-(entryPad.Left+entryPad.Right) {
-		t.Errorf("shrinkable %d, want the text width %d", a.ShrinkableWidth(), nat-(entryPad.Left+entryPad.Right))
+	nat := SizeWithin(a, Size{W: 1000, H: 100}).W
+	SizeWithin(row, Size{W: 1000, H: 100})
+	if widthGive(a) != nat-(entryPad.Left+entryPad.Right) {
+		t.Errorf("shrinkable %d, want the text width %d", widthGive(a), nat-(entryPad.Left+entryPad.Right))
 	}
 	row.Arrange(render.Rect{W: 2 * nat, H: 40})
 	if a.bounds.W != nat || b.bounds.W != nat {
@@ -184,8 +184,8 @@ func TestEntriesShrinkInATightRow(t *testing.T) {
 		t.Errorf("tight row: %v %v, want two 100px fields side by side", a.bounds, b.bounds)
 	}
 	b.AddClass("floor")
-	row.Measure(Constraints{Max: Size{W: 1000, H: 100}})
-	if got := b.ShrinkableWidth(); got != nat-120 {
+	SizeWithin(row, Size{W: 1000, H: 100})
+	if got := widthGive(b); got != nat-120 {
 		t.Errorf("min-width floor: shrinkable %d, want %d", got, nat-120)
 	}
 }
@@ -195,7 +195,7 @@ func TestEntriesShrinkInATightRow(t *testing.T) {
 // at is min characters, and the text typed changes neither.
 func TestEntryWidthChars(t *testing.T) {
 	face := entryFace(t)
-	con := Constraints{Max: Size{W: 1000, H: 100}}
+	con := Size{W: 1000, H: 100}
 	e := NewEntry(face, 14, 0)
 	in := e.textInsets()
 	pad := in.Left + in.Right
@@ -205,23 +205,23 @@ func TestEntryWidthChars(t *testing.T) {
 		t.Errorf("WidthChars = %d, %d", mn, mx)
 	}
 	// The characters, and the room the caret keeps after them.
-	if w := e.Measure(con).W; w != pad+10*cp+caretPad {
+	if w := SizeWithin(e, con).W; w != pad+10*cp+caretPad {
 		t.Errorf("natural %d, want ten characters and the caret's room (%d)", w, pad+10*cp+caretPad)
 	}
 	e.SetText(strings.Repeat("W", 40))
-	if w := e.Measure(con).W; w != pad+10*cp+caretPad {
+	if w := SizeWithin(e, con).W; w != pad+10*cp+caretPad {
 		t.Errorf("a long text resized the field to %d", w)
 	}
-	if got := e.ShrinkableWidth(); got != 4*cp {
+	if got := widthGive(e); got != 4*cp {
 		t.Errorf("shrinkable %d, want down to six characters (%d)", got, 4*cp)
 	}
 	// Min alone: the GTK natural width, at least min.
 	e.SetWidthChars(30, 0)
-	if w := e.Measure(con).W; w != pad+max(GTKTextWidth, 30*cp+caretPad) {
+	if w := SizeWithin(e, con).W; w != pad+max(GTKTextWidth, 30*cp+caretPad) {
 		t.Errorf("min only: %d", w)
 	}
 	e.SetWidthChars(0, 0)
-	if w := e.Measure(con).W; w <= pad+10*cp {
+	if w := SizeWithin(e, con).W; w <= pad+10*cp {
 		t.Errorf("unset: %d, want the text's width back", w)
 	}
 }
@@ -263,7 +263,7 @@ func TestEntryEllipsizesAtRest(t *testing.T) {
 	other := newFocusTarget()
 	root := NewBox(Column, 0, 0)
 	root.Append(e, false).Append(other, false)
-	root.Measure(Constraints{Max: Size{W: 140, H: 80}})
+	SizeWithin(root, Size{W: 140, H: 80})
 	root.Arrange(render.Rect{W: 140, H: 80})
 	r := &Router{Root: root}
 
@@ -310,7 +310,7 @@ func TestWidthCharsLeavesRoomForTheCaret(t *testing.T) {
 		text += "0"
 	}
 	e.SetText(text)
-	sz := e.Measure(Constraints{Max: Size{W: 1000, H: 100}})
+	sz := SizeWithin(e, Size{W: 1000, H: 100})
 	e.Arrange(render.Rect{W: sz.W, H: sz.H})
 	r := &Router{Root: e}
 	if err := r.SetFocus(e); err != nil {

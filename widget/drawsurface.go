@@ -113,8 +113,8 @@ func (d *DrawSurface) ensure(w, h, num, denom int) {
 func (d *DrawSurface) QueueDraw() { d.Invalidate() }
 
 // Measure requests the content size.
-func (d *DrawSurface) Measure(con Constraints) Size {
-	return clampSize(Size{W: d.w, H: d.h}, con)
+func (d *DrawSurface) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(Size{W: d.w, H: d.h}.Along(axis))
 }
 
 // Paint shows the backing canvas, allocating it first if this paint is

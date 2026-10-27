@@ -781,12 +781,13 @@ widget, in any container: a definite size or a bound holds the slot a
 container offers (a column box does not stretch a 100px-wide child,
 which sits at the start, or by SetHAlign), and a min size widens it.
 Percentages resolve against the containing block — the content box a
-CSS layout hands its items, and in a programmatic container the space
-it offers in the measure constraint; a percentage height resolves only
-against a definite height (a fixed or pinned one), and reads as auto
-under a content-sized parent, as CSS 2 §10.5 says. min-content is the
-widget's floor (what it can give up as a Shrinker or WidthShrinker,
-lowered to a MinSizer's floor — a wrapping label's widest word); a box
+CSS layout hands its items, and in a programmatic container its
+content box at arrange; a measure, which knows no containing block,
+reads them as auto. A percentage height resolves only against a
+definite height (a fixed one, or one a flex or grid layout sized), and
+reads as auto under a content-sized parent, as CSS 2 §10.5 says.
+min-content is the widget's minimum (a wrapping label's widest word,
+an ellipsizing one's ellipsis); a box
 whose lines break between its items — normal flow, a multi-line flex
 row, a column flex container — has its widest item's min-content
 contribution as its own, and a single-line flex row the sum of its
@@ -831,11 +832,6 @@ the widget's `SetScale` policy stands, centered.
 
 ### Layout limits
 
-- Inside a programmatic container a widget never outgrows the slot it
-  is offered: a definite size larger than the slot clamps to it,
-  because a widget's measure lies within its constraints. A CSS layout
-  (a Box with `display`) lets a definite size overflow its content box,
-  as CSS does.
 - `subgrid`: `grid-template-columns`/`grid-template-rows: subgrid`
   with its line-name lists parse, compute and report supported, and
   lay out as `none`, CSS's reading of `subgrid` on a grid that is not a

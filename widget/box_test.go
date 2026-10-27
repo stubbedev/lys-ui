@@ -18,8 +18,8 @@ func newStub(w, h int) *stub {
 	return &stub{nat: Size{W: w, H: h}}
 }
 
-func (s *stub) Measure(con Constraints) Size {
-	return clampSize(s.nat, con)
+func (s *stub) Measure(axis Axis, forSize int) Sizes {
+	return FixedSizes(s.nat.Along(axis))
 }
 
 func (s *stub) Arrange(r render.Rect) {
@@ -38,7 +38,7 @@ func TestBoxMeasureRow(t *testing.T) {
 		b := NewBox(Row, 2, 1)
 		b.Append(newStub(10, 5), false)
 		b.Append(newStub(8, 4), false)
-		got := b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		got := SizeWithin(b, Size{W: 100, H: 100})
 		if got.W != 1+10+2+8+1 {
 			t.Errorf("main extent = %d, want 22", got.W)
 		}
@@ -51,7 +51,7 @@ func TestBoxMeasureRow(t *testing.T) {
 		b := NewBox(Column, 2, 1)
 		b.Append(newStub(10, 5), false)
 		b.Append(newStub(8, 4), false)
-		got := b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		got := SizeWithin(b, Size{W: 100, H: 100})
 		if got.H != 1+5+2+4+1 {
 			t.Errorf("main extent = %d, want 13", got.H)
 		}
@@ -61,18 +61,17 @@ func TestBoxMeasureRow(t *testing.T) {
 	})
 
 	t.Run("empty box is just padding", func(t *testing.T) {
-		got := NewBox(Row, 4, 3).Measure(Constraints{Max: Size{W: 100, H: 100}})
+		got := SizeWithin(NewBox(Row, 4, 3), Size{W: 100, H: 100})
 		if got != (Size{W: 6, H: 6}) {
 			t.Errorf("empty box = %v, want 6x6", got)
 		}
 	})
 
-	t.Run("clamps to constraints", func(t *testing.T) {
+	t.Run("overflows a smaller host rather than squeeze", func(t *testing.T) {
 		b := NewBox(Row, 2, 1)
 		b.Append(newStub(50, 5), false)
-		got := b.Measure(Constraints{Max: Size{W: 30, H: 3}})
-		if got.W != 30 || got.H != 3 {
-			t.Errorf("measured %v, want clamped to 30x3", got)
+		if got := SizeWithin(b, Size{W: 30, H: 3}); got != (Size{W: 52, H: 7}) {
+			t.Errorf("measured %v, want its 52x7 minimum", got)
 		}
 	})
 }
@@ -85,7 +84,7 @@ func TestBoxArrangeRow(t *testing.T) {
 		b.Append(a, false)
 		b.Append(c, false)
 
-		b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(b, Size{W: 100, H: 100})
 		b.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 20})
 
 		if a.rect != (render.Rect{X: 1, Y: 1, W: 10, H: 18}) {
@@ -105,7 +104,7 @@ func TestBoxArrangeRow(t *testing.T) {
 		b.Append(c, true)
 		b.Append(d, true)
 
-		b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(b, Size{W: 100, H: 100})
 		b.Arrange(render.Rect{X: 0, Y: 0, W: 70, H: 20})
 
 		// 70 - 30 natural = 40 free, split between two expanders.
@@ -125,7 +124,7 @@ func TestBoxArrangeRow(t *testing.T) {
 		a := newStub(10, 5)
 		b.Append(a, false)
 
-		b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(b, Size{W: 100, H: 100})
 		b.Arrange(render.Rect{X: 0, Y: 0, W: 60, H: 20})
 
 		if a.rect.W != 10 {
@@ -140,7 +139,7 @@ func TestBoxArrangeRow(t *testing.T) {
 		b.Append(a, false)
 		b.Append(c, false)
 
-		b.Measure(Constraints{Max: Size{W: 40, H: 20}})
+		SizeWithin(b, Size{W: 40, H: 20})
 		b.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 20})
 
 		if a.rect.W != 30 || c.rect.W != 30 {
@@ -158,7 +157,7 @@ func TestBoxArrangeRow(t *testing.T) {
 		b.Append(a, false)
 		b.Append(c, false)
 
-		b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+		SizeWithin(b, Size{W: 100, H: 100})
 		b.Arrange(render.Rect{X: 0, Y: 0, W: 50, H: 40})
 
 		if a.rect != (render.Rect{X: 0, Y: 0, W: 50, H: 5}) {
@@ -174,7 +173,7 @@ func TestBoxHitTest(t *testing.T) {
 	b := NewBox(Row, 2, 1)
 	a := newStub(10, 5)
 	b.Append(a, false)
-	b.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(b, Size{W: 100, H: 100})
 	b.Arrange(render.Rect{X: 0, Y: 0, W: 40, H: 20})
 
 	t.Run("over a child returns the child", func(t *testing.T) {
@@ -202,7 +201,7 @@ func TestBoxAppendAligned(t *testing.T) {
 	row := NewBox(Row, 0, 0)
 	fill, mid, end := newStub(10, 6), newStub(10, 6), newStub(10, 6)
 	row.Append(fill, false).AppendAligned(mid, false, AlignCenter).AppendAligned(end, false, AlignEnd)
-	row.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(row, Size{W: 100, H: 100})
 	row.Arrange(render.Rect{W: 30, H: 20})
 	for name, c := range map[string]struct {
 		w    Widget
@@ -219,7 +218,7 @@ func TestBoxAppendAligned(t *testing.T) {
 	col := NewBox(Column, 0, 0)
 	start := newStub(8, 5)
 	col.AppendAligned(start, true, AlignStart)
-	col.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(col, Size{W: 100, H: 100})
 	col.Arrange(render.Rect{W: 40, H: 20})
 	if got := start.Bounds(); got != (render.Rect{X: 0, Y: 0, W: 8, H: 20}) {
 		t.Errorf("column start: %v, want natural width, expanded height", got)
@@ -241,7 +240,7 @@ func TestBoxTransform(t *testing.T) {
 	sw.AddClass("swatch")
 	root.Append(NewLabel(face, 10, "pad", render.RGBA(0, 0, 0, 255)), false)
 	root.Append(sw, false)
-	sz := root.Measure(Constraints{Max: Size{W: 200, H: 200}})
+	sz := SizeWithin(root, Size{W: 200, H: 200})
 	root.Arrange(render.Rect{W: sz.W, H: sz.H})
 
 	data := make([]byte, render.Stride(200)*100)
@@ -288,7 +287,7 @@ func TestBoxArrangesForItsAllocationNotAStaleMeasure(t *testing.T) {
 	col := NewBox(Column, 0, 0)
 	col.Append(header, false)
 	col.Append(NewSpacer(50, 100), true)
-	col.Measure(Constraints{Max: Size{W: 200, H: 0}})
+	SizeWithin(col, Size{W: 200, H: 0})
 	col.Arrange(render.Rect{W: 200, H: 300})
 	if b := header.Bounds(); b.H != 20 || b.W != 200 {
 		t.Errorf("header %v, want 200x20 after the zero-height probe", b)

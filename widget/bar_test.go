@@ -120,7 +120,7 @@ func TestGoldenBar(t *testing.T) {
 			row.AppendAligned(left, false, AlignStart)
 			row.AppendAligned(top, true, AlignStart)
 			NewGolden(t, row, "bar-"+tc.name, goldenTheme(tc.th), goldenFrame(520, 280), goldenAfterArrange(func() {
-				row.Measure(Constraints{Max: Size{W: 520, H: 280}})
+				SizeWithin(row, Size{W: 520, H: 280})
 				row.Arrange(render.Rect{W: 520, H: 280})
 			}))
 		})

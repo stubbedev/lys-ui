@@ -10,7 +10,7 @@ import (
 // layout the way a window frame does.
 func layoutRoot(root Widget, w, h int) {
 	for range 3 {
-		root.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(root, Size{W: w, H: h})
 		root.Arrange(render.Rect{W: w, H: h})
 		if !LayoutPending(root) {
 			return
@@ -119,11 +119,11 @@ func TestScrollCSSBox(t *testing.T) {
 	s := propagating(NewScroll(leaf))
 	s.VerticalOnly, s.ShowBars = true, true
 	s.AddClass("ed")
-	if sz := s.Measure(Constraints{Max: Size{W: 100, H: 300}}); sz.H != 214 {
+	if sz := SizeWithin(s, Size{W: 100, H: 300}); sz.H != 214 {
 		t.Errorf("height %d, want the content and its insets", sz.H)
 	}
 	s.SetMaxContentHeight(20)
-	if sz := s.Measure(Constraints{Max: Size{W: 100, H: 300}}); sz.H != 94 {
+	if sz := SizeWithin(s, Size{W: 100, H: 300}); sz.H != 94 {
 		t.Errorf("capped height %d, want the 80px content min-height and the insets", sz.H)
 	}
 	s.Arrange(render.Rect{W: 100, H: 80})
@@ -160,7 +160,7 @@ func TestScrollCSSBox(t *testing.T) {
 	}
 
 	plain := NewScroll(&solidLeaf{sz: Size{W: 10, H: 10}, col: render.RGB(0, 0, 0xff)})
-	plain.Measure(Constraints{Max: Size{W: 100, H: 80}})
+	SizeWithin(plain, Size{W: 100, H: 80})
 	plain.Arrange(render.Rect{W: 100, H: 80})
 	clear(data)
 	plain.Paint(cv)

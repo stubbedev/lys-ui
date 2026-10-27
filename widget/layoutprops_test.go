@@ -7,7 +7,7 @@ import (
 )
 
 func arrange(root Widget, w, h int) {
-	root.Measure(Constraints{Max: Size{W: w, H: h}})
+	SizeWithin(root, Size{W: w, H: h})
 	root.Arrange(render.Rect{W: w, H: h})
 }
 
@@ -58,7 +58,7 @@ func TestAlignAndMarginPlaceTheChildInItsAllocation(t *testing.T) {
 	child.SetMargin(render.Insets{Top: 5, Right: 0, Bottom: 5, Left: 0})
 	col := NewBox(Column, 0, 0)
 	col.Append(child, false)
-	sz := col.Measure(Constraints{Max: Size{W: 200, H: 100}})
+	sz := SizeWithin(col, Size{W: 200, H: 100})
 	if sz.H != 20 {
 		t.Errorf("measured height %d, want 10 plus the 5+5 margin", sz.H)
 	}
@@ -70,7 +70,7 @@ func TestAlignAndMarginPlaceTheChildInItsAllocation(t *testing.T) {
 	end.SetHAlign(AlignEnd)
 	end.SetVAlign(AlignEnd)
 	btn := NewButton(end, 0, 0)
-	btn.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(btn, Size{W: 100, H: 100})
 	btn.Arrange(render.Rect{W: 100, H: 100})
 	if b := end.Bounds(); b.X+b.W != btn.Bounds().X+btn.Bounds().W || b.Y+b.H != btn.Bounds().Y+btn.Bounds().H {
 		t.Errorf("end-aligned child %+v inside button %+v", b, btn.Bounds())

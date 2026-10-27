@@ -29,7 +29,7 @@ func NewForm() *Form {
 	f := &Form{group: NewFieldGroup()}
 	f.SetElement("form")
 	f.initComposite(f, f.group)
-	f.fillWidth = true
+	f.SetHExpand(true)
 	f.boxed = true
 	return f
 }

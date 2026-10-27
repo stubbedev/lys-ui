@@ -41,7 +41,7 @@ func newModuleButton(t *testing.T) *moduleButton {
 	return m
 }
 
-func (m *moduleButton) Measure(con Constraints) Size { return m.btn.Measure(con) }
+func (m *moduleButton) Measure(axis Axis, forSize int) Sizes { return m.btn.Measure(axis, forSize) }
 
 func (m *moduleButton) Arrange(r render.Rect) {
 	m.node.Arrange(r)
@@ -61,7 +61,7 @@ func TestRouterPointerHooksOnAnOutsideWidget(t *testing.T) {
 	root := NewBox(Row, 0, 0)
 	root.Append(mb, false)
 	r := Router{Root: root}
-	root.Measure(Constraints{Max: Size{W: 100, H: 40}})
+	SizeWithin(root, Size{W: 100, H: 40})
 	root.Arrange(render.Rect{W: 100, H: 40})
 
 	r.Press(BTNRight, Point{X: 2, Y: 2}, 0)
@@ -87,7 +87,7 @@ func TestRouterScrollHookTakesPrecedence(t *testing.T) {
 	root := NewBox(Row, 0, 0)
 	root.Append(mb, false)
 	r := Router{Root: root}
-	root.Measure(Constraints{Max: Size{W: 100, H: 40}})
+	SizeWithin(root, Size{W: 100, H: 40})
 	root.Arrange(render.Rect{W: 100, H: 40})
 	r.Move(Point{X: 2, Y: 2})
 	if got := r.Hovered(); got != Widget(mb) {
@@ -119,7 +119,7 @@ func TestRehoverFollowsTheTreeUnderARestingPointer(t *testing.T) {
 	col.Append(a, false)
 	col.Append(b, false)
 	layout := func(y int) {
-		col.Measure(Constraints{Max: Size{W: 100, H: 400}})
+		SizeWithin(col, Size{W: 100, H: 400})
 		col.Arrange(render.Rect{Y: y, W: 100, H: 400})
 	}
 	layout(0)

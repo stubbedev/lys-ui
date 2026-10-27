@@ -12,11 +12,11 @@ func TestTextSelectorAndGeometry(t *testing.T) {
 	face := testFace(t)
 	e := NewEntry(face, 14, render.RGB(0, 0, 0))
 	e.SetText("héllo")
-	e.Measure(Constraints{Max: Size{W: 300, H: 40}})
+	SizeWithin(e, Size{W: 300, H: 40})
 	e.Arrange(render.Rect{W: 300, H: 40})
 	ta := NewTextArea(face, 14, render.RGB(0, 0, 0))
 	ta.SetText("ab\ncdé")
-	ta.Measure(Constraints{Max: Size{W: 300, H: 200}})
+	SizeWithin(ta, Size{W: 300, H: 200})
 	ta.Arrange(render.Rect{Y: 50, W: 300, H: 200})
 
 	for _, c := range []struct {

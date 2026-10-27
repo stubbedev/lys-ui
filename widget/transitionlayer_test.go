@@ -13,7 +13,7 @@ func TestTransitionLayersGoAtRest(t *testing.T) {
 	const w, h = 120, 60
 	cv := render.New(make([]byte, render.Stride(w)*h), render.Stride(w), w, h)
 	paint := func(wd Widget) {
-		wd.Measure(Constraints{Max: Size{W: w, H: h}})
+		SizeWithin(wd, Size{W: w, H: h})
 		wd.Arrange(render.Rect{W: w, H: h})
 		wd.Paint(cv)
 	}

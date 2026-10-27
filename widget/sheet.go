@@ -181,12 +181,12 @@ func (s *Sheet) sheetRect() render.Rect {
 		}
 		return render.Rect{X: r.X + r.W - shown, Y: r.Y, W: w, H: r.H}
 	}
-	nat := s.panel.Measure(Constraints{Max: Size{W: s.panelRect(r).W, H: r.H}})
+	nat := s.panel.Measure(Column, s.panelRect(r).W).Nat
 	if s.side == SheetTop {
-		h := min(nat.H, r.H*9/10)
+		h := min(nat, r.H*9/10)
 		return render.Rect{X: r.X, Y: r.Y - h + int(float64(h)*s.progress), W: r.W, H: h}
 	}
-	h := min(nat.H+sheetHandle, r.H*9/10)
+	h := min(nat+sheetHandle, r.H*9/10)
 	y := r.Y + r.H - int(float64(h)*s.progress) + s.dragDY
 	return render.Rect{X: r.X, Y: y, W: r.W, H: h}
 }
@@ -214,9 +214,7 @@ func (s *Sheet) Arrange(r render.Rect) {
 	if !s.showing() {
 		return
 	}
-	pr := s.panelRect(s.sheetRect())
-	s.panel.Measure(Constraints{Max: Size{W: pr.W, H: pr.H}})
-	s.panel.Arrange(pr)
+	s.panel.Arrange(s.panelRect(s.sheetRect()))
 	setParents(s, s.panel)
 }
 

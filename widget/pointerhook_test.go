@@ -9,7 +9,7 @@ import (
 func arrangedList(t *testing.T, rows int) *List {
 	t.Helper()
 	l := NewList(newCountingModel(rows), 20)
-	l.Measure(Constraints{Max: Size{W: 100, H: 1 << 20}})
+	SizeWithin(l, Size{W: 100, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 100})
 	l.Paint(render.New(make([]uint8, 100*100*4), 100*4, 100, 100))
 	return l

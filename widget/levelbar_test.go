@@ -76,7 +76,7 @@ func TestCascadeReaders(t *testing.T) {
 	ring := NewLabel(face, 10, "", 0)
 	ring.AddClass("ring")
 	root.Append(ring, false)
-	root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	SizeWithin(root, Size{W: 100, H: 100})
 	root.Arrange(render.Rect{W: 100, H: 20})
 
 	if got := CascadeColor(ring); got != render.RGB(0x00, 0xaa, 0xff) {
@@ -104,7 +104,7 @@ func TestPaintBoxLayers(t *testing.T) {
 	row.AddClass("row", "available")
 	row.Append(NewSpacer(10, 10), false)
 	root.Append(row, false)
-	sz := root.Measure(Constraints{Max: Size{W: 100, H: 100}})
+	sz := SizeWithin(root, Size{W: 100, H: 100})
 	root.Arrange(render.Rect{W: 100, H: sz.H})
 
 	paint := func() render.Color {
@@ -139,7 +139,7 @@ func newHoverRow() *hoverRow {
 
 func (r *hoverRow) Append(w Widget, _ bool) { r.inner.Append(w, false) }
 
-func (r *hoverRow) Measure(con Constraints) Size { return r.inner.Measure(con) }
+func (r *hoverRow) Measure(axis Axis, forSize int) Sizes { return r.inner.Measure(axis, forSize) }
 
 func (r *hoverRow) Arrange(rect render.Rect) {
 	r.node.Arrange(rect)

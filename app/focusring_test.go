@@ -14,7 +14,7 @@ func TestFocusRingFollowsFocusVisible(t *testing.T) {
 	a, b := widget.NewSwitch(false), widget.NewSwitch(false)
 	root := widget.NewBox(widget.Column, 0, 0)
 	root.Append(a, false).Append(b, false)
-	root.Measure(widget.Constraints{Max: widget.Size{W: 100, H: 100}})
+	widget.SizeWithin(root, widget.Size{W: 100, H: 100})
 	root.Arrange(render.Rect{W: 100, H: 100})
 	w := &hostWindow{router: &widget.Router{Root: root}}
 

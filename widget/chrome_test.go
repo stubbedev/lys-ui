@@ -88,7 +88,7 @@ func TestHeaderBarHitTestIsMoveSurfaceExceptButtons(t *testing.T) {
 	bar.SetTitle("win")
 	btn := NewButton(NewLabel(face, 14, "menu", th.Text), 8, 4)
 	bar.PackStart(btn)
-	bar.Measure(Constraints{Max: Size{W: 400, H: 40}})
+	SizeWithin(bar, Size{W: 400, H: 40})
 	bar.Arrange(render.Rect{X: 0, Y: 0, W: 400, H: 40})
 	btnRect := btn.Bounds()
 

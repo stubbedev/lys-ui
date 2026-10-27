@@ -66,8 +66,8 @@ func galleryWidgets(root Widget) int {
 func BenchmarkStyleGalleryFullRestyle(b *testing.B) {
 	show := buildShowcase(b)
 	loadGalleryCSS(b)
-	con := Constraints{Max: Size{W: showW, H: showH}}
-	show.root.Measure(con)
+	con := Size{W: showW, H: showH}
+	SizeWithin(show.root, con)
 	show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
 	CollectDamage(show.root)
 	widgets := galleryWidgets(show.root)
@@ -92,8 +92,8 @@ func BenchmarkStyleGalleryFullRestyle(b *testing.B) {
 func BenchmarkStyleGalleryClassToggle(b *testing.B) {
 	show := buildShowcase(b)
 	loadGalleryCSS(b)
-	con := Constraints{Max: Size{W: showW, H: showH}}
-	show.root.Measure(con)
+	con := Size{W: showW, H: showH}
+	SizeWithin(show.root, con)
 	show.root.Arrange(render.Rect{X: 0, Y: 0, W: showW, H: showH})
 	CollectDamage(show.root)
 	// A leaf label with a live ancestor chain: the gallery's most

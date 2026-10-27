@@ -34,7 +34,7 @@ func bareTheme(t *testing.T) {
 // so tests start from the steady state.
 func arrangeTree(t *testing.T, root Widget, w, h int) {
 	t.Helper()
-	root.Measure(Constraints{Max: Size{W: w, H: h}})
+	SizeWithin(root, Size{W: w, H: h})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
 	CollectDamage(root)
 }
@@ -306,7 +306,7 @@ func TestLayoutAffectingChangeRelayouts(t *testing.T) {
 	loadCSS(t, `button { padding: 20; }`)
 	// The measure cache drops by stamp; the next frame relayouts and
 	// arranges with the new padding.
-	box.Measure(Constraints{Max: Size{W: 200, H: 60}})
+	SizeWithin(box, Size{W: 200, H: 60})
 	box.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 60})
 	if got, want := b.Bounds().H, warm.H+32; got != want {
 		t.Errorf("arranged height %d, want %d (padding 4 → 20)", got, want)

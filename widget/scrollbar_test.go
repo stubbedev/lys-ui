@@ -16,7 +16,7 @@ func scrolledColumn() (*Scroll, *Scrollbar, *Box) {
 	row := NewBox(Row, 0, 0)
 	row.Append(s, true)
 	row.Append(bar, false)
-	row.Measure(Constraints{Max: Size{W: 108, H: 100}})
+	SizeWithin(row, Size{W: 108, H: 100})
 	row.Arrange(render.Rect{W: 108, H: 100})
 	return s, bar, row
 }

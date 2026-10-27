@@ -81,7 +81,9 @@ func (b *Bar) SetEdge(edge BarEdge) {
 	b.edge = edge
 	// A horizontal bar claims the width it is offered, its zones
 	// spread along it; a vertical one is as wide as its content.
-	b.fillWidth = !edge.Vertical()
+	if !edge.Vertical() {
+		b.SetHExpand(true)
+	}
 	axis := Row
 	if edge.Vertical() {
 		axis = Column
@@ -279,7 +281,7 @@ func (s *BarSeparator) rule() (thick, length int) {
 
 // Measure turns the rule across the bar, then wants its thickness by
 // its length.
-func (s *BarSeparator) Measure(con Constraints) Size {
+func (s *BarSeparator) Measure(axis Axis, forSize int) Sizes {
 	across := Vertical
 	if barEdgeOf(s).Vertical() {
 		across = Horizontal
@@ -295,9 +297,9 @@ func (s *BarSeparator) Measure(con Constraints) Size {
 	}
 	thick, length := s.rule()
 	if s.orientation == Vertical {
-		return clampSize(Size{W: thick, H: length}, con)
+		return FixedSizes(Size{W: thick, H: length}.Along(axis))
 	}
-	return clampSize(Size{W: length, H: thick}, con)
+	return FixedSizes(Size{W: length, H: thick}.Along(axis))
 }
 
 // Paint draws the rule in its color, centered across its slot and, at
@@ -454,13 +456,13 @@ func (s *SegmentIndicator) SetSegmentUrgent(i int, urgent bool) {
 }
 
 // Measure stacks the segments in a vertical bar, then measures them.
-func (s *SegmentIndicator) Measure(con Constraints) Size {
-	axis := Row
+func (s *SegmentIndicator) Measure(axis Axis, forSize int) Sizes {
+	along := Row
 	if barEdgeOf(s).Vertical() {
-		axis = Column
+		along = Column
 	}
-	if s.box.Axis() != axis {
-		s.box.SetAxis(axis)
+	if s.box.Axis() != along {
+		s.box.SetAxis(along)
 	}
-	return s.composite.Measure(con)
+	return s.composite.Measure(axis, forSize)
 }

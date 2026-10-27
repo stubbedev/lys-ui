@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"math"
 	"slices"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -21,7 +22,7 @@ const flowMaxPerLine = 7
 // their own clicks.
 // Each child sits in a FlowBoxChild, the `flowboxchild` node a
 // stylesheet addresses (`flowbox > flowboxchild.drop-before`). Its
-// natural width is the widest line at the maximum per line; offered
+// natural width is the widest line at the maximum per line; given
 // less, it wraps and grows taller.
 type FlowBox struct {
 	node
@@ -31,9 +32,6 @@ type FlowBox struct {
 	maxPerLine             int
 	// justify distributes each line's leftover width (WrapBox).
 	justify Justify
-	// measuredW and floorW are the last Measure's width and the
-	// narrowest it lays out at (its widest child), for ShrinkableWidth.
-	measuredW, floorW int
 	// arranged is the last Arrange's lines, the keyboard's geometry.
 	arranged [][]int
 	// singleClick activates on a plain click (GTK's default).
@@ -318,42 +316,57 @@ func (f *FlowBox) lineSize(line []int) (w, h int) {
 	return w, h
 }
 
-// Measure lays the lines out within the offered width: as wide as its
-// widest line, as tall as its lines.
-func (f *FlowBox) Measure(con Constraints) Size {
-	if sz, ok := f.measureHit(con); ok {
+// Measure needs its widest child, wrapping (GtkFlowBox's minimum
+// width), and wants its widest line unwrapped; down, it is as tall as
+// its lines at the width given.
+func (f *FlowBox) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := f.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := f.style(f)
-	box := boxOf(v, render.Insets{})
-	o := box.outer()
-	sz := f.measureStore(con, measureBox(v, box, con, func(inner Constraints) Size {
-		widest := 0
+	return f.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		if axis == Column {
+			width := forSize
+			if width == Unknown {
+				width = f.flowSize(math.MaxInt).W
+			}
+			return FixedSizes(f.flowSize(width).H)
+		}
+		least := 0
 		for _, c := range f.kids {
-			c.nat = measureChild(f, c, Constraints{Max: inner.Max})
 			if IsVisible(c) {
-				widest = max(widest, c.nat.W)
+				least = max(least, measureChild(f, c, Row, Unknown).Min)
 			}
 		}
-		f.floorW = widest + o.Left + o.Right
-		var sz Size
-		for k, line := range f.lines(inner.Max.W) {
-			w, h := f.lineSize(line)
-			sz.W = max(sz.W, w)
-			if k > 0 {
-				sz.H += f.rowSpacing
-			}
-			sz.H += h
-		}
-		return clampSize(sz, inner)
+		return Sizes{Min: least, Nat: max(least, f.flowSize(math.MaxInt).W)}
 	}))
-	f.measuredW = sz.W
-	return sz
 }
 
-// ShrinkableWidth implements WidthShrinker: a flow box narrows to its
-// widest child, wrapping (GtkFlowBox's minimum width).
-func (f *FlowBox) ShrinkableWidth() int { return max(0, f.measuredW-f.floorW) }
+// sizeKids sizes each visible child within width: its natural width
+// held to width, its natural height there.
+func (f *FlowBox) sizeKids(width int) {
+	for _, c := range f.kids {
+		if IsVisible(c) {
+			c.nat = childWithin(f, c, Size{W: width, H: math.MaxInt})
+		}
+	}
+}
+
+// flowSize is the lines' extent laid out within width: the widest
+// line by the lines' heights and the spacing between.
+func (f *FlowBox) flowSize(width int) Size {
+	f.sizeKids(width)
+	var sz Size
+	for k, line := range f.lines(width) {
+		w, h := f.lineSize(line)
+		sz.W = max(sz.W, w)
+		if k > 0 {
+			sz.H += f.rowSpacing
+		}
+		sz.H += h
+	}
+	return sz
+}
 
 // Arrange places each line under the last, its children at their
 // natural widths from the start edge, as tall as the line.
@@ -361,6 +374,7 @@ func (f *FlowBox) Arrange(r render.Rect) {
 	border, inner := boxRects(boxOf(f.style(f), render.Insets{}), r)
 	f.node.Arrange(border)
 	y := inner.Y
+	f.sizeKids(inner.W)
 	f.arranged = f.lines(inner.W)
 	for _, line := range f.arranged {
 		_, h := f.lineSize(line)
@@ -422,13 +436,13 @@ func (c *FlowBoxChild) Index() int {
 }
 
 // Measure is the child inside the wrapper's CSS box.
-func (c *FlowBoxChild) Measure(con Constraints) Size {
-	if sz, ok := c.measureHit(con); ok {
+func (c *FlowBoxChild) Measure(axis Axis, forSize int) Sizes {
+	if sz, ok := c.measureHit(axis, forSize); ok {
 		return sz
 	}
 	v := c.style(c)
-	return c.measureStore(con, measureBox(v, boxOf(v, render.Insets{}), con, func(inner Constraints) Size {
-		return measureChild(c, c.child, inner)
+	return c.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
+		return measureChild(c, c.child, axis, forSize)
 	}))
 }
 

@@ -15,7 +15,7 @@ func TestProgressBarNodes(t *testing.T) {
 	host := NewBox(Column, 0, 0)
 	host.Append(p, false)
 	frame(t, host, 200, 40)
-	if got := p.Measure(Constraints{Max: Size{W: 200, H: 40}}); got.H != 8 {
+	if got := SizeWithin(p, Size{W: 200, H: 40}); got.H != 8 {
 		t.Errorf("bar height %d, want the trough's min-height 8", got.H)
 	}
 	tv := p.trough.style(&p.trough)
@@ -36,7 +36,7 @@ func TestProgressBarNodes(t *testing.T) {
 func TestProgressBarUnstyledDefaults(t *testing.T) {
 	p := NewProgressBar(0.5)
 	arrangeTree(t, p, 200, 40)
-	if got := p.Measure(Constraints{Max: Size{W: 200, H: 40}}); got.W != 160 || got.H != 8 {
+	if got := SizeWithin(p, Size{W: 200, H: 40}); got.W != 160 || got.H != 8 {
 		t.Errorf("bar %v, want the 160x8 default", got)
 	}
 	th := Current()
@@ -59,13 +59,13 @@ func TestProgressBarUnstyledDefaults(t *testing.T) {
 // an ancestor's class change, and a bar arranged taller than its trough
 // paints only the trough's band, centered (#260).
 func TestProgressBarTroughHeight(t *testing.T) {
-	if got := NewProgressBar(0.5).Measure(Constraints{Max: Size{W: 400, H: 400}}); got != (Size{W: 160, H: 8}) {
+	if got := SizeWithin(NewProgressBar(0.5), Size{W: 400, H: 400}); got != (Size{W: 160, H: 8}) {
 		t.Errorf("unstyled bar %v, want the 160x8 default", got)
 	}
 	loadCSS(t, `progressbar.x trough { min-height: 30px; } .osd trough { min-height: 8px; }`)
 	styled := NewProgressBar(0.5)
 	styled.AddClass("x")
-	if got := MeasureAsChild(styled, Constraints{Max: Size{W: 400, H: 400}}); got.H != 30 {
+	if got := SizeWithinAsChild(styled, Size{W: 400, H: 400}); got.H != 30 {
 		t.Errorf("30px trough rule measures %v", got)
 	}
 
