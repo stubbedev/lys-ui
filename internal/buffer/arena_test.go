@@ -7,6 +7,8 @@ package buffer
 import (
 	"os"
 	"testing"
+
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // countFDs reports how many fds this process holds. /proc/self/fd
@@ -375,5 +377,32 @@ func TestTakeSplitsAndErrors(t *testing.T) {
 	}
 	if err := a.ensure(1 << 31); err == nil {
 		t.Error("growth past the wayland int32 range must error")
+	}
+}
+
+// CopyRect reads a buffer that sat out an arena growth through the
+// current mapping, not the one the growth unmapped (#395).
+func TestCopyRectAfterArenaGrowth(t *testing.T) {
+	a := NewArena(nil)
+	t.Cleanup(func() { _ = a.Close() })
+	front, err := a.Acquire(4, 3, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range front.Data {
+		front.Data[i] = 9
+	}
+	big, err := a.Acquire(2048, 2048, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = big
+	dst, err := a.Acquire(4, 3, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	CopyRect(dst, front, render.Rect{W: 4, H: 3})
+	if dst.Data[0] != 9 || dst.Data[len(dst.Data)-1] != 9 {
+		t.Errorf("copied %d..%d, want the front's 9s through the grown mapping", dst.Data[0], dst.Data[len(dst.Data)-1])
 	}
 }

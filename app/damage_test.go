@@ -5,6 +5,7 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -226,41 +227,35 @@ func TestIdleFrameSkipsBuffers(t *testing.T) {
 	}
 }
 
+// A buffer coming into rotation owes everything that changed since it
+// was last shown, and it copies that from the buffer presented last
+// rather than painting it: the fresh second buffer and then the first,
+// which missed the second's frame, each paint and damage only their own
+// frame's change (TestReusedBufferCopiesForward pins the pixels).
 func TestRotatedBufferRepaintsMissedDamage(t *testing.T) {
 	root := widget.NewBox(widget.Column, 8, 8)
 	progress := widget.NewProgressBar(0)
 	root.Append(progress, false)
 	h := newPaintHarness(root, 320, 200)
-	h.frame() // buf A: full (fresh)
-
-	// Frame two lands in the fresh buffer B: a full initialization
-	// paint, the documented fallback. The wire damage covers the whole
-	// repaint (repaint region plus stale, EGL-style); the part that
-	// matters for other buffers' staleness is only what changed.
-	progress.SetValue(0.25)
-	painted2, damage2 := h.frame()
-	if painted2 == 0 {
-		t.Errorf("fresh buffer painted nothing, want a full initialization paint")
-	}
-	if got := render.UnionAll(damage2); got != (render.Rect{W: 320, H: 200}) {
-		t.Errorf("fresh buffer repaint region %+v, want the full buffer", got)
-	}
-
-	// Frame three reuses buffer A, which missed frame two's bar change:
-	// it repaints that missed rect plus its own - the same rect here,
-	// since a bar's bounds do not move - and a fraction of the window.
-	progress.SetValue(0.6)
-	painted3, damage3 := h.frame()
+	full, _ := h.frame() // buf A: full (fresh, nothing to copy from)
 	bar := progress.Bounds()
-	region := render.UnionAll(damage3)
-	if region != bar {
-		t.Errorf("rotated buffer repainted %+v, want just the bar rect %+v", region, bar)
+
+	progress.SetValue(0.25)
+	painted2, damage2 := h.frame() // buf B: fresh, copies the rest from A
+	if region := render.UnionAll(damage2); region != bar {
+		t.Errorf("fresh buffer damaged %+v, want just the bar %+v", region, bar)
 	}
-	if len(damage3) < 2 {
-		t.Errorf("rotated buffer sent %d damage rect(s), want the frame's own plus the stale rect", len(damage3))
+	if painted2*4 >= full {
+		t.Errorf("fresh buffer painted %d px of the first frame's %d, want only the bar", painted2, full)
 	}
-	if painted3 >= painted2 {
-		t.Errorf("rotated buffer painted %d px, want well under the fresh buffer's %d", painted3, painted2)
+
+	progress.SetValue(0.6)
+	painted3, damage3 := h.frame() // buf A again: copies frame two's bar from B
+	if region := render.UnionAll(damage3); region != bar {
+		t.Errorf("rotated buffer damaged %+v, want just the bar %+v", region, bar)
+	}
+	if painted3*4 >= full {
+		t.Errorf("rotated buffer painted %d px of the first frame's %d, want only the bar", painted3, full)
 	}
 }
 
@@ -328,5 +323,54 @@ func TestFrameCallbackRidesItsOwnCommit(t *testing.T) {
 	calls := ph.surf.calls
 	if len(calls) < 2 || calls[len(calls)-2] != "frame" || calls[len(calls)-1] != "commit" {
 		t.Errorf("calls = %v, want the frame request right before its commit", calls)
+	}
+}
+
+// A buffer that sat out frames is brought up to the screen by copying
+// what it owes from the buffer presented last, and only the frame's own
+// damage is painted: a fresh buffer coming into play while the first is
+// still held repaints the changed label, not the window (#395).
+func TestReusedBufferCopiesForward(t *testing.T) {
+	face, err := Font("sans", 14)
+	if err != nil {
+		t.Skip(err)
+	}
+	col := widget.NewBox(widget.Column, 6, 12)
+	var labels []*widget.Label
+	for i := range 20 {
+		l := widget.NewLabel(face, 14, fmt.Sprintf("row %d", i), 0)
+		labels = append(labels, l)
+		col.Append(l, false)
+	}
+	h := newPaintHarness(col, 400, 600)
+	h.frame()
+	front := h.bufs[len(h.bufs)-1]
+	labels[10].SetText("row ten, changed")
+	h.wnd.dirty = true
+	if !h.wnd.draw() {
+		t.Fatal(h.wnd.drawErr)
+	}
+	b := h.bufs[len(h.bufs)-1]
+	if b == front {
+		t.Fatal("the frame reused the buffer the compositor still holds")
+	}
+	if all := 400 * 600; h.wnd.paintedPixels*10 > all {
+		t.Errorf("painted %d of %d pixels, want only the changed label", h.wnd.paintedPixels, all)
+	}
+	changed := labels[10].Bounds()
+	differs := false
+	for y := range 600 {
+		for x := range 400 {
+			at := y*b.Stride + x*4
+			same := [4]byte(b.Data[at:at+4]) == [4]byte(front.Data[at:at+4])
+			if changed.Contains(x, y) {
+				differs = differs || !same
+			} else if !same {
+				t.Fatalf("(%d,%d) differs from the screen outside the changed label", x, y)
+			}
+		}
+	}
+	if !differs {
+		t.Error("the changed label did not repaint")
 	}
 }

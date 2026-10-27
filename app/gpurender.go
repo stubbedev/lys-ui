@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"log/slog"
 	"os"
 	"slices"
@@ -222,6 +223,21 @@ func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, paint func(cv *render.Can
 		return false, nil
 	}
 	return true, nil
+}
+
+// Copy copies r, in buffer pixels, from src's target into dst's. A
+// failed copy turns every surface to the CPU and reports false, or,
+// with the GPU required, is the error.
+func (r *gpuRenderer) Copy(dst, src *buffer.Buffer, rect render.Rect) (bool, error) {
+	err := r.dev.CopyRects(dst.Target, src.Target, []image.Rectangle{image.Rect(rect.X, rect.Y, rect.X+rect.W, rect.Y+rect.H)})
+	if err == nil {
+		return true, nil
+	}
+	if r.required {
+		return false, fmt.Errorf("app: GPU copy: %w", err)
+	}
+	r.fail(err)
+	return false, nil
 }
 
 // Failed reports whether a frame failed, turning every surface to the

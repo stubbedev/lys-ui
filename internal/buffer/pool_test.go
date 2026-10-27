@@ -455,3 +455,42 @@ func TestNewFileRejectsBadGeometry(t *testing.T) {
 		}
 	})
 }
+
+// The pool remembers the buffer presented last until a resize, and
+// CopyRect copies just its rect's rows (#395).
+func TestFrontAndCopyRect(t *testing.T) {
+	var made []*Buffer
+	p := New(func() (*Buffer, error) {
+		b := newTestBuffer(4, 3)
+		made = append(made, b)
+		return b, nil
+	}, 3)
+	a, _ := p.Acquire()
+	if p.Front() != nil {
+		t.Fatal("a front before any present")
+	}
+	for i := range a.Data {
+		a.Data[i] = 7
+	}
+	p.Presented(a, render.Rect{W: 4, H: 3})
+	if p.Front() != a {
+		t.Fatal("the presented buffer is not the front")
+	}
+	b, _ := p.Acquire()
+	CopyRect(b, a, render.Rect{X: 1, Y: 1, W: 2, H: 1})
+	for y := range 3 {
+		for x := range 4 {
+			want := byte(0)
+			if y == 1 && x >= 1 && x < 3 {
+				want = 7
+			}
+			if got := b.Data[y*b.Stride+x*4]; got != want {
+				t.Errorf("(%d,%d) = %d, want %d", x, y, got, want)
+			}
+		}
+	}
+	p.Resize(p.create)
+	if p.Front() != nil {
+		t.Error("the front survived a resize")
+	}
+}

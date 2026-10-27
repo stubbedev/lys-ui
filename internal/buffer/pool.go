@@ -152,6 +152,8 @@ type Pool struct {
 	create   func() (*Buffer, error)
 	capacity int
 	buffers  []*Buffer
+	// front is the buffer presented last: its content is the screen's.
+	front *Buffer
 
 	// retired holds buffers Resize or Close found still held by the
 	// compositor: at the previous size they can never be handed out
@@ -228,6 +230,7 @@ func (p *Pool) dropRetired(b *Buffer) {
 func (p *Pool) Presented(b *Buffer, changed render.Rect) {
 	// b was just repainted to match the screen, whatever it owed before.
 	b.Stale = render.Rect{}
+	p.front = b
 	if changed.Empty() {
 		return
 	}
@@ -235,6 +238,29 @@ func (p *Pool) Presented(b *Buffer, changed render.Rect) {
 		if o != b {
 			o.Stale = o.Stale.Union(changed)
 		}
+	}
+}
+
+// Front is the buffer presented last, whose content is what the screen
+// shows: a reused buffer can copy what it owes from it (CopyRect)
+// rather than paint it again. Nil before the first present and after a
+// resize.
+func (p *Pool) Front() *Buffer { return p.front }
+
+// CopyRect copies r, in buffer pixels, from src's pixels into dst's:
+// two shared-memory buffers of one size. Both views follow the arena's
+// current mapping first: a buffer that sat out frames can still point
+// at the one a growth unmapped.
+func CopyRect(dst, src *Buffer, r render.Rect) {
+	r = r.Intersect(render.Rect{W: dst.Width, H: dst.Height})
+	if r.Empty() {
+		return
+	}
+	dst.refresh()
+	src.refresh()
+	for y := r.Y; y < r.Y+r.H; y++ {
+		at := y*dst.Stride + r.X*4
+		copy(dst.Data[at:at+r.W*4], src.Data[at:at+r.W*4])
 	}
 }
 
@@ -248,6 +274,7 @@ func (p *Pool) Presented(b *Buffer, changed render.Rect) {
 // arrives, and its slot stays reserved until the arena closes).
 func (p *Pool) Resize(create func() (*Buffer, error)) {
 	p.create = create
+	p.front = nil
 	for _, b := range p.buffers {
 		dispose(b) // free: fully gone; held: dropped, storage waits for release
 		if b.busy {
@@ -262,6 +289,7 @@ func (p *Pool) Resize(create func() (*Buffer, error)) {
 // the arena now, held ones survive until the compositor releases them.
 func (p *Pool) Close() {
 	p.create = nil
+	p.front = nil
 	for _, b := range p.buffers {
 		dispose(b)
 		if b.busy {

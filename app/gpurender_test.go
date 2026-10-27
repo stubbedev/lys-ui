@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
@@ -216,6 +217,78 @@ func TestRefusedImportIsLoggedAsARefusal(t *testing.T) {
 		}
 		if got := log.String(); strings.Count(got, "refused the GPU's buffers") != 1 || !strings.Contains(got, want) || strings.Contains(got, "frame failed") {
 			t.Errorf("named %v: log %q; want one refusal line at %s", named, got, want)
+		}
+	}
+}
+
+// On the GPU a reused buffer copies what it owes from the target
+// presented last, and the frame records only its own damage (#395).
+func TestGPUReusedBufferCopiesForward(t *testing.T) {
+	if _, err := gputest.SetupTest(t); err != nil {
+		t.Fatal(err)
+	}
+	dev, err := gpu.Open()
+	if err != nil {
+		if gputest.Enabled() {
+			t.Fatal(err)
+		}
+		t.Skipf("no GPU: %v", err)
+	}
+	t.Cleanup(dev.Close)
+	face, err := Font("sans", 14)
+	if err != nil {
+		t.Skip(err)
+	}
+	col := widget.NewBox(widget.Column, 6, 12)
+	var labels []*widget.Label
+	for i := range 20 {
+		l := widget.NewLabel(face, 14, fmt.Sprintf("row %d", i), 0)
+		labels = append(labels, l)
+		col.Append(l, false)
+	}
+	h := newPaintHarness(col, 400, 600)
+	w := h.wnd
+	w.renderer = &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render}
+	var bufs []*buffer.Buffer
+	w.newBuffer = func() (*buffer.Buffer, error) {
+		tg, err := dev.NewOffscreen(400, 600)
+		if err != nil {
+			return nil, err
+		}
+		b := &buffer.Buffer{Width: 400, Height: 600, Scale: 1, Stale: render.Rect{W: 400, H: 600}, Target: tg}
+		bufs = append(bufs, b)
+		return b, nil
+	}
+	w.pool = buffer.New(w.allocator(), 3)
+	w.dirty = true
+	if !w.draw() {
+		t.Fatal(w.drawErr)
+	}
+	labels[10].SetText("row ten, changed")
+	w.dirty = true
+	if !w.draw() {
+		t.Fatal(w.drawErr)
+	}
+	if len(bufs) != 2 {
+		t.Fatalf("%d buffers, want a second while the first is held", len(bufs))
+	}
+	if all := 400 * 600; w.paintedPixels*10 > all {
+		t.Errorf("recorded %d of %d pixels, want only the changed label", w.paintedPixels, all)
+	}
+	got, err := bufs[1].Target.ReadPixels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := bufs[0].Target.ReadPixels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := labels[10].Bounds()
+	for y := range 600 {
+		for x := range 400 {
+			if !changed.Contains(x, y) && got.RGBAAt(x, y) != want.RGBAAt(x, y) {
+				t.Fatalf("(%d,%d) = %v, want the screen's %v outside the changed label", x, y, got.RGBAAt(x, y), want.RGBAAt(x, y))
+			}
 		}
 	}
 }

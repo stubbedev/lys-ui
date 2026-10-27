@@ -95,6 +95,9 @@ func (imp *dmabufImport) failed() {
 	b.pending, b.busy, b.freed = false, false, true
 	b.closeTarget()
 	if p := b.pool; p != nil {
+		if p.front == b {
+			p.front = nil
+		}
 		p.buffers = slices.DeleteFunc(p.buffers, func(x *Buffer) bool { return x == b })
 		p.dropRetired(b)
 		b.pool = nil

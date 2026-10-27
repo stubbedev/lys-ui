@@ -869,6 +869,10 @@ func (w *hostWindow) draw() bool {
 		w.drawErr = fmt.Errorf("app: acquire buffer: %w", err)
 		return false
 	}
+	if err := w.copyForward(b); err != nil {
+		w.drawErr = err
+		return false
+	}
 
 	// A buffer with stale content must repaint everything that changed
 	// since its content was last on screen, not just this frame's
@@ -958,6 +962,33 @@ func (w *hostWindow) draw() bool {
 	w.framePending = true
 	w.frameArmedAt = time.Now()
 	return true
+}
+
+// copyForward brings b up to the screen where it is stale by copying
+// that region from the buffer presented last, which shows what the
+// screen does, instead of painting it: a buffer that sat out frames
+// (the pool's third, used while frames outpace releases, as a popover
+// opens) can owe most of the window. A copy the GPU fails leaves the
+// region to paint, the renderer failing as a frame would.
+func (w *hostWindow) copyForward(b *buffer.Buffer) error {
+	front := w.pool.Front()
+	stale := b.Stale.Intersect(render.Rect{W: b.Width, H: b.Height})
+	if stale.Empty() || front == nil || front == b || front.Width != b.Width || front.Height != b.Height {
+		return nil
+	}
+	switch {
+	case b.Target != nil && front.Target != nil && w.renderer != nil:
+		ok, err := w.renderer.Copy(b, front, stale)
+		if !ok {
+			return err
+		}
+	case b.Data != nil && front.Data != nil:
+		buffer.CopyRect(b, front, stale)
+	default:
+		return nil
+	}
+	b.Stale = render.Rect{}
+	return nil
 }
 
 // dropRenderer turns the window to the CPU after its renderer failed:
