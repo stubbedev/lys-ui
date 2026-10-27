@@ -59,9 +59,9 @@ type Theme struct {
 
 // loadTheme parses the index.theme of the theme called dirName from the
 // first base directory that has one, or nil when none does.
-func loadTheme(baseDirs []string, dirName string) *Theme {
+func loadTheme(fsys themeFS, baseDirs []string, dirName string) *Theme {
 	for _, base := range baseDirs {
-		data, err := os.ReadFile(filepath.Join(base, dirName, "index.theme")) //nolint:gosec // the path comes from the XDG search path, not untrusted input
+		data, err := fsys.ReadFile(filepath.Join(base, dirName, "index.theme"))
 		if err != nil {
 			continue
 		}
@@ -207,7 +207,7 @@ func parseINI(data []byte) map[string]map[string]string {
 // hicolor, the fallbacks GTK 4 always looks in. An inherited hicolor
 // waits for the end: the spec makes it the last resort, after Adwaita. Missing themes and inheritance cycles are
 // tolerated; the depth cap keeps a corrupt index from looping.
-func themeChain(themeName string, baseDirs []string) []*Theme {
+func themeChain(fsys themeFS, themeName string, baseDirs []string) []*Theme {
 	var chain []*Theme
 	seen := map[string]bool{}
 	var walk func(name string, depth int)
@@ -216,7 +216,7 @@ func themeChain(themeName string, baseDirs []string) []*Theme {
 			return
 		}
 		seen[name] = true
-		t := loadTheme(baseDirs, name)
+		t := loadTheme(fsys, baseDirs, name)
 		if t == nil {
 			return
 		}

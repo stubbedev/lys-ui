@@ -3,9 +3,14 @@ package icons
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"iter"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
+	"syscall"
 )
 
 // ErrNotFound reports that no theme in the chain, nor any unthemed
@@ -15,7 +20,7 @@ var ErrNotFound = errors.New("icons: icon not found")
 // extensions are the file suffixes tried for one icon name, in spec
 // order: a directory shipping both prefers the raster PNG for that
 // fixed size.
-var extensions = []string{".png", ".svg", ".svgz"}
+var extensions = [...]string{".png", ".svg", ".svgz"}
 
 // Lookup resolves name at logical size and 120-based device scale
 // frac120 and returns the matched file's path. It walks the default
@@ -34,117 +39,52 @@ func Lookup(name string, size int, frac120 uint32) (string, error) {
 func (c *Cache) Lookup(name string, size int, frac120 uint32) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	path, err := c.resolveLocked(name, size, frac120)
-	if err != nil {
-		return "", err
+	return c.resolveLocked(name, size, frac120)
+}
+
+// resolveLocked is Lookup without the lock; the error wraps ErrNotFound.
+// Results, misses included, are memoized in the theme index until a
+// reset drops it.
+func (c *Cache) resolveLocked(name string, size int, frac120 uint32) (string, error) {
+	if c.index == nil {
+		c.index = buildThemeIndex(c.fsys, c.theme, c.searchPathsLocked())
+	}
+	scale := dirScale(frac120)
+	path := c.index.resolve(name, size, scale)
+	if path == "" {
+		return "", fmt.Errorf("%w: %q at size %d scale %d", ErrNotFound, name, size, scale)
 	}
 	return path, nil
 }
 
-// resolveLocked is Lookup without the lock; the error wraps ErrNotFound.
-func (c *Cache) resolveLocked(name string, size int, frac120 uint32) (string, error) {
-	paths := c.searchPathsLocked()
-	scale := dirScale(frac120)
-	if c.files == nil {
-		c.chain = themeChain(c.theme, paths)
-		c.files = dirIndex{}
-	}
-	for _, t := range c.chain {
-		if path := lookupTheme(c.files, t, paths, name, size, scale); path != "" {
-			return path, nil
-		}
-	}
-	if path := lookupUnthemed(c.files, paths, name); path != "" {
-		return path, nil
-	}
-	if path := lookupBuiltin(name); path != "" {
-		return path, nil
-	}
-	return "", fmt.Errorf("%w: %q at size %d scale %d", ErrNotFound, name, size, scale)
+// themeFS is the file system a theme index reads: the OS's, or a
+// counting wrapper in tests.
+type themeFS interface {
+	ReadFile(name string) ([]byte, error)
+	ReadDir(name string) ([]fs.DirEntry, error)
+	Stat(name string) (fs.FileInfo, error)
 }
 
-// lookupTheme runs both spec passes for one theme. A theme that has no
-// directory at the requested scale falls back to its scale-1
-// directories (the raster then upscales into the larger device box),
-// matching how GTK serves scale-1-only themes on hidpi.
-func lookupTheme(ix dirIndex, t *Theme, baseDirs []string, name string, size, scale int) string {
-	if path := lookupThemeScale(ix, t, baseDirs, name, size, scale); path != "" {
-		return path
-	}
-	if scale != 1 {
-		return lookupThemeScale(ix, t, baseDirs, name, size, 1)
-	}
-	return ""
+// osFS reads the real file system.
+type osFS struct{}
+
+func (osFS) ReadFile(name string) ([]byte, error) {
+	return os.ReadFile(name) //nolint:gosec // the path comes from the XDG search path, not untrusted input
 }
 
-// lookupThemeScale runs the exact pass then the nearest pass at one
-// integer directory scale.
-func lookupThemeScale(ix dirIndex, t *Theme, baseDirs []string, name string, size, scale int) string {
-	// Exact pass: the first directory whose size rule accepts the
-	// request, in declaration order, wins.
-	for _, base := range baseDirs {
-		for _, d := range t.Dirs {
-			if !d.matches(size, scale) {
-				continue
-			}
-			if path := findIconFile(ix, base, t.DirName, d.Path, name); path != "" {
-				return path
-			}
-		}
+// ReadDir lists name unsorted: the index groups entries by stem, so
+// the sort os.ReadDir does would be wasted.
+func (osFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	f, err := os.Open(name) //nolint:gosec // the path comes from the XDG search path, not untrusted input
+	if err != nil {
+		return nil, err
 	}
-	// Nearest pass: the smallest size distance among the directories
-	// that actually hold the name. Ties keep the earlier directory.
-	best := ""
-	bestDist := 0
-	for _, base := range baseDirs {
-		for _, d := range t.Dirs {
-			if d.Scale != scale {
-				continue
-			}
-			dist := d.distance(size)
-			if best != "" && dist >= bestDist {
-				continue
-			}
-			if path := findIconFile(ix, base, t.DirName, d.Path, name); path != "" {
-				best, bestDist = path, dist
-			}
-		}
-	}
-	return best
+	defer f.Close()
+	return f.ReadDir(-1)
 }
 
-// lookupUnthemed is the spec's fallback: base directories are searched
-// for the bare name, no theme or size rule involved.
-func lookupUnthemed(ix dirIndex, baseDirs []string, name string) string {
-	for _, base := range baseDirs {
-		if path := findIconFile(ix, base, "", "", name); path != "" {
-			return path
-		}
-	}
-	return ""
-}
-
-// findIconFile returns the first existing file for the icon name under
-// base/theme/dir with a known extension. A "-symbolic" name also tries
-// its unsuffixed base: themes often ship only the plain glyph.
-func findIconFile(ix dirIndex, base, theme, dir, name string) string {
-	d := filepath.Join(base, theme, dir)
-	for _, nm := range nameCandidates(name) {
-		for _, ext := range extensions {
-			if ix.isFile(d, nm+ext) {
-				return filepath.Join(d, nm+ext)
-			}
-		}
-	}
-	return ""
-}
-
-// nameCandidates lists the file stems tried for an icon name.
-func nameCandidates(name string) []string {
-	if base, ok := strings.CutSuffix(name, symbolicSuffix); ok {
-		return []string{name, base}
-	}
-	return []string{name}
+func (osFS) Stat(name string) (fs.FileInfo, error) {
+	return os.Stat(name)
 }
 
 // fileKind is what a directory entry is, as far as a lookup needs.
@@ -158,51 +98,347 @@ const (
 	fileOther
 )
 
-// dirIndex holds the entries of the theme directories lookups have
-// read, each read once: a lookup answers from memory instead of
-// statting every candidate path, as GTK's icon-theme.cache does. A
-// cache reset drops it, so icons installed since are found.
-type dirIndex map[string]map[string]fileKind
+// slot is one directory a lookup may match in: a theme directory under
+// one base directory, or a bare base directory for the unthemed
+// fallback (dir nil). Slots are numbered in lookup order: theme of the
+// chain, then base directory, then the theme's declaration order, the
+// unthemed base directories last.
+type slot struct {
+	path  string
+	dir   *Dir
+	theme int
+}
 
-// isFile reports whether dir/name exists and is (or links to) a
-// regular file.
-func (ix dirIndex) isFile(dir, name string) bool {
-	entries, ok := ix[dir]
-	if !ok {
-		entries = readEntries(dir)
-		ix[dir] = entries
+// hit is one slot's files for one icon stem, by extension.
+type hit struct {
+	kinds [len(extensions)]fileKind
+	slot  int32
+}
+
+// resolveKey is one memoized resolution; the theme and search paths are
+// the index's own.
+type resolveKey struct {
+	name  string
+	size  int
+	scale int
+}
+
+// maxResolved bounds the resolution memo: names come from applications
+// and windows, so a long-running process could otherwise grow it
+// without limit. Reaching it starts the memo over.
+const maxResolved = 4096
+
+// themeIndex is a theme chain's directories read once, as GTK's
+// icon-theme.cache holds them: each icon stem maps to the slots that
+// hold it, in lookup order, so a lookup visits only the directories
+// that have the name instead of every directory of every theme under
+// every base directory. A cache reset drops it, so icons installed
+// since are found.
+type themeIndex struct {
+	fsys  themeFS
+	chain []*Theme
+	// scales lists, per theme of the chain, the directory scales it
+	// declares.
+	scales [][]int
+	// themeEnd is, per theme of the chain, the first slot past it.
+	themeEnd []int32
+	slots    []slot
+	stems    map[string][]hit
+	resolved map[resolveKey]string
+}
+
+// buildThemeIndex parses the chain of theme under baseDirs and lists
+// each of its directories once. A theme root missing from a base
+// directory skips all its directories there, and a directory whose top
+// component the root does not list is never opened.
+func buildThemeIndex(fsys themeFS, theme string, baseDirs []string) *themeIndex {
+	ix := &themeIndex{
+		fsys:     fsys,
+		chain:    themeChain(fsys, theme, baseDirs),
+		stems:    map[string][]hit{},
+		resolved: map[resolveKey]string{},
 	}
-	switch entries[name] {
+	listings := map[string][]fs.DirEntry{}
+	list := func(path string) []fs.DirEntry {
+		des, ok := listings[path]
+		if !ok {
+			des, _ = fsys.ReadDir(path)
+			listings[path] = des
+		}
+		return des
+	}
+	for ti, t := range ix.chain {
+		var scales []int
+		for i := range t.Dirs {
+			if !slices.Contains(scales, t.Dirs[i].Scale) {
+				scales = append(scales, t.Dirs[i].Scale)
+			}
+		}
+		ix.scales = append(ix.scales, scales)
+		for _, base := range baseDirs {
+			top, prune, skip := themeRoot(fsys, filepath.Join(base, t.DirName))
+			if skip {
+				continue
+			}
+			for i := range t.Dirs {
+				d := &t.Dirs[i]
+				if first, ok := topComponent(d.Path); prune && ok && !top[first] {
+					continue
+				}
+				path := filepath.Join(base, t.DirName, d.Path)
+				ix.add(slot{path: path, dir: d, theme: ti}, list(path))
+			}
+		}
+		ix.themeEnd = append(ix.themeEnd, int32(len(ix.slots))) //nolint:gosec // slots are directories, far below 2^31
+	}
+	for _, base := range baseDirs {
+		path := filepath.Join(base, "", "")
+		ix.add(slot{path: path, theme: len(ix.chain)}, list(path))
+	}
+	return ix
+}
+
+// themeRoot lists a theme's root directory under one base directory.
+// skip reports that it does not exist there; prune that top holds its
+// entries, so a directory whose top component is missing need not be
+// opened. An unreadable root prunes nothing.
+func themeRoot(fsys themeFS, root string) (top map[string]bool, prune, skip bool) {
+	des, err := fsys.ReadDir(root)
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ENOTDIR) {
+		return nil, false, true
+	}
+	if err != nil {
+		return nil, false, false
+	}
+	top = make(map[string]bool, len(des))
+	for _, de := range des {
+		top[de.Name()] = true
+	}
+	return top, true, false
+}
+
+// topComponent returns the first path component of a theme directory;
+// ok is false when the directory is not below the theme root, so its
+// root listing cannot rule it out.
+func topComponent(dir string) (string, bool) {
+	first, _, _ := strings.Cut(filepath.Clean(dir), string(filepath.Separator))
+	return first, first != "" && first != "." && first != ".."
+}
+
+// add appends slot s and indexes its entries: regular files and links
+// with an icon extension, by stem.
+func (ix *themeIndex) add(s slot, des []fs.DirEntry) {
+	n := int32(len(ix.slots)) //nolint:gosec // slots are directories, far below 2^31
+	ix.slots = append(ix.slots, s)
+	for _, de := range des {
+		var kind fileKind
+		switch t := de.Type(); {
+		case t.IsRegular():
+			kind = fileRegular
+		case t&fs.ModeSymlink != 0:
+			kind = fileLink
+		default:
+			continue
+		}
+		stem, ext, ok := splitIconFile(de.Name())
+		if !ok {
+			continue
+		}
+		hits := ix.stems[stem]
+		if len(hits) == 0 || hits[len(hits)-1].slot != n {
+			hits = append(hits, hit{slot: n})
+		}
+		hits[len(hits)-1].kinds[ext] = kind
+		ix.stems[stem] = hits
+	}
+}
+
+// splitIconFile splits a file name into its stem and the index of its
+// icon extension; ok is false for any other file.
+func splitIconFile(name string) (string, int, bool) {
+	for i, ext := range extensions {
+		if stem, ok := strings.CutSuffix(name, ext); ok {
+			return stem, i, true
+		}
+	}
+	return "", 0, false
+}
+
+// resolve returns the path name resolves to at size and directory
+// scale, "" when nothing holds it, memoized.
+func (ix *themeIndex) resolve(name string, size, scale int) string {
+	key := resolveKey{name: name, size: size, scale: scale}
+	if path, ok := ix.resolved[key]; ok {
+		return path
+	}
+	path := ix.find(name, size, scale)
+	if len(ix.resolved) >= maxResolved {
+		clear(ix.resolved)
+	}
+	ix.resolved[key] = path
+	return path
+}
+
+// find runs the spec lookup over the slots holding name or, for a
+// -symbolic name, its unsuffixed base, which themes often ship alone:
+// each theme of the chain, then the unthemed base directories, then the
+// bundled set.
+func (ix *themeIndex) find(name string, size, scale int) string {
+	alt, symbolic := strings.CutSuffix(name, symbolicSuffix)
+	st := stems{name: name, nameHits: ix.stems[name]}
+	if symbolic {
+		st.alt, st.altHits = alt, ix.stems[alt]
+	}
+	for ti := range ix.chain {
+		theme, rest := st.split(ix.themeEnd[ti])
+		st = rest
+		if theme.empty() {
+			continue
+		}
+		if path := ix.lookupTheme(ti, theme, size, scale); path != "" {
+			return path
+		}
+	}
+	for sh := range st.slots() {
+		if path := ix.file(sh); path != "" {
+			return path
+		}
+	}
+	return lookupBuiltin(name)
+}
+
+// lookupTheme runs both spec passes for one theme. A theme that has no
+// directory at the requested scale falls back to its scale-1
+// directories (the raster then upscales into the larger device box),
+// matching how GTK serves scale-1-only themes on hidpi. A pass at a
+// scale the theme does not declare cannot match and is skipped.
+func (ix *themeIndex) lookupTheme(ti int, st stems, size, scale int) string {
+	if slices.Contains(ix.scales[ti], scale) {
+		if path := ix.lookupThemeScale(st, size, scale); path != "" {
+			return path
+		}
+	}
+	if scale != 1 && slices.Contains(ix.scales[ti], 1) {
+		return ix.lookupThemeScale(st, size, 1)
+	}
+	return ""
+}
+
+// lookupThemeScale runs the exact pass then the nearest pass at one
+// integer directory scale over one theme's slots.
+func (ix *themeIndex) lookupThemeScale(st stems, size, scale int) string {
+	for sh := range st.slots() {
+		if !ix.slots[sh.slot].dir.matches(size, scale) {
+			continue
+		}
+		if path := ix.file(sh); path != "" {
+			return path
+		}
+	}
+	best := ""
+	bestDist := 0
+	for sh := range st.slots() {
+		d := ix.slots[sh.slot].dir
+		if d.Scale != scale {
+			continue
+		}
+		dist := d.distance(size)
+		if best != "" && dist >= bestDist {
+			continue
+		}
+		if path := ix.file(sh); path != "" {
+			best, bestDist = path, dist
+		}
+	}
+	return best
+}
+
+// file returns the first existing file a slot holds for the name, the
+// name's own stem before its unsuffixed base, each in extension order.
+// A link is followed once, on first ask.
+func (ix *themeIndex) file(sh slotHits) string {
+	dir := ix.slots[sh.slot].path
+	for _, c := range [...]struct {
+		h    *hit
+		stem string
+	}{{sh.name, sh.st.name}, {sh.alt, sh.st.alt}} {
+		if c.h == nil {
+			continue
+		}
+		for i, ext := range extensions {
+			if ix.isFile(&c.h.kinds[i], dir, c.stem+ext) {
+				return filepath.Join(dir, c.stem+ext)
+			}
+		}
+	}
+	return ""
+}
+
+// isFile reports whether the entry of kind *k, dir/file, is (or links
+// to) a regular file, recording a followed link's target kind.
+func (ix *themeIndex) isFile(k *fileKind, dir, file string) bool {
+	switch *k {
 	case fileRegular:
 		return true
 	case fileLink:
-		kind := fileOther
-		if info, err := os.Stat(filepath.Join(dir, name)); err == nil && info.Mode().IsRegular() {
-			kind = fileRegular
+		*k = fileOther
+		if info, err := ix.fsys.Stat(filepath.Join(dir, file)); err == nil && info.Mode().IsRegular() {
+			*k = fileRegular
 		}
-		entries[name] = kind
-		return kind == fileRegular
+		return *k == fileRegular
 	}
 	return false
 }
 
-// readEntries lists dir's files and links; a missing or unreadable
-// directory holds none.
-func readEntries(dir string) map[string]fileKind {
-	des, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
+// stems is a lookup's two candidate stems with their hits, each in
+// slot order.
+type stems struct {
+	name, alt         string
+	nameHits, altHits []hit
+}
+
+func (st stems) empty() bool {
+	return len(st.nameHits) == 0 && len(st.altHits) == 0
+}
+
+// split cuts st at slot end: the hits before it, and the rest.
+func (st stems) split(end int32) (stems, stems) {
+	before := func(hits []hit) int {
+		return sort.Search(len(hits), func(i int) bool { return hits[i].slot >= end })
 	}
-	entries := make(map[string]fileKind, len(des))
-	for _, de := range des {
-		switch t := de.Type(); {
-		case t.IsRegular():
-			entries[de.Name()] = fileRegular
-		case t&os.ModeSymlink != 0:
-			entries[de.Name()] = fileLink
+	head, tail := st, st
+	n, a := before(st.nameHits), before(st.altHits)
+	head.nameHits, tail.nameHits = st.nameHits[:n], st.nameHits[n:]
+	head.altHits, tail.altHits = st.altHits[:a], st.altHits[a:]
+	return head, tail
+}
+
+// slotHits is one slot holding either candidate stem.
+type slotHits struct {
+	st        *stems
+	name, alt *hit
+	slot      int32
+}
+
+// slots yields the slots holding either stem, in slot order.
+func (st *stems) slots() iter.Seq[slotHits] {
+	return func(yield func(slotHits) bool) {
+		a, b := st.nameHits, st.altHits
+		for len(a) > 0 || len(b) > 0 {
+			sh := slotHits{st: st}
+			switch {
+			case len(b) == 0 || (len(a) > 0 && a[0].slot < b[0].slot):
+				sh.name, sh.slot, a = &a[0], a[0].slot, a[1:]
+			case len(a) == 0 || b[0].slot < a[0].slot:
+				sh.alt, sh.slot, b = &b[0], b[0].slot, b[1:]
+			default:
+				sh.name, sh.alt, sh.slot, a, b = &a[0], &b[0], a[0].slot, a[1:], b[1:]
+			}
+			if !yield(sh) {
+				return
+			}
 		}
 	}
-	return entries
 }
 
 // symbolicSuffix marks a symbolic icon name.

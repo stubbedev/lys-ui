@@ -63,10 +63,11 @@ type Cache struct {
 	// order lists the keys from least to most recently used.
 	order []cacheKey
 
-	// chain is the theme inheritance chain lookups walk, parsed once;
-	// files indexes the directories they read. A reset drops both.
-	chain []*Theme
-	files dirIndex
+	// fsys is the file system lookups read.
+	fsys themeFS
+	// index is the theme chain's directories, read on the first lookup
+	// after a reset, with its memoized resolutions. A reset drops it.
+	index *themeIndex
 }
 
 // DefaultTheme is GTK's default icon theme, the one lookups start on
@@ -78,7 +79,7 @@ const DefaultTheme = "Adwaita"
 // Lookups search the standard XDG paths until SetSearchPaths overrides
 // them.
 func New(name string) *Cache {
-	return &Cache{theme: name, entries: map[cacheKey]*cacheEntry{}}
+	return &Cache{theme: name, entries: map[cacheKey]*cacheEntry{}, fsys: osFS{}}
 }
 
 var (
@@ -175,7 +176,7 @@ func (c *Cache) OnReset(fn func()) {
 func (c *Cache) resetLocked() []func() {
 	c.entries = map[cacheKey]*cacheEntry{}
 	c.order = nil
-	c.chain, c.files = nil, nil
+	c.index = nil
 	c.gen++
 	return slices.Clone(c.resetListeners)
 }
