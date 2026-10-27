@@ -91,4 +91,7 @@ func TestCheckButtonThemedMark(t *testing.T) {
 	if c.markTint != render.RGB(0x11, 0x22, 0x33) {
 		t.Errorf("the mark took tint %v, want the palette's", c.markTint)
 	}
+	if b := c.mark.Bounds(); b.Empty() || !c.indicator.Contains(b.X+b.W/2, b.Y+b.H/2) {
+		t.Errorf("the mark sits at %v, want a size centered in the indicator %v", b, c.indicator)
+	}
 }

@@ -444,11 +444,8 @@ func (c *CheckButton) drawThemedMark(cv *render.Canvas, name string, box render.
 		c.markName, c.markTint = name, tint
 		setParents(c, c.mark)
 	}
-	c.mark.Arrange(render.Rect{
-		X: box.X + (box.W-c.mark.Bounds().W)/2, Y: box.Y + (box.H-c.mark.Bounds().H)/2,
-		W: c.mark.Bounds().W, H: c.mark.Bounds().H,
-	})
-	c.mark.Measure(Constraints{Max: Size{W: box.W, H: box.H}})
+	sz := c.mark.Measure(Constraints{Max: Size{W: box.W, H: box.H}})
+	c.mark.Arrange(render.Rect{X: box.X + (box.W-sz.W)/2, Y: box.Y + (box.H-sz.H)/2, W: sz.W, H: sz.H})
 	PaintChild(cv, c.mark)
 }
 
