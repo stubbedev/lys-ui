@@ -659,3 +659,61 @@ func TestSwatchCheckerboardStaysOneTexture(t *testing.T) {
 		t.Errorf("checkerboards %T and %T are not one still raster", first[0], second[0])
 	}
 }
+
+// A source decodes divided by the largest power of two that still
+// gives its box every pixel it shows, under each fit; ImageNone, an
+// unknown size or no box yet keep every pixel.
+func TestSourceShrink(t *testing.T) {
+	box := render.Rect{W: 96, H: 96}
+	cover := image.Pt(3000, 3000)
+	for _, tc := range []struct {
+		natural image.Point
+		box     render.Rect
+		fit     render.ImageScale
+		want    int
+	}{
+		{cover, box, render.ImageFit, 4},
+		{cover, box, render.ImageCover, 4},
+		{cover, box, render.ImageScaleDown, 4},
+		{cover, box, render.ImageStretch, 4},
+		{cover, box, render.ImageNone, 0},
+		{image.Pt(3000, 300), box, render.ImageCover, 1},
+		{image.Pt(150, 150), box, render.ImageFit, 0},
+		{image.Point{}, box, render.ImageFit, 0},
+		{cover, render.Rect{}, render.ImageFit, 0},
+	} {
+		got := sourceShrink(tc.natural, tc.box, tc.fit)
+		if got != tc.want {
+			t.Errorf("sourceShrink(%v, %v, %v) = %d, want %d", tc.natural, tc.box, tc.fit, got, tc.want)
+			continue
+		}
+		if got > 0 {
+			d := 1 << got
+			kept := image.Pt((tc.natural.X+d-1)/d, (tc.natural.Y+d-1)/d)
+			if src, dst := render.PlaceImage(kept.X, kept.Y, tc.box.W, tc.box.H, tc.fit, render.ImageCentered); src.Dx() < dst.W || src.Dy() < dst.H {
+				t.Errorf("%v shrunk by %d keeps %v, too few pixels for a %dx%d draw", tc.natural, d, kept, dst.W, dst.H)
+			}
+		}
+	}
+}
+
+// A file shown in a small box keeps a shrunk decode, measures at its
+// natural size, and decodes finer once its box outgrows that (#412).
+func TestFileImageKeepsADecodeTheSizeOfItsBox(t *testing.T) {
+	resetImageCache(t)
+	im := NewFileImage(writePNG(t, solidPNG(t, 1024, 512, color.NRGBA{R: 0xff, A: 0xff})))
+	data, dev := paintImage(im, 64, 64, 1, 1)
+	if got := px(data, dev, 32, 32); got != render.RGB(0xff, 0, 0) {
+		t.Fatalf("the tile painted %v, want the picture's red", got)
+	}
+	if b := im.img.Bounds(); b.Dx() != 64 || b.Dy() != 32 {
+		t.Errorf("a 64 px tile keeps a %dx%d decode of a 1024x512 picture, want 64x32", b.Dx(), b.Dy())
+	}
+	if got := im.Measure(Constraints{Max: Size{W: 2000, H: 2000}}); got != (Size{W: 1024, H: 512}) {
+		t.Errorf("the shrunk picture measures %v, want its natural 1024x512", got)
+	}
+	paintImage(im, 600, 600, 1, 1)
+	if b := im.img.Bounds(); b.Dx() < 600 {
+		t.Errorf("a 600 px box still shows a %dx%d decode", b.Dx(), b.Dy())
+	}
+}

@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -132,7 +133,10 @@ func invoke(fn func()) {
 // (internal/imgcache): painting the same image at the same size hits
 // the cache and never rescales, and SetImage drops the old source's
 // entries. A policy of ImageNone skips the cache entirely - nothing
-// resamples.
+// resamples. A file or URL source decodes divided by a power of two
+// down to what its box shows, so a 96 px cover tile keeps no 3000 px
+// picture, and decodes finer if the box outgrows that; it still
+// measures at its natural size.
 type Image struct {
 	node
 	src imageSource
@@ -162,6 +166,12 @@ type Image struct {
 	loaded  bool
 	loading bool
 	gen     uint64
+	// natural is a loaded file or URL source's size as encoded, and
+	// shrink the power of two its decode was divided by to fit the
+	// largest box it has been drawn in (sourceShrink): a cover shown as
+	// a 96 px tile keeps no 3000 px decode.
+	natural image.Point
+	shrink  int
 
 	// play steps an animated source (image_anim.go).
 	play imagePlayback
@@ -291,7 +301,10 @@ func (im *Image) Measure(con Constraints) Size {
 		return sz
 	}
 	w, h := 0, 0
-	if im.img != nil {
+	switch {
+	case im.natural != image.Point{}:
+		w, h = im.natural.X, im.natural.Y
+	case im.img != nil:
 		b := im.img.Bounds()
 		w, h = b.Dx(), b.Dy()
 	}
@@ -302,17 +315,17 @@ func (im *Image) Measure(con Constraints) Size {
 // while an async load is in flight, nothing after a failure, and
 // otherwise the cached resample for the device rect the policy picked.
 func (im *Image) Paint(cv *render.Canvas) {
-	im.ensureSettled()
+	box := cv.MapRect(im.bounds)
+	fit, pos := im.placement(cv, box)
+	im.ensureSettled(box, fit)
 	if im.img == nil {
 		if im.placeholder != 0 {
 			cv.FillRect(im.bounds, im.placeholder)
 		}
 		return
 	}
-	box := cv.MapRect(im.bounds)
 	pic, frame := im.currentFrame()
 	b := pic.Bounds()
-	fit, pos := im.placement(cv, box)
 	srcRect, dst := render.PlaceImage(b.Dx(), b.Dy(), box.W, box.H, fit, pos)
 	if dst.Empty() {
 		return
@@ -424,42 +437,53 @@ func (im *Image) applyPaste(gen uint64, img image.Image, err error) {
 // the actions themselves are none of its own.
 func (im *Image) KeyAction(KeyAction, Mods) {}
 
-// ensureSettled kicks the first load of a file/URL source. Without an
-// invoker installed there is no loop goroutine to deliver through, so
-// the load settles synchronously instead - the paint itself is
-// loop-goroutine code whenever it runs inside Run.
-func (im *Image) ensureSettled() {
-	if im.loaded || im.loading {
+// ensureSettled kicks the first load of a file/URL source, decoded for
+// the device box it paints in under fit, and loads it again at a finer
+// shrink once the box outgrows the decode it has. Without an invoker
+// installed there is no loop goroutine to deliver through, so the load
+// settles synchronously instead - the paint itself is loop-goroutine
+// code whenever it runs inside Run.
+func (im *Image) ensureSettled(box render.Rect, fit render.ImageScale) {
+	if im.loading || im.src.kind != imageFile && im.src.kind != imageURL {
 		return
 	}
-	if im.src.kind != imageFile && im.src.kind != imageURL {
+	if im.loaded && (im.loadErr != nil || sourceShrink(im.natural, box, fit) >= im.shrink) {
 		return
 	}
+	src, gen := im.src, im.gen
 	if !hasInvoker() {
-		key, img, err := loadImage(im.src)
-		im.applyLoad(im.gen, key, img, err)
+		im.applyLoad(gen, loadImage(src, box, fit))
 		return
 	}
 	im.loading = true
-	gen := im.gen
-	src := im.src
 	go func() {
-		key, img, err := loadImage(src)
-		invoke(func() { im.applyLoad(gen, key, img, err) })
+		res := loadImage(src, box, fit)
+		invoke(func() { im.applyLoad(gen, res) })
 	}()
 }
 
 // applyLoad records a settled load on the loop goroutine. Results for
 // a superseded source (the gen moved on via SetImage and friends) are
-// dropped: they must not overwrite the new source's state.
-func (im *Image) applyLoad(gen uint64, key string, img image.Image, err error) {
+// dropped: they must not overwrite the new source's state. A finer
+// decode of the same source replaces the coarser one, whose cache
+// entries go.
+func (im *Image) applyLoad(gen uint64, res loadResult) {
 	if gen != im.gen {
 		return
 	}
+	if old := im.src.key; old != "" && old != res.key {
+		imgcache.Default().InvalidateSource(old)
+	}
+	reload := im.loaded
 	im.loading = false
 	im.loaded = true
-	im.src.key = key
-	im.img, im.loadErr = img, err
+	im.src.key = res.key
+	im.img, im.loadErr = res.img, res.err
+	im.natural, im.shrink = res.natural, res.shrink
+	if reload && res.err == nil {
+		im.Invalidate()
+		return
+	}
 	im.restartPlayback()
 	// The natural size may have appeared or changed: drop the measure
 	// caches up the tree and owe the frame a repaint.
@@ -469,18 +493,74 @@ func (im *Image) applyLoad(gen uint64, key string, img image.Image, err error) {
 	}
 }
 
-// loadImage fetches and decodes src off the loop goroutine; it reads
-// only its snapshot and the shared cache, never widget state.
-func loadImage(src imageSource) (key string, img image.Image, err error) {
+// loadResult is a settled file or URL load: the cache key, the decoded
+// image, its encoded size and the shrink it was decoded at.
+type loadResult struct {
+	key     string
+	img     image.Image
+	natural image.Point
+	shrink  int
+	err     error
+}
+
+// sourceShrink is the power of two a natural-sized source can be
+// divided by and still give a box-sized device rect, placed by fit,
+// every pixel it shows: the decode a tile keeps instead of the whole
+// picture. ImageNone draws source pixels one to one and keeps them
+// all; an unknown size or box (no layout yet) keeps them all too.
+func sourceShrink(natural image.Point, box render.Rect, fit render.ImageScale) int {
+	if natural.X <= 0 || natural.Y <= 0 || box.Empty() || fit == render.ImageNone {
+		return 0
+	}
+	sx, sy := float64(box.W)/float64(natural.X), float64(box.H)/float64(natural.Y)
+	s := max(sx, sy)
+	if fit == render.ImageFit || fit == render.ImageScaleDown {
+		s = min(sx, sy)
+	}
+	if s >= 0.5 {
+		return 0
+	}
+	return int(math.Floor(math.Log2(1 / s)))
+}
+
+// loadImage fetches and decodes src off the loop goroutine, divided by
+// the sourceShrink of a box-sized draw under fit; it reads only its
+// snapshot and the shared cache, never widget state. Each shrink of a
+// source is its own cache entry.
+func loadImage(src imageSource, box render.Rect, fit render.ImageScale) loadResult {
 	data, err := fetchSource(src)
 	if err != nil {
-		return "", nil, err
+		return loadResult{err: err}
 	}
-	key = hashKey(data)
-	img, err = imgcache.Default().Source(key, func() (image.Image, error) {
-		return decodeImageData(data, src.name)
+	var res loadResult
+	if cfg, _, err := image.DecodeConfig(bytes.NewReader(data)); err == nil {
+		res.natural = image.Pt(cfg.Width, cfg.Height)
+	}
+	res.shrink = sourceShrink(res.natural, box, fit)
+	res.key = hashKey(data)
+	if res.shrink > 0 {
+		res.key = fmt.Sprintf("%s@%d", res.key, res.shrink)
+	}
+	res.img, res.err = imgcache.Default().Source(res.key, func() (image.Image, error) {
+		img, err := decodeImageData(data, src.name)
+		if err != nil || res.shrink == 0 {
+			return img, err
+		}
+		return shrunk(img, res.shrink), nil
 	})
-	return key, img, err
+	return res
+}
+
+// shrunk is a still img divided by 2^shrink, rounded up, so it keeps
+// at least the resolution sourceShrink promised; an animation stays
+// whole.
+func shrunk(img image.Image, shrink int) image.Image {
+	if _, ok := img.(*render.Animation); ok {
+		return img
+	}
+	b := img.Bounds()
+	d := 1 << shrink
+	return render.NewStillImage(render.Resample(img, b, (b.Dx()+d-1)/d, (b.Dy()+d-1)/d))
 }
 
 func fetchSource(src imageSource) ([]byte, error) {
