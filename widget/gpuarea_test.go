@@ -76,9 +76,9 @@ func TestGPUAreaAttachesOnScreenAndDetachesOnRemoval(t *testing.T) {
 	if len(surfaces) != 2 {
 		t.Error("an area back on screen did not get a new surface")
 	}
-	DetachGPUAreas(root)
+	Detach(root)
 	if !surfaces[1].closed {
-		t.Error("DetachGPUAreas missed the area")
+		t.Error("Detach missed the area")
 	}
 }
 

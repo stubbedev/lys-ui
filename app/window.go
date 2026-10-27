@@ -337,7 +337,7 @@ func (w *hostWindow) noteFootprint() {
 // windows leaves no fds, mappings, or slots behind.
 func (w *hostWindow) release() {
 	if w.router != nil {
-		widget.DetachGPUAreas(w.router.Root)
+		widget.Detach(w.router.Root)
 	}
 	if w.sess != nil {
 		w.sess.SetSurfaceInput(w.host.HostSurface(), nil)

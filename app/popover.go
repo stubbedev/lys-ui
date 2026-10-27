@@ -630,11 +630,13 @@ func (a *Application) surfaceOrigin(root widget.Widget) (widget.Point, bool) {
 }
 
 // release frees what the open popover holds once its surface is gone:
-// the painter, the input, and the content's style anchor.
+// the painter, the input, the content's style anchor, and what its
+// tree held for being on screen (widget.Detach).
 func (op *openPopover) release() {
 	op.painter.Close()
 	op.detach()
 	op.unanchor()
+	widget.Detach(op.keyRoot)
 }
 
 // drivePopovers runs one loop pass over the open popovers: a destroyed

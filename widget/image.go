@@ -361,6 +361,16 @@ func (im *Image) Paint(cv *render.Canvas) {
 	cv.DrawImageDevice(raster, dx, dy)
 }
 
+// detach drops the rasters resampled from a source only this widget
+// holds: an in-memory image's key is its own, so nothing could hit
+// them once it leaves the screen. A file, URL or bytes source's are
+// keyed by content, which other widgets share, and stay cached.
+func (im *Image) detach() {
+	if im.src.kind == imageRaster && im.src.key != "" {
+		imgcache.Default().InvalidateSource(im.src.key)
+	}
+}
+
 // imageWarn reports an image that could not paint this frame.
 var imageWarn = func(err error) { logutil.L().Warn("widget: image paint", "err", err) }
 

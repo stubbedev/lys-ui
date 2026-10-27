@@ -717,3 +717,27 @@ func TestFileImageKeepsADecodeTheSizeOfItsBox(t *testing.T) {
 		t.Errorf("a 600 px box still shows a %dx%d decode", b.Dx(), b.Dy())
 	}
 }
+
+// An image over an in-memory picture drops the rasters resampled from
+// it when it leaves the tree: its source key is its own, so nothing
+// could hit them again. Content-keyed sources, which other widgets
+// share, stay cached.
+func TestRemovedImageDropsItsOwnRasters(t *testing.T) {
+	resetImageCache(t)
+	pic := image.NewRGBA(image.Rect(0, 0, 64, 64))
+	own := NewImage(pic)
+	shared := NewBytesImage(solidPNG(t, 64, 64, color.NRGBA{B: 0xff, A: 0xff}), "art")
+	box := NewBox(Column, 0, 0)
+	box.Append(own, false).Append(shared, false)
+	for _, im := range []*Image{own, shared} {
+		paintImage(im, 16, 16, 1, 1)
+	}
+	if _, rasters := imgcache.Default().Len(); rasters != 2 {
+		t.Fatalf("%d rasters cached for two resampled images, want 2", rasters)
+	}
+	box.Remove(own)
+	box.Remove(shared)
+	if _, rasters := imgcache.Default().Len(); rasters != 1 {
+		t.Errorf("%d rasters cached after removing both, want only the shared source's", rasters)
+	}
+}

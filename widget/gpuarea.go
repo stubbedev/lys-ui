@@ -169,14 +169,20 @@ func (a *GPUArea) detach() {
 	a.surface = nil
 }
 
-// DetachGPUAreas closes the surfaces of every GPUArea in w's tree: a
-// subtree leaving its window, or a window going away. Each area
-// reattaches when next arranged on screen.
-func DetachGPUAreas(w Widget) {
+// Detach releases what w's tree holds for being on screen, for a tree
+// leaving it (a removed widget, a closed window or popover): every
+// GPUArea's surface, and the rasters every Image resampled from a
+// source only it holds. A tree shown again re-creates them on its
+// next paint.
+func Detach(w Widget) {
 	walkWidgets(w, func(w Widget) bool {
-		if a, ok := w.(*GPUArea); ok {
-			a.detach()
+		if d, ok := w.(detacher); ok {
+			d.detach()
 		}
 		return true
 	})
 }
+
+// detacher is a widget holding something for being on screen that a
+// tree leaving it releases (Detach).
+type detacher interface{ detach() }

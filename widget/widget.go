@@ -860,7 +860,7 @@ func SetRemovedHook(fn func(Widget)) {
 	removedHook.Store(&fn)
 }
 
-// notifyRemoved detaches the GPUAreas under every non-nil ws and fires
+// notifyRemoved detaches every non-nil ws's tree (Detach) and fires
 // the removal hook for it.
 func notifyRemoved(ws ...Widget) {
 	fn := removedHook.Load()
@@ -868,7 +868,7 @@ func notifyRemoved(ws ...Widget) {
 		if w == nil {
 			continue
 		}
-		DetachGPUAreas(w)
+		Detach(w)
 		if fn != nil {
 			(*fn)(w)
 		}
