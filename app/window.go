@@ -84,6 +84,9 @@ type hostWindow struct {
 	kick atomic.Bool
 
 	pool *buffer.Pool
+	// footprint is the pool's buffer count and bytes as last logged
+	// (LYS_DEBUG=frame).
+	footprint [2]int
 	// renderer draws the window's frames on the GPU into dmabuf
 	// buffers; nil draws them on the CPU into shared memory.
 	renderer *gpuRenderer
@@ -317,6 +320,21 @@ func newHostWindow(sess *wlsession.Session, host Host, initialScale int, root wi
 		dnd.Bind(host.HostSurface(), input)
 	}
 	return w
+}
+
+// noteFootprint logs, in lysdebug builds, what the window's buffers
+// hold whenever it changed: lys-shell attributes its memory to
+// surfaces by it.
+func (w *hostWindow) noteFootprint() {
+	if !debug.Enabled {
+		return
+	}
+	n, bytes := w.pool.Footprint()
+	if [2]int{n, bytes} == w.footprint {
+		return
+	}
+	w.footprint = [2]int{n, bytes}
+	debug.Log("frame", "surface %d holds %d buffers, %.1f MiB", w.host.HostSurface().Id(), n, float32(bytes)/(1<<20))
 }
 
 // release tears down the window's loop state: input handlers are
@@ -955,6 +973,7 @@ func (w *hostWindow) draw() bool {
 	// The commit just went to the screen through b: b is current now,
 	// and every other pooled buffer lags by what changed here.
 	w.pool.Presented(b, changed)
+	w.noteFootprint()
 	if !w.presented {
 		w.presented = true
 		if w.cfg.onPresented != nil {

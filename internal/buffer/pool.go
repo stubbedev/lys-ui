@@ -60,6 +60,9 @@ type Buffer struct {
 	Stale render.Rect
 
 	busy bool
+	// used marks a buffer Acquire handed out since the pool's last
+	// Trim.
+	used bool
 	// pending marks a dmabuf buffer whose import the compositor has not
 	// answered yet: it has no wl_buffer, and its pool counts it busy.
 	pending bool
@@ -187,7 +190,7 @@ func (p *Pool) Acquire() (*Buffer, error) {
 	for _, b := range p.buffers {
 		if !b.busy {
 			b.refresh()
-			b.busy = true
+			b.busy, b.used = true, true
 			return b, nil
 		}
 	}
@@ -196,7 +199,7 @@ func (p *Pool) Acquire() (*Buffer, error) {
 		if err != nil {
 			return nil, err
 		}
-		b.busy = true
+		b.busy, b.used = true, true
 		b.pool = p
 		p.buffers = append(p.buffers, b)
 		if b.pending {
@@ -298,6 +301,42 @@ func (p *Pool) Close() {
 	}
 	p.buffers = nil
 	p.capRetired()
+}
+
+// Trim disposes of the free buffers no Acquire handed out since the
+// previous Trim, the front aside: a surface that stopped drawing, or
+// draws slower than the compositor releases, keeps only what its
+// frames use. Acquire allocates again on demand, and a new buffer
+// repaints or copies forward what it lacks.
+func (p *Pool) Trim() {
+	kept := p.buffers[:0]
+	for _, b := range p.buffers {
+		used := b.used
+		b.used = false
+		if used || b.busy || b == p.front {
+			kept = append(kept, b)
+			continue
+		}
+		dispose(b)
+	}
+	clear(p.buffers[len(kept):])
+	p.buffers = kept
+}
+
+// Spares reports whether the rotation holds a buffer beyond the one a
+// frame needs: what Trim may free.
+func (p *Pool) Spares() bool { return len(p.buffers) > 1 }
+
+// Footprint is how many buffers the pool holds, rotation and retired,
+// and their pixel bytes.
+func (p *Pool) Footprint() (n, bytes int) {
+	for _, list := range [][]*Buffer{p.buffers, p.retired} {
+		for _, b := range list {
+			n++
+			bytes += b.Width * b.Height * 4
+		}
+	}
+	return n, bytes
 }
 
 // capRetired bounds the pending stack: beyond the capacity, the oldest

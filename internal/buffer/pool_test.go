@@ -494,3 +494,47 @@ func TestFrontAndCopyRect(t *testing.T) {
 		t.Error("the front survived a resize")
 	}
 }
+
+// A pool that stopped needing its spares frees them: Trim keeps the
+// front, buffers the compositor holds, and any Acquire handed out
+// since the previous Trim, and the pool allocates again on demand.
+func TestTrimFreesSparesNoFrameUsed(t *testing.T) {
+	created := 0
+	p := New(countingCreate(&created, 100, 20), 3)
+	var bufs []*Buffer
+	for range 3 {
+		b, err := p.Acquire()
+		if err != nil {
+			t.Fatal(err)
+		}
+		bufs = append(bufs, b)
+	}
+	front, spare, held := bufs[0], bufs[1], bufs[2]
+	p.Presented(front, render.Rect{W: 100, H: 20})
+	front.Release()
+	spare.Release()
+
+	p.Trim()
+	if n, _ := p.Footprint(); n != 3 {
+		t.Fatalf("the first Trim freed buffers frames had just used: %d left, want 3", n)
+	}
+	p.Trim()
+	if n, bytes := p.Footprint(); n != 2 || bytes != 2*100*20*4 {
+		t.Errorf("Trim kept %d buffers of %d bytes, want the front and the held one", n, bytes)
+	}
+	if got, err := p.Acquire(); err != nil || got != front {
+		t.Errorf("Acquire after Trim = %p, %v, want the kept front %p", got, err, front)
+	}
+	front.Release()
+	held.Release()
+	p.Trim()
+	if n, _ := p.Footprint(); n != 1 || p.Spares() {
+		t.Errorf("an idle pool kept %d buffers, want only the front, which a frame just used", n)
+	}
+	if _, err := p.Acquire(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Acquire(); err != nil || created != 4 {
+		t.Errorf("a trimmed pool allocated %d buffers in all (%v), want a fresh spare on demand", created, err)
+	}
+}

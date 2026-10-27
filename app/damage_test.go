@@ -409,3 +409,38 @@ func TestIdleTimerWakesNoWindow(t *testing.T) {
 		t.Error("a timer that invalidated a widget left the window parked")
 	}
 }
+
+// A window that stopped drawing gives its spare buffers back after the
+// trim interval and keeps the front; the trim timer then stops, so
+// the idle application parks without waking for it.
+func TestIdleWindowFreesItsSpareBuffers(t *testing.T) {
+	root := widget.NewBox(widget.Column, 0, 0)
+	bar := widget.NewProgressBar(0)
+	root.Append(bar, false)
+	h := newPaintHarness(root, 200, 100)
+	v := 0.0
+	h.warm(func() { v += 0.1; bar.SetValue(v) }, 4)
+	for _, b := range h.bufs {
+		b.Release()
+	}
+	a := &Application{windows: []*hostWindow{h.wnd}}
+	a.armTrim()
+	if a.stopTrim == nil {
+		t.Fatal("a window holding spare buffers armed no trim")
+	}
+	clock := time.Now()
+	for range 2 {
+		clock = clock.Add(bufferTrimInterval)
+		a.pump(clock)
+	}
+	if n, _ := h.wnd.pool.Footprint(); n != 1 {
+		t.Errorf("the idle window holds %d buffers, want only the front", n)
+	}
+	if a.stopTrim != nil || a.queues.timerCount() != 0 {
+		t.Error("the trim timer kept running with no spare buffer left")
+	}
+	bar.SetValue(0.9)
+	if px, _ := h.frame(); px == 0 {
+		t.Error("the trimmed window painted nothing on its next frame")
+	}
+}

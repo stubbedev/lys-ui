@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -85,6 +86,10 @@ type Application struct {
 	// explicit SetInspect/ToggleInspect; see inspect.go.
 	inspectArmed bool
 	inspectOn    bool
+
+	// stopTrim cancels the buffer trim timer; nil while no window
+	// holds a spare buffer (armTrim).
+	stopTrim func()
 
 	windows  []*hostWindow
 	dialogs  []*Dialog
@@ -920,6 +925,7 @@ func (a *Application) tick(step func() error, now time.Time) error {
 			}
 		}
 	}
+	a.armTrim()
 	if err := a.drivePopovers(); err != nil {
 		return a.loopError(err)
 	}
@@ -950,6 +956,37 @@ func (a *Application) tick(step func() error, now time.Time) error {
 		return a.loopError(fmt.Errorf("app: dispatch: %w", err))
 	}
 	return nil
+}
+
+// bufferTrimInterval is how long a spare buffer may sit unused before
+// its window frees it. It is well above the period a slowly updating
+// window alternates its buffers at (a 1 Hz clock bar takes each of two
+// every 2 s), so a steady frame rate never frees and reallocates.
+const bufferTrimInterval = 5 * time.Second
+
+// armTrim starts the buffer trim timer once a window holds a spare.
+func (a *Application) armTrim() {
+	if a.stopTrim != nil || !slices.ContainsFunc(a.windows, func(w *hostWindow) bool { return w.pool.Spares() }) {
+		return
+	}
+	a.stopTrim = a.Every(bufferTrimInterval, a.trimBuffers)
+}
+
+// trimBuffers frees the spare buffers no frame took since the last
+// trim (buffer.Pool.Trim): a wallpaper drawn once keeps one 4K buffer
+// instead of three. The timer stops once no window holds a spare, so
+// an idle application parks without waking for it.
+func (a *Application) trimBuffers() {
+	spares := false
+	for _, w := range a.windows {
+		w.pool.Trim()
+		w.noteFootprint()
+		spares = spares || w.pool.Spares()
+	}
+	if !spares {
+		a.stopTrim()
+		a.stopTrim = nil
+	}
 }
 
 // updateTips advances every window's tooltip state machine.
