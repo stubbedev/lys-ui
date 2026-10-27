@@ -174,6 +174,15 @@ func (s *Stylesheet) Priority() int { return s.priority }
 // relayer rebuilds the cascade snapshot and the sensitivity union and
 // stamps every widget stale.
 func relayer() {
+	resensitize()
+	styleGen++
+	markDamage()
+}
+
+// resensitize rebuilds the cascade snapshot and the sensitivity union
+// from the stylesheets in use, installed and attached, and loads their
+// font faces. It restyles nothing.
+func resensitize() {
 	layersNow = layersNow[:0]
 	sensNow = sensitivity{}
 	for _, s := range sheets {
@@ -200,9 +209,7 @@ func relayer() {
 			sensNow.classes[c] = true
 		}
 	}
-	styleGen++
 	loadFontFaces()
-	markDamage()
 }
 
 // scopedSheets are the stylesheets attached to at least one widget.
@@ -221,8 +228,9 @@ func (n *node) AttachStylesheet(s *Stylesheet) {
 	n.sheets = append(n.sheets, s)
 	if s.attached++; s.attached == 1 {
 		scopedSheets = append(scopedSheets, s)
+		resensitize()
 	}
-	relayer()
+	n.restyleScoped()
 }
 
 // DetachStylesheet stops s from styling this subtree; detaching one
@@ -236,8 +244,26 @@ func (n *node) DetachStylesheet(s *Stylesheet) {
 	n.sheets = slices.Delete(n.sheets, i, i+1)
 	if s.attached--; s.attached == 0 {
 		scopedSheets = slices.DeleteFunc(scopedSheets, func(o *Stylesheet) bool { return o == s })
+		resensitize()
 	}
-	relayer()
+	n.restyleScoped()
+}
+
+// restyleScoped restyles the subtree a scoped stylesheet came to or
+// left, the only one that reads n's sheets; every other tree keeps its
+// styles. A root no container has parented yet has no handle to walk:
+// one never styled needs none, since its first cascade reads the sheet,
+// and a styled one stamps every widget stale.
+func (n *node) restyleScoped() {
+	switch {
+	case n.self != nil:
+		n.markStyleDirty()
+		restyleSubtree(n.self)
+	case n.unseen():
+	default:
+		styleGen++
+		markDamage()
+	}
 }
 
 // layerBuf is layersFor's reusable buffer (loop-goroutine only).

@@ -129,3 +129,40 @@ func TestDamageReport(t *testing.T) {
 		t.Error("the report did not clear")
 	}
 }
+
+// Attaching a stylesheet restyles only the subtree it styles: another
+// window's tree owes nothing, and the style generation stands, so no
+// window repaints whole (#401).
+func TestAttachStylesheetRestylesOnlyItsSubtree(t *testing.T) {
+	face := testFace(t)
+	other := NewBox(Column, 0, 0)
+	other.Append(NewLabel(face, 14, "elsewhere", 0), false)
+	arrangeTree(t, other, 200, 40)
+	label := NewLabel(face, 14, "popover", 0)
+	inner := NewBox(Column, 0, 0)
+	inner.Append(label, false)
+	root := NewBox(Column, 0, 0)
+	root.Append(inner, false)
+	arrangeTree(t, root, 200, 40)
+	CollectDamage(other)
+	CollectDamage(root)
+	gen := styleGen
+
+	inner.AttachStylesheet(NewStylesheet(`label { color: #ff0000; }`, StylePriorityUser))
+	if styleGen != gen {
+		t.Error("attaching a sheet to one subtree bumped the style generation")
+	}
+	if rects, _ := CollectDamage(other); len(rects) != 0 {
+		t.Errorf("another tree owes %v after a sheet came to an unrelated subtree", rects)
+	}
+	if got := label.style(label).Color; got != render.RGB(0xff, 0, 0) {
+		t.Errorf("the label under the sheet is %v, want its red", got)
+	}
+
+	fresh := NewBox(Column, 0, 0)
+	fresh.Append(NewLabel(face, 14, "unstyled", 0), false)
+	fresh.AttachStylesheet(NewStylesheet(`label { color: #00ff00; }`, StylePriorityUser))
+	if styleGen != gen {
+		t.Error("attaching a sheet to a root never styled bumped the style generation")
+	}
+}
