@@ -204,11 +204,12 @@ func TestEntryWidthChars(t *testing.T) {
 	if mn, mx := e.WidthChars(); mn != 6 || mx != 10 {
 		t.Errorf("WidthChars = %d, %d", mn, mx)
 	}
-	if w := e.Measure(con).W; w != pad+10*cp {
-		t.Errorf("natural %d, want ten characters (%d)", w, pad+10*cp)
+	// The characters, and the room the caret keeps after them.
+	if w := e.Measure(con).W; w != pad+10*cp+caretPad {
+		t.Errorf("natural %d, want ten characters and the caret's room (%d)", w, pad+10*cp+caretPad)
 	}
 	e.SetText(strings.Repeat("W", 40))
-	if w := e.Measure(con).W; w != pad+10*cp {
+	if w := e.Measure(con).W; w != pad+10*cp+caretPad {
 		t.Errorf("a long text resized the field to %d", w)
 	}
 	if got := e.ShrinkableWidth(); got != 4*cp {
@@ -216,7 +217,7 @@ func TestEntryWidthChars(t *testing.T) {
 	}
 	// Min alone: the GTK natural width, at least min.
 	e.SetWidthChars(30, 0)
-	if w := e.Measure(con).W; w != pad+max(GTKTextWidth, 30*cp) {
+	if w := e.Measure(con).W; w != pad+max(GTKTextWidth, 30*cp+caretPad) {
 		t.Errorf("min only: %d", w)
 	}
 	e.SetWidthChars(0, 0)
@@ -294,5 +295,29 @@ func TestEntryEllipsizesAtRest(t *testing.T) {
 	}
 	if _, ok := e.restingLine(e.displayText()); ok {
 		t.Error("EllipsizeNone still truncates at rest")
+	}
+}
+
+// A field sized by width-chars shows text that fills them whole, its
+// caret at the end without panning the first glyph out (#392).
+func TestWidthCharsLeavesRoomForTheCaret(t *testing.T) {
+	face := testFace(t)
+	e := NewEntry(face, 14, render.RGB(255, 255, 255))
+	e.SetWidthChars(4, 4)
+	cp := e.charPx()
+	text := ""
+	for len(text) < 4 {
+		text += "0"
+	}
+	e.SetText(text)
+	sz := e.Measure(Constraints{Max: Size{W: 1000, H: 100}})
+	e.Arrange(render.Rect{W: sz.W, H: sz.H})
+	r := &Router{Root: e}
+	if err := r.SetFocus(e); err != nil {
+		t.Fatal(err)
+	}
+	r.KeyAction(KeyEnd, 0)
+	if e.ScrollX() != 0 {
+		t.Errorf("a %d-px char field holding 4 chars panned %dpx, want none", cp, e.ScrollX())
 	}
 }

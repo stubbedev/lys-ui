@@ -1049,16 +1049,18 @@ func (e *Entry) charPx() int {
 }
 
 // charsText is the text width width-chars ask for, and its floor; ok
-// false when neither is set.
+// false when neither is set. Both keep caretPad beyond the characters:
+// the room pan-to-caret leaves after a caret at the end, so text that
+// fills its width-chars shows whole instead of panning a glyph out.
 func (e *Entry) charsText() (natural, floor int, ok bool) {
 	if e.widthChars == 0 && e.maxWidthChars == 0 {
 		return 0, 0, false
 	}
 	cp := e.charPx()
-	floor = e.widthChars * cp
+	floor = e.widthChars*cp + caretPad
 	natural = GTKTextWidth
 	if e.maxWidthChars > 0 {
-		natural = e.maxWidthChars * cp
+		natural = e.maxWidthChars*cp + caretPad
 	}
 	return max(natural, floor), floor, true
 }
