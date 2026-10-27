@@ -15,6 +15,7 @@
 package datacontrol
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -496,11 +497,33 @@ func (o *Offer) Receive(mime string) (*os.File, error) {
 // one wrapping xfer.ErrTimeout, and done then gets no bytes. The
 // error return covers only what fails before the transfer starts.
 func (o *Offer) Read(mime string, limit int64, done func([]byte, error)) error {
+	if done == nil {
+		return errors.New("datacontrol: Read needs a done callback")
+	}
+	var b bytes.Buffer
+	return o.ReadTo(mime, limit, &b, func(_ int64, err error) {
+		if err != nil {
+			done(nil, err)
+			return
+		}
+		done(b.Bytes(), nil)
+	})
+}
+
+// ReadTo is Read streaming into w, memory the caller owns (reused, or
+// off the Go heap), rather than a fresh slice: w is written on the
+// transfer goroutine until done runs on the loop goroutine with the
+// bytes written. A payload past limit leaves the first limit bytes in
+// w and an error wrapping xfer.ErrTooLarge; a stalled owner one
+// wrapping xfer.ErrTimeout; a write w refuses ends the transfer with
+// its error. The error return covers only what fails before the
+// transfer starts.
+func (o *Offer) ReadTo(mime string, limit int64, w io.Writer, done func(int64, error)) error {
 	if limit <= 0 {
 		return fmt.Errorf("datacontrol: read limit %d must be positive", limit)
 	}
-	if done == nil {
-		return errors.New("datacontrol: Read needs a done callback")
+	if w == nil || done == nil {
+		return errors.New("datacontrol: ReadTo needs a writer and a done callback")
 	}
 	r, err := o.Receive(mime)
 	if err != nil {
@@ -509,11 +532,8 @@ func (o *Offer) Read(mime string, limit int64, done func([]byte, error)) error {
 	invoke := o.dev.invoke
 	go func() {
 		defer r.Close()
-		data, err := xfer.Read(r, limit, transferTimeout)
-		if err != nil {
-			data = nil
-		}
-		invoke(func() { done(data, err) })
+		n, err := xfer.Copy(w, r, limit, transferTimeout)
+		invoke(func() { done(n, err) })
 	}()
 	return nil
 }

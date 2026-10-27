@@ -10,6 +10,7 @@
 package xfer
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -45,33 +46,57 @@ var (
 	ErrTimeout = errors.New("xfer: peer stalled and the deadline cut the transfer off")
 )
 
-// Read drains r up to limit bytes, under a deadline. The deadline is a
-// timer that closes r: a read blocked on a silent peer wakes with our
-// own close error, which reports as ErrTimeout. time.AfterFunc creates
-// no goroutine until it fires and the defer stops it when the transfer
-// finishes early, so nothing is created for — or leaks after — a
-// normal transfer.
+// Read drains r up to limit bytes, under a deadline, into a fresh
+// slice: Copy into memory Read owns.
 //
 // A payload past limit is truncated: the bytes that fit are returned
-// together with an error wrapping ErrTooLarge, after the rest of the
-// stream is drained into the void (still under the deadline) so the
-// peer's writes to the shared pipe never block on a full buffer.
+// together with an error wrapping ErrTooLarge. A failed read returns no
+// bytes.
 func Read(r *os.File, limit int64, timeout time.Duration) ([]byte, error) {
+	var b bytes.Buffer
+	b.Grow(int(min(limit, 64<<10)))
+	_, err := Copy(&b, r, limit, timeout)
+	if err != nil && !errors.Is(err, ErrTooLarge) {
+		return nil, err
+	}
+	return b.Bytes(), err
+}
+
+// Copy drains r into w up to limit bytes, under a deadline, and reports
+// the bytes written: the streaming form of Read, for a caller that
+// owns the memory a transfer lands in (reused, or off the Go heap). The
+// deadline is a timer that closes r: a read blocked on a silent peer
+// wakes with our own close error, which reports as ErrTimeout.
+// time.AfterFunc creates no goroutine until it fires and the defer
+// stops it when the transfer finishes early, so nothing is created
+// for, or leaks after, a normal transfer.
+//
+// A payload past limit is truncated: the bytes that fit are written,
+// and the error wraps ErrTooLarge, after the rest of the stream is
+// drained into the void (still under the deadline) so the peer's
+// writes to the shared pipe never block on a full buffer. A write w
+// refuses ends the transfer with its error.
+func Copy(w io.Writer, r *os.File, limit int64, timeout time.Duration) (int64, error) {
 	timer := time.AfterFunc(timeout, func() { _ = r.Close() })
 	defer timer.Stop()
 
-	data := make([]byte, 0, min(limit, 64<<10))
 	chunk := make([]byte, 32<<10)
+	var written int64
 	overrun := false
 	readErr := error(nil)
 	for readErr == nil && !overrun {
 		var n int
 		n, readErr = r.Read(chunk)
-		if room := limit - int64(len(data)); n > 0 && int64(n) > room {
+		if room := limit - written; n > 0 && int64(n) > room {
 			n = int(max(room, 0))
 			overrun = true
 		}
-		data = append(data, chunk[:n]...)
+		if n > 0 {
+			if _, err := w.Write(chunk[:n]); err != nil {
+				return written, fmt.Errorf("xfer: write: %w", err)
+			}
+			written += int64(n)
+		}
 		if readErr != nil {
 			if errors.Is(readErr, io.EOF) {
 				// EOF is the honest end of the transfer.
@@ -87,17 +112,17 @@ func Read(r *os.File, limit int64, timeout time.Duration) ([]byte, error) {
 			// peer will not stop — so the peer is never left
 			// blocked on the pipe.
 			if _, derr := io.Copy(io.Discard, r); derr != nil && !errors.Is(derr, io.EOF) {
-				return data, errors.Join(oversize(limit), readFailure(derr))
+				return written, errors.Join(oversize(limit), readFailure(derr))
 			}
 		} else if !errors.Is(readErr, io.EOF) {
-			return data, errors.Join(oversize(limit), readFailure(readErr))
+			return written, errors.Join(oversize(limit), readFailure(readErr))
 		}
-		return data, oversize(limit)
+		return written, oversize(limit)
 	}
 	if readErr != nil {
-		return nil, readFailure(readErr)
+		return written, readFailure(readErr)
 	}
-	return data, nil
+	return written, nil
 }
 
 // DeadlineWriter prepares the pipe write end a consumer handed over —

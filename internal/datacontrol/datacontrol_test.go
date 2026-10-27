@@ -1,6 +1,7 @@
 package datacontrol
 
 import (
+	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -660,5 +661,43 @@ func TestAPassSourceGetsTheRawPipe(t *testing.T) {
 	// An unoffered mime never reaches Pass.
 	if got := sendSync(t, d, mgr.sources[0], "image/png"); got != "" || len(asked) != 1 {
 		t.Fatalf("unoffered mime served %q, Pass asked %v", got, asked)
+	}
+}
+
+// ReadTo streams the owner's bytes into a writer the caller owns, and
+// over the cap leaves the first limit bytes there with ErrTooLarge.
+func TestReadToStreamsIntoTheCallersWriter(t *testing.T) {
+	d, _, _ := newTestDevice(true)
+	readTo := func(limit int64, into *bytes.Buffer) (int64, error) {
+		t.Helper()
+		type result struct {
+			n   int64
+			err error
+		}
+		ch := make(chan result, 1)
+		if err := d.Offer(Clipboard).ReadTo("text/plain", limit, into, func(n int64, err error) { ch <- result{n, err} }); err != nil {
+			t.Fatalf("ReadTo: %v", err)
+		}
+		select {
+		case r := <-ch:
+			return r.n, r.err
+		case <-time.After(10 * time.Second):
+			t.Fatal("ReadTo never delivered")
+			return 0, nil
+		}
+	}
+	announce(d, Clipboard, &fakeOffer{write: writer([]byte("hello world"))}, "text/plain")
+	var into bytes.Buffer
+	if n, err := readTo(64, &into); err != nil || n != 11 || into.String() != "hello world" {
+		t.Errorf("read %d bytes %q (%v), want 11 bytes of hello world", n, into.String(), err)
+	}
+
+	announce(d, Clipboard, &fakeOffer{write: writer([]byte("0123456789abcdef"))}, "text/plain")
+	into.Reset()
+	if n, err := readTo(4, &into); !errors.Is(err, xfer.ErrTooLarge) || n != 4 || into.String() != "0123" {
+		t.Errorf("an oversized read left %d bytes %q (%v), want the first 4 and ErrTooLarge", n, into.String(), err)
+	}
+	if err := d.Offer(Clipboard).ReadTo("text/plain", 4, nil, func(int64, error) {}); err == nil {
+		t.Error("ReadTo without a writer started a transfer")
 	}
 }
