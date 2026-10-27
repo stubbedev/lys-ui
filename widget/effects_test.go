@@ -173,6 +173,7 @@ func TestFilterBlurPaintsOutsideBox(t *testing.T) {
 }
 
 func TestEffectsFastPathAllocationFree(t *testing.T) {
+	skipAllocBudget(t)
 	// The no-effect paint stays allocation-free: the stylesheet loads
 	// but declares no rendering effect, so the old PushAlpha path runs.
 	loadCSS(t, `.plain { background-color: #ff0000; }`)

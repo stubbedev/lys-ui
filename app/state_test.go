@@ -22,12 +22,15 @@ import (
 // (wire-free) window.Window: configures go through the window's own
 // handlers, and Size/State report what the window holds - so stateful
 // tests run the real state machine under the real hostWindow pipeline.
-type stateHost struct{ win *window.Window }
+type stateHost struct {
+	win  *window.Window
+	surf wl.Surface
+}
 
 func (h *stateHost) EnsureUsable() error      { return h.win.EnsureUsable() }
 func (h *stateHost) Closed() bool             { return h.win.Closed() }
 func (h *stateHost) Size() (int, int)         { return h.win.Size() }
-func (h *stateHost) HostSurface() *wl.Surface { return nil }
+func (h *stateHost) HostSurface() *wl.Surface { return &h.surf }
 func (h *stateHost) State() window.State      { return h.win.State() }
 
 // configure plays one toplevel configure round: the state array and the

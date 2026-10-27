@@ -621,6 +621,7 @@ func TestCSSGridInlineAndMinContent(t *testing.T) {
 // baselines, an absolute item and a nested flexbox — measures and
 // arranges without allocating once the per-depth buffers have grown.
 func TestCSSGridSteadyFrameAllocatesNothing(t *testing.T) {
+	skipAllocBudget(t)
 	nested := cssBox(Row, "f", item(20, 10), item(20, 10))
 	root := cssBox(Column, "g", item(30, 20, "h"), item(30, 20, "s2"), &baseStub{nat: Size{W: 30, H: 20}, base: 12},
 		nested, item(30, 20, "abs"), item(30, 20), item(30, 20, "n"))
