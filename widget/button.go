@@ -188,6 +188,17 @@ func (b *Button) InsertRune(r rune) {
 	}
 }
 
+// Children returns the button's content.
+func (b *Button) Children() []Widget { return b.appendChildren(nil) }
+
+// appendChildren is Children into buf, for the walks that reuse one.
+func (b *Button) appendChildren(buf []Widget) []Widget {
+	if b.child == nil {
+		return buf
+	}
+	return append(buf, b.child)
+}
+
 // appendStyleKids is the content the button's style passes down to
 // (styleKids); a method so an embedding type keeps it.
 func (b *Button) appendStyleKids(buf []Widget) []Widget { return append(buf, b.child) }

@@ -275,7 +275,8 @@ func TestDescribeTree(t *testing.T) {
 			roles = append(roles, st.Role)
 		}
 	}
-	want := []Role{RoleButton, RoleLabel, RoleSwitch}
+	// The button lists its label as its child, ahead of the hint.
+	want := []Role{RoleButton, RoleLabel, RoleLabel, RoleSwitch}
 	if len(roles) != len(want) {
 		t.Fatalf("roles = %v, want %v", roles, want)
 	}

@@ -1,5 +1,6 @@
 *widget.Box bounds=0,0+400x300
   *widget.Label bounds=4,4+392x19 role=label tooltip="the page title"
   *widget.Button name="toolbar:save" bounds=4,31+392x39 role=button tooltip="saves the thing" focusable hover pressed
+    *widget.Label bounds=14,41+372x19 role=label tooltip="save"
   *widget.Entry bounds=4,78+392x36 role=entry focusable
   *widget.Slider name="zoom" bounds=4,122+392x18 role=slider focusable focused
