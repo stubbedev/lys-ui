@@ -25,6 +25,8 @@ type BarConfig struct {
 	Exclusive bool
 	// Namespace tags the surface for compositor rules.
 	Namespace string
+	// OnPresented mirrors LayerConfig.OnPresented.
+	OnPresented func()
 }
 
 // BarWindow is a bar's layer surface. Its thickness is the bar's
@@ -46,7 +48,8 @@ func (a *Application) NewBar(cfg BarConfig) (*BarWindow, error) {
 	lw, err := a.NewLayer(LayerConfig{
 		Output: cfg.Output, Layer: cfg.Layer, Anchor: barAnchor(edge), Margin: barMargins(edge, cfg.Margin),
 		Namespace: cfg.Namespace, Root: cfg.Bar,
-		OnResize: func(width, height int) { w.reserve(width, height) },
+		OnResize:    func(width, height int) { w.reserve(width, height) },
+		OnPresented: cfg.OnPresented,
 	})
 	if err != nil {
 		return nil, err
@@ -65,18 +68,38 @@ func (w *BarWindow) SetEdge(edge widget.BarEdge) error {
 	return w.SetAnchor(barAnchor(edge))
 }
 
+// SetExclusive starts or stops reserving the bar's edge: on, the
+// exclusive zone takes the bar's current thickness and follows it as
+// the bar resizes; off, it drops to 0 and maximized windows reach the
+// edge again. The change applies with the next commit.
+func (w *BarWindow) SetExclusive(on bool) error {
+	if on == w.cfg.Exclusive {
+		return nil
+	}
+	w.cfg.Exclusive = on
+	if !on {
+		return w.SetExclusiveZone(0)
+	}
+	return w.SetExclusiveZone(w.thickness(w.Size()))
+}
+
 // reserve sets the exclusive zone to the thickness across the edge.
 func (w *BarWindow) reserve(width, height int) {
 	if !w.cfg.Exclusive || w.LayerWindow == nil {
 		return
 	}
-	thick := height
-	if w.cfg.Bar.Edge().Vertical() {
-		thick = width
-	}
-	if err := w.SetExclusiveZone(intconv.Int32(thick)); err != nil {
+	thick := w.thickness(width, height)
+	if err := w.SetExclusiveZone(thick); err != nil {
 		logutil.L().Warn("app: bar: reserve its exclusive zone", "thickness", thick, "err", err)
 	}
+}
+
+// thickness is the bar's extent across its edge at width x height.
+func (w *BarWindow) thickness(width, height int) int32 {
+	if w.cfg.Bar.Edge().Vertical() {
+		return intconv.Int32(width)
+	}
+	return intconv.Int32(height)
 }
 
 // barAnchor anchors a bar to its edge and both ends of it.

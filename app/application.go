@@ -461,6 +461,12 @@ type LayerConfig struct {
 	OnResize      func(width, height int)
 	OnKey         func(r *widget.Router, keycode uint32, mods wlsession.Mods)
 	KeyCapture    func(Accel) bool
+	// OnPresented runs on the loop goroutine once the surface's first
+	// buffer is committed, its content on screen: the moment a
+	// replacement can take over from the surface it replaces. A
+	// reconnect rebuilds the surface, and it runs again for the new
+	// one.
+	OnPresented func()
 	// OnClosed runs when the surface closed or its output went away.
 	OnClosed func()
 }
@@ -575,14 +581,15 @@ func (a *Application) openLayer(l *LayerWindow, cfg LayerConfig) (*hostWindow, e
 	}
 	l.ls = ls
 	hw := a.newWindow(&layerHost{ls: ls, out: cfg.Output}, max(scale, 1), cfg.Root, windowHooks{
-		background: cfg.Background,
-		opaque:     opaqueFor(cfg.Background, cfg.Opaque),
-		onPress:    cfg.OnPress,
-		onMove:     cfg.OnPointerMove,
-		onResize:   cfg.OnResize,
-		onKey:      cfg.OnKey,
-		keyCapture: cfg.KeyCapture,
-		blur:       cfg.BackgroundBlur,
+		background:  cfg.Background,
+		opaque:      opaqueFor(cfg.Background, cfg.Opaque),
+		onPress:     cfg.OnPress,
+		onMove:      cfg.OnPointerMove,
+		onResize:    cfg.OnResize,
+		onKey:       cfg.OnKey,
+		keyCapture:  cfg.KeyCapture,
+		blur:        cfg.BackgroundBlur,
+		onPresented: cfg.OnPresented,
 	}, cfg.OnClosed, surfx.KindOverlay)
 	hw.layer = l
 	// A rotated output's transform must be published before the first

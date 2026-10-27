@@ -118,6 +118,8 @@ type hostWindow struct {
 	// application-wide one, so a key press allocates nothing.
 	keyChain     func(r *widget.Router, keycode uint32, mods wlsession.Mods)
 	lastW, lastH int
+	// presented is set once the surface's first buffer is committed.
+	presented bool
 	// reportedW and reportedH are the size OnResize last heard.
 	reportedW, reportedH int
 	// limits reports the host's min/max size in logical pixels (zero
@@ -209,7 +211,9 @@ type windowHooks struct {
 	blur bool
 	// keyCapture sees each press before any routing; true consumes it.
 	keyCapture func(Accel) bool
-	onClosed   func()
+	// onPresented runs once the surface's first buffer is committed.
+	onPresented func()
+	onClosed    func()
 }
 
 // opaqueFor reports whether a window may promise an opaque surface:
@@ -943,6 +947,12 @@ func (w *hostWindow) draw() bool {
 	// The commit just went to the screen through b: b is current now,
 	// and every other pooled buffer lags by what changed here.
 	w.pool.Presented(b, changed)
+	if !w.presented {
+		w.presented = true
+		if w.cfg.onPresented != nil {
+			w.cfg.onPresented()
+		}
+	}
 
 	debug.Log("frame", "frame committed, waiting for callback")
 	w.framePending = true
