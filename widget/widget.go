@@ -248,7 +248,8 @@ type node struct {
 	// node runs no animation.
 	anims *nodeAnim
 	// self is the widget embedding this node, recorded by the first
-	// arranging container, so a state flip can walk its own subtree.
+	// arranging container or, for a root no container holds, its first
+	// style, so a state flip can walk its own subtree.
 	self Widget
 	// sibs is this node's filtered child list as the sibling selectors
 	// read it, memoized per damage generation (visibleSiblings); kids
@@ -690,11 +691,9 @@ func (n *node) Arrange(r render.Rect) {
 	}
 	// A resized query container's descendants recompute their
 	// @container conditions and container units against the new
-	// bounds, as a viewport change restyles @media rules; any other
-	// widget's resize leaves every style as it was.
-	if r != n.bounds && sensNow.containers && n.queryContainer() {
-		styleGen++
-		markDamage()
+	// bounds; any other widget's resize leaves every style as it was.
+	if r != n.bounds && sensNow.containers && !n.unseen() && n.queryContainer() {
+		restyleSubtree(n.self)
 	}
 	n.bounds = r
 }

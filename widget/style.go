@@ -175,8 +175,7 @@ func (s *Stylesheet) Priority() int { return s.priority }
 // stamps every widget stale.
 func relayer() {
 	resensitize()
-	styleGen++
-	markDamage()
+	bumpStyleGen("stylesheet")
 }
 
 // resensitize rebuilds the cascade snapshot and the sensitivity union
@@ -230,7 +229,7 @@ func (n *node) AttachStylesheet(s *Stylesheet) {
 		scopedSheets = append(scopedSheets, s)
 		resensitize()
 	}
-	n.restyleScoped()
+	n.restyleTree()
 }
 
 // DetachStylesheet stops s from styling this subtree; detaching one
@@ -246,24 +245,19 @@ func (n *node) DetachStylesheet(s *Stylesheet) {
 		scopedSheets = slices.DeleteFunc(scopedSheets, func(o *Stylesheet) bool { return o == s })
 		resensitize()
 	}
-	n.restyleScoped()
+	n.restyleTree()
 }
 
-// restyleScoped restyles the subtree a scoped stylesheet came to or
-// left, the only one that reads n's sheets; every other tree keeps its
-// styles. A root no container has parented yet has no handle to walk:
-// one never styled needs none, since its first cascade reads the sheet,
-// and a styled one stamps every widget stale.
-func (n *node) restyleScoped() {
-	switch {
-	case n.self != nil:
-		n.markStyleDirty()
-		restyleSubtree(n.self)
-	case n.unseen():
-	default:
-		styleGen++
-		markDamage()
+// restyleTree restyles n and its subtree, after a change only they
+// read (a scoped stylesheet coming or going, their window's viewport);
+// every other tree keeps its styles. A widget never styled and in no
+// tree needs nothing: its first cascade reads the change.
+func (n *node) restyleTree() {
+	if n.unseen() {
+		return
 	}
+	n.markStyleDirty()
+	restyleSubtree(n.self)
 }
 
 // layerBuf is layersFor's reusable buffer (loop-goroutine only).
@@ -321,8 +315,7 @@ func SetRootFontSize(px float64) {
 		return
 	}
 	styleEnv = style.Env{Rem: px, FontPx: px}
-	styleGen++
-	markDamage()
+	bumpStyleGen("root font size")
 }
 
 // RootFontSize returns the current root font size.
@@ -353,8 +346,7 @@ func SetMediaViewport(w, h int) {
 	if !sensNow.media {
 		return
 	}
-	styleGen++
-	markDamage()
+	bumpStyleGen("media viewport")
 }
 
 // SetMediaViewportFor sets the @media viewport of one window's tree:
@@ -374,11 +366,9 @@ func SetMediaViewportFor(root Widget, w, h int) {
 		return
 	}
 	n.viewport.w, n.viewport.h = w, h
-	if !sensNow.media {
-		return
+	if sensNow.media {
+		n.restyleTree()
 	}
-	styleGen++
-	markDamage()
 }
 
 // MediaViewportOf returns the @media viewport w's tree computes
@@ -393,7 +383,7 @@ func MediaViewportOf(w Widget) (int, int) {
 }
 
 // SetMediaContrast turns the prefers-contrast media feature on or
-// // off; the desktop's contrast preference, which no Theme field
+// off; the desktop's contrast preference, which no Theme field
 // carries. The whole tree restyles on a change.
 func SetMediaContrast(on bool) {
 	if on == mediaContrast {
@@ -403,8 +393,7 @@ func SetMediaContrast(on bool) {
 	if !sensNow.media {
 		return
 	}
-	styleGen++
-	markDamage()
+	bumpStyleGen("media contrast")
 }
 
 // SetMediaResolution sets the resolution the @media resolution feature
@@ -417,8 +406,7 @@ func SetMediaResolution(dpi float64) {
 	if !sensNow.media {
 		return
 	}
-	styleGen++
-	markDamage()
+	bumpStyleGen("media resolution")
 }
 
 // defaultFontMetrics loads the UI face's metrics once; the
@@ -1724,6 +1712,9 @@ func restyleParts(w Widget) {
 // the compute and one comparison, and touches nothing.
 func (n *node) restyle(w Widget) *style.Values {
 	w = styleOwner(w)
+	if n.self == nil {
+		n.self = w
+	}
 	firstStyle := n.styleSeen == 0
 	var parent *style.Values
 	if pw := styleParentOf(n); pw != nil {
@@ -2245,16 +2236,16 @@ func (n *node) invalidateState(changed style.State) {
 }
 
 // restyleState is invalidateState for the propagated states — the
-// hover chain and focus-within — on w, whose node is n, which no widget
-// paints from itself: the cascade is marked stale, and only a moved
+// hover chain and focus-within — on n, which no widget paints from
+// itself: the cascade is marked stale, and only a moved
 // value repaints, the root's subtree included.
-func (n *node) restyleState(w Widget, changed style.State) {
+func (n *node) restyleState(changed style.State) {
 	n.markStyleDirty()
 	if n.unseen() {
 		return
 	}
 	markDamage()
-	n.scope(w, sensNow.states&changed != 0 || sensNow.has, sensNow.siblingFacts)
+	n.scope(sensNow.states&changed != 0 || sensNow.has, sensNow.siblingFacts)
 }
 
 // invalidateClasses is invalidateState for a class-list change.
@@ -2282,35 +2273,22 @@ func (n *node) invalidateScope(sub, sib bool) {
 		}
 		markDamage()
 	}
-	n.scope(n.self, sub, sib)
+	n.scope(sub, sib)
 }
 
-// scope marks the dependents of a flipped fact on w, n's widget (nil
-// when unknown): the subtree when sub, the parent's children (and
-// theirs) when sib. A root, which has no siblings, restyles its own
-// subtree; only its moved values repaint.
-func (n *node) scope(w Widget, sub, sib bool) {
-	if !sub && !sib {
+// scope marks the dependents of a flipped fact on n: the subtree when
+// sub, the parent's children (and theirs) when sib. A root, which has
+// no siblings, restyles its own subtree; only its moved values repaint.
+// A widget never styled and in no tree has no dependents yet.
+func (n *node) scope(sub, sib bool) {
+	if !sub && !sib || n.unseen() {
 		return
 	}
 	if sib && n.parent != nil {
 		restyleSubtree(n.parent)
 		return
 	}
-	if w == nil {
-		w = n.self
-	}
-	if w != nil {
-		restyleSubtree(w)
-		return
-	}
-	if n.unseen() {
-		return
-	}
-	// The root (or a widget no container arranged yet): no link to walk
-	// from, so the whole generation goes stale.
-	styleGen++
-	markDamage()
+	restyleSubtree(n.self)
 }
 
 // setHoverChain moves the hover chain from old's ancestry to new's: a
@@ -2329,14 +2307,14 @@ func setHoverChain(old, new Widget) {
 	for w := old; w != nil; w = parentOf(w) {
 		if n := nodeOf(w); n != nil && n.hoverChain && !in[n] {
 			n.hoverChain = false
-			n.restyleState(w, style.Hover)
+			n.restyleState(style.Hover)
 			notifyHoverWithin(w, n, false)
 		}
 	}
 	for w := new; w != nil; w = parentOf(w) {
 		if n := nodeOf(w); n != nil && !n.hoverChain {
 			n.hoverChain = true
-			n.restyleState(w, style.Hover)
+			n.restyleState(style.Hover)
 			notifyHoverWithin(w, n, true)
 		}
 	}

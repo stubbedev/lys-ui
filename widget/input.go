@@ -747,7 +747,7 @@ func shiftFocusWithin(w Widget, delta int) {
 		was := n.focusWithin > 0
 		n.focusWithin = max(0, n.focusWithin+delta)
 		if was != (n.focusWithin > 0) {
-			n.restyleState(w, style.FocusWithin)
+			n.restyleState(style.FocusWithin)
 		}
 	}
 }

@@ -94,6 +94,20 @@ func damageReasons(n *node) string {
 	return strings.Join(why, "+")
 }
 
+// styleBumps records, in lysdebug builds, what stamped every style
+// stale since the last DamageReport, keyed by reason.
+var styleBumps = map[string]int{}
+
+// bumpStyleGen stamps every widget's style stale and owes the repaint;
+// why names the change in the LYS_DEBUG=damage report.
+func bumpStyleGen(why string) {
+	styleGen++
+	markDamage()
+	if debug.Enabled {
+		styleBumps[why]++
+	}
+}
+
 // noteDamage records that w owed its whole bounds this frame, and why.
 func noteDamage(w Widget, bounds render.Rect, why string) {
 	boundsDamage[fmt.Sprintf("%dx%d %T %s", bounds.W, bounds.H, w, why)]++
@@ -104,7 +118,7 @@ func noteDamage(w Widget, bounds render.Rect, why string) {
 // and clears them; "" when there were none or the build lacks the
 // lysdebug tag. The app logs it per frame under LYS_DEBUG=damage.
 func DamageReport() string {
-	if !debug.Enabled || len(boundsDamage) == 0 {
+	if !debug.Enabled || len(boundsDamage) == 0 && len(styleBumps) == 0 {
 		return ""
 	}
 	area := func(k string) int {
@@ -126,5 +140,13 @@ func DamageReport() string {
 		parts = append(parts, k)
 	}
 	clear(boundsDamage)
+	if len(styleBumps) > 0 {
+		bumps := make([]string, 0, len(styleBumps))
+		for _, k := range slices.Sorted(maps.Keys(styleBumps)) {
+			bumps = append(bumps, fmt.Sprintf("%s (x%d)", k, styleBumps[k]))
+		}
+		clear(styleBumps)
+		parts = append(parts, "stylegen bumped by: "+strings.Join(bumps, ", "))
+	}
 	return strings.Join(parts, ", ")
 }

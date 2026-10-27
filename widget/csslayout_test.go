@@ -865,20 +865,35 @@ func TestHiddenWidgetsTakeNoFocus(t *testing.T) {
 // With @container rules loaded, a query container's resize restyles
 // its descendants; any other widget's resize, a tooltip arranged or a
 // row moving, leaves every style as it was, so it damages only its own
-// pixels instead of every widget in every window (#328).
+// pixels instead of every widget in every window (#328). The query
+// container's restyle stays within its subtree too.
 func TestOnlyAQueryContainerResizeRestyles(t *testing.T) {
 	loadCSS(t, `.q { container-type: inline-size; } @container (min-width: 100px) { .x { color: #ff0000; } }`)
-	plain, query := newStub(10, 10), newStub(10, 10)
+	face := testFace(t)
+	other := NewLabel(face, 14, "elsewhere", 0)
+	settle(t, other, 200, 20)
+	CollectDamage(other)
+	plain := newStub(10, 10)
+	inside := NewLabel(face, 14, "inside", 0)
+	inside.AddClass("x")
+	query := NewBox(Column, 0, 0).Append(inside, false)
 	query.AddClass("q")
 	row := NewBox(Row, 0, 0).Append(plain, false).Append(query, false)
-	settle(t, row, 50, 10)
+	settle(t, row, 150, 20)
+	CollectDamage(row)
+	if got := inside.style(inside).Color; got == render.RGB(0xff, 0, 0) {
+		t.Fatal("the container query matched at 50px wide")
+	}
 	before := styleGen
 	plain.Arrange(render.Rect{W: 80, H: 10})
 	if styleGen != before {
 		t.Errorf("a plain widget's resize restyled everything (styleGen %d -> %d)", before, styleGen)
 	}
-	query.Arrange(render.Rect{W: 120, H: 10})
-	if styleGen == before {
-		t.Error("a query container's resize restyled nothing")
+	query.Arrange(render.Rect{X: 30, W: 120, H: 20})
+	if got := inside.style(inside).Color; got != render.RGB(0xff, 0, 0) {
+		t.Errorf("a query container's resize left its descendant %v, want the matched red", got)
+	}
+	if rects, _ := CollectDamage(other); len(rects) != 0 {
+		t.Errorf("another tree owes %v after a query container resized", rects)
 	}
 }

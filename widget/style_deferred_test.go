@@ -36,7 +36,11 @@ func TestPerWindowMediaViewport(t *testing.T) {
 		t.Errorf("the large window's tree is unaffected: %08x", uint32(bg))
 	}
 	// Resizing one window restyles only trees that read the change.
+	CollectDamage(small)
 	SetMediaViewportFor(large, 400, 400)
+	if rects, _ := CollectDamage(small); len(rects) != 0 {
+		t.Errorf("the small window owes %v after the large one resized", rects)
+	}
 	if bg := StyleBackground(largeBtn); bg != render.RGB(0x12, 0x34, 0x56) {
 		t.Errorf("after the resize the large window matches: %08x", uint32(bg))
 	}

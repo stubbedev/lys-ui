@@ -128,6 +128,13 @@ func TestDamageReport(t *testing.T) {
 	if DamageReport() != "" {
 		t.Error("the report did not clear")
 	}
+
+	SetRootFontSize(RootFontSize() + 2)
+	t.Cleanup(func() { SetRootFontSize(RootFontSize() - 2) })
+	CollectDamage(root)
+	if report := DamageReport(); !strings.HasSuffix(report, "stylegen bumped by: root font size (x1)") {
+		t.Errorf("report %q, want the root font size named as what restyled every widget", report)
+	}
 }
 
 // Attaching a stylesheet restyles only the subtree it styles: another
@@ -164,5 +171,36 @@ func TestAttachStylesheetRestylesOnlyItsSubtree(t *testing.T) {
 	fresh.AttachStylesheet(NewStylesheet(`label { color: #00ff00; }`, StylePriorityUser))
 	if styleGen != gen {
 		t.Error("attaching a sheet to a root never styled bumped the style generation")
+	}
+}
+
+// A state flip on a tree's root restyles that tree alone: the root
+// learns its widget when it first styles, so the flip walks its
+// subtree and leaves the style generation standing. A focused popover
+// list is its popup's root, and every focus flip on it repainted every
+// window whole.
+func TestRootStateFlipRestylesOnlyItsTree(t *testing.T) {
+	face := testFace(t)
+	sheet := AddStylesheet(`.picked label { color: #ff0000; }`, StylePriorityUser)
+	t.Cleanup(sheet.Remove)
+	other := NewBox(Column, 0, 0)
+	other.Append(NewLabel(face, 14, "elsewhere", 0), false)
+	arrangeTree(t, other, 200, 40)
+	label := NewLabel(face, 14, "popover", 0)
+	root := NewBox(Column, 0, 0)
+	root.Append(label, false)
+	arrangeTree(t, root, 200, 40)
+	CollectDamage(other)
+	gen := styleGen
+
+	root.AddClass("picked")
+	if styleGen != gen {
+		t.Error("a class flip on a root bumped the style generation")
+	}
+	if rects, _ := CollectDamage(other); len(rects) != 0 {
+		t.Errorf("another tree owes %v after a root in a different tree flipped", rects)
+	}
+	if got := label.style(label).Color; got != render.RGB(0xff, 0, 0) {
+		t.Errorf("the label under the flipped root is %v, want its red", got)
 	}
 }
