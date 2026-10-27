@@ -162,11 +162,13 @@ func (n *Notebook) syncSelectedTab() {
 	}
 }
 
-// appendStyleKids is the header and the visible page (styleKids).
+// appendStyleKids is the header and every page, shown or not
+// (styleKids): a hidden page keeps its cascade, so a restyle reaches it
+// before it shows.
 func (n *Notebook) appendStyleKids(buf []Widget) []Widget {
 	buf = append(buf, &n.header)
-	if n.selected < len(n.tabs) {
-		buf = append(buf, n.tabs[n.selected].w)
+	for _, t := range n.tabs {
+		buf = append(buf, t.w)
 	}
 	return buf
 }

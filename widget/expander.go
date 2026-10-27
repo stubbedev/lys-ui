@@ -71,10 +71,12 @@ func NewExpander(face render.Font, title string, child Widget) *Expander {
 	return e
 }
 
-// appendStyleKids is the title and, while open, the child (styleKids).
+// appendStyleKids is the title and the child, open or not (styleKids):
+// a collapsed child keeps its cascade, so a restyle reaches it before
+// it opens.
 func (e *Expander) appendStyleKids(buf []Widget) []Widget {
 	buf = append(buf, &e.titleNode)
-	if e.open && e.child != nil {
+	if e.child != nil {
 		buf = append(buf, e.child)
 	}
 	return buf

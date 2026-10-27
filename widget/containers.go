@@ -141,6 +141,15 @@ func (s *Stack) appendChildren(buf []Widget) []Widget {
 	return buf
 }
 
+// appendStyleKids is every page, shown or not (styleKids): a hidden
+// page keeps its cascade, so a restyle reaches it before it shows.
+func (s *Stack) appendStyleKids(buf []Widget) []Widget {
+	for _, name := range s.order {
+		buf = append(buf, s.kids[name])
+	}
+	return buf
+}
+
 // SetEnabled turns the visible child on or off through the per-query
 // enable walk, like Box (hidden children stay untouched; they paint
 // nothing, so they need no repaint either).

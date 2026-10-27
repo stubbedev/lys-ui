@@ -204,3 +204,24 @@ func TestRootStateFlipRestylesOnlyItsTree(t *testing.T) {
 		t.Errorf("the label under the flipped root is %v, want its red", got)
 	}
 }
+
+// A stylesheet attached to an already styled root reaches the pages
+// its stacks are not showing: they keep their cascades, and a page
+// shown later paints with the sheet.
+func TestAttachStylesheetReachesHiddenPages(t *testing.T) {
+	face := testFace(t)
+	hidden := NewLabel(face, 14, "hidden", 0)
+	stack := NewStack()
+	stack.Add("shown", NewLabel(face, 14, "shown", 0))
+	stack.Add("hidden", hidden)
+	stack.Show("shown")
+	root := NewBox(Column, 0, 0)
+	root.Append(stack, false)
+	arrangeTree(t, root, 200, 40)
+	hidden.style(hidden)
+
+	root.AttachStylesheet(NewStylesheet(`label { color: #ff0000; }`, StylePriorityUser))
+	if got := hidden.style(hidden).Color; got != render.RGB(0xff, 0, 0) {
+		t.Errorf("the hidden page's label is %v, want the attached sheet's red", got)
+	}
+}
