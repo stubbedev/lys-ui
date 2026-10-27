@@ -374,3 +374,38 @@ func TestReusedBufferCopiesForward(t *testing.T) {
 		t.Error("the changed label did not repaint")
 	}
 }
+
+// A timer that changes no widget wakes no window: a hot-reload poll
+// finding nothing leaves the window parked, without a layout pass, and
+// one that invalidates a widget owes it a draw (#402).
+func TestIdleTimerWakesNoWindow(t *testing.T) {
+	root := widget.NewBox(widget.Column, 0, 0)
+	root.Append(widget.NewProgressBar(0.5), false)
+	h := newPaintHarness(root, 200, 100)
+	h.frame()
+	a := &Application{windows: []*hostWindow{h.wnd}}
+	var touch func()
+	a.Every(time.Millisecond, func() {
+		if touch != nil {
+			touch()
+		}
+	})
+	clock := time.Now()
+	run := func() {
+		clock = clock.Add(time.Second)
+		gen := widget.DamageGeneration()
+		if a.pump(clock) {
+			a.markDirtyIfDamaged(gen)
+		}
+	}
+	h.wnd.dirty = false
+	run()
+	if h.wnd.dirty {
+		t.Error("a poll that changed nothing marked the window for a draw")
+	}
+	touch = func() { root.Invalidate() }
+	run()
+	if !h.wnd.dirty {
+		t.Error("a timer that invalidated a widget left the window parked")
+	}
+}

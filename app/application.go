@@ -805,6 +805,18 @@ func (a *Application) stepFn() func() error {
 	return a.sess.Step
 }
 
+// markDirtyIfDamaged owes every window a draw when a widget was
+// invalidated since the damage generation gen: work that changed no
+// widget leaves windows parked, without a layout pass.
+func (a *Application) markDirtyIfDamaged(gen uint64) {
+	if widget.DamageGeneration() == gen {
+		return
+	}
+	for _, w := range a.windows {
+		w.dirty = true
+	}
+}
+
 // tick runs one loop pass: queued work, repeats, IME sync, animation
 // ticks, tooltip state, window draws (paced), wake computation, and
 // one dispatch. A non-nil error ends the loop; ErrClosed comes back
@@ -812,14 +824,12 @@ func (a *Application) stepFn() func() error {
 func (a *Application) tick(step func() error, now time.Time) error {
 	// Off-loop work queued since the last pass: Invoke fns first,
 	// then the periodic timers (pollers) that came due. Everything
-	// here runs on this goroutine, the loop goroutine. Work that ran
-	// owes every surface a damage check; a window whose tree drained
-	// nothing skips its draw.
-	worked := a.pump(now)
-	if worked {
-		for _, w := range a.windows {
-			w.dirty = true
-		}
+	// here runs on this goroutine, the loop goroutine. Work that
+	// changed a widget owes every surface a damage check; work that
+	// touched none (a poll that found nothing) wakes no window.
+	gen := widget.DamageGeneration()
+	if a.pump(now) {
+		a.markDirtyIfDamaged(gen)
 	}
 
 	if code, mods, ok := a.rep.tick(); ok {
@@ -841,10 +851,9 @@ func (a *Application) tick(step func() error, now time.Time) error {
 		// schedules pace it when they stop (occlusion). A tick that
 		// ran callbacks invalidated widgets, so only then is a
 		// frame owed.
+		gen := widget.DamageGeneration()
 		if animclock.Tick(now) {
-			for _, w := range a.windows {
-				w.dirty = true
-			}
+			a.markDirtyIfDamaged(gen)
 		}
 	}
 	a.updateTips(now)
