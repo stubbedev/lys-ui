@@ -26,8 +26,10 @@ func noteMeasureMiss(n *node, con Constraints) {
 		reason = "style"
 	case n.styleSeen != styleGen:
 		reason = "stylegen"
+	case n.subStyle:
+		reason = "substyle"
 	default:
-		reason = fmt.Sprintf("constraints(%v, was %v | %v)", con.Max, n.measureIn.Max, n.measureIn2.Max)
+		reason = fmt.Sprintf("constraints(%v, was %v | %v | %v)", con.Max, n.measureIn.Max, n.measureOld[0].in.Max, n.measureOld[1].in.Max)
 	}
 	kind := "unparented"
 	if n.self != nil {

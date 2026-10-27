@@ -1536,7 +1536,7 @@ func SetStyleAnchor(w, anchor Widget) {
 	if an := nodeOf(anchor); an != nil {
 		an.anchored = append(an.anchored, w)
 	}
-	n.styleDirty = true
+	n.markStyleDirty()
 	restyleSubtree(w)
 }
 
@@ -1548,7 +1548,7 @@ func SetStyleAnchor(w, anchor Widget) {
 func SetStyleRoot(w Widget) {
 	if n := nodeOf(w); n != nil && !n.styleRoot {
 		n.styleRoot = true
-		n.styleDirty = true
+		n.markStyleDirty()
 		markDamage()
 	}
 }
@@ -1787,7 +1787,7 @@ func restyleCountersAfter(w Widget) {
 		}
 		for _, k := range sib[idx+1:] {
 			if kn := nodeOf(k); kn != nil {
-				kn.styleDirty = true
+				kn.markStyleDirty()
 			}
 			restyleSubtree(k)
 		}
@@ -2146,7 +2146,7 @@ func restyleInto(w Widget, depth int) {
 	}
 	for _, k := range styleStack[depth] {
 		if n := nodeOf(k); n != nil {
-			n.styleDirty = true
+			n.markStyleDirty()
 		}
 		restyleInto(k, depth+1)
 	}
@@ -2186,12 +2186,25 @@ func restyleChildren(w Widget) {
 	restyleSubtree(w)
 }
 
+// markStyleDirty marks n's cascade stale, and every ancestor's cached
+// measure as owing a pass down to n: the cascade reruns lazily, inside
+// n's next measure, so a cached ancestor would otherwise never ask it,
+// and a change to what n wants would lay out a pass late. The re-run
+// ancestors find their other children cached; a change that alters n's
+// layout drops their caches through InvalidateLayout as ever.
+func (n *node) markStyleDirty() {
+	n.styleDirty = true
+	for p := parentNodeOf(n); p != nil; p = parentNodeOf(p) {
+		p.subStyle = true
+	}
+}
+
 // invalidateStyle is the shared body of the self-only style mutators:
 // mark the cascade stale and owe the repaint. The diff-driven subtree
 // and relayout work happens at the next read, in restyle.
 func (n *node) invalidateStyle() {
 	checkLoop("invalidateStyle")
-	n.styleDirty = true
+	n.markStyleDirty()
 	n.Invalidate()
 }
 
@@ -2210,7 +2223,7 @@ func (n *node) invalidateState(changed style.State) {
 // paints from itself: the cascade is marked stale, and only a moved
 // value repaints, the root's subtree included.
 func (n *node) restyleState(w Widget, changed style.State) {
-	n.styleDirty = true
+	n.markStyleDirty()
 	if n.unseen() {
 		return
 	}
@@ -2239,7 +2252,7 @@ func (n *node) invalidateScope(sub, sib bool) {
 	n.invalidateStyle()
 	if sensNow.has && !n.unseen() {
 		for p := parentNodeOf(n); p != nil; p = parentNodeOf(p) {
-			p.styleDirty = true
+			p.markStyleDirty()
 		}
 		markDamage()
 	}

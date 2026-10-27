@@ -131,21 +131,24 @@ type node struct {
 	subInvalid bool
 	extras     []render.Rect
 
-	// measure cache: measuredIn/out memoize the last two Measure
-	// calls once measureSeen; the second slot absorbs the containers
-	// that measure a child twice a frame under two constraint sets (a
-	// row's natural pass and its shrunk pass, an expanding child's
-	// expand and final rects) — the alternation would thrash a single
-	// slot. measureDirty forces a recompute after InvalidateLayout.
-	// The style marks join the key: a stale cascade (or one marked by a
-	// class or state change) drops the entry, since padding, font-size,
-	// and min-* change what the widget wants.
+	// measure cache: measureIn/Out is the most recently used Measure
+	// once measureSeen, and measureOld the two before it, most recent
+	// first. Three slots absorb the containers that measure a child
+	// under several constraint sets a frame (a row's natural and shrunk
+	// passes; a vertical scroll's two overflow probe widths and the
+	// natural height it then arranges at) — fewer would thrash.
+	// measureDirty forces a recompute after InvalidateLayout. The style
+	// marks join the key: a stale cascade (or one marked by a class or
+	// state change) drops every entry, since padding, font-size, and
+	// min-* change what the widget wants.
 	measureSeen  bool
 	measureDirty bool
-	measureIn    Constraints
-	measureOut   Size
-	measureIn2   Constraints
-	measureOut2  Size
+	// subStyle is set while a descendant's cascade is stale
+	// (markStyleDirty): the cached measure re-runs down to it.
+	subStyle   bool
+	measureIn  Constraints
+	measureOut Size
+	measureOld [2]measureEntry
 	// measureCount tallies Measure entries; the zero-recursion pin test
 	// reads it.
 	measureCount int
@@ -389,7 +392,7 @@ func (n *node) SetEnabled(enabled bool) {
 		return
 	}
 	n.disabled = !enabled
-	n.styleDirty = true
+	n.markStyleDirty()
 	n.Invalidate()
 }
 
@@ -476,7 +479,7 @@ func invalidateTree(self Widget) {
 			v.Invalidate()
 		}
 		if n := nodeOf(w); n != nil {
-			n.styleDirty = true
+			n.markStyleDirty()
 		}
 	})
 	markDamage()
@@ -580,10 +583,17 @@ func (n *node) markMeasureDirty() bool {
 	return was
 }
 
+// measureEntry is one older slot of the measure cache.
+type measureEntry struct {
+	in  Constraints
+	out Size
+	ok  bool
+}
+
 func (n *node) dropMeasureCache() {
 	n.measureSeen = false
 	n.measureIn, n.measureOut = Constraints{}, Size{}
-	n.measureIn2, n.measureOut2 = Constraints{}, Size{}
+	n.measureOld = [2]measureEntry{}
 }
 
 // measureHit returns the cached natural size when it is still valid
@@ -592,12 +602,32 @@ func (n *node) dropMeasureCache() {
 // stylesheet load relayouts the tree by stamp, with no walk.
 func (n *node) measureHit(con Constraints) (Size, bool) {
 	n.measureCount++
-	if n.measureSeen && !n.measureDirty && !n.styleDirty && n.styleSeen == styleGen {
-		if n.measureIn == con {
-			return n.measureOut, true
+	if !n.measureSeen || n.measureDirty || n.styleDirty || n.styleSeen != styleGen {
+		if debug.Enabled {
+			noteMeasureMiss(n, con)
 		}
-		if n.measureIn2 == con {
-			return n.measureOut2, true
+		// Every entry predates the invalidation: none may come back
+		// once the recompute below stamps the cache fresh.
+		n.dropMeasureCache()
+		return Size{}, false
+	}
+	if n.subStyle {
+		if debug.Enabled {
+			noteMeasureMiss(n, con)
+		}
+		return Size{}, false
+	}
+	if n.measureIn == con {
+		return n.measureOut, true
+	}
+	for i, e := range n.measureOld {
+		if e.ok && e.in == con {
+			// Most recently used first: measureOut stays the last
+			// measured size the shrink floors read.
+			copy(n.measureOld[1:i+1], n.measureOld[:i])
+			n.measureOld[0] = measureEntry{in: n.measureIn, out: n.measureOut, ok: true}
+			n.measureIn, n.measureOut = e.in, e.out
+			return e.out, true
 		}
 	}
 	if debug.Enabled {
@@ -614,12 +644,14 @@ func (n *node) measureCalls() int { return n.measureCount }
 // and returns it, closing the measureHit pair. The entry is stamped
 // with the style generation it measured under.
 func (n *node) measureStore(con Constraints, s Size) Size {
+	if n.measureSeen && con != n.measureIn {
+		n.measureOld[1] = n.measureOld[0]
+		n.measureOld[0] = measureEntry{in: n.measureIn, out: n.measureOut, ok: true}
+	}
 	n.measureSeen = true
 	n.measureDirty = false
-	if con != n.measureIn {
-		n.measureIn2, n.measureOut2 = n.measureIn, n.measureOut
-		n.measureIn = con
-	}
+	n.subStyle = false
+	n.measureIn = con
 	n.measureOut = s
 	n.styleSeen = styleGen
 	return s
@@ -732,11 +764,11 @@ func hasRelink(p Widget) {
 		return
 	}
 	for a := nodeOf(p); a != nil; a = parentNodeOf(a) {
-		a.styleDirty = true
+		a.markStyleDirty()
 	}
 	for _, k := range appendStyleKids(p, nil) {
 		if kn := nodeOf(k); kn != nil {
-			kn.styleDirty = true
+			kn.markStyleDirty()
 		}
 	}
 	markDamage()
