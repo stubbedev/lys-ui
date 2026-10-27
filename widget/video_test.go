@@ -35,7 +35,7 @@ func testStream(t *testing.T, frames int) *media.Stream {
 	t.Helper()
 	a := &render.Animation{}
 	for range frames {
-		a.Frames = append(a.Frames, halves(red, blue))
+		a.Frames = append(a.Frames, render.NewStillImage(halves(red, blue)))
 		a.Delays = append(a.Delays, 100*time.Millisecond)
 	}
 	src, err := media.NewAnimation(a)
@@ -71,7 +71,7 @@ func pixel(data []byte, stride, x, y int) render.Color {
 func TestVideoFitsTheFrameIntoItsBounds(t *testing.T) {
 	s := testStream(t, 1)
 	v := NewVideo(testFace(t), 13, s)
-	pumpUntil(t, func() bool { img, _ := s.Frame(); return img != nil })
+	pumpUntil(t, func() bool { return s.Frame().RGBA != nil })
 	if got := v.Measure(Constraints{Max: Size{W: 400, H: 400}}); got.W < 4 || got.H < 2 {
 		t.Errorf("natural size %v, want at least the 4x2 frame", got)
 	}
@@ -127,7 +127,7 @@ func TestMediaControlsDriveTheStream(t *testing.T) {
 	s := testStream(t, 20)
 	m := NewMediaControls(testFace(t), 13, s)
 	m.Measure(Constraints{Max: Size{W: 600, H: 100}})
-	pumpUntil(t, func() bool { img, _ := s.Frame(); return img != nil })
+	pumpUntil(t, func() bool { return s.Frame().RGBA != nil })
 	if IsVisible(m.mute) || IsVisible(m.volume) {
 		t.Error("a silent stream shows sound controls")
 	}

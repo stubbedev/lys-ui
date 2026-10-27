@@ -95,7 +95,7 @@ func (v *Video) SetScale(s ImageScale) {
 func (v *Video) Scale() ImageScale { return v.view.scale }
 
 func (v *Video) changed() {
-	if _, seq := v.view.stream.Frame(); seq != v.view.painted {
+	if v.view.stream.Frame().Version != v.view.painted {
 		v.view.Invalidate()
 	}
 	v.syncControls()
@@ -112,8 +112,10 @@ type videoView struct {
 	scale   ImageScale
 	painted uint64
 	raster  *image.RGBA
-	drawn   uint64
-	src     image.Rectangle
+	// rasterID is raster's identity, a new one with every new raster.
+	rasterID render.ImageID
+	drawn    uint64
+	src      image.Rectangle
 	// version moves with every resample into raster.
 	version uint64
 }
@@ -135,10 +137,11 @@ func (p *videoView) Paint(cv *render.Canvas) {
 	if p.stream == nil {
 		return
 	}
-	frame, seq := p.stream.Frame()
-	if frame == nil {
+	frame := p.stream.Frame()
+	if frame.RGBA == nil {
 		return
 	}
+	seq := frame.Version
 	box := cv.MapRect(p.bounds)
 	b := frame.Rect
 	srcRect, dst := render.PlaceImage(b.Dx(), b.Dy(), box.W, box.H, p.scale, render.ImageCentered)
@@ -148,16 +151,16 @@ func (p *videoView) Paint(cv *render.Canvas) {
 	dw, dh, dx, dy := dst.W, dst.H, box.X+dst.X, box.Y+dst.Y
 	p.painted = seq
 	if srcRect.Dx() == dw && srcRect.Dy() == dh {
-		cv.DrawImageDevice(render.VersionedImage{RGBA: frame, Version: seq}.SubImage(srcRect), dx, dy)
+		cv.DrawImageDevice(frame.SubImage(srcRect), dx, dy)
 		return
 	}
 	if p.raster == nil || p.raster.Rect.Dx() != dw || p.raster.Rect.Dy() != dh {
-		p.raster, p.drawn = image.NewRGBA(image.Rect(0, 0, dw, dh)), 0
+		p.raster, p.rasterID, p.drawn = image.NewRGBA(image.Rect(0, 0, dw, dh)), render.NewImageID(), 0
 	}
 	if p.drawn != seq || p.src != srcRect {
-		render.ResampleInto(p.raster, frame, srcRect)
+		render.ResampleInto(p.raster, frame.RGBA, srcRect)
 		p.drawn, p.src = seq, srcRect
 		p.version++
 	}
-	cv.DrawImageDevice(render.VersionedImage{RGBA: p.raster, Version: p.version}, dx, dy)
+	cv.DrawImageDevice(render.VersionedImage{RGBA: p.raster, ID: p.rasterID, Version: p.version}, dx, dy)
 }

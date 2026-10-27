@@ -201,7 +201,7 @@ func borderImageSource(src style.ImageSource, area render.Rect) (render.StillIma
 		if ic == nil {
 			return render.StillImage{}, false
 		}
-		return render.StillImage{RGBA: ic.Image()}, true
+		return ic.Still(), true
 	}
 	if area.Empty() {
 		return render.StillImage{}, false

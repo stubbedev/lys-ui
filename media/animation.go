@@ -11,7 +11,7 @@ import (
 )
 
 type animationSource struct {
-	frames []*image.RGBA
+	frames []render.StillImage
 	starts []time.Duration
 	total  time.Duration
 	next   int

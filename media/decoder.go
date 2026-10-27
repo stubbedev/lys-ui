@@ -3,6 +3,8 @@ package media
 import (
 	"image"
 	"time"
+
+	"github.com/stubbedev/lys-lib/render"
 )
 
 const (
@@ -10,8 +12,16 @@ const (
 	framePool   = decodeAhead + 2
 )
 
-type decoded struct {
+// frameBuf is one of a stream's pooled frame buffers, with the
+// identity a GPU renderer keeps its texture by: the buffer's for its
+// whole life, while the stream's sequence number versions its pixels.
+type frameBuf struct {
 	img *image.RGBA
+	id  render.ImageID
+}
+
+type decoded struct {
+	img *frameBuf
 	pts time.Duration
 	gen int
 	err error
@@ -27,7 +37,7 @@ type decoder struct {
 	seeker Seeker
 	size   image.Rectangle
 	out    chan decoded
-	free   chan *image.RGBA
+	free   chan *frameBuf
 	seek   chan seekRequest
 	quit   chan struct{}
 	done   chan struct{}
@@ -37,7 +47,7 @@ func startDecoder(src Source, seeker Seeker, info Info) *decoder {
 	d := &decoder{
 		src: src, seeker: seeker, size: image.Rect(0, 0, info.Width, info.Height),
 		out:  make(chan decoded, decodeAhead),
-		free: make(chan *image.RGBA, framePool),
+		free: make(chan *frameBuf, framePool),
 		seek: make(chan seekRequest, 1),
 		quit: make(chan struct{}),
 		done: make(chan struct{}),
@@ -51,7 +61,7 @@ func (d *decoder) run() {
 	var (
 		gen       int
 		atEnd     bool
-		buf       *image.RGBA
+		buf       *frameBuf
 		allocated int
 		pending   *decoded
 	)
@@ -89,7 +99,7 @@ func (d *decoder) run() {
 			}
 			continue
 		case buf == nil && allocated < framePool:
-			buf = image.NewRGBA(d.size)
+			buf = &frameBuf{img: image.NewRGBA(d.size), id: render.NewImageID()}
 			allocated++
 		case buf == nil:
 			select {
@@ -101,7 +111,7 @@ func (d *decoder) run() {
 				return
 			}
 		}
-		pts, err := d.src.ReadFrame(buf)
+		pts, err := d.src.ReadFrame(buf.img)
 		msg := decoded{pts: pts, gen: gen, err: err}
 		if err == nil {
 			msg.img, buf = buf, nil
@@ -126,7 +136,7 @@ func (d *decoder) requestSeek(r seekRequest) {
 	}
 }
 
-func (d *decoder) recycle(img *image.RGBA) {
+func (d *decoder) recycle(img *frameBuf) {
 	if img == nil {
 		return
 	}

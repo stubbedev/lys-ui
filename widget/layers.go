@@ -139,7 +139,7 @@ func tileAxis(k style.TileKind, pos style.AxisPos, start, area, size float64) (f
 // the rounded clip box.
 func paintLayerImage(cv *render.Canvas, img layerImage, t render.Tile, clip render.Rect, radii render.Corners) {
 	if img.icon != nil {
-		cv.PaintImageTiles(render.StillImage{RGBA: img.icon.Image()}, t, clip, radii)
+		cv.PaintImageTiles(img.icon.Still(), t, clip, radii)
 		return
 	}
 	if img.grain > 0 {

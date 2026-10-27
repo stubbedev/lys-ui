@@ -3,10 +3,11 @@ package media
 import (
 	"errors"
 	"fmt"
-	"image"
 	"io"
 	"slices"
 	"time"
+
+	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
 )
@@ -46,7 +47,7 @@ type Stream struct {
 	anchorPos time.Duration
 
 	gen, curGen, eofGen int
-	cur                 *image.RGBA
+	cur                 *frameBuf
 	frameSeq            uint64
 	queue               []decoded
 	lastPTS, prevPTS    time.Duration
@@ -142,10 +143,16 @@ func (s *Stream) Closed() bool { return s.closed }
 // Err returns the failure that stopped the stream, nil while healthy.
 func (s *Stream) Err() error { return s.err }
 
-// Frame returns the frame to show, nil before the first is decoded,
-// and a sequence number that changes whenever the frame does. The
-// image belongs to the stream and stays valid until the next change.
-func (s *Stream) Frame() (*image.RGBA, uint64) { return s.cur, s.frameSeq }
+// Frame returns the frame to show, its RGBA nil before the first is
+// decoded: a pooled buffer's pixels under the buffer's identity, at a
+// version that changes whenever the frame does. The image belongs to
+// the stream and stays valid until the next change.
+func (s *Stream) Frame() render.VersionedImage {
+	if s.cur == nil {
+		return render.VersionedImage{Version: s.frameSeq}
+	}
+	return render.VersionedImage{RGBA: s.cur.img, ID: s.cur.id, Version: s.frameSeq}
+}
 
 // Subscribe calls fn on the loop after every change; cancel stops it.
 func (s *Stream) Subscribe(fn func()) (cancel func()) {

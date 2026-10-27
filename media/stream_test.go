@@ -145,8 +145,8 @@ func (h *harness) settle() {
 
 func (h *harness) frame() int {
 	h.t.Helper()
-	img, _ := h.s.Frame()
-	if img == nil {
+	img := h.s.Frame()
+	if img.RGBA == nil {
 		h.t.Fatal("no frame")
 	}
 	return int(img.Pix[0])

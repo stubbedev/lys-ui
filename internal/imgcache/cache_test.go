@@ -5,6 +5,8 @@ import (
 	"image"
 	"image/color"
 	"testing"
+
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // redRGBA returns a fresh w x h red raster; every entry gets its own
@@ -51,7 +53,10 @@ func TestSourceDecodesOnce(t *testing.T) {
 	}
 }
 
-func TestSourceNormalizesToRGBA(t *testing.T) {
+// A decoded source comes back premultiplied as a still image with an
+// identity, the same on every hit, so every widget showing it shares
+// one GPU texture.
+func TestSourceNormalizesToAnIdentifiedStillImage(t *testing.T) {
 	c := New()
 	src := image.NewNRGBA(image.Rect(0, 0, 2, 1))
 	src.SetNRGBA(0, 0, color.NRGBA{R: 0x10, G: 0x20, B: 0x30, A: 0x40})
@@ -61,9 +66,12 @@ func TestSourceNormalizesToRGBA(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rgba, ok := img.(*image.RGBA)
-	if !ok {
-		t.Fatalf("Source returned %T, want *image.RGBA", img)
+	rgba, ok := img.(render.StillImage)
+	if !ok || rgba.ID == 0 {
+		t.Fatalf("Source returned %T (%v), want a render.StillImage with an identity", img, rgba.ID)
+	}
+	if again, _ := c.Source("k", func() (image.Image, error) { return src, nil }); again.(render.StillImage).ID != rgba.ID {
+		t.Error("a cache hit returned the source under another identity")
 	}
 	// Premultiplied: alpha 0x40 scales the channels down.
 	if got, want := rgba.RGBAAt(0, 0), (color.RGBA{R: 0x04, G: 0x08, B: 0x0c, A: 0x40}); got != want {

@@ -103,7 +103,7 @@ func checkerboard() render.StillImage {
 			img.Set(x, y, color.RGBA{R: c.R(), G: c.G(), B: c.B(), A: c.A()})
 		}
 	}
-	checkerboards[key] = render.StillImage{RGBA: img}
+	checkerboards[key] = render.NewStillImage(img)
 	return checkerboards[key]
 }
 

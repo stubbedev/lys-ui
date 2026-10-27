@@ -65,7 +65,7 @@ func (s *ScreenPick) Paint(cv *render.Canvas) {
 		return
 	}
 	if s.scaled.RGBA == nil || s.scaledSrc != src || s.scaled.Rect.Dx() != dw || s.scaled.Rect.Dy() != dh {
-		s.scaled, s.scaledSrc = render.StillImage{RGBA: render.Resample(s.img, src, dw, dh)}, src
+		s.scaled, s.scaledSrc = render.NewStillImage(render.Resample(s.img, src, dw, dh)), src
 	}
 	cv.DrawImageDevice(s.scaled, s.fit.X, s.fit.Y)
 }

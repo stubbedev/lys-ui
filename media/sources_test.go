@@ -27,7 +27,7 @@ func solid(c color.RGBA) *image.RGBA {
 
 func TestAnimationPlaysItsFramesOnTheirDelays(t *testing.T) {
 	a := &render.Animation{
-		Frames: []*image.RGBA{solid(color.RGBA{1, 0, 0, 255}), solid(color.RGBA{2, 0, 0, 255}), solid(color.RGBA{3, 0, 0, 255})},
+		Frames: []render.StillImage{render.NewStillImage(solid(color.RGBA{1, 0, 0, 255})), render.NewStillImage(solid(color.RGBA{2, 0, 0, 255})), render.NewStillImage(solid(color.RGBA{3, 0, 0, 255}))},
 		Delays: []time.Duration{100 * time.Millisecond, 50 * time.Millisecond, 200 * time.Millisecond},
 	}
 	src, err := NewAnimation(a)

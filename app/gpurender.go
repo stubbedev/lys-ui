@@ -215,7 +215,12 @@ func (r *gpuRenderer) NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) 
 func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, paint func(cv *render.Canvas)) (bool, error) {
 	cv := r.rec.ResetRecorder(b.Width, b.Height, num, scale.Denom)
 	paint(cv)
-	if err := r.render(cv.Recording(), b.Target); err != nil {
+	err := r.render(cv.Recording(), b.Target)
+	// The recording is done once drawn: ending it now releases the
+	// rasters retired while it was open (render.Retire), which an idle
+	// window would otherwise hold back until its next frame.
+	cv.Recording().End()
+	if err != nil {
 		if r.required {
 			return false, fmt.Errorf("app: GPU frame: %w", err)
 		}

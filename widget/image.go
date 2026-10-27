@@ -169,7 +169,8 @@ type Image struct {
 // NewImage returns an image widget around a decoded image. The widget
 // keeps the reference; treat it as read-only after handoff. To show
 // changed pixels, SetImage the raster again, as a render.VersionedImage
-// at its next version so a GPU renderer updates its texture in place.
+// at its next version and with the ID it keeps for the raster
+// (render.NewImageID), so a GPU renderer updates its texture in place.
 // A nil img paints nothing.
 func NewImage(img image.Image) *Image {
 	im := &Image{}
@@ -309,10 +310,6 @@ func (im *Image) Paint(cv *render.Canvas) {
 	}
 	box := cv.MapRect(im.bounds)
 	pic, frame := im.currentFrame()
-	if rgba, ok := pic.(*image.RGBA); ok {
-		// An animation's frame: decoded once, never changed.
-		pic = render.StillImage{RGBA: rgba}
-	}
 	b := pic.Bounds()
 	fit, pos := im.placement(cv, box)
 	srcRect, dst := render.PlaceImage(b.Dx(), b.Dy(), box.W, box.H, fit, pos)
@@ -343,7 +340,7 @@ func (im *Image) Paint(cv *render.Canvas) {
 	}, func() *image.RGBA {
 		return render.Resample(pic, srcRect, dw, dh)
 	})
-	cv.DrawImageDevice(render.StillImage{RGBA: raster}, dx, dy)
+	cv.DrawImageDevice(raster, dx, dy)
 }
 
 // placement is the scale policy and position the image draws by in
@@ -515,16 +512,23 @@ func decodeImageData(data []byte, name string) (image.Image, error) {
 	return heldImage(img), nil
 }
 
-// heldImage is img as a widget holds an image handed to it read-only:
-// a still, versioned or animated image as it is, an *image.RGBA as a
-// still image over the same pixels, and any other image converted once
-// (render.Still), so a GPU renderer keeps each as a texture.
+// heldImage is img as a widget holds an image handed to it read-only,
+// each raster with the identity a GPU renderer keeps its texture by: a
+// versioned or animated image as it is (their owners keep the
+// identity), a still image or an *image.RGBA as a still image over the
+// same pixels with an identity of its own when it has none, and any
+// other image converted once (render.Still).
 func heldImage(img image.Image) image.Image {
 	switch v := img.(type) {
-	case nil, render.StillImage, render.VersionedImage, *render.Animation:
+	case nil, render.VersionedImage, *render.Animation:
 		return img
+	case render.StillImage:
+		if v.ID == 0 {
+			v.ID = render.NewImageID()
+		}
+		return v
 	case *image.RGBA:
-		return render.StillImage{RGBA: v}
+		return render.NewStillImage(v)
 	}
 	return render.Still(img)
 }

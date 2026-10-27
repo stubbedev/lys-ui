@@ -11,6 +11,8 @@ import (
 	"image"
 	"image/draw"
 	"sync"
+
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // DefaultEntryLimit is the process-wide entry budget. A bar holds a
@@ -127,20 +129,22 @@ func (c *Cache) Source(key string, decode func() (image.Image, error)) (image.Im
 }
 
 // Raster returns the resampled raster for key, calling build once on a
-// miss. Resampling cannot fail, so neither does this.
-func (c *Cache) Raster(key RasterKey, build func() *image.RGBA) *image.RGBA {
+// miss, as a still image with its own identity, so every widget drawing
+// it shares one GPU texture. Resampling cannot fail, so neither does
+// this.
+func (c *Cache) Raster(key RasterKey, build func() *image.RGBA) render.StillImage {
 	c.mu.Lock()
 	if e, ok := c.items[key]; ok {
 		c.touchLocked(e)
 		c.hits++
 		c.mu.Unlock()
-		raster, _ := e.img.(*image.RGBA)
+		raster, _ := e.img.(render.StillImage)
 		return raster
 	}
 	c.misses++
 	c.mu.Unlock()
 
-	img := build()
+	img := render.NewStillImage(build())
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.storeLocked(&entry{key: key, img: img, bytes: pixelBytes(img.Rect)})
@@ -244,10 +248,11 @@ func (c *Cache) removeLocked(e *entry) {
 	delete(c.items, e.key)
 }
 
-// normalize converts a decoded image into a premultiplied *image.RGBA
-// and reports its byte cost. A nil input (a decode failure) costs zero.
-// An image that reports its own cost (an animation's frames) is kept
-// as is: flattening it would drop all but its first frame.
+// normalize converts a decoded image into a premultiplied still image
+// with an identity, which every widget showing it shares, and reports
+// its byte cost. A nil input (a decode failure) costs zero. An image
+// that reports its own cost (an animation's frames) is kept as is:
+// flattening it would drop all but its first frame.
 func normalize(img image.Image) (image.Image, int) {
 	if img == nil {
 		return nil, 0
@@ -255,13 +260,19 @@ func normalize(img image.Image) (image.Image, int) {
 	if c, ok := img.(interface{ PixelBytes() int }); ok {
 		return img, c.PixelBytes()
 	}
-	rgba, ok := img.(*image.RGBA)
-	if !ok {
-		b := img.Bounds()
-		rgba = image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
-		draw.Draw(rgba, rgba.Bounds(), img, b.Min, draw.Src)
+	switch v := img.(type) {
+	case render.StillImage:
+		if v.ID == 0 {
+			v.ID = render.NewImageID()
+		}
+		return v, pixelBytes(v.Rect)
+	case *image.RGBA:
+		return render.NewStillImage(v), pixelBytes(v.Rect)
 	}
-	return rgba, pixelBytes(rgba.Rect)
+	b := img.Bounds()
+	rgba := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(rgba, rgba.Bounds(), img, b.Min, draw.Src)
+	return render.NewStillImage(rgba), pixelBytes(rgba.Rect)
 }
 
 func pixelBytes(r image.Rectangle) int {
