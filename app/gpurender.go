@@ -258,6 +258,22 @@ func (a *Application) popupRenderer() popup.Renderer {
 	return a.gpu
 }
 
+// ForgetImage drops the GPU's copy of the raster id names once the
+// frame drawing it is done, instead of after it idles out: an owner
+// that frees a raster's pixels (render.Retire), or stops showing a large
+// one for good, calls it so the texture goes with them. Drawing on the
+// CPU there is no copy to drop. Call it on the event-loop goroutine. A
+// zero id, no identity, panics: such a raster is the garbage
+// collector's to free.
+func (a *Application) ForgetImage(id render.ImageID) {
+	if id == 0 {
+		panic("app: ForgetImage of a raster without an ImageID")
+	}
+	if a.gpu != nil {
+		a.gpu.dev.Forget(id)
+	}
+}
+
 // closeRenderer releases the GPU once every window has gone.
 func (a *Application) closeRenderer() {
 	if a.gpu != nil {

@@ -292,3 +292,16 @@ func TestGPUReusedBufferCopiesForward(t *testing.T) {
 		}
 	}
 }
+
+// ForgetImage drops a raster's GPU copy where there is a GPU and does
+// nothing on the CPU; a raster without an identity is a caller bug.
+func TestForgetImage(t *testing.T) {
+	a := &Application{}
+	a.ForgetImage(render.NewImageID())
+	defer func() {
+		if recover() == nil {
+			t.Error("ForgetImage(0) did not panic")
+		}
+	}()
+	a.ForgetImage(0)
+}
