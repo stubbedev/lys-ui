@@ -964,9 +964,13 @@ func (a *Application) tick(step func() error, now time.Time) error {
 // every 2 s), so a steady frame rate never frees and reallocates.
 const bufferTrimInterval = 5 * time.Second
 
-// armTrim starts the buffer trim timer once a window holds a spare.
+// armTrim starts the buffer trim timer once a window holds a spare or
+// the GPU drew.
 func (a *Application) armTrim() {
-	if a.stopTrim != nil || !slices.ContainsFunc(a.windows, func(w *hostWindow) bool { return w.pool.Spares() }) {
+	if a.stopTrim != nil {
+		return
+	}
+	if !slices.ContainsFunc(a.windows, func(w *hostWindow) bool { return w.pool.Spares() }) && (a.gpu == nil || !a.gpu.drawn) {
 		return
 	}
 	a.stopTrim = a.Every(bufferTrimInterval, a.trimBuffers)
@@ -974,14 +978,19 @@ func (a *Application) armTrim() {
 
 // trimBuffers frees the spare buffers no frame took since the last
 // trim (buffer.Pool.Trim): a wallpaper drawn once keeps one 4K buffer
-// instead of three. The timer stops once no window holds a spare, so
-// an idle application parks without waking for it.
+// instead of three. A GPU device that drew nothing for a whole interval
+// gives back its scratch canvases and staging too (trimIdle). The timer
+// stops once no window holds a spare and the device is trimmed, so an
+// idle application parks without waking for it.
 func (a *Application) trimBuffers() {
 	spares := false
 	for _, w := range a.windows {
 		w.pool.Trim()
 		w.noteFootprint()
 		spares = spares || w.pool.Spares()
+	}
+	if a.gpu != nil && a.gpu.trimIdle() {
+		spares = true
 	}
 	if !spares {
 		a.stopTrim()

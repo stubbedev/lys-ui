@@ -305,3 +305,44 @@ func TestForgetImage(t *testing.T) {
 	}()
 	a.ForgetImage(0)
 }
+
+// The buffer trim gives an idle GPU device's scratch back once it has
+// drawn nothing for a whole interval, keeps the timer running while it
+// draws, and trims it once, not on every tick.
+func TestGPUTrimWaitsForAnIdleDevice(t *testing.T) {
+	if _, err := gputest.SetupTest(t); err != nil {
+		t.Fatal(err)
+	}
+	dev, err := gpu.Open()
+	if err != nil {
+		if gputest.Enabled() {
+			t.Fatal(err)
+		}
+		t.Skipf("no GPU: %v", err)
+	}
+	t.Cleanup(dev.Close)
+	tg, err := dev.NewOffscreen(16, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render}
+	b := &buffer.Buffer{Width: 16, Height: 16, Scale: 1, Target: tg}
+	if ok, err := r.Frame(b, 120, func(cv *render.Canvas) { cv.Clear(cv.Rect(), render.RGB(1, 2, 3)) }); !ok || err != nil {
+		t.Fatalf("frame: %v, %v", ok, err)
+	}
+	a := &Application{gpu: r}
+	a.armTrim()
+	if a.stopTrim == nil {
+		t.Fatal("a GPU frame armed no trim")
+	}
+	if !r.trimIdle() || r.trimmed {
+		t.Error("a device that just drew was trimmed")
+	}
+	if r.trimIdle() || !r.trimmed {
+		t.Error("a device idle for an interval was not trimmed")
+	}
+	a.trimBuffers()
+	if a.stopTrim != nil {
+		t.Error("the trim timer kept running for a trimmed, idle device")
+	}
+}

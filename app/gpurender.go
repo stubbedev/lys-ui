@@ -54,6 +54,28 @@ type gpuRenderer struct {
 	hasNode bool
 	// render is the device's Render, a seam for tests.
 	render func(*render.List, *gpu.Target) error
+	// drawn marks a frame since the buffer trim last looked, and
+	// trimmed a device trimmed since its last frame (trimIdle).
+	drawn, trimmed bool
+}
+
+// trimIdle trims the device once it has drawn nothing for a whole trim
+// interval: its scratch canvases and oversized staging go back, which a
+// device still drawing would only allocate again. It reports whether
+// the device drew since the last look, so the trim timer keeps running
+// until it has gone idle.
+func (r *gpuRenderer) trimIdle() bool {
+	if r.drawn {
+		r.drawn = false
+		return true
+	}
+	if !r.trimmed {
+		r.trimmed = true
+		if err := r.dev.Trim(); err != nil {
+			r.fail(fmt.Errorf("app: trim the GPU device: %w", err))
+		}
+	}
+	return false
 }
 
 // fail records a frame error and reports the switch to the CPU, once.
@@ -213,6 +235,7 @@ func (r *gpuRenderer) NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) 
 // scale.Denom. A failed frame turns every surface to the CPU (fail)
 // and reports false; with the GPU required it is the error.
 func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, paint func(cv *render.Canvas)) (bool, error) {
+	r.drawn, r.trimmed = true, false
 	cv := r.rec.ResetRecorder(b.Width, b.Height, num, scale.Denom)
 	paint(cv)
 	err := r.render(cv.Recording(), b.Target)
