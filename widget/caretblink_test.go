@@ -1,6 +1,8 @@
 package widget
 
 import (
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -86,5 +88,41 @@ func TestCaretDoesNotBlinkUnderReducedMotion(t *testing.T) {
 	}
 	if e.blink.cancel != nil {
 		t.Error("a blink started under reduced motion")
+	}
+}
+
+// Clicking moves the caret and repaints it where it was and where it
+// is, nothing more; a drag repaints the rows its selection covers
+// (#400).
+func TestTextAreaClickRepaintsTheCaret(t *testing.T) {
+	ta := NewTextArea(testFace(t), 14, render.RGB(255, 255, 255))
+	lines := make([]string, 30)
+	for i := range lines {
+		lines[i] = "a line of text in the area"
+	}
+	ta.SetText(strings.Join(lines, "\n"))
+	root := NewBox(Column, 0, 0)
+	root.Append(ta, true)
+	arrangeTree(t, root, 300, 600)
+	r := &Router{Root: root}
+	if err := r.SetFocus(ta); err != nil {
+		t.Fatal(err)
+	}
+	CollectDamage(root)
+	old, _ := ta.caretRect()
+	ta.ClickAt(Point{X: ta.Bounds().X + 60, Y: ta.Bounds().Y + 200})
+	now, _ := ta.caretRect()
+	if now == old {
+		t.Fatal("the click did not move the caret")
+	}
+	rects, _ := CollectDamage(root)
+	if len(rects) != 2 || !slices.Contains(rects, old) || !slices.Contains(rects, now) {
+		t.Errorf("the click damaged %v, want the caret where it was %v and is %v", rects, old, now)
+	}
+	ta.DragMove(Point{X: ta.Bounds().X + 120, Y: ta.Bounds().Y + 260})
+	rects, _ = CollectDamage(root)
+	band := render.UnionAll(rects)
+	if band.Empty() || band.H >= ta.Bounds().H/2 {
+		t.Errorf("the drag damaged %v, want the rows its selection covers", band)
 	}
 }

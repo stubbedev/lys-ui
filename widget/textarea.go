@@ -1210,10 +1210,14 @@ func (t *TextArea) Paint(cv *render.Canvas) {
 // keyboard focus; none while the input method hides its composing
 // caret.
 func (t *TextArea) caretRect() (render.Rect, bool) {
+	return t.caretRectAt(t.caretPos())
+}
+
+// caretRectAt is caretRect for a caret at caret.
+func (t *TextArea) caretRectAt(caret pos) (render.Rect, bool) {
 	if !t.focused || (t.composing() && t.peCur < 0) {
 		return render.Rect{}, false
 	}
-	caret := t.caretPos()
 	lsh := t.shapeLine(t.lines[caret.line])
 	adv := 0
 	if caret.col < len(t.lines[caret.line]) {
@@ -1310,6 +1314,7 @@ func (t *TextArea) posAt(p Point) pos {
 // dropping the composing display.
 func (t *TextArea) ClickAt(p Point) {
 	t.clearPreedit()
+	defer t.repaintMove(t.cursor, t.anchor)
 	t.cursor = t.posAt(p)
 	t.anchor = t.cursor
 	switch userSelectOf(t) {
@@ -1326,12 +1331,40 @@ func (t *TextArea) ClickAt(p Point) {
 // outside the viewport.
 func (t *TextArea) DragMove(p Point) {
 	t.clearPreedit()
+	defer t.repaintMove(t.cursor, t.anchor)
 	t.autoPan(p)
 	t.cursor = t.posAt(p)
 	if userSelectOf(t) == style.SelectNone {
 		t.anchor = t.cursor
 	}
 	t.hasPref = false
+}
+
+// repaintMove damages what moving the cursor and anchor from cur and
+// anc changed: the caret where it was and where it is, and every row a
+// selection covers before or after the move.
+func (t *TextArea) repaintMove(cur, anc pos) {
+	if r, ok := t.caretRectAt(cur); ok {
+		t.InvalidateRect(r)
+	}
+	if r, ok := t.caretRectAt(t.cursor); ok {
+		t.InvalidateRect(r)
+	}
+	if cur == anc && t.cursor == t.anchor {
+		return
+	}
+	lo, hi := cur, cur
+	for _, p := range []pos{anc, t.cursor, t.anchor} {
+		if p.line < lo.line || p.line == lo.line && p.col < lo.col {
+			lo = p
+		}
+		if p.line > hi.line || p.line == hi.line && p.col > hi.col {
+			hi = p
+		}
+	}
+	lineH := t.lineHeight()
+	top := t.textRect().Y + t.rowOf(lo)*lineH
+	t.InvalidateRect(render.Rect{X: t.bounds.X, Y: top, W: t.bounds.W, H: (t.rowOf(hi) - t.rowOf(lo) + 1) * lineH})
 }
 
 // autoPan pans the clicked line one drag step when p passes the
