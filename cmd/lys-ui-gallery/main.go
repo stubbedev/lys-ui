@@ -667,7 +667,7 @@ func (g *gallery) demos(send func(galleryMsg)) []demo {
 				widget.NavigationLink{Title: "Hover Card", Description: "Preview content behind a link."},
 			)},
 			widget.NavigationMenuItem{Label: "Docs", OnActivate: func() {}},
-		).Ref(&navMenu), widget.AlignStart)).opens(click, leading(&navMenu, 40)).room(640, 300),
+		).Ref(&navMenu), widget.AlignStart)).opens(hover, leading(&navMenu, 40)).room(640, 300),
 		section("Pagination", ui.Pagination(10, 5)),
 		section("Popover", ui.Aligned(ui.Button(ui.Label("Open popover"), 0, 0).Classes(css.Outline).Ref(&g.popoverButton).OnClick(g.popover), widget.AlignStart)).opens(click, center(&g.popoverButton)).room(400, 360),
 		section("Progress", ui.Aligned(ui.ProgressBar(0.66).SizeRequest(360, 0), widget.AlignStart)),
