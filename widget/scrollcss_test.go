@@ -129,6 +129,21 @@ func TestScrollSnapResnapOnResize(t *testing.T) {
 
 // scroll-snap-align: center aligns the child's middle with the
 // viewport's; scroll-snap-stop: always clamps a target that would skip
+// A snap position past the scrollable range clamps into it (css-scroll-snap-1
+// §6.1): the first of end-aligned rows sits at the top, so a mandatory
+// scroll at rest there stays through every relayout instead of jumping
+// to the next row. Regression: the first row's -40 stayed unclamped,
+// and a relayout snapped from 0 to 20, the nearer of -40 and 20.
+func TestScrollSnapClampsPositionsToTheRange(t *testing.T) {
+	s, _ := newSnapScroll(t, `scrolledwindow { scroll-snap-type: y mandatory; } .end { scroll-snap-align: end; }`, "end", 60, 100, 5)
+	for range 3 {
+		s.Arrange(render.Rect{W: 60, H: 100})
+	}
+	if _, offY := s.Offset(); offY != 0 {
+		t.Errorf("at rest at the top the scroll moved to %d, want 0", offY)
+	}
+}
+
 // an always panel.
 func TestScrollSnapAlignCenterAndStop(t *testing.T) {
 	s, _ := newSnapScroll(t, `scrolledwindow { scroll-snap-type: y mandatory; } .snap { scroll-snap-align: center; }`, "snap", 60, 60, 2)

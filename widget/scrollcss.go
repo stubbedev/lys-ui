@@ -181,7 +181,8 @@ func (s *Scroll) snapAxisTo(axis Axis, target int, mandatory bool) int {
 // snapPoints walks the scrolled content for snap areas — descendants
 // whose scroll-snap-align names an edge on axis — and returns the
 // offsets that align each in the viewport, inset by the container's
-// scroll-padding, ascending. The positions come from the children's
+// scroll-padding, ascending, held inside the scrollable range
+// (css-scroll-snap-1 §6.1). The positions come from the children's
 // last arranged bounds against the current offset, so they stay right
 // through a scroll and re-snap on a relayout.
 func (s *Scroll) snapPoints(axis Axis) []snapPoint {
@@ -189,6 +190,11 @@ func (s *Scroll) snapPoints(axis Axis) []snapPoint {
 		return nil
 	}
 	pad := s.scrollPadding()
+	maxX, maxY := s.scrollMax()
+	limit := maxY
+	if axis == Row {
+		limit = maxX
+	}
 	var pts []snapPoint
 	eachDescendant(s.child, func(k Widget) {
 		n := nodeOf(k)
@@ -212,7 +218,7 @@ func (s *Scroll) snapPoints(axis Axis) []snapPoint {
 		if !ok {
 			return
 		}
-		pts = append(pts, snapPoint{pos: pos, always: v.SnapStopAlways})
+		pts = append(pts, snapPoint{pos: min(max(pos, 0), limit), always: v.SnapStopAlways})
 	})
 	slices.SortFunc(pts, func(a, b snapPoint) int { return a.pos - b.pos })
 	return pts
