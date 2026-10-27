@@ -215,7 +215,7 @@ func (pc *Painter) Pass() (bool, error) {
 		pc.mapped = true
 		p.checkSide(intconv.Int32(h))
 	}
-	debug.Log("frame", "popup %d frame %dx%d", pc.surf.Id(), b.Width, b.Height)
+	debug.Log("frame", "popup %d committed %dx%d", pc.surf.Id(), b.Width, b.Height)
 	return true, nil
 }
 

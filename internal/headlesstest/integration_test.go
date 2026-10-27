@@ -1086,12 +1086,12 @@ func TestHeadlessPopoverTakesTypingAndRepaints(t *testing.T) {
 	// The layer takes the keyboard as the popover opens.
 	waitKeyboard(t, w)
 	// The open popover's first frame is the size to grow past.
-	first, err := w.Wait("frame", "popup ", traceTimeout)
+	first, err := w.Wait("frame", " committed ", traceTimeout)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var id, fw, fh int
-	if _, err := fmt.Sscanf(first.Message, "popup %d frame %dx%d", &id, &fw, &fh); err != nil {
+	if _, err := fmt.Sscanf(first.Message, "popup %d committed %dx%d", &id, &fw, &fh); err != nil {
 		t.Fatalf("bad frame trace %q: %v", first.Message, err)
 	}
 	if err := in.TypeText("hi"); err != nil {
@@ -1107,12 +1107,12 @@ func TestHeadlessPopoverTakesTypingAndRepaints(t *testing.T) {
 	}
 	grew := false
 	for range 20 {
-		tr, err := w.Wait("frame", "popup ", traceTimeout)
+		tr, err := w.Wait("frame", " committed ", traceTimeout)
 		if err != nil {
 			break
 		}
 		var gid, gw, gh int
-		if _, err := fmt.Sscanf(tr.Message, "popup %d frame %dx%d", &gid, &gw, &gh); err == nil && gid == id && gh > fh {
+		if _, err := fmt.Sscanf(tr.Message, "popup %d committed %dx%d", &gid, &gw, &gh); err == nil && gid == id && gh > fh {
 			grew = true
 			break
 		}
@@ -1123,7 +1123,7 @@ func TestHeadlessPopoverTakesTypingAndRepaints(t *testing.T) {
 	// The ticker changes the label every 100ms with no input arriving:
 	// an app-loop popover paints each change.
 	for i := range 3 {
-		if _, err := w.Wait("frame", "popup ", traceTimeout); err != nil {
+		if _, err := w.Wait("frame", " committed ", traceTimeout); err != nil {
 			t.Fatalf("popover frame %d after the timer change never painted: %v\n%s", i, err, tailTraces(w, 25))
 		}
 	}
