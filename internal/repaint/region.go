@@ -25,6 +25,8 @@ type Region struct {
 	seen uint64
 	// dev is the scratch the device rects of a frame are built in.
 	dev []render.Rect
+	// drained is the scratch a tree's damage drains into.
+	drained []render.Rect
 }
 
 // Collect drains root's invalidations into the region, clipped to
@@ -37,8 +39,9 @@ func (r *Region) Collect(root widget.Widget, bounds render.Rect) bool {
 		return false
 	}
 	r.seen = gen
-	rects, damaged := widget.CollectDamage(root)
-	r.Add(bounds, rects...)
+	var damaged bool
+	r.drained, damaged = widget.CollectDamageInto(r.drained, root)
+	r.Add(bounds, r.drained...)
 	return damaged
 }
 

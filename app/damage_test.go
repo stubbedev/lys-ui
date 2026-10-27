@@ -101,6 +101,8 @@ type paintHarness struct {
 	wnd  *hostWindow
 	surf *fakeSurface
 	bufs []*buffer.Buffer
+	// stale is frame's scratch: the buffers busy before the frame.
+	stale []*buffer.Buffer
 }
 
 func newPaintHarness(root widget.Widget, w, hgt int) *paintHarness {
@@ -136,17 +138,17 @@ func newPaintHarness(root widget.Widget, w, hgt int) *paintHarness {
 // handed back by now (every buffer busy before this frame). It returns
 // the pixels written and the damage rects sent on the wire.
 func (h *paintHarness) frame() (int, []render.Rect) {
-	var stale []*buffer.Buffer
+	h.stale = h.stale[:0]
 	for _, b := range h.bufs {
 		if b.Busy() {
-			stale = append(stale, b)
+			h.stale = append(h.stale, b)
 		}
 	}
 	h.wnd.dirty = true
 	if !h.wnd.draw() {
 		panic(h.wnd.drawErr)
 	}
-	for _, b := range stale {
+	for _, b := range h.stale {
 		b.Release()
 	}
 	return h.wnd.paintedPixels, h.wnd.lastDamage

@@ -83,8 +83,16 @@ func markDamage() { damageGen.Add(1) }
 // flags, so an empty result means the tree paints identically to the
 // last frame.
 func CollectDamage(root Widget) (rects []render.Rect, any bool) {
+	return CollectDamageInto(nil, root)
+}
+
+// CollectDamageInto is CollectDamage reusing buf's storage for the
+// rects, so a frame loop that keeps its buffer drains without
+// allocating.
+func CollectDamageInto(buf []render.Rect, root Widget) (rects []render.Rect, any bool) {
+	rects = buf[:0]
 	if root == nil {
-		return nil, false
+		return rects, false
 	}
 	damageWalks.Add(1)
 	backdropReach = backdropReach[:0]

@@ -3,10 +3,12 @@ package repaint
 import (
 	"testing"
 
+	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/scale"
+	"github.com/stubbedev/lys-ui/widget"
 )
 
 // A plan repaints what the surface owes and what the buffer is stale
@@ -33,5 +35,32 @@ func TestPlan(t *testing.T) {
 	}
 	if !r.Empty() {
 		t.Error("the plan left the owed rects pending")
+	}
+}
+
+// Draining a damaged tree reuses the region's buffers: a frame that
+// collects and plans its damage allocates nothing. Regression: every
+// drain built a fresh slice of the tree's rects.
+func TestCollectAllocatesNothing(t *testing.T) {
+	if debug.Enabled {
+		t.Skip("lysdebug names every drained rect")
+	}
+	root := widget.NewBox(widget.Column, 0, 0)
+	bar := widget.NewProgressBar(0)
+	root.Append(bar, false)
+	root.Arrange(render.Rect{W: 100, H: 50})
+	bounds := render.Rect{W: 100, H: 50}
+	b := &buffer.Buffer{Width: 100, Height: 50}
+	var r Region
+	frame := func() {
+		bar.Invalidate()
+		if !r.Collect(root, bounds) {
+			t.Fatal("an invalidated bar left nothing to collect")
+		}
+		r.Plan(b, scale.Denom)
+	}
+	frame()
+	if allocs := testing.AllocsPerRun(50, frame); allocs != 0 {
+		t.Errorf("a damaged frame allocates %v, want nothing", allocs)
 	}
 }
