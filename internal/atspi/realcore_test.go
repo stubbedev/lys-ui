@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -37,13 +39,14 @@ func TestRealAtSpi2Core(t *testing.T) {
 	// socket inherited").
 	launcher := exec.Command(filepath.Join(libexec, "at-spi-bus-launcher"), "--launch-immediately")
 	launcher.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtime, "ATSPI_DBUS_IMPLEMENTATION=dbus-daemon")
+	// The launcher spawns the accessibility bus's dbus-daemon, which
+	// outlives a killed launcher: the launcher leads a process group of
+	// its own, and the whole group goes at cleanup.
+	launcher.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := launcher.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() {
-		_ = launcher.Process.Kill()
-		_ = launcher.Wait()
-	})
+	t.Cleanup(func() { killGroup(t, launcher, runtime) })
 
 	// The launcher owns org.a11y.Bus once the accessibility bus runs.
 	sess, err := dbus.Connect(session)
@@ -168,6 +171,48 @@ func TestRealAtSpi2Core(t *testing.T) {
 }
 
 // eventually polls cond for up to five seconds.
+// killGroup kills the process group cmd leads, and fails the test if
+// any process still names dir (the bus's runtime directory) once the
+// group is reaped: a daemon left behind.
+func killGroup(t *testing.T, cmd *exec.Cmd, dir string) {
+	t.Helper()
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	_ = cmd.Process.Kill()
+	_ = cmd.Wait()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		left := processesNaming(t, dir)
+		if len(left) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("%s left running: %v", cmd.Path, left)
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// processesNaming lists the command lines that mention s.
+func processesNaming(t *testing.T, s string) []string {
+	t.Helper()
+	cmdlines, err := filepath.Glob("/proc/[0-9]*/cmdline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, path := range cmdlines {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			continue // exited since the glob
+		}
+		if line := strings.ReplaceAll(string(raw), "\x00", " "); strings.Contains(line, s) {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
 func eventually(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
