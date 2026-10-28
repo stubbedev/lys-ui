@@ -68,12 +68,9 @@ func Load(env xdg.Env) (Settings, error) {
 
 // paths lists the settings.ini files in load order: the system config
 // dirs from least to most important ($XDG_CONFIG_DIRS lists the most
-// important first, and a relative entry is ignored), then the user's.
+// important first), then the user's.
 func paths(env xdg.Env) []string {
-	dirs := slices.DeleteFunc(filepath.SplitList(env("XDG_CONFIG_DIRS")), func(d string) bool { return !filepath.IsAbs(d) })
-	if len(dirs) == 0 {
-		dirs = []string{"/etc/xdg"}
-	}
+	dirs := env.ConfigDirs()
 	slices.Reverse(dirs)
 	if home, ok := env.ConfigHome(); ok {
 		dirs = append(dirs, home)
