@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-text/typesetting/font"
 	"github.com/go-text/typesetting/fontscan"
-	"github.com/go-text/typesetting/language"
 	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/goregular"
 
@@ -262,7 +261,7 @@ func TestFallbackChain(t *testing.T) {
 			// script hint, then verify actual coverage - ResolveFace
 			// returns an arbitrary face when nothing covers, so
 			// coverage is the check, and its absence a skip reason.
-			tf, err := lookup(primary.Family(), regAspect, language.LookupScript(r), r)
+			tf, err := fallbackFace([]string{primary.Family()}, r)
 			if err != nil {
 				t.Skipf("store lookup failed for %q: %v", r, err)
 			}
@@ -387,13 +386,46 @@ func TestMonospaceNeverResolvesProportional(t *testing.T) {
 func TestFallbackLoadsFacesOnlyOnDemand(t *testing.T) {
 	sans := mustSans(t)
 	storeMu.Lock()
-	direct, cached := len(directFaces), len(faceCache)
+	loaded := len(typefaces)
 	storeMu.Unlock()
 	ch := Fallback(sans)
 	ch.Shape("plain latin text", 14)
 	storeMu.Lock()
 	defer storeMu.Unlock()
-	if len(directFaces) != direct || len(faceCache) != cached {
-		t.Errorf("a chain over covered text loaded %d direct and %d store faces", len(directFaces)-direct, len(faceCache)-cached)
+	if n := len(typefaces) - loaded; n != 0 {
+		t.Errorf("a chain over covered text loaded %d faces", n)
+	}
+}
+
+// A file the store knows under another family name is one face
+// whichever name reaches it: the alias resolves to the very typeface
+// the matcher handed out for the generic (#427).
+func TestTwoNamesOfAFileShareOneTypeface(t *testing.T) {
+	sans := mustSans(t)
+	storeMu.Lock()
+	var loc fontscan.Location
+	for l, tf := range typefaces {
+		if tf == sans {
+			loc = l
+		}
+	}
+	saved, savedBuilt := aliasIndex, aliasIndexBuilt
+	aliasIndex = map[string][]systemFace{"lystestsharedfamily": {{loc, regAspect}}}
+	aliasIndexBuilt = true
+	storeMu.Unlock()
+	t.Cleanup(func() {
+		storeMu.Lock()
+		aliasIndex, aliasIndexBuilt = saved, savedBuilt
+		storeMu.Unlock()
+	})
+	if loc == (fontscan.Location{}) {
+		t.Fatal("Sans() is not among the store's typefaces")
+	}
+	tf, err := lookup("Lys Test Shared Family", regAspect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tf != sans {
+		t.Errorf("the alias of %s resolved to another typeface than Sans()", loc.File)
 	}
 }

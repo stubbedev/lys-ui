@@ -34,21 +34,38 @@ func (quietLogger) Printf(string, ...any) {}
 // regAspect is the regular aspect every default resolution asks for.
 var regAspect = font.Aspect{Style: font.StyleNormal, Weight: font.WeightNormal}
 
-// The process-wide font store: one fontscan scan, one face cache. The
-// FontMap is stateful (query, script, LRU) and not safe for concurrent
-// use, so every lookup holds the mutex; like render.Typeface, the
-// resolved fonts are for single-threaded UI use.
+// The process-wide font store: one fontscan scan, one typeface per
+// font file. The FontMap is stateful (query, script, LRU) and not safe
+// for concurrent use, so every lookup holds the mutex; like
+// render.Typeface, the resolved fonts are for single-threaded UI use.
 var (
 	storeOnce sync.Once
 	storeFM   *fontscan.FontMap
 	storeErr  error
 	storeMu   sync.Mutex
-	faceCache = map[*font.Face]*render.Typeface{}
-	// directFaces caches the faces loaded outside the matcher's
-	// coverage filter (see lookup); a nil value marks an unreadable
-	// file so failures are not retried on every lookup.
-	directFaces = map[fontscan.Location]*render.Typeface{}
+	// typefaces holds the typeface of every face the store has handed
+	// out, keyed by its file location, whichever path loaded it: a
+	// family resolved by name, the matcher, or a fallback chain. A
+	// file reached by two paths is parsed and wrapped once.
+	typefaces = map[fontscan.Location]*render.Typeface{}
+	// installed indexes the system faces by the normalized family
+	// fontscan files each under.
+	installed map[string][]systemFace
 )
+
+// matcherFamilies are the normalized families only the CSS matcher
+// resolves: the generics, which name no face, and the embedded
+// families, which the store holds as its own faces.
+var matcherFamilies = func() map[string]bool {
+	out := map[string]bool{}
+	for _, f := range []string{
+		fontscan.SansSerif, fontscan.Serif, fontscan.Monospace, fontscan.Cursive,
+		fontscan.Fantasy, fontscan.Math, fontscan.Emoji, uifont.Family, uifont.MonoFamily,
+	} {
+		out[font.NormalizeFamily(f)] = true
+	}
+	return out
+}()
 
 // fontmap builds the shared store once; the first error sticks.
 func fontmap() (*fontscan.FontMap, error) {
@@ -60,6 +77,12 @@ func fontmap() (*fontscan.FontMap, error) {
 				storeErr = fmt.Errorf("sysfont: scan system fonts: %w", err)
 				return
 			}
+			footprints, err := fontscan.SystemFonts(quietLogger{}, "")
+			if err != nil {
+				storeErr = fmt.Errorf("sysfont: index system fonts: %w", err)
+				return
+			}
+			installed = indexFamilies(footprints)
 		}
 		for _, f := range []struct {
 			family string
@@ -75,46 +98,59 @@ func fontmap() (*fontscan.FontMap, error) {
 	return storeFM, storeErr
 }
 
-// lookup resolves family+aspect to a face covering r, shaped under the
-// given script hint (0 for none). The CSS matcher applies fallback
-// rules, so the result honors the user's font configuration; an empty
-// database resolves to nil and errors.
-func lookup(family string, aspect font.Aspect, script language.Script, r rune) (*render.Typeface, error) {
+// indexFamilies groups footprints by their family.
+func indexFamilies(footprints []fontscan.Footprint) map[string][]systemFace {
+	index := make(map[string][]systemFace, len(footprints))
+	for _, fp := range footprints {
+		index[fp.Family] = append(index[fp.Family], systemFace{fp.Location, fp.Aspect})
+	}
+	return index
+}
+
+// lookup resolves family at aspect. An installed family, known to
+// the store by that name or by any other it declares (see
+// aliasIndex), loads its closest face to aspect directly: the
+// matcher filters candidates by the probe rune's coverage, a filter
+// symbol faces (color emoji, icon fonts, no latin glyphs) never
+// pass, and a family it does not know by that name falls through to
+// a substitute it parses only for lookup to discard. Generics, the
+// embedded families and families not installed go through the CSS
+// matcher, whose fallback rules honor the user's font configuration;
+// an empty database errors.
+func lookup(family string, aspect font.Aspect) (*render.Typeface, error) {
 	fm, err := fontmap()
 	if err != nil {
 		return nil, err
 	}
 	storeMu.Lock()
 	defer storeMu.Unlock()
+	if faces := installedFaces(family); len(faces) > 0 {
+		return typefaceAt(closestFace(faces, aspect).loc)
+	}
 	fm.SetQuery(fontscan.Query{Families: []string{family}, Aspect: aspect})
-	fm.SetScript(script)
-	face := fm.ResolveFace(r)
+	fm.SetScript(0)
+	face := fm.ResolveFace('x')
 	if face == nil {
 		return nil, fmt.Errorf("sysfont: no %s face found", family)
 	}
-	if script == 0 && font.NormalizeFamily(family) == fontscan.Monospace {
-		face = monospaced(fm, face, aspect, r)
+	if font.NormalizeFamily(family) == fontscan.Monospace {
+		face = monospaced(fm, face, aspect, 'x')
 	}
-	// A per-rune lookup (script hint set) intentionally crosses
-	// families: return whatever covering face the matcher found. A
-	// family lookup probes with 'x', and the matcher filters its
-	// candidates by the probe rune's coverage - a filter that symbol
-	// faces (color emoji, icon fonts, no latin glyphs) can never
-	// pass. When such a lookup fell through to another family and
-	// the exact family is installed, load its face directly; a family
-	// the store knows only by another of its names (see aliasIndex)
-	// loads its closest face to the aspect.
-	if script == 0 && font.NormalizeFamily(face.Describe().Family) != font.NormalizeFamily(family) {
-		if direct := faceForFamily(family); direct != nil {
-			return direct, nil
-		}
-		if faces := aliasFaces(family); len(faces) > 0 {
-			if direct := directFace(closestFace(faces, aspect).loc); direct != nil {
-				return direct, nil
-			}
-		}
+	return typeface(fm, face)
+}
+
+// installedFaces returns the system faces of family, nil for a family
+// the matcher resolves (see matcherFamilies) or one not installed.
+// Caller holds storeMu.
+func installedFaces(family string) []systemFace {
+	key := font.NormalizeFamily(family)
+	if matcherFamilies[key] {
+		return nil
 	}
-	return typeface(face)
+	if faces := installed[key]; len(faces) > 0 {
+		return faces
+	}
+	return aliasFaces(key)
 }
 
 // monospaced keeps face, the store's answer to the monospace generic,
@@ -133,39 +169,38 @@ func monospaced(fm *fontscan.FontMap, face *font.Face, aspect font.Aspect, r run
 	return face
 }
 
-// faceForFamily loads the first system face of family outside the
-// matcher's coverage filter. Caller holds storeMu.
-// nil when the family is not installed or its file is unreadable.
-func faceForFamily(family string) *render.Typeface {
-	loc, ok := storeFM.FindSystemFont(family)
-	if !ok {
-		return nil
+// typefaceAt returns the typeface of the system face at loc, parsing
+// the file on its first use. Caller holds storeMu.
+func typefaceAt(loc fontscan.Location) (*render.Typeface, error) {
+	if tf, ok := typefaces[loc]; ok {
+		return tf, nil
 	}
-	return directFace(loc)
-}
-
-// directFace loads the system face at loc, caching per location (a
-// collection's faces share a file). Caller holds storeMu. nil when
-// the file is unreadable.
-func directFace(loc fontscan.Location) *render.Typeface {
-	if tf, ok := directFaces[loc]; ok {
-		return tf
-	}
-	tf, err := loadFaceFile(loc.File, loc.Index)
-	if err != nil {
-		tf = nil // cache the failure
-	}
-	directFaces[loc] = tf
-	return tf
-}
-
-// loadFaceFile parses and wraps the face at path:index.
-func loadFaceFile(path string, index uint16) (*render.Typeface, error) {
-	face, err := faceFromFile(path, index)
+	face, err := faceFromFile(loc.File, loc.Index)
 	if err != nil {
 		return nil, err
 	}
-	return render.NewTypeface(face)
+	return remember(loc, face)
+}
+
+// typeface returns the typeface of face, a face fm resolved, sharing
+// the one already handed out for its file. Caller holds storeMu.
+func typeface(fm *fontscan.FontMap, face *font.Face) (*render.Typeface, error) {
+	loc := fm.FontLocation(face.Font)
+	if tf, ok := typefaces[loc]; ok {
+		return tf, nil
+	}
+	return remember(loc, face)
+}
+
+// remember wraps face, loaded from loc, and caches the typeface.
+// Caller holds storeMu.
+func remember(loc fontscan.Location, face *font.Face) (*render.Typeface, error) {
+	tf, err := render.NewTypeface(face)
+	if err != nil {
+		return nil, err
+	}
+	typefaces[loc] = tf
+	return tf, nil
 }
 
 // faceFromFile parses the face at index of a font file (0 for plain
@@ -192,25 +227,10 @@ func faceFromFile(path string, index uint16) (*font.Face, error) {
 	return font.NewFace(ft), nil
 }
 
-// typeface wraps face in a render.Typeface, sharing one instance per
-// underlying face so chains can group runs by identity and shaping
-// state stays warm.
-func typeface(face *font.Face) (*render.Typeface, error) {
-	if tf, ok := faceCache[face]; ok {
-		return tf, nil
-	}
-	tf, err := render.NewTypeface(face)
-	if err != nil {
-		return nil, err
-	}
-	faceCache[face] = tf
-	return tf, nil
-}
-
 // Sans returns the system's default sans-serif face, resolved with the
 // same rules a browser applies to font-family: sans-serif.
 func Sans() (*render.Typeface, error) {
-	return lookup(fontscan.SansSerif, regAspect, 0, 'x')
+	return lookup(fontscan.SansSerif, regAspect)
 }
 
 // UI returns the face lys-ui's default look is drawn in: Geist,
@@ -225,7 +245,7 @@ func UIMono() (*render.Typeface, error) { return embedded(uifont.MonoFamily) }
 // them at its first use, so a resolution to another family is a store
 // defect, not a missing install, and errors.
 func embedded(family string) (*render.Typeface, error) {
-	tf, err := lookup(family, regAspect, 0, 'x')
+	tf, err := lookup(family, regAspect)
 	if err != nil {
 		return nil, err
 	}
@@ -237,19 +257,23 @@ func embedded(family string) (*render.Typeface, error) {
 
 // Monospace returns the system's default monospace face.
 func Monospace() (*render.Typeface, error) {
-	return lookup(fontscan.Monospace, regAspect, 0, 'x')
+	return lookup(fontscan.Monospace, regAspect)
 }
 
 // Serif returns the system's default serif face.
 func Serif() (*render.Typeface, error) {
-	return lookup(fontscan.Serif, regAspect, 0, 'x')
+	return lookup(fontscan.Serif, regAspect)
 }
 
 // FaceFile loads a font file's first face — the @font-face loader's
 // entry point for app fonts declared in stylesheets. The path is the
 // stylesheet's own src, app input like every stylesheet path.
 func FaceFile(path string) (*render.Typeface, error) {
-	return loadFaceFile(path, 0)
+	face, err := faceFromFile(path, 0)
+	if err != nil {
+		return nil, err
+	}
+	return render.NewTypeface(face)
 }
 
 // Best resolves the family a widget asks for: any installed family
@@ -263,7 +287,7 @@ func Best(family string, size float64) (*render.Typeface, error) {
 	if size <= 0 {
 		return nil, fmt.Errorf("sysfont: Best(%q, %v): size must be positive", family, size)
 	}
-	return lookup(family, regAspect, 0, 'x')
+	return lookup(family, regAspect)
 }
 
 // Variant resolves a bold, italic, or bold-italic face of the same
@@ -279,7 +303,7 @@ func Variant(base *render.Typeface, bold, italic bool) (*render.Typeface, error)
 	if italic {
 		aspect.Style = font.StyleItalic
 	}
-	tf, err := lookup(base.Family(), aspect, 0, 'x')
+	tf, err := lookup(base.Family(), aspect)
 	if err != nil {
 		return nil, fmt.Errorf("sysfont: no %s variant (bold=%v, italic=%v) found", base.Family(), bold, italic)
 	}
@@ -327,7 +351,7 @@ func Weighted(family string, size float64, weight int, italic bool) (*render.Typ
 	if italic {
 		aspect.Style = font.StyleItalic
 	}
-	tf, err := lookup(family, aspect, 0, 'x')
+	tf, err := lookup(family, aspect)
 	if err != nil {
 		return nil, err
 	}
@@ -352,24 +376,31 @@ var fallbackFamilies = []string{"Noto Sans CJK JP", "Noto Color Emoji"}
 func Fallback(base *render.Typeface) *render.Chain {
 	families := append([]string{base.Family()}, fallbackFamilies...)
 	return render.NewChain(base).WithResolver(func(r rune) *render.Typeface {
-		fm, err := fontmap()
-		if err != nil {
-			return nil
-		}
-		storeMu.Lock()
-		defer storeMu.Unlock()
-		fm.SetQuery(fontscan.Query{Families: families, Aspect: regAspect})
-		fm.SetScript(language.LookupScript(r))
-		face := fm.ResolveFace(r)
-		if face == nil {
-			return nil
-		}
-		tf, err := typeface(face)
+		tf, err := fallbackFace(families, r)
 		if err != nil {
 			return nil
 		}
 		return tf
 	})
+}
+
+// fallbackFace resolves the store's face for r under families, with
+// r's script as the matcher's hint. The face need not cover r: the
+// matcher returns an arbitrary face when nothing does.
+func fallbackFace(families []string, r rune) (*render.Typeface, error) {
+	fm, err := fontmap()
+	if err != nil {
+		return nil, err
+	}
+	storeMu.Lock()
+	defer storeMu.Unlock()
+	fm.SetQuery(fontscan.Query{Families: families, Aspect: regAspect})
+	fm.SetScript(language.LookupScript(r))
+	face := fm.ResolveFace(r)
+	if face == nil {
+		return nil, fmt.Errorf("sysfont: no face for %U", r)
+	}
+	return typeface(fm, face)
 }
 
 // FallbackFamilies returns the standard Linux fallback family names
@@ -438,7 +469,7 @@ func Families() ([]string, error) {
 // face loads. Chooser rows and previews call this lazily, so a long
 // family list never parses more than the faces actually shown.
 func FamilyDisplay(family string) string {
-	tf, err := lookup(family, regAspect, 0, 'x')
+	tf, err := lookup(family, regAspect)
 	if err != nil {
 		return family
 	}

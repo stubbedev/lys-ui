@@ -17,8 +17,8 @@ import (
 // family (16), and the WWS family (21).
 var familyNameIDs = [...]uint16{1, 16, 21}
 
-// aliasFace is one system face declaring a family name.
-type aliasFace struct {
+// systemFace is one system face: where it is and its aspect.
+type systemFace struct {
 	loc    fontscan.Location
 	aspect font.Aspect
 }
@@ -32,13 +32,13 @@ type aliasFace struct {
 // is unknown to the store. Built once, on the first lookup the store
 // cannot answer; guarded by storeMu.
 var (
-	aliasIndex      map[string][]aliasFace
+	aliasIndex      map[string][]systemFace
 	aliasIndexBuilt bool
 )
 
 // aliasFaces returns the faces declaring family among their name
 // records. Caller holds storeMu.
-func aliasFaces(family string) []aliasFace {
+func aliasFaces(family string) []systemFace {
 	if !aliasIndexBuilt {
 		aliasIndexBuilt = true
 		footprints, err := fontscan.SystemFonts(quietLogger{}, "")
@@ -52,15 +52,15 @@ func aliasFaces(family string) []aliasFace {
 // buildAliasIndex indexes footprints by every family name names
 // reads for their location. A face whose names cannot be read is left
 // out: it stays reachable under the family the store gave it.
-func buildAliasIndex(footprints []fontscan.Footprint, names func(fontscan.Location) ([]string, error)) map[string][]aliasFace {
-	index := make(map[string][]aliasFace, len(footprints))
+func buildAliasIndex(footprints []fontscan.Footprint, names func(fontscan.Location) ([]string, error)) map[string][]systemFace {
+	index := make(map[string][]systemFace, len(footprints))
 	for _, fp := range footprints {
 		declared, err := names(fp.Location)
 		if err != nil {
 			continue
 		}
 		for _, name := range declared {
-			index[name] = append(index[name], aliasFace{fp.Location, fp.Aspect})
+			index[name] = append(index[name], systemFace{fp.Location, fp.Aspect})
 		}
 	}
 	return index
@@ -161,7 +161,7 @@ func decodeName(platform tables.PlatformID, encoding tables.EncodingID, b []byte
 // closestFace picks the face of faces closest to want by the CSS
 // font matching steps fontscan applies within a family (CSS Fonts 3
 // §5.2): stretch, then style, then weight. faces must not be empty.
-func closestFace(faces []aliasFace, want font.Aspect) aliasFace {
+func closestFace(faces []systemFace, want font.Aspect) systemFace {
 	want.SetDefaults()
 	stretch := closest(faces, func(a font.Aspect) float32 { return float32(a.Stretch) }, float32(want.Stretch), float32(font.StretchNormal), float32(font.StretchNormal))
 	faces = filterAspect(faces, func(a font.Aspect) bool { return a.Stretch == font.Stretch(stretch) })
@@ -177,7 +177,7 @@ func closestFace(faces []aliasFace, want font.Aspect) aliasFace {
 // hi, then lighter, then heavier; below lo lighter first; above hi
 // heavier first. Stretch passes lo = hi = normal (narrow first at or
 // below normal), weight lo 400 and hi 500.
-func closest(faces []aliasFace, value func(font.Aspect) float32, query, lo, hi float32) float32 {
+func closest(faces []systemFace, value func(font.Aspect) float32, query, lo, hi float32) float32 {
 	var above, below float32
 	var hasAbove, hasBelow bool
 	for _, f := range faces {
@@ -215,7 +215,7 @@ func closest(faces []aliasFace, value func(font.Aspect) float32, query, lo, hi f
 
 // matchStyle is the CSS style step: the wanted style when a face has
 // it, else the other (fontscan folds oblique into italic).
-func matchStyle(faces []aliasFace, want font.Style) font.Style {
+func matchStyle(faces []systemFace, want font.Style) font.Style {
 	for _, f := range faces {
 		if f.aspect.Style == want {
 			return want
@@ -225,8 +225,8 @@ func matchStyle(faces []aliasFace, want font.Style) font.Style {
 }
 
 // filterAspect keeps the faces whose aspect satisfies keep.
-func filterAspect(faces []aliasFace, keep func(font.Aspect) bool) []aliasFace {
-	out := make([]aliasFace, 0, len(faces))
+func filterAspect(faces []systemFace, keep func(font.Aspect) bool) []systemFace {
+	out := make([]systemFace, 0, len(faces))
 	for _, f := range faces {
 		if keep(f.aspect) {
 			out = append(out, f)

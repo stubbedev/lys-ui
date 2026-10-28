@@ -78,11 +78,11 @@ func TestFamilyNamesRejectsMalformedTables(t *testing.T) {
 	}
 }
 
-// faces builds alias faces at the given aspects, located by order.
-func faces(aspects ...font.Aspect) []aliasFace {
-	out := make([]aliasFace, len(aspects))
+// faces builds system faces at the given aspects, located by order.
+func faces(aspects ...font.Aspect) []systemFace {
+	out := make([]systemFace, len(aspects))
 	for i, a := range aspects {
-		out[i] = aliasFace{loc: fontscan.Location{File: "f", Index: uint16(i)}, aspect: a}
+		out[i] = systemFace{loc: fontscan.Location{File: "f", Index: uint16(i)}, aspect: a}
 	}
 	return out
 }
@@ -155,7 +155,7 @@ func TestWeightedResolvesAFamilyByAnotherOfItsNames(t *testing.T) {
 	mustSans(t)
 	storeMu.Lock()
 	saved, savedBuilt := aliasIndex, aliasIndexBuilt
-	aliasIndex = map[string][]aliasFace{
+	aliasIndex = map[string][]systemFace{
 		"lystestaliasfamily": faces(aspect(400, font.StyleNormal)),
 	}
 	aliasIndex["lystestaliasfamily"][0].loc = fontscan.Location{File: "testdata/Cantarell-Regular.ttf"}
