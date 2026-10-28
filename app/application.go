@@ -20,11 +20,11 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
+	"github.com/stubbedev/lys-ui/gtksettings"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/clipboard"
 	"github.com/stubbedev/lys-ui/internal/datacontrol"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
-	"github.com/stubbedev/lys-ui/internal/gtksettings"
 	"github.com/stubbedev/lys-ui/internal/icons"
 	"github.com/stubbedev/lys-ui/internal/inspect"
 	"github.com/stubbedev/lys-ui/internal/layersurface"

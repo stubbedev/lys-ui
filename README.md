@@ -57,6 +57,7 @@ implementation.
 | `widget/css` | libadwaita's style classes and named colors as constants |
 | `anim` | tweens, easing, springs and timelines |
 | `appearance` | the desktop's color scheme, accent and contrast preferences |
+| `gtksettings` | GTK 4's settings.ini, read with GTK's file order |
 | `i18n` | gettext catalogs (`.mo`, `.po`) |
 | `highlight` | syntax highlighters for the code view |
 | `media` | video and sound playback |

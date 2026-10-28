@@ -4,8 +4,11 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/stubbedev/lys-lib/xdg"
+
 	"github.com/stubbedev/lys-ui/appearance"
-	"github.com/stubbedev/lys-ui/internal/gtksettings"
+	"github.com/stubbedev/lys-ui/gtksettings"
+	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
 // ColorScheme returns the desktop's current dark/light preference,
@@ -47,7 +50,7 @@ func (a *Application) OnContrastChange(fn func(appearance.Contrast)) (off func()
 // app applies this with widget.SetRootFontSize.
 func (a *Application) DesktopFontSize() float64 {
 	ini := a.gtkSettings()
-	return appearance.ResolveFontSettings(a.portal.FontName(), a.portal.TextScale(), ini.FontName, ini.DPI).DefaultFontPx()
+	return appearance.ResolveFontSettings(a.portal.FontName(), a.portal.TextScale(), ini.FontName, ini.XftDPI.DotsPerInch()).DefaultFontPx()
 }
 
 // OnDesktopFontSizeChange registers fn for every change of
@@ -69,9 +72,17 @@ func (a *Application) OnDesktopFontSizeChange(fn func(px float64)) (off func()) 
 	})
 }
 
-// gtkSettings reads settings.ini once per application.
+// gtkSettings reads settings.ini once per application. A file that
+// cannot be read is reported and the readable ones still apply, as GTK
+// warns and carries on.
 func (a *Application) gtkSettings() gtksettings.Settings {
-	a.gtkIniOnce.Do(func() { a.gtkIni = gtksettings.Load() })
+	a.gtkIniOnce.Do(func() {
+		ini, err := gtksettings.Load(xdg.OS)
+		if err != nil {
+			logutil.L().Warn("app: settings.ini", "err", err)
+		}
+		a.gtkIni = ini
+	})
 	return a.gtkIni
 }
 
