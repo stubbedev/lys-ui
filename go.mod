@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/go-text/typesetting v0.3.5
 	github.com/jfreymuth/pulse v0.1.3
-	github.com/stubbedev/lys-lib v0.1.1-0.20261028194726-7780832d5c88
+	github.com/stubbedev/lys-lib v0.1.1-0.20261028202131-e10e9a07cba0
 	github.com/stubbedev/memory-go v0.3.0
 	github.com/unxed/xkb-go v0.1.9
 	golang.org/x/image v0.47.0
@@ -17,7 +17,7 @@ require (
 	github.com/kettek/apng v0.0.0-20250827064933-2bb5f5fcf253 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
-	golang.org/x/net v0.61.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
