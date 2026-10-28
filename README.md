@@ -228,7 +228,8 @@ Dependabot keeps the module and the pinned workflow actions current.
 All pure Go:
 [neurlang/wayland](https://github.com/neurlang/wayland) (patched, in
 lys-lib's `third_party/wayland`),
-[godbus/dbus](https://github.com/godbus/dbus),
+[godbus/dbus](https://github.com/godbus/dbus) (patched, in lys-lib's
+`third_party/godbus`),
 [go-text/typesetting](https://github.com/go-text/typesetting),
 [rivo/uniseg](https://github.com/rivo/uniseg),
 [golang.org/x/image](https://pkg.go.dev/golang.org/x/image),

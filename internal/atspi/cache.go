@@ -3,8 +3,8 @@ package atspi
 import (
 	"slices"
 
-	"github.com/godbus/dbus/v5"
 	"github.com/stubbedev/lys-lib/intconv"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 )
 
 // The AT-SPI Cache (org.a11y.atspi.Cache at /org/a11y/atspi/cache):

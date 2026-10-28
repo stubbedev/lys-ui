@@ -8,14 +8,13 @@ import (
 	"runtime"
 	"slices"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
-	"github.com/godbus/dbus/v5"
+	"github.com/stubbedev/lys-lib/dbustest"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-ui/appearance"
-	"github.com/stubbedev/lys-ui/internal/dbustest"
 	"github.com/stubbedev/lys-ui/internal/icons"
 )
 
@@ -26,11 +25,6 @@ import (
 // socket through the dial seam, so every test exercises the real wire
 // path — marshalling, match rules, activation-free name lookup — with
 // zero session-bus contact.
-
-// startBus and startBusAt launch a private session bus (dbustest).
-func startBus(t *testing.T) (string, int) { return dbustest.Start(t) }
-
-func startBusAt(t *testing.T, sock string) (string, int) { return dbustest.StartAt(t, sock) }
 
 // mockPortal is the scripted org.freedesktop.portal.Settings service.
 // Fields are mutex-guarded: ReadOne runs on godbus's handler goroutine
@@ -111,15 +105,11 @@ func (p *mockPortal) ReadOne(namespace, key string) (dbus.Variant, error) {
 	return dbus.MakeVariant(p.value), nil
 }
 
-// publishMock connects to the bus at address, claims the portal's
-// well-known name, and exports the mock on the portal object path.
-func publishMock(t *testing.T, address string) *mockPortal {
+// publishMock connects to bus, claims the portal's well-known name,
+// and exports the mock on the portal object path.
+func publishMock(t *testing.T, bus *dbustest.Bus) *mockPortal {
 	t.Helper()
-	conn, err := dbus.Connect(address)
-	if err != nil {
-		t.Fatalf("mock portal: connect: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	conn := bus.Conn(t)
 	reply, err := conn.RequestName(portalName, dbus.NameFlagDoNotQueue)
 	if err != nil {
 		t.Fatalf("mock portal: request name: %v", err)
@@ -279,10 +269,10 @@ func TestStartupRead(t *testing.T) {
 		{"prefer-light", 2, appearance.Light},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			address, _ := startBus(t)
-			mock := publishMock(t, address)
+			bus := dbustest.Start(t)
+			mock := publishMock(t, bus)
 			mock.set(tc.value)
-			m := newTestMonitor(t, address)
+			m := newTestMonitor(t, bus.Address)
 			// The startup read is synchronous: no waiting.
 			if got := m.ColorScheme(); got != tc.want {
 				t.Fatalf("ColorScheme() = %v, want %v", got, tc.want)
@@ -302,10 +292,10 @@ func TestStartupFallbacksToUnknown(t *testing.T) {
 		{"garbage type", func(p *mockPortal) { p.setRaw("prefer-dark") }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			address, _ := startBus(t)
-			mock := publishMock(t, address)
+			bus := dbustest.Start(t)
+			mock := publishMock(t, bus)
 			tc.set(mock)
-			m := newTestMonitor(t, address)
+			m := newTestMonitor(t, bus.Address)
 			if got := m.ColorScheme(); got != appearance.Unknown {
 				t.Fatalf("ColorScheme() = %v, want unknown", got)
 			}
@@ -314,10 +304,10 @@ func TestStartupFallbacksToUnknown(t *testing.T) {
 }
 
 func TestNoPortalIsUnknownAndSilent(t *testing.T) {
-	address, _ := startBus(t)
+	bus := dbustest.Start(t)
 	// A bus, but nobody owns the portal name: the common
 	// no-portal-desktop shape.
-	m := newTestMonitor(t, address)
+	m := newTestMonitor(t, bus.Address)
 	onChange, snapshot := collect()
 	m.OnColorSchemeChange(onChange)
 	if got := m.ColorScheme(); got != appearance.Unknown {
@@ -327,10 +317,10 @@ func TestNoPortalIsUnknownAndSilent(t *testing.T) {
 }
 
 func TestStartupReadNeverFiresOnChange(t *testing.T) {
-	address, _ := startBus(t)
-	mock := publishMock(t, address)
+	bus := dbustest.Start(t)
+	mock := publishMock(t, bus)
 	mock.set(2)
-	m := newTestMonitor(t, address)
+	m := newTestMonitor(t, bus.Address)
 	onChange, snapshot := collect()
 	m.OnColorSchemeChange(onChange)
 	// The baseline is not history: a listener registered after New
@@ -342,10 +332,10 @@ func TestStartupReadNeverFiresOnChange(t *testing.T) {
 }
 
 func TestSettingChangedDeliversInOrder(t *testing.T) {
-	address, _ := startBus(t)
-	mock := publishMock(t, address)
+	bus := dbustest.Start(t)
+	mock := publishMock(t, bus)
 	mock.set(1)
-	m := newTestMonitor(t, address)
+	m := newTestMonitor(t, bus.Address)
 	if got := m.ColorScheme(); got != appearance.Dark {
 		t.Fatalf("ColorScheme() = %v, want dark", got)
 	}
@@ -397,8 +387,8 @@ func TestReconnectAfterBusRestart(t *testing.T) {
 	// monitor's dial seam (a plain address) reaches either one.
 	sock := dbustest.SocketPath(t)
 
-	_, pid1 := startBusAt(t, sock)
-	mock := publishMock(t, "unix:path="+sock)
+	first := dbustest.StartAt(t, sock)
+	mock := publishMock(t, first)
 	mock.set(1)
 	// The default backoff (250ms first attempt) is long enough for the
 	// restart below to complete before the first re-dial lands.
@@ -411,26 +401,13 @@ func TestReconnectAfterBusRestart(t *testing.T) {
 	onChange, snapshot := collect()
 	m.OnColorSchemeChange(onChange)
 
-	// Kill generation one and wait for it to be gone: a new daemon on
+	// Stop generation one and wait for it to be gone: a new daemon on
 	// the same path must not race a dying one that still owns the
 	// socket (the monitor must never re-read the dead generation).
-	if err := syscall.Kill(pid1, syscall.SIGTERM); err != nil {
-		t.Fatalf("kill bus: %v", err)
-	}
-	deadline := time.Now().Add(2 * time.Second)
-	for {
-		if err := syscall.Kill(pid1, 0); err == syscall.ESRCH {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("old bus daemon never exited")
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
+	first.Stop(t)
 
 	// Generation two on the same socket path, mock now saying light.
-	startBusAt(t, sock)
-	mock2 := publishMock(t, "unix:path="+sock)
+	mock2 := publishMock(t, dbustest.StartAt(t, sock))
 	mock2.set(2)
 
 	// The reconnect path re-reads (2 -> light, delivered because it
@@ -444,14 +421,10 @@ func TestReconnectAfterBusRestart(t *testing.T) {
 }
 
 func TestSharedConnFailsSilentOnDeath(t *testing.T) {
-	address, _ := startBus(t)
-	mock := publishMock(t, address)
+	bus := dbustest.Start(t)
+	mock := publishMock(t, bus)
 	mock.set(1)
-	shared, err := dbus.Connect(address)
-	if err != nil {
-		t.Fatalf("shared conn: %v", err)
-	}
-	t.Cleanup(func() { _ = shared.Close() })
+	shared := bus.Conn(t)
 
 	m := NewOn(shared)
 	t.Cleanup(m.Close)
@@ -474,11 +447,11 @@ func TestSharedConnFailsSilentOnDeath(t *testing.T) {
 }
 
 func TestCloseStopsGoroutines(t *testing.T) {
-	address, _ := startBus(t)
-	_ = publishMock(t, address)
+	bus := dbustest.Start(t)
+	_ = publishMock(t, bus)
 	before := runtime.NumGoroutine()
 
-	m := newTestMonitor(t, address)
+	m := newTestMonitor(t, bus.Address)
 	onChange, _ := collect()
 	m.OnColorSchemeChange(onChange)
 	m.Close()
@@ -496,10 +469,10 @@ func TestCloseStopsGoroutines(t *testing.T) {
 }
 
 func TestCallbacksRunOnMonitorGoroutine(t *testing.T) {
-	address, _ := startBus(t)
-	mock := publishMock(t, address)
+	bus := dbustest.Start(t)
+	mock := publishMock(t, bus)
 	mock.set(1)
-	m := newTestMonitor(t, address)
+	m := newTestMonitor(t, bus.Address)
 
 	caller := goroutineID()
 	delivered := make(chan uint64, 1)
@@ -519,10 +492,10 @@ func TestCallbacksRunOnMonitorGoroutine(t *testing.T) {
 }
 
 func TestCloseBeforeEventsDeliversNothing(t *testing.T) {
-	address, _ := startBus(t)
-	mock := publishMock(t, address)
+	bus := dbustest.Start(t)
+	mock := publishMock(t, bus)
 	mock.set(1)
-	m := newTestMonitor(t, address)
+	m := newTestMonitor(t, bus.Address)
 	onChange, snapshot := collect()
 	m.OnColorSchemeChange(onChange)
 	m.Close()
@@ -618,10 +591,10 @@ func iconTree(t *testing.T) string {
 // itself, duplicate announcements dedup, and unregistering stops
 // delivery.
 func TestIconThemeStream(t *testing.T) {
-	address, _ := startBus(t)
-	mock := publishMock(t, address)
+	bus := dbustest.Start(t)
+	mock := publishMock(t, bus)
 	mock.setIconTheme("Papirus")
-	m := newTestMonitor(t, address)
+	m := newTestMonitor(t, bus.Address)
 
 	if got := m.IconTheme(); got != "Papirus" {
 		t.Fatalf("IconTheme() = %q, want the startup read Papirus", got)
@@ -666,10 +639,10 @@ func TestIconThemeStream(t *testing.T) {
 // non-string variant reads empty, and an explicitly emptied setting
 // delivers "" — the consumer owns the fallback policy.
 func TestIconThemeStreamUnreadableValues(t *testing.T) {
-	address, _ := startBus(t)
-	mock := publishMock(t, address)
+	bus := dbustest.Start(t)
+	mock := publishMock(t, bus)
 	mock.setIconTheme("Adwaita")
-	m := newTestMonitor(t, address)
+	m := newTestMonitor(t, bus.Address)
 
 	sink, snapshot := collectIconThemes()
 	m.OnIconThemeChange(sink)
@@ -687,10 +660,10 @@ func TestIconThemeStreamUnreadableValues(t *testing.T) {
 // theme. The re-resolution is what live widget.Icons do on their next
 // damage pass: they watch the same generation.
 func TestIconThemeFollowsThroughCache(t *testing.T) {
-	address, _ := startBus(t)
-	mock := publishMock(t, address)
+	bus := dbustest.Start(t)
+	mock := publishMock(t, bus)
 	mock.setIconTheme("first")
-	m := newTestMonitor(t, address)
+	m := newTestMonitor(t, bus.Address)
 
 	// The application's wiring, verbatim (app/application.go): the
 	// monitor's icon-theme stream feeds the cache's applier.
@@ -740,9 +713,9 @@ func TestIconThemeFollowsThroughCache(t *testing.T) {
 }
 
 func TestUpdateAfterCloseDeliversNothing(t *testing.T) {
-	address, _ := startBus(t)
-	publishMock(t, address)
-	m := newTestMonitor(t, address)
+	bus := dbustest.Start(t)
+	publishMock(t, bus)
+	m := newTestMonitor(t, bus.Address)
 	onChange, snapshot := collect()
 	m.OnColorSchemeChange(onChange)
 	m.Close()
@@ -758,11 +731,11 @@ func TestUpdateAfterCloseDeliversNothing(t *testing.T) {
 // mapping (a non-string font and a non-positive or non-double scale
 // read as unset).
 func TestInterfaceFontStream(t *testing.T) {
-	address, _ := startBus(t)
-	mock := publishMock(t, address)
+	bus := dbustest.Start(t)
+	mock := publishMock(t, bus)
 	mock.setSetting(interfaceNamespace, fontNameKey, "Adwaita Sans 11")
 	mock.setSetting(interfaceNamespace, textScaleKey, 1.25)
-	m := newTestMonitor(t, address)
+	m := newTestMonitor(t, bus.Address)
 	if got := m.FontName(); got != "Adwaita Sans 11" {
 		t.Fatalf("FontName() = %q, want the startup read", got)
 	}

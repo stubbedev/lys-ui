@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/godbus/dbus/v5"
-
-	"github.com/stubbedev/lys-ui/internal/dbustest"
+	"github.com/stubbedev/lys-lib/dbustest"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 )
 
 // fakeStatus plays at-spi-bus-launcher's org.a11y.Status properties.
@@ -32,15 +31,12 @@ func (f *fakeStatus) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 // The watch reports the switch at once and follows a screen reader
 // starting and stopping; a bus without org.a11y.Bus is an error.
 func TestWatchStatus(t *testing.T) {
-	address, _ := dbustest.Start(t)
+	bus := dbustest.Start(t)
+	address := bus.Address
 	if _, err := WatchStatus(address, func(bool) {}); err == nil {
 		t.Fatal("a bus without org.a11y.Bus watched")
 	}
-	conn, err := dbus.Connect(address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	conn := bus.Conn(t)
 	if _, err := conn.RequestName(busName, dbus.NameFlagDoNotQueue); err != nil {
 		t.Fatal(err)
 	}

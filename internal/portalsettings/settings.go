@@ -4,7 +4,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/godbus/dbus/v5"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 )
 
 // The per-setting machinery every tracked portal key shares:

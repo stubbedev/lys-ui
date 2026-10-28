@@ -8,9 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/godbus/dbus/v5"
-
-	"github.com/stubbedev/lys-ui/internal/dbustest"
+	"github.com/stubbedev/lys-lib/dbustest"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 )
 
 type mockDesktop struct {
@@ -127,13 +126,8 @@ func (b backgroundIface) SetStatus(opts map[string]dbus.Variant) *dbus.Error {
 
 func startMockDesktop(t *testing.T) *mockDesktop {
 	t.Helper()
-	address, _ := dbustest.Start(t)
-	t.Setenv("DBUS_SESSION_BUS_ADDRESS", address)
-	conn, err := dbus.Connect(address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	bus := dbustest.Session(t)
+	conn := bus.Conn(t)
 	d := &mockDesktop{t: t, conn: conn}
 	for iface, v := range map[string]any{"org.freedesktop.portal.Inhibit": inhibitIface{d}, "org.freedesktop.portal.Background": backgroundIface{d}, portalPrintIface: printIface{d}} {
 		if err := conn.Export(v, "/org/freedesktop/portal/desktop", iface); err != nil {

@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/godbus/dbus/v5"
+	"github.com/stubbedev/lys-lib/dbustest"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
-	"github.com/stubbedev/lys-ui/internal/dbustest"
 	"github.com/stubbedev/lys-ui/internal/portalsettings"
 )
 
@@ -41,24 +41,15 @@ func desktopFontApp(t *testing.T, p fontPortal, ini string) *Application {
 			t.Fatal(err)
 		}
 	}
-	address, _ := dbustest.Start(t)
-	portalConn, err := dbus.Connect(address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = portalConn.Close() })
+	bus := dbustest.Start(t)
+	portalConn := bus.Conn(t)
 	if err := portalConn.Export(p, "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := portalConn.RequestName("org.freedesktop.portal.Settings", dbus.NameFlagDoNotQueue); err != nil {
 		t.Fatal(err)
 	}
-	conn, err := dbus.Connect(address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
-	m := portalsettings.NewOn(conn)
+	m := portalsettings.NewOn(bus.Conn(t))
 	t.Cleanup(m.Close)
 	return &Application{portal: m}
 }

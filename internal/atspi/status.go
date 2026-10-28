@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/godbus/dbus/v5"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 )
 
 // The desktop's accessibility switch: org.a11y.Status on the session

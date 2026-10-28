@@ -12,8 +12,8 @@ package app
 import (
 	"errors"
 
-	"github.com/godbus/dbus/v5"
 	"github.com/stubbedev/lys-lib/debug"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 )
 
 // ErrGlobalShortcutDenied reports the user refusing the portal's bind

@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/godbus/dbus/v5"
+	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/render"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 	"golang.org/x/image/font/gofont/goregular"
 
-	"github.com/stubbedev/lys-ui/internal/dbustest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -75,14 +75,6 @@ func (s *testScene) SetFocus(w widget.Widget) error {
 	return nil
 }
 
-// startA11yBus launches a private bus standing in for the
-// accessibility bus.
-func startA11yBus(t *testing.T) string {
-	t.Helper()
-	address, _ := dbustest.Start(t)
-	return address
-}
-
 // fakeRegistry plays the accessibility registry on the bus: it answers
 // Socket.Embed, records the plug, and collects the signals the bridge
 // emits into a recorded list — order-independent lookups, unlike a
@@ -96,15 +88,11 @@ type fakeRegistry struct {
 	signal   chan *dbus.Signal
 }
 
-// startFakeRegistry connects a second connection, claims the registry
-// name, and serves the Socket.
-func startFakeRegistry(t *testing.T, address string) *fakeRegistry {
+// startFakeRegistry connects to the private bus standing in for the
+// accessibility bus, claims the registry name, and serves the Socket.
+func startFakeRegistry(t *testing.T, a11y *dbustest.Bus) *fakeRegistry {
 	t.Helper()
-	conn, err := dbus.Connect(address)
-	if err != nil {
-		t.Fatalf("registry connect: %v", err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	conn := a11y.Conn(t)
 	if _, err := conn.RequestName("org.a11y.atspi.Registry", dbus.NameFlagDoNotQueue); err != nil {
 		t.Fatalf("registry name: %v", err)
 	}
@@ -205,8 +193,9 @@ func faceOf(t *testing.T) render.Font {
 // carries bounds.
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	address := startA11yBus(t)
-	bus := startFakeRegistry(t, address)
+	a11y := dbustest.Start(t)
+	address := a11y.Address
+	bus := startFakeRegistry(t, a11y)
 	name := fmt.Sprintf("org.a11y.atspi.lysui.test.p%d", os.Getpid())
 
 	face := faceOf(t)
@@ -793,14 +782,11 @@ func TestEvents(t *testing.T) {
 // address, Serve asks the session bus (DBUS_SESSION_BUS_ADDRESS) for
 // the accessibility bus and dials what it is told.
 func TestBusDiscovery(t *testing.T) {
-	address := startA11yBus(t)
+	a11y := dbustest.Start(t)
+	address := a11y.Address
 	// The session bus and the a11y bus are the same daemon here — the
 	// mock org.a11y.Bus just reports it.
-	conn, err := dbus.Connect(address)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = conn.Close() })
+	conn := a11y.Conn(t)
 	if _, err := conn.RequestName("org.a11y.Bus", dbus.NameFlagDoNotQueue); err != nil {
 		t.Fatalf("mock bus name: %v", err)
 	}
@@ -809,7 +795,7 @@ func TestBusDiscovery(t *testing.T) {
 	if err := conn.ExportAll(&mockOrgA11yBus{addr: address}, "/org/a11y/bus", "org.a11y.Bus"); err != nil {
 		t.Fatalf("mock bus export: %v", err)
 	}
-	t.Setenv("DBUS_SESSION_BUS_ADDRESS", address)
+	a11y.UseAsSessionBus(t)
 
 	root := widget.NewBox(widget.Column, 0, 0)
 	scene := &testScene{roots: []widget.Widget{root}}
@@ -835,8 +821,9 @@ func TestBusDiscovery(t *testing.T) {
 // start with a digit, so the raw pid (org.a11y.atspi.lysui.1234) is
 // rejected by a real bus and the bridge died on startup.
 func TestServeDefaultNameIsValid(t *testing.T) {
-	address := startA11yBus(t)
-	startFakeRegistry(t, address)
+	a11y := dbustest.Start(t)
+	address := a11y.Address
+	startFakeRegistry(t, a11y)
 	root := widget.NewBox(widget.Column, 0, 0)
 	scene := &testScene{roots: []widget.Widget{root}}
 	br, err := Serve(scene, Options{Address: address, Poll: -1})

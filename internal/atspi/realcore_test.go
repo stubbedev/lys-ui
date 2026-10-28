@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/godbus/dbus/v5"
+	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/render"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
-	"github.com/stubbedev/lys-ui/internal/dbustest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -30,9 +30,9 @@ func TestRealAtSpi2Core(t *testing.T) {
 	if libexec == "" {
 		t.Skip("ATSPI_LIBEXEC unset; `just atspi-verify` runs this against real at-spi2-core")
 	}
-	session, _ := dbustest.Start(t)
+	bus := dbustest.Session(t)
+	session := bus.Address
 	runtime := t.TempDir()
-	t.Setenv("DBUS_SESSION_BUS_ADDRESS", session)
 	// dbus-daemon, not dbus-broker: under a systemd user session the
 	// launcher prefers the broker, which only runs with systemd's
 	// socket activation and so dies on this private bus ("No listener
@@ -49,11 +49,7 @@ func TestRealAtSpi2Core(t *testing.T) {
 	t.Cleanup(func() { killGroup(t, launcher, runtime) })
 
 	// The launcher owns org.a11y.Bus once the accessibility bus runs.
-	sess, err := dbus.Connect(session)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = sess.Close() })
+	sess := bus.Conn(t)
 	var a11yAddr string
 	eventually(t, "org.a11y.Bus", func() bool {
 		return sess.Object(busName, busPath).Call("org.a11y.Bus.GetAddress", 0).Store(&a11yAddr) == nil

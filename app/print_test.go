@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/godbus/dbus/v5"
+	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/render"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
-	"github.com/stubbedev/lys-ui/internal/dbustest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -227,8 +227,7 @@ func TestPrintRendersOnTheConfirmedSetupAndRemembersIt(t *testing.T) {
 }
 
 func TestPrintWithoutAPortalSaysSo(t *testing.T) {
-	address, _ := dbustest.Start(t)
-	t.Setenv("DBUS_SESSION_BUS_ADDRESS", address)
+	dbustest.Session(t)
 	a := testApp(nil)
 	defer a.desktop().close()
 	var result *error
