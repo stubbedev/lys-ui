@@ -8,8 +8,8 @@ import (
 	"slices"
 
 	"github.com/stubbedev/lys-lib/debug"
-	"github.com/stubbedev/lys-lib/dmabuf"
 	"github.com/stubbedev/lys-lib/dmabufwl"
+	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
 )
@@ -21,8 +21,8 @@ const maxDmabufVersion = 4
 
 // DmabufLayout is a format and modifier pair the compositor imports.
 type DmabufLayout struct {
-	Format   uint32
-	Modifier uint64
+	Format   fourcc.Format
+	Modifier fourcc.Modifier
 }
 
 type dmabufFormats struct {
@@ -32,12 +32,12 @@ type dmabufFormats struct {
 
 func (f dmabufFormats) HandleZwpDmabufV1Format(ev wlr.ZwpDmabufV1FormatEvent) {
 	if f.version < 3 {
-		f.s.dmabufLayouts[DmabufLayout{Format: ev.Format, Modifier: dmabuf.ModifierInvalid}] = true
+		f.s.dmabufLayouts[DmabufLayout{Format: fourcc.Format(ev.Format), Modifier: fourcc.Invalid}] = true
 	}
 }
 
 func (f dmabufFormats) HandleZwpDmabufV1Modifier(ev wlr.ZwpDmabufV1ModifierEvent) {
-	f.s.dmabufLayouts[DmabufLayout{Format: ev.Format, Modifier: uint64(ev.ModifierHi)<<32 | uint64(ev.ModifierLo)}] = true
+	f.s.dmabufLayouts[DmabufLayout{Format: fourcc.Format(ev.Format), Modifier: fourcc.Modifier(uint64(ev.ModifierHi)<<32 | uint64(ev.ModifierLo))}] = true
 }
 
 func (s *Session) bindSubcompositor(ev wl.RegistryGlobalEvent) {
@@ -112,12 +112,12 @@ func (s *Session) Dmabuf() *wlr.ZwpDmabufV1 { return s.dmabuf }
 func (s *Session) DmabufImports(l DmabufLayout) bool { return s.dmabufLayouts[l] }
 
 // DmabufModifiers lists, sorted, the explicit modifiers the compositor
-// imports format in (dmabuf.ModifierInvalid, an implicit layout, left
+// imports format in (fourcc.Invalid, an implicit layout, left
 // out).
-func (s *Session) DmabufModifiers(format uint32) []uint64 {
-	var mods []uint64
+func (s *Session) DmabufModifiers(format fourcc.Format) []fourcc.Modifier {
+	var mods []fourcc.Modifier
 	for l := range s.dmabufLayouts {
-		if l.Format == format && l.Modifier != dmabuf.ModifierInvalid {
+		if l.Format == format && l.Modifier != fourcc.Invalid {
 			mods = append(mods, l.Modifier)
 		}
 	}

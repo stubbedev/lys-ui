@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
-	"github.com/stubbedev/lys-lib/dmabuf"
+	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/dmabufwl"
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
@@ -26,9 +26,9 @@ import (
 // would end the whole connection. The buffer is pending until the
 // compositor answers, and a pool counts it busy meanwhile. A refusal
 // drops the buffer from its pool and reports the error to rejected.
-func NewDmabuf(dev *gpu.Device, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, modifiers []uint64, rejected func(error)) (*Buffer, error) {
+func NewDmabuf(dev *gpu.Device, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, modifiers []fourcc.Modifier, rejected func(error)) (*Buffer, error) {
 	start := time.Now()
-	t, err := dev.NewTarget(bufW, bufH, dmabuf.FormatARGB8888, modifiers)
+	t, err := dev.NewTarget(bufW, bufH, fourcc.ARGB8888, modifiers)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func NewDmabuf(dev *gpu.Device, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, mod
 	imp := &dmabufImport{b: b, done: func() { _ = params.Destroy() }, rejected: rejected, allocate: allocated.Sub(start), sent: time.Now()}
 	params.AddCreatedHandler(imp)
 	params.AddFailedHandler(imp)
-	if err := params.Create(w, h, dmabuf.FormatARGB8888, 0); err != nil {
+	if err := params.Create(w, h, uint32(fourcc.ARGB8888), 0); err != nil {
 		_ = params.Destroy()
 		t.Close()
 		return nil, fmt.Errorf("buffer: dmabuf create %dx%d: %w", bufW, bufH, err)

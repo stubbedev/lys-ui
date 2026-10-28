@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/stubbedev/lys-lib/dmabuf"
+	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/dmabufwl"
 )
 
@@ -17,12 +17,12 @@ func TestDmabufFeedbackNamesDeviceAndLayouts(t *testing.T) {
 	}
 	s.applyDmabufFeedback(dmabufwl.Feedback{
 		Device:    0xe280,
-		Modifiers: map[uint32][]uint64{dmabuf.FormatARGB8888: {7, 0}},
+		Modifiers: map[fourcc.Format][]fourcc.Modifier{fourcc.ARGB8888: {7, 0}},
 	})
 	if dev, ok := s.DmabufDevice(); !ok || dev != 0xe280 {
 		t.Errorf("main device %#x, %v; want 0xe280", dev, ok)
 	}
-	if got := s.DmabufModifiers(dmabuf.FormatARGB8888); !slices.Equal(got, []uint64{0, 7}) {
+	if got := s.DmabufModifiers(fourcc.ARGB8888); !slices.Equal(got, []fourcc.Modifier{0, 7}) {
 		t.Errorf("ARGB8888 modifiers %v, want [0 7]", got)
 	}
 }

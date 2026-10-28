@@ -10,7 +10,7 @@ import (
 	"slices"
 
 	"github.com/stubbedev/lys-lib/debug"
-	"github.com/stubbedev/lys-lib/dmabuf"
+	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/sys/unix"
@@ -35,7 +35,7 @@ const rendererEnv = "LYS_UI_RENDERER"
 type gpuRenderer struct {
 	dev       *gpu.Device
 	name      string
-	modifiers []uint64
+	modifiers []fourcc.Modifier
 	// rec is the recording canvas a frame paints into before the GPU
 	// renders it; windows paint one at a time, on the loop.
 	rec *render.Canvas
@@ -185,16 +185,16 @@ func openDevice(dev uint64, named bool) (*gpu.Device, error) {
 
 // agreeModifiers is the ARGB8888 layouts dev renders and the session's
 // compositor imports.
-func (a *Application) agreeModifiers(dev *gpu.Device) ([]uint64, error) {
+func (a *Application) agreeModifiers(dev *gpu.Device) ([]fourcc.Modifier, error) {
 	if a.sess == nil || a.sess.Dmabuf() == nil {
 		return nil, errors.New("the compositor has no linux-dmabuf")
 	}
-	mods, err := dev.Modifiers(dmabuf.FormatARGB8888)
+	mods, err := dev.Modifiers(fourcc.ARGB8888)
 	if err != nil {
 		return nil, err
 	}
-	imports := a.sess.DmabufModifiers(dmabuf.FormatARGB8888)
-	mods = slices.DeleteFunc(mods, func(m uint64) bool { return !slices.Contains(imports, m) })
+	imports := a.sess.DmabufModifiers(fourcc.ARGB8888)
+	mods = slices.DeleteFunc(mods, func(m fourcc.Modifier) bool { return !slices.Contains(imports, m) })
 	if len(mods) == 0 {
 		return nil, fmt.Errorf("%s renders ARGB8888 in no modifier the compositor imports", dev.Name())
 	}

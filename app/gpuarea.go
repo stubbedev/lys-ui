@@ -238,7 +238,7 @@ func (s *gpuSurface) Import(d dmabuf.Buffer) (widget.GPUBuffer, error) {
 		return nil, ErrNoDmabuf
 	}
 	if !s.app.sess.DmabufImports(wlsession.DmabufLayout{Format: d.Format, Modifier: d.Modifier}) {
-		return nil, fmt.Errorf("%w: format %#08x modifier %#x", ErrDmabufLayout, d.Format, d.Modifier)
+		return nil, fmt.Errorf("%w: format %s modifier %s", ErrDmabufLayout, d.Format, d.Modifier)
 	}
 	params, err := dmabufwl.Params(mgr, d)
 	if err != nil {
@@ -257,7 +257,7 @@ func (s *gpuSurface) Import(d dmabuf.Buffer) (widget.GPUBuffer, error) {
 		_ = params.Destroy()
 		return nil, fmt.Errorf("app: dmabuf height: %w", err)
 	}
-	if err := params.Create(w, h, d.Format, 0); err != nil {
+	if err := params.Create(w, h, uint32(d.Format), 0); err != nil {
 		_ = params.Destroy()
 		return nil, fmt.Errorf("app: dmabuf create: %w", err)
 	}
@@ -343,7 +343,7 @@ func (b *gpuBuffer) HandleZwpBufferParamsV1Created(ev wlr.ZwpBufferParamsV1Creat
 func (b *gpuBuffer) HandleZwpBufferParamsV1Failed(wlr.ZwpBufferParamsV1FailedEvent) {
 	b.finishImport()
 	if b.err == nil {
-		b.err = fmt.Errorf("%w: %dx%d format %#08x modifier %#x", ErrDmabufRejected, b.desc.Width, b.desc.Height, b.desc.Format, b.desc.Modifier)
+		b.err = fmt.Errorf("%w: %dx%d format %s modifier %s", ErrDmabufRejected, b.desc.Width, b.desc.Height, b.desc.Format, b.desc.Modifier)
 	}
 	if b.s.waiting == b {
 		b.s.waiting = nil

@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/capture"
 	"github.com/stubbedev/lys-lib/dmabuf"
+	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/udmabuf"
 	"github.com/stubbedev/lys-lib/wltest"
@@ -109,7 +110,7 @@ func TestHeadlessGPUAreaPresentsDmabufs(t *testing.T) {
 	showGPUArea(t, func(area *widget.GPUArea, _ widget.GPUFrame) {
 		if buf == nil {
 			b, err := area.Import(dmabuf.Buffer{
-				Width: w, Height: h, Format: dmabuf.FormatXRGB8888, Modifier: dmabuf.ModifierLinear,
+				Width: w, Height: h, Format: fourcc.XRGB8888, Modifier: fourcc.Linear,
 				Planes: []dmabuf.Plane{{FD: mem.FD, Stride: w * 4}},
 			})
 			imported <- err
