@@ -8,10 +8,9 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor/xcursor"
-
-	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // File cursors (CSS cursor: url()): the stylesheet names an xcursor
@@ -97,7 +96,7 @@ func (s *Session) pushFileCursorLocked(fc fileCursor) error {
 	if err := s.crs.surface.Attach(ib.GetBuffer(), 0, 0); err != nil {
 		return fmt.Errorf("cursor attach: %w", err)
 	}
-	if err := s.crs.surface.DamageBuffer(0, 0, intconv.Int32(ib.GetWidth()), intconv.Int32(ib.GetHeight())); err != nil {
+	if err := s.crs.surface.DamageBuffer(0, 0, intconv.Clamp[int32](ib.GetWidth()), intconv.Clamp[int32](ib.GetHeight())); err != nil {
 		return fmt.Errorf("cursor damage: %w", err)
 	}
 	if err := s.crs.surface.Commit(); err != nil {

@@ -12,10 +12,10 @@
 package scale
 
 import (
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
 
-	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 )
 
@@ -107,9 +107,9 @@ func (c *Controller) Apply(frac120 uint32, w, h int) error {
 		return nil
 	}
 	if c.viewport != nil {
-		return c.viewport.SetDestination(intconv.Int32(w), intconv.Int32(h))
+		return c.viewport.SetDestination(intconv.Clamp[int32](w), intconv.Clamp[int32](h))
 	}
-	return c.surf.SetBufferScale(intconv.Int32(max(1, DeviceSize(1, frac120))))
+	return c.surf.SetBufferScale(intconv.Clamp[int32](max(1, DeviceSize(1, frac120))))
 }
 
 // DeviceSize rounds the logical size v up to device pixels at the

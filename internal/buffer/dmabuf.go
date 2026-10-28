@@ -6,14 +6,13 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
-	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/dmabufwl"
+	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
-
-	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // NewDmabuf allocates a bufW x bufH buffer the GPU renders into: a
@@ -33,12 +32,12 @@ func NewDmabuf(dev *gpu.Device, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, mod
 		return nil, err
 	}
 	allocated := time.Now()
-	w, err := intconv.CheckedInt32(bufW)
+	w, err := intconv.Exact[int32](bufW)
 	if err != nil {
 		t.Close()
 		return nil, fmt.Errorf("buffer: dmabuf width: %w", err)
 	}
-	h, err := intconv.CheckedInt32(bufH)
+	h, err := intconv.Exact[int32](bufH)
 	if err != nil {
 		t.Close()
 		return nil, fmt.Errorf("buffer: dmabuf height: %w", err)

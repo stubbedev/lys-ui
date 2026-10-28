@@ -5,10 +5,9 @@ import (
 	"image"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
-
-	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // Pointer constraints (zwp_pointer_constraints_v1) and relative motion
@@ -204,7 +203,7 @@ func (s *Session) constrain(surf *wl.Surface, region []image.Rectangle, persiste
 			return nil, err
 		}
 		for _, rc := range region {
-			_ = r.Add(intconv.Int32(rc.Min.X), intconv.Int32(rc.Min.Y), intconv.Int32(rc.Dx()), intconv.Int32(rc.Dy()))
+			_ = r.Add(intconv.Clamp[int32](rc.Min.X), intconv.Clamp[int32](rc.Min.Y), intconv.Clamp[int32](rc.Dx()), intconv.Clamp[int32](rc.Dy()))
 		}
 		defer func() { _ = r.Destroy() }()
 		reg = r

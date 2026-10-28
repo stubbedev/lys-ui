@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/vinput"
-
-	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // usKeymap is a flattened US xkb keymap (see testdata/us.xkb), the
@@ -103,7 +102,7 @@ func (v *VirtualInput) MoveTo(x, y int) error {
 	if x < 0 || y < 0 || x > int(w) || y > int(h) {
 		return fmt.Errorf("move to (%d,%d): outside the %dx%d output", x, y, w, h)
 	}
-	if err := v.dev.MotionAbsolute(intconv.Uint32(x), intconv.Uint32(y), intconv.Uint32(w), intconv.Uint32(h)); err != nil {
+	if err := v.dev.MotionAbsolute(intconv.Clamp[uint32](x), intconv.Clamp[uint32](y), intconv.Clamp[uint32](w), intconv.Clamp[uint32](h)); err != nil {
 		return err
 	}
 	v.settle()

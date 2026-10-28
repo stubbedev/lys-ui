@@ -4,10 +4,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/icons"
-	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/style"
 )
 
@@ -375,5 +375,5 @@ func fracOf(num, denom int) uint32 {
 	if num <= 0 || denom <= 0 {
 		return 0
 	}
-	return intconv.Uint32((num*120 + denom/2) / denom)
+	return intconv.Clamp[uint32]((num*120 + denom/2) / denom)
 }

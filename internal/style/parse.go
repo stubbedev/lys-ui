@@ -22,7 +22,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/stubbedev/lys-ui/internal/intconv"
+	"github.com/stubbedev/lys-lib/intconv"
+
 	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
@@ -790,7 +791,7 @@ func (p *parser) containerRule(ts []token, i int) int {
 		full = slices.Clone(p.sheet.containerQs[p.cq])
 	}
 	full = append(full, q)
-	p.cq = intconv.Int32(len(p.sheet.containerQs))
+	p.cq = intconv.Clamp[int32](len(p.sheet.containerQs))
 	for i, other := range p.sheet.containerQs {
 		if slices.EqualFunc(other, full, condsEqual) {
 			p.cq = int32(i)
@@ -1369,7 +1370,7 @@ func (p *parser) add(sel selector, block, start *Block) {
 		return
 	}
 	s := &p.sheet
-	idx := intconv.Int32(len(s.rules))
+	idx := intconv.Clamp[int32](len(s.rules))
 	if p.scope != nil {
 		sel.upper = p.scope.upper
 	}
@@ -1384,7 +1385,7 @@ func (p *parser) add(sel selector, block, start *Block) {
 		s.sens.Container = true
 	}
 	if p.mq != nil {
-		r.mq = intconv.Int32(len(s.mediaQs))
+		r.mq = intconv.Clamp[int32](len(s.mediaQs))
 		for i, q := range s.mediaQs {
 			if queryEqual(q, p.mq) {
 				r.mq = int32(i)

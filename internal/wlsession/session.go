@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/keymapfd"
 	text "github.com/stubbedev/lys-lib/third_party/wayland/unstable/text-input-v3"
 	deco "github.com/stubbedev/lys-lib/third_party/wayland/unstable/xdg-decoration-v1"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/compose"
-	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
@@ -1251,8 +1251,8 @@ func (s *Session) Mods() Mods {
 // HandleKeyboardRepeatInfo implements wl.KeyboardRepeatInfoHandler: the
 // compositor's rate (keys per second) and delay (milliseconds).
 func (s *Session) HandleKeyboardRepeatInfo(ev wl.KeyboardRepeatInfoEvent) {
-	s.repeatRate = intconv.Uint32(ev.Rate)
-	s.repeatDelay = intconv.Uint32(ev.Delay)
+	s.repeatRate = intconv.Clamp[uint32](ev.Rate)
+	s.repeatDelay = intconv.Clamp[uint32](ev.Delay)
 }
 
 // RepeatInfo returns the compositor's key repeat rate in keys per second

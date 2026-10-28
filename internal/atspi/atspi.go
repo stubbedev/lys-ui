@@ -27,8 +27,8 @@ import (
 
 	"github.com/godbus/dbus/v5"
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/intconv"
 
-	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -534,7 +534,7 @@ func diff(old, cur *tree, busName string) []event {
 		if now.text && now.st.Caret != before.st.Caret {
 			out = append(out, event{
 				path: pathOf(now), name: eventObject("TextCaretMoved"),
-				args: []any{"", intconv.Int32(now.st.Caret), int32(0), dbus.MakeVariant(int32(0)), map[string]dbus.Variant{}},
+				args: []any{"", intconv.Clamp[int32](now.st.Caret), int32(0), dbus.MakeVariant(int32(0)), map[string]dbus.Variant{}},
 			})
 		}
 		if now.st.Bounds != before.st.Bounds {
@@ -601,7 +601,7 @@ func textChangedEvents(n *anode, before, after string) []event {
 		if len(rs) > 0 {
 			out = append(out, event{
 				path: pathOf(n), name: eventObject("TextChanged"),
-				args: []any{op, intconv.Int32(pre), intconv.Int32(len(rs)), dbus.MakeVariant(string(rs)), map[string]dbus.Variant{}},
+				args: []any{op, intconv.Clamp[int32](pre), intconv.Clamp[int32](len(rs)), dbus.MakeVariant(string(rs)), map[string]dbus.Variant{}},
 			})
 		}
 	}
@@ -638,7 +638,7 @@ func childrenEvent(busName string, parent *anode, op string, index int, child *a
 	return event{
 		path: pathOf(parent), name: eventObject("ChildrenChanged"),
 		args: []any{
-			op, intconv.Int32(index), int32(0),
+			op, intconv.Clamp[int32](index), int32(0),
 			dbus.MakeVariant(objRef{Name: busName, Path: pathOf(child)}),
 			map[string]dbus.Variant{},
 		},

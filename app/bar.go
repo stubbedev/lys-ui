@@ -3,7 +3,8 @@ package app
 import (
 	"errors"
 
-	"github.com/stubbedev/lys-ui/internal/intconv"
+	"github.com/stubbedev/lys-lib/intconv"
+
 	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -97,9 +98,9 @@ func (w *BarWindow) reserve(width, height int) {
 // thickness is the bar's extent across its edge at width x height.
 func (w *BarWindow) thickness(width, height int) int32 {
 	if w.cfg.Bar.Edge().Vertical() {
-		return intconv.Int32(width)
+		return intconv.Clamp[int32](width)
 	}
-	return intconv.Int32(height)
+	return intconv.Clamp[int32](height)
 }
 
 // barAnchor anchors a bar to its edge and both ends of it.

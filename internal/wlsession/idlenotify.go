@@ -5,10 +5,9 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
-
-	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // ext-idle-notify-v1: the compositor tells the client when the user
@@ -83,7 +82,7 @@ func (s *Session) IdleNotify(timeout time.Duration, inputOnly bool) (*IdleNotifi
 	if !s.IdleNotifyAvailable() {
 		return nil, ErrIdleNotifyUnavailable
 	}
-	ms := intconv.Uint32(max(timeout.Milliseconds(), 1))
+	ms := intconv.Clamp[uint32](max(timeout.Milliseconds(), 1))
 	var (
 		obj *wlr.ExtIdleNotificationV1
 		err error

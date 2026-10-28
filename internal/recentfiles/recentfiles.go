@@ -13,7 +13,8 @@ import (
 	"slices"
 	"time"
 
-	"github.com/stubbedev/lys-ui/internal/atomicfile"
+	"github.com/stubbedev/lys-lib/atomicfile"
+
 	"github.com/stubbedev/lys-ui/transfer"
 )
 

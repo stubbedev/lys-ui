@@ -13,13 +13,12 @@ import (
 	"os"
 	"sync"
 
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 	wlos "github.com/stubbedev/lys-lib/third_party/wayland/os"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 	"golang.org/x/sys/unix"
-
-	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // slot is a byte range in the arena's pool file. Buffer geometry (width,
@@ -119,7 +118,7 @@ func (a *Arena) Acquire(bufW, bufH, scale int) (*Buffer, error) {
 	a.lastFormat = Format
 	var wlBuf *wl.Buffer
 	if a.pool != nil {
-		wlBuf, err = a.pool.CreateBuffer(intconv.Int32(s.offset), intconv.Int32(bufW), intconv.Int32(bufH), intconv.Int32(stride), a.lastFormat)
+		wlBuf, err = a.pool.CreateBuffer(intconv.Clamp[int32](s.offset), intconv.Clamp[int32](bufW), intconv.Clamp[int32](bufH), intconv.Clamp[int32](stride), a.lastFormat)
 		if err != nil {
 			a.put(s)
 			return nil, fmt.Errorf("buffer: wl_shm_pool.create_buffer: %w", err)
@@ -190,7 +189,7 @@ func (a *Arena) ensure(size int) error {
 	if size <= a.size {
 		return nil
 	}
-	wireSize, err := intconv.CheckedInt32(size)
+	wireSize, err := intconv.Exact[int32](size)
 	if err != nil {
 		return fmt.Errorf("buffer: pool size %d exceeds the wayland int32 range: %w", size, err)
 	}

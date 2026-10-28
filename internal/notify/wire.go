@@ -4,8 +4,7 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
-
-	"github.com/stubbedev/lys-ui/internal/intconv"
+	"github.com/stubbedev/lys-lib/intconv"
 )
 
 // The wire builders, pure and table-tested: the same Notification
@@ -87,7 +86,7 @@ func classicTimeout(d time.Duration) int32 {
 	case d < 0:
 		return -1
 	default:
-		return intconv.Int32(d.Milliseconds())
+		return intconv.Clamp[int32](d.Milliseconds())
 	}
 }
 

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/intconv"
 
-	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/mailbox"
 )
 
@@ -286,7 +286,7 @@ func writeInvocation(conn net.Conn, inv Invocation) error {
 	if err != nil {
 		return err
 	}
-	n, err := intconv.CheckedUint32(len(payload))
+	n, err := intconv.Exact[uint32](len(payload))
 	if err != nil {
 		return fmt.Errorf("app: invocation frame length: %w", err)
 	}

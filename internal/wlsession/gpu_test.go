@@ -4,8 +4,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/dmabufwl"
+	"github.com/stubbedev/lys-lib/fourcc"
 )
 
 // A linux-dmabuf v4 compositor's default feedback names the device it

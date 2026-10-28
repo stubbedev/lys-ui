@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/unxed/xkb-go"
 
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
-	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/window"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
@@ -261,10 +261,10 @@ func (a *Application) rebuildToplevel(old *hostWindow) error {
 	cfg := w.cfg
 	cfg.Title = prev.Title()
 	if pw, ph := prev.Size(); pw > 0 && ph > 0 {
-		cfg.Width, cfg.Height = intconv.Uint32(pw), intconv.Uint32(ph)
+		cfg.Width, cfg.Height = intconv.Clamp[uint32](pw), intconv.Clamp[uint32](ph)
 	}
 	minW, minH, maxW, maxH := prev.SizeLimits()
-	cfg.MinWidth, cfg.MinHeight, cfg.MaxWidth, cfg.MaxHeight = intconv.Uint32(minW), intconv.Uint32(minH), intconv.Uint32(maxW), intconv.Uint32(maxH)
+	cfg.MinWidth, cfg.MinHeight, cfg.MaxWidth, cfg.MaxHeight = intconv.Clamp[uint32](minW), intconv.Clamp[uint32](minH), intconv.Clamp[uint32](maxW), intconv.Clamp[uint32](maxH)
 	cfg.Parent = nil // re-linked once every window is back
 	state := prev.State()
 	hw, err := a.openWindow(w, cfg)

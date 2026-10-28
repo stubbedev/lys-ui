@@ -9,10 +9,10 @@ import (
 	"os"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/stubbedev/lys-lib/atomicfile"
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 
-	"github.com/stubbedev/lys-ui/internal/atomicfile"
-	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/pdf"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -301,7 +301,7 @@ func (d *desktopPortals) preparePrint(window, title string, settings map[string]
 }
 
 func (d *desktopPortals) print(window, title string, f *os.File, token uint32) error {
-	fd, err := intconv.CheckedInt32(f.Fd())
+	fd, err := intconv.Exact[int32](f.Fd())
 	if err != nil {
 		return fmt.Errorf("app: print %s: fd: %w", f.Name(), err)
 	}

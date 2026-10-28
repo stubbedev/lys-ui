@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/stubbedev/lys-lib/intconv"
 
-	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -37,7 +37,7 @@ func (b *Bridge) childAt(id, index int32) objRef {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	n := b.cur.nodes[id]
-	if n == nil || index < 0 || index >= intconv.Int32(len(n.children)) {
+	if n == nil || index < 0 || index >= intconv.Clamp[int32](len(n.children)) {
 		return objRef{Name: "", Path: nullPath}
 	}
 	c := n.children[index]
@@ -65,7 +65,7 @@ func (b *Bridge) indexInParent(id int32) int32 {
 	if n == nil {
 		return -1
 	}
-	return intconv.Int32(n.index)
+	return intconv.Clamp[int32](n.index)
 }
 
 // roleOf is the AT-SPI role enum: APPLICATION for the root, the mapped
@@ -282,8 +282,8 @@ func (b *Bridge) properties(id int32, iface string) map[string]dbus.Variant {
 	case ifaceText:
 		if n := b.node(id); n != nil {
 			return map[string]dbus.Variant{
-				"CharacterCount": dbus.MakeVariant(intconv.Int32(len([]rune(n.st.Text)))),
-				"CaretOffset":    dbus.MakeVariant(intconv.Int32(n.st.Caret)),
+				"CharacterCount": dbus.MakeVariant(intconv.Clamp[int32](len([]rune(n.st.Text)))),
+				"CaretOffset":    dbus.MakeVariant(intconv.Clamp[int32](n.st.Caret)),
 				"version":        dbus.MakeVariant(uint32(1)),
 			}
 		}
@@ -315,7 +315,7 @@ func (b *Bridge) properties(id int32, iface string) map[string]dbus.Variant {
 // delimited string and its offsets. All offsets are rune offsets into
 // the model's text.
 func textBoundary(r []rune, offset, kind int32) (string, int32, int32) {
-	n := intconv.Int32(len(r))
+	n := intconv.Clamp[int32](len(r))
 	offset = max32(0, min32(offset, n))
 	switch kind {
 	case 0: // CHAR
@@ -363,25 +363,25 @@ func textBoundary(r []rune, offset, kind int32) (string, int32, int32) {
 // wordAt is the GetStringAtOffset word granularity: the word at or
 // before the offset.
 func wordAt(r []rune, offset int32) (string, int32, int32) {
-	s, e := wordSpan(r, max32(0, min32(offset, intconv.Int32(len(r)))))
+	s, e := wordSpan(r, max32(0, min32(offset, intconv.Clamp[int32](len(r)))))
 	return string(r[s:e]), s, e
 }
 
 // sentenceAt is the sentence granularity.
 func sentenceAt(r []rune, offset int32) (string, int32, int32) {
-	s, e := sentenceSpan(r, max32(0, min32(offset, intconv.Int32(len(r)))))
+	s, e := sentenceSpan(r, max32(0, min32(offset, intconv.Clamp[int32](len(r)))))
 	return string(r[s:e]), s, e
 }
 
 // lineAt is the line granularity: newline-delimited.
 func lineAt(r []rune, offset int32) (string, int32, int32) {
-	s, e := lineSpan(r, max32(0, min32(offset, intconv.Int32(len(r)))))
+	s, e := lineSpan(r, max32(0, min32(offset, intconv.Clamp[int32](len(r)))))
 	return string(r[s:e]), s, e
 }
 
 // wordSpan finds the whitespace-delimited word containing offset.
 func wordSpan(r []rune, offset int32) (int32, int32) {
-	n := intconv.Int32(len(r))
+	n := intconv.Clamp[int32](len(r))
 	if n == 0 {
 		return 0, 0
 	}
@@ -403,7 +403,7 @@ func wordSpan(r []rune, offset int32) (int32, int32) {
 // sentenceSpan finds the sentence (terminated by . ! or ?) containing
 // offset.
 func sentenceSpan(r []rune, offset int32) (int32, int32) {
-	n := intconv.Int32(len(r))
+	n := intconv.Clamp[int32](len(r))
 	if n == 0 {
 		return 0, 0
 	}
@@ -423,7 +423,7 @@ func sentenceSpan(r []rune, offset int32) (int32, int32) {
 
 // lineSpan finds the newline-delimited line containing offset.
 func lineSpan(r []rune, offset int32) (int32, int32) {
-	n := intconv.Int32(len(r))
+	n := intconv.Clamp[int32](len(r))
 	if n == 0 {
 		return 0, 0
 	}

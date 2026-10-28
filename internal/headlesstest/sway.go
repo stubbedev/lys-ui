@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/stubbedev/lys-ui/internal/intconv"
+	"github.com/stubbedev/lys-lib/intconv"
 )
 
 // ipcMagic fronts every i3/sway IPC message and reply.
@@ -108,7 +108,7 @@ func swayIPCCommand(dir, command string) error {
 
 	head := make([]byte, 0, 14+len(command))
 	head = append(head, ipcMagic...)
-	n, err := intconv.CheckedUint32(len(command))
+	n, err := intconv.Exact[uint32](len(command))
 	if err != nil {
 		return fmt.Errorf("headlesstest: sway IPC command length: %w", err)
 	}

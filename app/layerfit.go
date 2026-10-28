@@ -1,9 +1,9 @@
 package app
 
 import (
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 
-	"github.com/stubbedev/lys-ui/internal/intconv"
 	"github.com/stubbedev/lys-ui/internal/layersurface"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
@@ -92,10 +92,10 @@ func fittedSize(root widget.Widget, fit fitAxes, width, height uint32, cur [2]in
 	}
 	size := measure(root, limit, pinW)
 	if fit.w {
-		width = intconv.Uint32(max(size.W, 1))
+		width = intconv.Clamp[uint32](max(size.W, 1))
 	}
 	if fit.h {
-		height = intconv.Uint32(max(size.H, 1))
+		height = intconv.Clamp[uint32](max(size.H, 1))
 	}
 	return width, height
 }

@@ -7,9 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/stubbedev/lys-lib/intconv"
 	"golang.org/x/sys/unix"
-
-	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // File descriptors and paths watched on the application loop: a
@@ -28,7 +27,7 @@ var ErrLoopEnded = errors.New("app: the application loop has ended")
 // returned. The fd stays the caller's; stop (or the loop ending) ends
 // the watch, after which fn is not called again.
 func (a *Application) WatchFD(fd int, events int16, fn func(revents int16)) (stop func(), err error) {
-	pollFD, err := intconv.CheckedInt32(fd)
+	pollFD, err := intconv.Exact[int32](fd)
 	if err != nil {
 		return nil, fmt.Errorf("app: watch fd %d: %w", fd, err)
 	}
@@ -36,7 +35,7 @@ func (a *Application) WatchFD(fd int, events int16, fn func(revents int16)) (sto
 	if err != nil {
 		return nil, fmt.Errorf("app: watch eventfd: %w", err)
 	}
-	pollWake, err := intconv.CheckedInt32(wake)
+	pollWake, err := intconv.Exact[int32](wake)
 	if err != nil {
 		_ = unix.Close(wake)
 		return nil, fmt.Errorf("app: watch eventfd %d: %w", wake, err)

@@ -26,10 +26,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
-
-	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // btnLeft is the linux-evdev code wl_pointer uses for the primary button.
@@ -163,7 +162,7 @@ func main() {
 
 	t := func() uint32 { return uint32(time.Now().UnixMilli() & math.MaxUint32) }
 	move := func(x, y int32) {
-		if err := ctx.SendRequest(vp, 1, t(), intconv.Uint32(x), intconv.Uint32(y), intconv.Uint32(g.modeW), intconv.Uint32(g.modeH)); err != nil {
+		if err := ctx.SendRequest(vp, 1, t(), intconv.Clamp[uint32](x), intconv.Clamp[uint32](y), intconv.Clamp[uint32](g.modeW), intconv.Clamp[uint32](g.modeH)); err != nil {
 			die("motion_absolute: %v", err)
 		}
 		_ = ctx.SendRequest(vp, 4)

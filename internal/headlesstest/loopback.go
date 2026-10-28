@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/wltest"
-
-	"github.com/stubbedev/lys-ui/internal/intconv"
 )
 
 // WireFrame is one request as it hit a WireServer: object id, opcode,
