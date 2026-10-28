@@ -125,7 +125,7 @@ func lookup(family string, aspect font.Aspect) (*render.Typeface, error) {
 	storeMu.Lock()
 	defer storeMu.Unlock()
 	if faces := installedFaces(family); len(faces) > 0 {
-		return typefaceAt(closestFace(faces, aspect).loc)
+		return typefaceAt(fm, closestFace(faces, aspect).loc)
 	}
 	fm.SetQuery(fontscan.Query{Families: []string{family}, Aspect: aspect})
 	fm.SetScript(0)
@@ -170,8 +170,11 @@ func monospaced(fm *fontscan.FontMap, face *font.Face, aspect font.Aspect, r run
 }
 
 // typefaceAt returns the typeface of the system face at loc, parsing
-// the file on its first use. Caller holds storeMu.
-func typefaceAt(loc fontscan.Location) (*render.Typeface, error) {
+// the file on its first use. A parsed face is handed to fm, filed
+// under its own location and description, so a later match or
+// fallback that resolves to the same file reuses it instead of
+// parsing the file again. Caller holds storeMu.
+func typefaceAt(fm *fontscan.FontMap, loc fontscan.Location) (*render.Typeface, error) {
 	if tf, ok := typefaces[loc]; ok {
 		return tf, nil
 	}
@@ -179,6 +182,7 @@ func typefaceAt(loc fontscan.Location) (*render.Typeface, error) {
 	if err != nil {
 		return nil, err
 	}
+	fm.AddFace(face, loc, face.Describe())
 	return remember(loc, face)
 }
 

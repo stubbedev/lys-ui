@@ -3,6 +3,7 @@ package sysfont
 import (
 	"bytes"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -397,6 +398,14 @@ func TestFallbackLoadsFacesOnlyOnDemand(t *testing.T) {
 	}
 }
 
+// liveHeap returns the bytes of live heap after a full collection.
+func liveHeap() uint64 {
+	runtime.GC()
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.HeapAlloc
+}
+
 // A file the store knows under another family name is one face
 // whichever name reaches it: the alias resolves to the very typeface
 // the matcher handed out for the generic (#427).
@@ -427,5 +436,47 @@ func TestTwoNamesOfAFileShareOneTypeface(t *testing.T) {
 	}
 	if tf != sans {
 		t.Errorf("the alias of %s resolved to another typeface than Sans()", loc.File)
+	}
+}
+
+// A face a name lookup parsed is the matcher's face for that file too:
+// resolving the generic to the same file afterwards parses nothing
+// (#427), where it used to parse the file a second time.
+func TestAFileReachedByNameThenMatcherIsParsedOnce(t *testing.T) {
+	sans := mustSans(t)
+	family := FamilyKey(sans.Family())
+	storeMu.Lock()
+	var pick systemFace
+	var found bool
+	for _, f := range installed[family] {
+		if _, loaded := typefaces[f.loc]; !loaded && closestFace(installed[family], f.aspect) == f {
+			pick, found = f, true
+			break
+		}
+	}
+	storeMu.Unlock()
+	if !found {
+		t.Skipf("every face of %s is already loaded", sans.Family())
+	}
+	before := liveHeap()
+	named, err := lookup(sans.Family(), pick.aspect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed := liveHeap() - before
+	before = liveHeap()
+	generic, err := lookup(fontscan.SansSerif, pick.aspect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again := int64(liveHeap()) - int64(before)
+	if generic.Describe() != named.Describe() {
+		t.Skipf("sans-serif at %v resolves %v, not %v", pick.aspect, generic.Describe(), named.Describe())
+	}
+	if generic != named {
+		t.Error("the generic resolved the file to another typeface")
+	}
+	if again > int64(parsed/4) {
+		t.Errorf("the generic grew the heap by %d bytes after the name lookup's parse of %s took %d", again, pick.loc.File, parsed)
 	}
 }
