@@ -58,6 +58,7 @@ implementation.
 | `anim` | tweens, easing, springs and timelines |
 | `appearance` | the desktop's color scheme, accent and contrast preferences |
 | `gtksettings` | GTK 4's settings.ini, read with GTK's file order |
+| `icontheme` | freedesktop icon theme lookup for programs that draw icons without widgets |
 | `i18n` | gettext catalogs (`.mo`, `.po`) |
 | `highlight` | syntax highlighters for the code view |
 | `media` | video and sound playback |
