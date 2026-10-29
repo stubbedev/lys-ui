@@ -2,6 +2,7 @@ package widget
 
 import (
 	"bytes"
+	"errors"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -739,5 +740,33 @@ func TestRemovedImageDropsItsOwnRasters(t *testing.T) {
 	box.Remove(shared)
 	if _, rasters := imgcache.Default().Len(); rasters != 1 {
 		t.Errorf("%d rasters cached after removing both, want only the shared source's", rasters)
+	}
+}
+
+// A picture is no Tab stop: focus passes from the button before it to
+// the one after. With an OnPasteImage hook it is a paste target, and
+// Tab lands on it.
+func TestImageTakesFocusOnlyAsAPasteTarget(t *testing.T) {
+	before, after := NewButton(NewBox(Row, 0, 0), 0, 0), NewButton(NewBox(Row, 0, 0), 0, 0)
+	img := NewImage(solidImage(8, 8, color.NRGBA{A: 255}))
+	box := NewBox(Row, 0, 0)
+	box.Append(before, false)
+	box.Append(img, false)
+	box.Append(after, false)
+	arrangeTree(t, box, 200, 50)
+	r := &Router{Root: box}
+	if err := r.SetFocus(img); !errors.Is(err, ErrNotFocusable) {
+		t.Errorf("focusing a picture: %v, want ErrNotFocusable", err)
+	}
+	r.SetFocus(before)
+	r.FocusNext()
+	if r.Focused() != Widget(after) {
+		t.Errorf("Tab from the button went to %T, want past the picture", r.Focused())
+	}
+	img.OnPasteImage = func(image.Image) {}
+	r.SetFocus(before)
+	r.FocusNext()
+	if r.Focused() != Widget(img) {
+		t.Errorf("Tab from the button went to %T, want the paste target", r.Focused())
 	}
 }

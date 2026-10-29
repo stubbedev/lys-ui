@@ -459,6 +459,10 @@ func (im *Image) applyPaste(gen uint64, img image.Image, err error) {
 // the actions themselves are none of its own.
 func (im *Image) KeyAction(KeyAction, Mods) {}
 
+// focusable implements focusOptOut: only a paste target takes the
+// focus; a picture alone is no Tab stop.
+func (im *Image) focusable() bool { return im.OnPasteImage != nil }
+
 // ensureSettled kicks the first load of a file/URL source, decoded for
 // the device box it paints in under fit, and loads it again at a finer
 // shrink once the box outgrows the decode it has. Without an invoker
