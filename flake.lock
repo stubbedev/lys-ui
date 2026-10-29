@@ -30,11 +30,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793287606,
-        "narHash": "sha256-XXAgO3D8PCkxsjBjv7/NIE/pbhmU4Cc516IFoEvSdxw=",
+        "lastModified": 1793288504,
+        "narHash": "sha256-+ZHxfSq9spDWngTq47voLzYiSpyj0pWTtIO68oy3LA4=",
         "owner": "stubbedev",
         "repo": "lys-lib",
-        "rev": "586d3f5b86100ae79f2b62983dab51e182d5770b",
+        "rev": "c3c0d438dfc85325286d140221fa945585955de8",
         "type": "github"
       },
       "original": {

@@ -29,7 +29,7 @@
           );
         };
         env.CGO_ENABLED = "0";
-        vendorHash = "sha256-SbYmpYDLabtEKfyZylEhtL2mQfw6MAl/LF6h5H32wFA=";
+        vendorHash = "sha256-TL45rITNQZEBVsv84qnOOruwa4QT4/M3VEYJT2mMLec=";
         doCheck = true;
         preCheck = ''
           export HOME="$TMPDIR" FONTCONFIG_FILE=${testFontsConf}
