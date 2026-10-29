@@ -6,10 +6,10 @@ import (
 	"os"
 	"unicode/utf16"
 
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/font/opentype"
-	"github.com/go-text/typesetting/font/opentype/tables"
-	"github.com/go-text/typesetting/fontscan"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/font"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/font/opentype"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/font/opentype/tables"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/fontscan"
 )
 
 // familyNameIDs are the name records a family is matched by, as

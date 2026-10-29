@@ -16,11 +16,11 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/font/opentype"
-	"github.com/go-text/typesetting/fontscan"
-	"github.com/go-text/typesetting/language"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/font"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/font/opentype"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/fontscan"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/language"
 
 	"github.com/stubbedev/lys-ui/internal/uifont"
 )

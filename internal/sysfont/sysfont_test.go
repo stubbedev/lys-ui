@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/fontscan"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/font"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/fontscan"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/stubbedev/lys-ui/internal/uifont"
@@ -378,6 +378,29 @@ func TestMonospaceNeverResolvesProportional(t *testing.T) {
 	got := monospaced(fm, face, regAspect, 'x')
 	if !got.IsMonospace() || got.Describe().Family != uifont.MonoFamily {
 		t.Errorf("monospace resolved %q (monospaced %v), want the embedded %q", got.Describe().Family, got.IsMonospace(), uifont.MonoFamily)
+	}
+}
+
+// A dual-width monospace family, whose wide glyphs advance two or
+// three cells, is the monospace answer itself: the generic keeps it
+// instead of parsing it and swapping in the embedded mono (#428).
+func TestMonospaceKeepsADualWidthFace(t *testing.T) {
+	fm, err := fontmap()
+	if err != nil {
+		t.Skipf("no system font store: %v", err)
+	}
+	storeMu.Lock()
+	defer storeMu.Unlock()
+	loc, ok := fm.FindSystemFont("Noto Sans Mono")
+	if !ok {
+		t.Skip("Noto Sans Mono is not installed")
+	}
+	face, err := faceFromFile(loc.File, loc.Index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := monospaced(fm, face, regAspect, 'x'); got != face {
+		t.Errorf("monospace swapped Noto Sans Mono for %q", got.Describe().Family)
 	}
 }
 

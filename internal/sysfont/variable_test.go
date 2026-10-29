@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/go-text/typesetting/font"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/font"
 
 	"github.com/stubbedev/lys-ui/internal/uifont"
 )

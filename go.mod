@@ -3,9 +3,8 @@ module github.com/stubbedev/lys-ui
 go 1.27.3
 
 require (
-	github.com/go-text/typesetting v0.3.5
 	github.com/jfreymuth/pulse v0.1.3
-	github.com/stubbedev/lys-lib v0.1.1-0.20261028203227-0f3de84c644b
+	github.com/stubbedev/lys-lib v0.1.1-0.20261029053638-68a67a2e917e
 	github.com/stubbedev/memory-go v0.3.0
 	github.com/unxed/xkb-go v0.1.9
 	golang.org/x/image v0.47.0

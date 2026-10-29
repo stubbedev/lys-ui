@@ -7,8 +7,8 @@ import (
 	"testing"
 	"unicode/utf16"
 
-	"github.com/go-text/typesetting/font"
-	"github.com/go-text/typesetting/fontscan"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/font"
+	"github.com/stubbedev/lys-lib/third_party/typesetting/fontscan"
 )
 
 // nameRecord is one record for nameTable.
