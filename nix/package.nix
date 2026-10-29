@@ -38,6 +38,7 @@
         # cgo, so no rpath): the binaries find it through the
         # wrapper's library path, NixOS having none of its own.
         nativeBuildInputs = [pkgs.makeWrapper];
+        nativeCheckInputs = [pkgs.dbus];
         postFixup = ''
           for bin in $out/bin/*; do
             wrapProgram "$bin" --prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [pkgs.vulkan-loader]}
