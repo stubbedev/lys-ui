@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/internal/logutil"
@@ -129,6 +130,9 @@ func setTestLogger(t *testing.T, l *slog.Logger) *bytes.Buffer {
 // lifecycle writes zero bytes to stderr or stdout. Any direct
 // fmt.Fprint in library code shows up here.
 func TestLifecycleSilentByDefault(t *testing.T) {
+	if debug.Enabled {
+		t.Skip("a lysdebug build traces to stderr by design; the silence contract is the default build's")
+	}
 	out := captureOutput(t)
 	driveLifecycle(t)
 	out.restore()
@@ -173,6 +177,9 @@ func TestLifecycleInjectedLogger(t *testing.T) {
 // TestNilLoggerDiscards: SetLogger(nil) must mean discard — the same
 // lifecycle that logged in the injected case goes quiet again.
 func TestNilLoggerDiscards(t *testing.T) {
+	if debug.Enabled {
+		t.Skip("a lysdebug build traces to stderr by design; the silence contract is the default build's")
+	}
 	out := captureOutput(t)
 	buf := setTestLogger(t, slog.New(slog.NewTextHandler(&bytes.Buffer{}, nil)))
 	SetLogger(nil)
