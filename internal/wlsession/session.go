@@ -101,6 +101,7 @@ type Session struct {
 	shm           *wl.Shm
 	layerShell    *wlr.ZwlrLayerShellV1
 	viewporter    *wlr.WpViewporter
+	presentation  *wlr.WpPresentation
 	subcompositor *wl.Subcompositor
 	dmabuf        *wlr.ZwpDmabufV1
 	dmabufVersion uint32
@@ -474,6 +475,12 @@ func (s *Session) HandleRegistryGlobal(ev wl.RegistryGlobalEvent) {
 			return
 		}
 		s.viewporter = vp
+	case "wp_presentation":
+		p := wlr.NewWpPresentation(s.registry.Context())
+		if !s.bindOptional(ev, 1, p) {
+			return
+		}
+		s.presentation = p
 	case "wp_fractional_scale_manager_v1":
 		ctx := s.registry.Context()
 		mgr := wlr.NewWpScaleManagerV1(ctx)
@@ -1275,6 +1282,10 @@ func (s *Session) LayerShell() *wlr.ZwlrLayerShellV1 { return s.layerShell }
 // compositor does not provide it; fractional scaling degrades to
 // integer set_buffer_scale without it.
 func (s *Session) Viewporter() *wlr.WpViewporter { return s.viewporter }
+
+// Presentation returns the bound wp_presentation, or nil when the
+// compositor does not provide it.
+func (s *Session) Presentation() *wlr.WpPresentation { return s.presentation }
 
 // FractionalScaleManager returns the bound
 // wp_fractional_scale_manager_v1, or nil when the compositor does not

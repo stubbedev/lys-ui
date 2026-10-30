@@ -31,6 +31,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
+	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/buffer"
@@ -122,8 +123,10 @@ type hostWindow struct {
 	// application-wide one, so a key press allocates nothing.
 	keyChain     func(r *widget.Router, keycode uint32, mods wlsession.Mods)
 	lastW, lastH int
-	// presented is set once the surface's first buffer is committed.
-	presented bool
+	// presented is set once the compositor reports the surface's
+	// first buffer presented.
+	presented      bool
+	presentOnFrame bool
 	// reportedW and reportedH are the size OnResize last heard.
 	reportedW, reportedH int
 	// limits reports the host's min/max size in logical pixels (zero
@@ -208,7 +211,8 @@ type windowHooks struct {
 	blur bool
 	// keyCapture sees each press before any routing; true consumes it.
 	keyCapture func(Accel) bool
-	// onPresented runs once the surface's first buffer is committed.
+	// onPresented runs once the compositor reports the surface's first
+	// buffer presented.
 	onPresented func()
 	onClosed    func()
 }
@@ -611,6 +615,7 @@ type surfaceHandle interface {
 	// Frame arms the compositor callback that fires ready once the
 	// frame may be followed by another.
 	Frame(ready *bool) error
+	Feedback(done func(shown bool)) error
 	// BlurAvailable reports whether the compositor blurs behind
 	// surfaces now (its offer can come and go).
 	BlurAvailable() bool
@@ -666,6 +671,36 @@ func (s wireSurface) Frame(ready *bool) error {
 	}
 	wlclient.CallbackAddListener(cb, frameDone{ready: ready})
 	return nil
+}
+
+func (s wireSurface) Feedback(done func(shown bool)) error {
+	p := s.sess.Presentation()
+	if p == nil {
+		return errNoPresentation
+	}
+	fb, err := p.Feedback(s.wl)
+	if err != nil {
+		return err
+	}
+	l := &presentationFeedback{fb: fb, done: done}
+	fb.AddPresentedHandler(l)
+	fb.AddDiscardedHandler(l)
+	return nil
+}
+
+type presentationFeedback struct {
+	fb   *wlr.WpPresentationFeedback
+	done func(shown bool)
+}
+
+func (p *presentationFeedback) HandleWpPresentationFeedbackPresented(wlr.WpPresentationFeedbackPresentedEvent) {
+	p.fb.Unregister()
+	p.done(true)
+}
+
+func (p *presentationFeedback) HandleWpPresentationFeedbackDiscarded(wlr.WpPresentationFeedbackDiscardedEvent) {
+	p.fb.Unregister()
+	p.done(false)
 }
 
 // SetOpaqueRegion implements surfaceHandle: the compositor's region
@@ -927,6 +962,15 @@ func (w *hostWindow) draw() bool {
 		w.drawErr = fmt.Errorf("app: frame callback: %w", err)
 		return false
 	}
+	if !w.presented && w.cfg.onPresented != nil && !w.presentOnFrame {
+		switch err := w.surf.Feedback(w.notePresented); {
+		case errors.Is(err, errNoPresentation):
+			w.presentOnFrame = true
+		case err != nil:
+			w.drawErr = fmt.Errorf("app: presentation feedback: %w", err)
+			return false
+		}
+	}
 	if err := w.surf.Commit(); err != nil {
 		w.drawErr = fmt.Errorf("app: commit: %w", err)
 		return false
@@ -935,17 +979,33 @@ func (w *hostWindow) draw() bool {
 	// and every other pooled buffer lags by what changed here.
 	w.pool.Presented(b, changed)
 	w.noteFootprint()
-	if !w.presented {
-		w.presented = true
-		if w.cfg.onPresented != nil {
-			w.cfg.onPresented()
-		}
-	}
 
 	debug.Log("frame", "frame committed, waiting for callback")
 	w.framePending = true
 	w.frameArmedAt = time.Now()
 	return true
+}
+
+var errNoPresentation = errors.New("app: compositor has no wp_presentation")
+
+func (w *hostWindow) takeFrame() {
+	if !w.frameReady {
+		return
+	}
+	w.frameReady = false
+	w.framePending = false
+	if w.presentOnFrame {
+		w.presentOnFrame = false
+		w.notePresented(true)
+	}
+}
+
+func (w *hostWindow) notePresented(shown bool) {
+	if !shown || w.presented {
+		return
+	}
+	w.presented = true
+	w.cfg.onPresented()
 }
 
 // copier is the window's GPU copier for Pool.CopyForward, nil drawing

@@ -411,6 +411,14 @@ type WindowConfig struct {
 	// lock masked out, so it compares equal to ParseAccel of a
 	// binding's name.
 	KeyCapture func(Accel) bool
+	// OnPresented runs on the loop goroutine once the compositor
+	// reports the window's first buffer presented through
+	// wp_presentation, retrying with the next commit when one is
+	// discarded; without wp_presentation, at the first frame callback
+	// after the first commit. That is the moment a replacement can
+	// take over from the surface it replaces. A reconnect rebuilds the
+	// window, and it runs again for the new one.
+	OnPresented func()
 	// OnClosed runs when the window closed (compositor request accepted,
 	// client Close, or output gone).
 	OnClosed func()
@@ -467,11 +475,7 @@ type LayerConfig struct {
 	OnResize      func(width, height int)
 	OnKey         func(r *widget.Router, keycode uint32, mods wlsession.Mods)
 	KeyCapture    func(Accel) bool
-	// OnPresented runs on the loop goroutine once the surface's first
-	// buffer is committed, its content on screen: the moment a
-	// replacement can take over from the surface it replaces. A
-	// reconnect rebuilds the surface, and it runs again for the new
-	// one.
+	// OnPresented mirrors WindowConfig.OnPresented.
 	OnPresented func()
 	// OnClosed runs when the surface closed or its output went away.
 	OnClosed func()
@@ -520,14 +524,15 @@ func (a *Application) openWindow(w *Window, cfg WindowConfig) (*hostWindow, erro
 	}
 	w.win = win
 	hw := a.newWindow(win, max(cfg.Scale, 1), cfg.Root, windowHooks{
-		background: cfg.Background,
-		opaque:     opaqueFor(cfg.Background, cfg.Opaque),
-		onPress:    cfg.OnPress,
-		onMove:     cfg.OnPointerMove,
-		onResize:   cfg.OnResize,
-		onKey:      cfg.OnKey,
-		keyCapture: cfg.KeyCapture,
-		blur:       cfg.BackgroundBlur,
+		background:  cfg.Background,
+		opaque:      opaqueFor(cfg.Background, cfg.Opaque),
+		onPress:     cfg.OnPress,
+		onMove:      cfg.OnPointerMove,
+		onResize:    cfg.OnResize,
+		onKey:       cfg.OnKey,
+		keyCapture:  cfg.KeyCapture,
+		blur:        cfg.BackgroundBlur,
+		onPresented: cfg.OnPresented,
 	}, cfg.OnClosed, w.kind)
 	hw.win = w
 	if cfg.Parent != nil {
@@ -898,10 +903,7 @@ func (a *Application) tick(step func() error, now time.Time) error {
 		// else is dirty: syncSize resizes the pool and schedules the
 		// repaint, so the frame below already runs at the new size.
 		resized := w.syncSize()
-		if w.frameReady {
-			w.frameReady = false
-			w.framePending = false
-		}
+		w.takeFrame()
 		if w.host.EnsureUsable() != nil {
 			// Not configured yet; the configure event wakes the park.
 			continue

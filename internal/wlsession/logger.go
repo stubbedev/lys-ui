@@ -33,6 +33,7 @@ var optionalGlobals = []string{
 	"xdg_wm_base",
 	"wl_data_device_manager",
 	"wp_viewporter",
+	"wp_presentation",
 	"wp_fractional_scale_manager_v1",
 	"zxdg_decoration_manager_v1",
 	"zwp_text_input_manager_v3",

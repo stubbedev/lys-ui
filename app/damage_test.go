@@ -46,8 +46,10 @@ type fakeSurface struct {
 	holes [][]render.Rect
 	// blurOffered is what BlurAvailable reports; blur records each
 	// SetBlurRegion call's rects (nil: the effect removed).
-	blurOffered bool
-	blur        [][]render.Rect
+	blurOffered  bool
+	blur         [][]render.Rect
+	presentation bool
+	feedback     []func(shown bool)
 }
 
 func (f *fakeSurface) BlurAvailable() bool { return f.blurOffered }
@@ -74,6 +76,15 @@ func (f *fakeSurface) Frame(ready *bool) error {
 	f.frames++
 	f.calls = append(f.calls, "frame")
 	*ready = true
+	return nil
+}
+
+func (f *fakeSurface) Feedback(done func(shown bool)) error {
+	if !f.presentation {
+		return errNoPresentation
+	}
+	f.calls = append(f.calls, "feedback")
+	f.feedback = append(f.feedback, done)
 	return nil
 }
 
