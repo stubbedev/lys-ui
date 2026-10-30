@@ -9,6 +9,7 @@ package buffer
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"sync"
@@ -19,6 +20,8 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 	"golang.org/x/sys/unix"
+
+	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
 // slot is a byte range in the arena's pool file. Buffer geometry (width,
@@ -233,9 +236,9 @@ func (a *Arena) ensure(size int) error {
 
 // put returns a slot to the free list, keeping it sorted by offset and
 // merging adjacent slots so fragmentation cannot accumulate.
-func (a *Arena) put(s slot) {
+func (a *Arena) put(s slot) slot {
 	if s.bytes <= 0 {
-		return
+		return s
 	}
 	i := 0
 	for i < len(a.free) && a.free[i].offset < s.offset {
@@ -254,6 +257,26 @@ func (a *Arena) put(s slot) {
 		a.free[i].bytes += a.free[i+1].bytes
 		a.free = append(a.free[:i+1], a.free[i+2:]...)
 	}
+	return a.free[i]
+}
+
+func (a *Arena) punch(s slot) error {
+	if a.file == nil {
+		return nil
+	}
+	page := unix.Getpagesize()
+	start := (s.offset + page - 1) / page * page
+	end := (s.offset + s.bytes) / page * page
+	if s.offset+s.bytes >= a.size {
+		end = (a.size + page - 1) / page * page
+	}
+	if end <= start {
+		return nil
+	}
+	if err := unix.Fallocate(int(a.file.Fd()), unix.FALLOC_FL_PUNCH_HOLE|unix.FALLOC_FL_KEEP_SIZE, int64(start), int64(end-start)); err != nil {
+		return fmt.Errorf("buffer: punch pool bytes [%d, %d): %w", start, end, err)
+	}
+	return nil
 }
 
 // retire returns a buffer's slot to the free list. Called when the
@@ -268,7 +291,9 @@ func (a *Arena) retire(b *Buffer) {
 		_ = b.WL.Destroy()
 		b.WL = nil
 	}
-	a.put(b.slot)
+	if err := a.punch(a.put(b.slot)); err != nil {
+		logutil.L().Warn("buffer: freed slot stays resident", slog.Int("offset", b.slot.offset), slog.Int("bytes", b.slot.bytes), slog.Any("err", err))
+	}
 	a.live--
 	b.arena = nil
 }
