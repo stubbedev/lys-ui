@@ -164,7 +164,7 @@ func (n *node) driveAnimations(now time.Time) {
 	}
 	span := animDriveSpan
 	if !math.IsInf(remaining, 1) {
-		span = time.Duration(remaining * float64(time.Second))
+		span = time.Duration(math.Ceil(remaining * float64(time.Second)))
 	}
 	na.drive = anim.Play(anim.Animate(span, func(t float64) {
 		at := animclock.Now()
@@ -173,5 +173,5 @@ func (n *node) driveAnimations(now time.Time) {
 			na.drive = nil
 			n.driveAnimations(at)
 		}
-	}))
+	}).Easing(anim.Linear))
 }

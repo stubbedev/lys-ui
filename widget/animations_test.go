@@ -3,11 +3,14 @@ package widget
 import (
 	"image"
 	"image/color"
+	"math"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/anim"
+	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/style"
 )
 
@@ -86,6 +89,46 @@ func TestCSSAnimationInactive(t *testing.T) {
 	frame(t, b2, 50, 50)
 	if b2.style(b2).Has(style.PropOpacity) {
 		t.Errorf("reduced motion declared an opacity: %v", b2.style(b2).Opacity)
+	}
+}
+
+func TestCSSAnimationDriveSurvivesEasedEndBeforeItsSpan(t *testing.T) {
+	c := pinAnimClock(t)
+	loadCSS(t, `@keyframes fade { from { opacity: 1; } to { opacity: 0.5; } }
+		box { animation: fade 1s linear infinite; }`)
+	b := NewBox(Column, 0, 0)
+	start := c.now()
+	frame(t, b, 50, 50)
+	c.set(start.Add(time.Second - time.Microsecond))
+	animclock.Tick(c.now())
+	c.set(start.Add(time.Second + 100*time.Millisecond))
+	animclock.Tick(c.now())
+	if got := b.style(b).Opacity; math.Abs(got-0.95) > 1e-6 {
+		t.Fatalf("opacity %v a tenth into the second cycle, want 0.95", got)
+	}
+
+	loadCSS(t, `@keyframes fade { from { opacity: 1; } to { opacity: 0.5; } }
+		box { animation: none; }`)
+	_ = b.style(b)
+	if animclock.Active() {
+		t.Fatal("a frame drive outlived animation: none")
+	}
+	for c.step() {
+	}
+}
+
+func TestCSSAnimationEndsWhenUnderANanosecondRemains(t *testing.T) {
+	c := pinAnimClock(t)
+	loadCSS(t, `@keyframes fade { from { opacity: 1; } to { opacity: 0.4; } }
+		box { opacity: 0.9; animation: fade 0.1000000005s linear; }`)
+	b := NewBox(Column, 0, 0)
+	frame(t, b, 50, 50)
+	c.drive()
+	if got := b.style(b).Opacity; got != 0.9 {
+		t.Errorf("after the animation the opacity is %v, want the cascade's 0.9", got)
+	}
+	if animclock.Active() {
+		t.Error("a frame drive outlived the animation's end")
 	}
 }
 
