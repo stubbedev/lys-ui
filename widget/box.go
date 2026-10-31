@@ -311,16 +311,15 @@ func (b *Box) Measure(axis Axis, forSize int) Sizes {
 // mainRequest is the content's request along the axis at cross, its
 // extent across: the flowing children end to end with the spacing.
 func (b *Box) mainRequest(v *style.Values, cross int) Sizes {
+	kinds := b.flows()
+	defer boxFlows.pop()
 	var sum, largest Sizes
 	shown := 0
-	for _, c := range b.child {
-		// Parented first: whether a child flows is its cascade's call,
-		// which resolves only under its ancestors.
-		setParents(b, c.w)
-		if !flows(c.w) {
+	for i, c := range b.child {
+		if kinds[i] != flowIn {
 			continue
 		}
-		r := measureChild(b, c.w, b.axis, cross)
+		r := measureOuter(c.w, b.axis, cross, indefiniteSize)
 		sum, largest = sum.plus(r), largest.widest(r)
 		shown++
 	}
@@ -337,18 +336,19 @@ func (b *Box) mainRequest(v *style.Values, cross int) Sizes {
 // along the axis (Unknown for none): the largest child's at its share,
 // and a row's baseline group's span.
 func (b *Box) crossRequest(v *style.Values, main int) Sizes {
+	kinds := b.flows()
+	defer boxFlows.pop()
 	shares := boxShares.push(len(b.child))
 	defer boxShares.pop()
-	b.split(v, main, Unknown, shares)
+	b.split(v, main, Unknown, kinds, shares)
 	cross := otherAxis(b.axis)
 	var req Sizes
 	above, below, grouped := 0, 0, false
 	for i, c := range b.child {
-		setParents(b, c.w)
-		if !flows(c.w) {
+		if kinds[i] != flowIn {
 			continue
 		}
-		r := measureChild(b, c.w, cross, shares[i])
+		r := measureOuter(c.w, cross, shares[i], indefiniteSize)
 		req = req.widest(r)
 		if b.axis == Row && c.crossAlign() == AlignBaseline {
 			if base, ok := baselineOf(c.w); ok {
@@ -369,17 +369,27 @@ var (
 	boxShares  depthStack[int]
 	boxReqs    depthStack[Sizes]
 	boxExpands depthStack[bool]
+	boxFlows   depthStack[flow]
 )
+
+func (b *Box) flows() []flow {
+	kinds := boxFlows.push(len(b.child))
+	for i, c := range b.child {
+		setParents(b, c.w)
+		kinds[i] = flowOf(c.w)
+	}
+	return kinds
+}
 
 // split hands out main, the content's extent along the axis, among the
 // flowing children as Arrange does, writing each one's share to out
 // (Unknown when main is): homogeneous, an equal share each; otherwise
 // allocate's split of their requests at cross, the extent across, the
 // expanders sharing what is left past every natural.
-func (b *Box) split(v *style.Values, main, cross int, out []int) {
+func (b *Box) split(v *style.Values, main, cross int, kinds []flow, out []int) {
 	shown := 0
-	for _, c := range b.child {
-		if flows(c.w) {
+	for _, k := range kinds {
+		if k == flowIn {
 			shown++
 		}
 	}
@@ -392,8 +402,8 @@ func (b *Box) split(v *style.Values, main, cross int, out []int) {
 	avail := max(0, main-b.gap(v)*(shown-1))
 	if b.homogeneous {
 		k := 0
-		for i, c := range b.child {
-			if flows(c.w) {
+		for i := range b.child {
+			if kinds[i] == flowIn {
 				out[i] = avail/shown + btoi(k < avail%shown)
 				k++
 			}
@@ -407,17 +417,17 @@ func (b *Box) split(v *style.Values, main, cross int, out []int) {
 	shares := boxShares.push(shown)
 	defer boxShares.pop()
 	k := 0
-	for _, c := range b.child {
-		if flows(c.w) {
-			reqs[k] = measureChild(b, c.w, b.axis, cross)
+	for i, c := range b.child {
+		if kinds[i] == flowIn {
+			reqs[k] = measureOuter(c.w, b.axis, cross, indefiniteSize)
 			expand[k] = b.expands(c)
 			k++
 		}
 	}
 	allocate(reqs, expand, avail, shares)
 	k = 0
-	for i, c := range b.child {
-		if flows(c.w) {
+	for i := range b.child {
+		if kinds[i] == flowIn {
 			out[i] = shares[k]
 			k++
 		}
@@ -427,12 +437,12 @@ func (b *Box) split(v *style.Values, main, cross int, out []int) {
 // baselineGroup spans a row's baseline-aligned children at the
 // heights tall gives them: the most any reaches above the shared
 // baseline and below it.
-func (b *Box) baselineGroup(tall []int) (above, below int, ok bool) {
+func (b *Box) baselineGroup(kinds []flow, tall []int) (above, below int, ok bool) {
 	if b.axis != Row {
 		return 0, 0, false
 	}
 	for i, c := range b.child {
-		if c.crossAlign() != AlignBaseline || !flows(c.w) {
+		if kinds[i] != flowIn || c.crossAlign() != AlignBaseline {
 			continue
 		}
 		if base, has := baselineOf(c.w); has {
@@ -444,13 +454,13 @@ func (b *Box) baselineGroup(tall []int) (above, below int, ok bool) {
 
 // crossExtents writes each flowing child's natural extent across at
 // its share of main, the content's extent along the axis, to out.
-func (b *Box) crossExtents(v *style.Values, main int, out []int) {
+func (b *Box) crossExtents(v *style.Values, main int, kinds []flow, out []int) {
 	shares := boxShares.push(len(b.child))
 	defer boxShares.pop()
-	b.split(v, main, Unknown, shares)
+	b.split(v, main, Unknown, kinds, shares)
 	for i, c := range b.child {
-		if flows(c.w) {
-			out[i] = measureChild(b, c.w, otherAxis(b.axis), shares[i]).Nat
+		if kinds[i] == flowIn {
+			out[i] = measureOuter(c.w, otherAxis(b.axis), shares[i], indefiniteSize).Nat
 		}
 	}
 }
@@ -476,21 +486,23 @@ func (b *Box) Baseline() (int, bool) {
 	if b.axis == Column {
 		main = Unknown
 	}
+	kinds := b.flows()
+	defer boxFlows.pop()
 	tall := boxShares.push(len(b.child))
 	defer boxShares.pop()
-	b.crossExtents(v, main, tall)
+	b.crossExtents(v, main, kinds, tall)
 	cross := 0
-	for i, c := range b.child {
-		if flows(c.w) {
+	for i := range b.child {
+		if kinds[i] == flowIn {
 			cross = max(cross, tall[i])
 		}
 	}
-	if above, below, ok := b.baselineGroup(tall); ok {
+	if above, below, ok := b.baselineGroup(kinds, tall); ok {
 		cross = max(cross, above+below)
 		return top + (cross-above-below)/2 + above, true
 	}
 	for i, c := range b.child {
-		if !flows(c.w) {
+		if kinds[i] != flowIn {
 			continue
 		}
 		base, ok := baselineOf(c.w)
@@ -576,12 +588,12 @@ func (b *Box) Arrange(r render.Rect) {
 		// Nothing flows in an empty box, but an out-of-flow child still
 		// takes its place against its containing block.
 		for _, c := range b.child {
-			if ownVisible(c.w) && !flows(c.w) {
+			setParents(b, c.w)
+			if flowOf(c.w) == flowOut {
 				arrangeChild(c.w, render.Rect{X: inner.X, Y: inner.Y})
 			} else {
 				c.w.Arrange(render.Rect{})
 			}
-			setParents(b, c.w)
 		}
 	case mode != modeBox:
 		b.cssArrange(v, mode, inner)
@@ -602,26 +614,28 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 	if b.axis == Column {
 		main, cross = inner.H, inner.W
 	}
+	kinds := b.flows()
+	defer boxFlows.pop()
 	sizes := boxShares.push(len(b.child))
 	defer boxShares.pop()
-	b.split(v, main, cross, sizes)
+	b.split(v, main, cross, kinds, sizes)
 	tall := boxArranged.push(len(b.child))
 	defer boxArranged.pop()
 	if b.axis == Row {
 		for i, c := range b.child {
-			if flows(c.w) {
-				tall[i] = min(measureChild(b, c.w, Column, sizes[i]).Nat, inner.H)
+			if kinds[i] == flowIn {
+				tall[i] = min(measureOuter(c.w, Column, sizes[i], indefiniteSize).Nat, inner.H)
 			}
 		}
 	}
 
 	pos := 0
 	rtl := b.axis == Row && b.dir == DirectionRTL
-	above, below, grouped := b.baselineGroup(tall)
+	above, below, grouped := b.baselineGroup(kinds, tall)
 	groupTop := inner.Y + (inner.H-above-below)/2
 	for i, c := range b.child {
-		if !flows(c.w) {
-			if ownVisible(c.w) {
+		if kinds[i] != flowIn {
+			if kinds[i] == flowOut {
 				at := Point{X: inner.X + pos, Y: inner.Y}
 				if b.axis == Column {
 					at = Point{X: inner.X, Y: inner.Y + pos}
@@ -632,7 +646,6 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 			} else {
 				c.w.Arrange(render.Rect{})
 			}
-			setParents(b, c.w)
 			continue
 		}
 		size := sizes[i]
@@ -658,11 +671,10 @@ func (b *Box) arrangeBox(v *style.Values, inner render.Rect) {
 		} else {
 			rect = render.Rect{X: inner.X, Y: inner.Y + pos, W: inner.W, H: size}
 			if al := c.crossAlign(); al != AlignFill {
-				rect = alignRect(rect, Size{W: min(measureChild(b, c.w, Row, size).Nat, inner.W), H: size}, al, AlignFill)
+				rect = alignRect(rect, Size{W: min(measureOuter(c.w, Row, size, indefiniteSize).Nat, inner.W), H: size}, al, AlignFill)
 			}
 		}
 		arrangeChild(c.w, rect)
-		setParents(b, c.w)
 		pos += size + spacing
 	}
 }

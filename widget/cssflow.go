@@ -70,9 +70,26 @@ type contentsHost interface {
 
 func (b *Box) contentsBox() *Box { return b }
 
-// flows reports whether a container's child w takes part in its flow:
-// visible and not out of flow.
-func flows(w Widget) bool { return ownVisible(w) && !outOfFlow(w) }
+// flow is what a container's child does in its flow: nothing when
+// hidden, a placement of its own when out of flow, a share otherwise.
+type flow uint8
+
+const (
+	flowGone flow = iota
+	flowOut
+	flowIn
+)
+
+func flowOf(w Widget) flow {
+	switch {
+	case !ownVisible(w):
+		return flowGone
+	case outOfFlow(w):
+		return flowOut
+	default:
+		return flowIn
+	}
+}
 
 // cssMeasure is the box's content request along axis at forSize by
 // its CSS layout. Every extent a measure is given is definite; none

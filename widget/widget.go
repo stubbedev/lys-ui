@@ -145,6 +145,7 @@ type node struct {
 	// measureMisses tallies the measures the cache could not answer;
 	// the static-tree pin test reads it.
 	measureMisses int
+	arranges      int
 
 	// themeSeen stamps the theme generation this widget last joined a
 	// frame with; SetTheme bumps themeGen so every widget repaints once.
@@ -631,6 +632,8 @@ func (n *node) measureMiss(axis Axis, forSize int) {
 // its cache; the static-tree pin test reads it.
 func (n *node) measureMissCount() int { return n.measureMisses }
 
+func (n *node) arrangeCount() int { return n.arranges }
+
 // measureStore records s as the cache entry for axis at forSize and
 // returns it, closing the measureHit pair. The cache is stamped with the
 // style generation it measured under.
@@ -673,6 +676,7 @@ func (n *node) takeDamage() (bounds render.Rect, extra []render.Rect, dirty bool
 // the previous frame also invalidates the old pixels, so partial
 // damage does not leave the widget's old paint behind.
 func (n *node) Arrange(r render.Rect) {
+	n.arranges++
 	if !n.bounds.Empty() && r != n.bounds {
 		n.InvalidateRect(n.ink.Grow(n.bounds))
 		n.Invalidate()

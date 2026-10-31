@@ -162,3 +162,54 @@ func TestAllocBudgetResizeDamage(t *testing.T) {
 		t.Errorf("a resize's damage allocates %v allocs/op, budget %d", allocs, budget)
 	}
 }
+
+func TestAllocBudgetSteadyLayout(t *testing.T) {
+	skipAllocBudget(t)
+	const w, h = 1605, 1391
+	root := settingsTree(t)
+	cv := render.New(make([]byte, render.Stride(w)*h), render.Stride(w), w, h)
+	settingsFrame(root, cv, w, h)
+	layout := func() {
+		SizeWithin(root, Size{W: w, H: h})
+		root.Arrange(render.Rect{W: w, H: h})
+		CollectDamage(root)
+	}
+	const budget = 0
+	if allocs := testing.AllocsPerRun(50, layout); allocs > budget {
+		t.Errorf("steady layout allocates %v allocs/op, budget %d", allocs, budget)
+	}
+}
+
+func TestSteadyLayoutArrangesEachWidgetOnce(t *testing.T) {
+	const w, h = 1605, 1391
+	root := settingsTree(t)
+	cv := render.New(make([]byte, render.Stride(w)*h), render.Stride(w), w, h)
+	settingsFrame(root, cv, w, h)
+	type counted interface {
+		Widget
+		arrangeCount() int
+	}
+	var nodes []counted
+	before := map[counted]int{}
+	walkWidgets(root, func(w Widget) bool {
+		if c, ok := w.(counted); ok {
+			nodes = append(nodes, c)
+			before[c] = c.arrangeCount()
+		}
+		return true
+	})
+	SizeWithin(root, Size{W: w, H: h})
+	root.Arrange(render.Rect{W: w, H: h})
+	total := 0
+	for _, c := range nodes {
+		d := c.arrangeCount() - before[c]
+		if d > 1 {
+			t.Errorf("%T arranged %d times in one steady frame, want at most once", c, d)
+		}
+		total += d
+	}
+	const budget = 549
+	if total > budget {
+		t.Errorf("a steady frame arranges %d widgets, budget %d", total, budget)
+	}
+}
