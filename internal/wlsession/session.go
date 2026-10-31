@@ -1374,6 +1374,37 @@ func (s *Session) Roundtrip() error {
 	return nil
 }
 
+// AfterSync runs fn from the dispatch of the compositor's answer to a
+// display sync sent now: by then the compositor has processed every
+// request the client sent before the call. Its done handler is in place
+// before the request goes out, so no dispatch can miss the answer. On a
+// closed session or a dead connection it fails with ErrDisconnected and
+// fn never runs.
+func (s *Session) AfterSync(fn func()) error {
+	if s.Closed() {
+		return fmt.Errorf("wlsession: sync after Close: %w", ErrDisconnected)
+	}
+	ctx := s.Display.Context()
+	cb := wl.NewCallback(ctx)
+	cb.AddDoneHandler(&afterSync{cb: cb, fn: fn})
+	if err := ctx.SendRequest(s.Display, displaySyncOpcode, cb); err != nil {
+		cb.Unregister()
+		return s.asDisconnect(err)
+	}
+	return nil
+}
+
+// afterSync runs fn once its sync callback fires.
+type afterSync struct {
+	cb *wl.Callback
+	fn func()
+}
+
+func (a *afterSync) HandleCallbackDone(wl.CallbackDoneEvent) {
+	a.cb.Unregister()
+	a.fn()
+}
+
 type syncDone bool
 
 func (d *syncDone) HandleCallbackDone(wl.CallbackDoneEvent) { *d = true }

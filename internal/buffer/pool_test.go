@@ -314,6 +314,40 @@ func TestPoolCloseReturnsSlots(t *testing.T) {
 	}
 }
 
+// A closed pool's held buffers keep their slots until the compositor
+// releases them or, once it has processed the surface's destruction,
+// Reclaim gives up on the release: every slot returns to the arena and
+// nothing is left tracked. A buffer whose release already landed is not
+// returned twice.
+func TestReclaimReturnsWhatTheDestroyedSurfaceHeld(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	arena := NewArena(nil)
+	defer arena.Close()
+	p := New(arenaBuffer(arena, 100, 20), 3)
+	var held []*Buffer
+	for range 3 {
+		b, err := p.Acquire()
+		if err != nil {
+			t.Fatal(err)
+		}
+		held = append(held, b)
+	}
+	held[0].Release()
+	p.Close()
+	held[1].Release()
+	if arena.Live() != 1 || p.Pending() != 1 {
+		t.Fatalf("after close and one late release: live %d, pending %d, want the one unreleased buffer", arena.Live(), p.Pending())
+	}
+	p.Reclaim()
+	if arena.Live() != 0 || p.Pending() != 0 {
+		t.Errorf("after Reclaim: live %d, pending %d, want 0/0", arena.Live(), p.Pending())
+	}
+	p.Reclaim()
+	if arena.Live() != 0 {
+		t.Errorf("a second Reclaim changed the arena: live %d", arena.Live())
+	}
+}
+
 // TestRetiredSweepFreesSlotsForReuse checks that released pre-resize
 // buffers retire at the next acquire, so their slots serve the new size
 // instead of the arena growing.

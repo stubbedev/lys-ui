@@ -337,6 +337,20 @@ func (p *Pool) Close() {
 	p.capRetired()
 }
 
+// Reclaim ends the wait on the buffers a closed pool's surface still
+// held. Call it once the compositor has processed the surface's
+// destruction: a compositor need not release what a destroyed surface
+// held (sway does not release the buffer current at the destroy), so
+// a held buffer would otherwise keep its slot resident for the rest of
+// the session. The compositor no longer reads them; each is destroyed
+// and its slot returns to the arena.
+func (p *Pool) Reclaim() {
+	held := append([]*Buffer(nil), p.retired...)
+	for _, b := range held {
+		b.Release()
+	}
+}
+
 // Trim disposes of the free buffers no Acquire handed out since the
 // previous Trim, the front aside: a surface that stopped drawing, or
 // draws slower than the compositor releases, keeps only what its

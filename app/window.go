@@ -52,6 +52,10 @@ type hostWindow struct {
 	host Host
 	sess *wlsession.Session
 	cfg  windowHooks
+	// afterSync runs a func once the compositor has processed every
+	// request sent so far (Session.AfterSync); nil in wire-free tests,
+	// where held buffers wait for their release alone.
+	afterSync func(func()) error
 
 	win *Window
 	// inputRegion is the last region applied from styleRoot
@@ -232,14 +236,15 @@ func newHostWindow(sess *wlsession.Session, host Host, initialScale int, root wi
 	}
 	w := &hostWindow{
 		host: host, sess: sess, cfg: hooks,
-		surf:    wireSurface{wl: host.HostSurface(), comp: sess.Compositor(), sess: sess},
-		frac120: uint32(initialScale * 120),
-		scale:   initialScale,
-		router:  &widget.Router{Root: root},
-		dnd:     dnd,
-		tip:     &tooltipCtl{since: time.Now()},
-		dirty:   true,
-		destroy: destroy,
+		afterSync: sess.AfterSync,
+		surf:      wireSurface{wl: host.HostSurface(), comp: sess.Compositor(), sess: sess},
+		frac120:   uint32(initialScale * 120),
+		scale:     initialScale,
+		router:    &widget.Router{Root: root},
+		dnd:       dnd,
+		tip:       &tooltipCtl{since: time.Now()},
+		dirty:     true,
+		destroy:   destroy,
 	}
 	// Animated kinds (layer overlays, dialogs) wrap their tree in a
 	// morph the coordinator drives; the enter starts lazily — at the
@@ -337,8 +342,11 @@ func (w *hostWindow) noteFootprint() {
 
 // release tears down the window's loop state: input handlers are
 // unregistered and the buffer pool's storage returns to the session
-// arena (held buffers wait for the compositor's release), so closing
-// windows leaves no fds, mappings, or slots behind.
+// arena, so closing windows leaves no fds, mappings, or slots behind.
+// Buffers the destroyed surface still held come back on their release
+// or, at the latest, with the compositor's answer to a sync sent after
+// the destroy (Pool.Reclaim); on a dead connection nothing is held any
+// more.
 func (w *hostWindow) release() {
 	if w.router != nil {
 		widget.Detach(w.router.Root)
@@ -349,8 +357,17 @@ func (w *hostWindow) release() {
 	if w.dnd != nil {
 		w.dnd.Bind(w.host.HostSurface(), nil)
 	}
-	if w.pool != nil {
-		w.pool.Close()
+	if w.pool == nil {
+		return
+	}
+	pool := w.pool
+	pool.Close()
+	if pool.Pending() == 0 || w.afterSync == nil {
+		return
+	}
+	if err := w.afterSync(pool.Reclaim); err != nil {
+		debug.Log("frame", "reclaim held buffers now: %v", err)
+		pool.Reclaim()
 	}
 }
 

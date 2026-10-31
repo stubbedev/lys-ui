@@ -52,3 +52,38 @@ func TestWindowCloseWithHeldBuffersDefersThem(t *testing.T) {
 		t.Errorf("pending = %d after post-close release, want 0", got)
 	}
 }
+
+// A held buffer whose release never comes back - sway does not release
+// the buffer a destroyed surface showed - returns with the compositor's
+// answer to the sync the close sends; until then it stays pending.
+func TestWindowCloseReclaimsHeldBuffersAfterTheSync(t *testing.T) {
+	root := widget.NewBox(widget.Row, 0, 0)
+	h := newPaintHarness(root, 320, 200)
+	var answer func()
+	h.wnd.afterSync = func(fn func()) error { answer = fn; return nil }
+	h.frame()
+	h.wnd.dirty = true
+	if !h.wnd.draw() {
+		t.Fatal(h.wnd.drawErr)
+	}
+	h.wnd.release()
+	if got := h.wnd.pool.Pending(); got != 1 || answer == nil {
+		t.Fatalf("pending = %d, sync sent %v; want the held buffer waiting on a sync", got, answer != nil)
+	}
+	answer()
+	if got := h.wnd.pool.Pending(); got != 0 {
+		t.Errorf("pending = %d after the sync's answer, want 0", got)
+	}
+}
+
+// A window whose buffers all came back sends no sync at close.
+func TestWindowCloseWithNothingHeldSendsNoSync(t *testing.T) {
+	root := widget.NewBox(widget.Row, 0, 0)
+	h := newPaintHarness(root, 320, 200)
+	h.wnd.afterSync = func(func()) error { t.Error("a sync was sent with nothing held"); return nil }
+	h.frame()
+	for _, b := range h.bufs {
+		b.Release()
+	}
+	h.wnd.release()
+}
