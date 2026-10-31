@@ -70,6 +70,34 @@ func TestCSSAnimationEndsAndReverts(t *testing.T) {
 	}
 }
 
+// A frame whose on-screen check restyles the node to a cascade without
+// the animation ends the animation and touches no more of it. The
+// node's style goes stale behind the tween's back, as when a class
+// lands without a restyle; the check re-reads it, which drops the
+// runners, and the frame that tween was about to write has nothing
+// left to write to. lys-shell's bar crashed on exactly this frame.
+func TestCSSAnimationDroppedDuringItsFrameCheck(t *testing.T) {
+	c := pinAnimClock(t)
+	loadCSS(t, `@keyframes fade { from { opacity: 1; } to { opacity: 0.4; } }
+		.spin { animation: fade 100ms linear infinite; }
+		.spin.still { animation: none; }`)
+	root := NewBox(Column, 0, 0)
+	b := NewBox(Column, 0, 0)
+	b.AddClass("spin")
+	b.SetSizeRequest(10, 10)
+	root.Append(b, false)
+	frame(t, root, 50, 50)
+	c.step()
+	b.classes = append(b.classes, "still")
+	b.styleDirty = true
+	for range 3 {
+		c.step()
+	}
+	if b.style(b).Has(style.PropOpacity) {
+		t.Errorf("the dropped animation still writes opacity %v", b.style(b).Opacity)
+	}
+}
+
 // An unknown keyframes name animates nothing, and reduced motion does
 // not start the tween.
 func TestCSSAnimationInactive(t *testing.T) {

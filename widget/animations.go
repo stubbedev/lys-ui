@@ -41,6 +41,9 @@ type nodeAnim struct {
 	// animation needs another frame.
 	drive  anim.Cancel
 	parked bool
+	// driveID numbers the tweens drive has run, so a tween can tell
+	// whether it is still the one driving.
+	driveID uint64
 }
 
 // animRunner is one computed animation's timeline.
@@ -177,8 +180,19 @@ func (n *node) driveAnimations(now time.Time) {
 	if !math.IsInf(remaining, 1) {
 		span = time.Duration(math.Ceil(remaining * float64(time.Second)))
 	}
-	na.drive = anim.Play(anim.Animate(span, func(t float64) {
-		if !onScreen(n.self) {
+	na.driveID++
+	id := na.driveID
+	var drive anim.Cancel
+	drive = anim.Play(anim.Animate(span, func(t float64) {
+		// The on-screen check may restyle the node, and the restyle
+		// may drop the animations or drive them afresh; this tween is
+		// then no longer the node's and must not touch its state.
+		visible := onScreen(n.self)
+		if n.anims != na || na.driveID != id {
+			drive()
+			return
+		}
+		if !visible {
 			na.drive()
 			na.drive = nil
 			na.parked = true
@@ -191,4 +205,5 @@ func (n *node) driveAnimations(now time.Time) {
 			n.driveAnimations(at)
 		}
 	}).Easing(anim.Linear))
+	na.drive = drive
 }
