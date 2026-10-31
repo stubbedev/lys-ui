@@ -169,7 +169,8 @@ func (w *LogWatcher) Since(mark int) []Trace {
 
 // MaxGapSince returns the largest pause in seconds between consecutive
 // traces in category containing substr after mark, counting the wait
-// for the first such trace from mark itself. Software renderers under
+// for the first such trace from mark itself and the silence after the
+// last one up to the newest trace of any kind. Software renderers under
 // suite load present slowly but steadily; a pacing bug stops outright,
 // and this is the signal that tells them apart from a low frame count.
 func (w *LogWatcher) MaxGapSince(mark int, category, substr string) float64 {
@@ -191,6 +192,9 @@ func (w *LogWatcher) MaxGapSince(mark int, category, substr string) float64 {
 			gap = max(gap, tr.Secs-last)
 		}
 		last = tr.Secs
+	}
+	if last >= 0 {
+		gap = max(gap, w.seen[len(w.seen)-1].Secs-last)
 	}
 	return gap
 }

@@ -3,6 +3,7 @@ package widget
 import (
 	"image"
 
+	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/media"
@@ -149,6 +150,9 @@ func (p *videoView) Paint(cv *render.Canvas) {
 		return
 	}
 	dw, dh, dx, dy := dst.W, dst.H, box.X+dst.X, box.Y+dst.Y
+	if debug.Enabled && p.painted != seq {
+		debug.Log("frame", "video frame %d painted", seq)
+	}
 	p.painted = seq
 	if srcRect.Dx() == dw && srcRect.Dy() == dh {
 		cv.DrawImageDevice(frame.SubImage(srcRect), dx, dy)

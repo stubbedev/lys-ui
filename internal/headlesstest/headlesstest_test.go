@@ -235,3 +235,24 @@ func TestKeyForCoversEverythingTheSuiteTypes(t *testing.T) {
 		t.Error("unknown rune did not error")
 	}
 }
+
+func TestMaxGapSinceCountsTheSilenceAfterTheLastMatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "client.log")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w, err := Watch(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := "  0.100s frame: start\n" +
+		"  0.200s frame: frame committed, waiting for callback\n" +
+		"  0.340s frame: frame committed, waiting for callback\n" +
+		"  1.100s input: wire key code=57 state=1\n"
+	if err := os.WriteFile(path, []byte(log), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.MaxGapSince(1, "frame", "frame committed"); got < 0.75 || got > 0.77 {
+		t.Fatalf("MaxGapSince = %.2fs, want the 0.76s of silence after the last commit", got)
+	}
+}

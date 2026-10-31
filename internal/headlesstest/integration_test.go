@@ -1548,23 +1548,20 @@ func TestHeadlessToplevelExport(t *testing.T) {
 	}
 }
 
-func commitsWithin(w *LogWatcher, d time.Duration) int {
-	mark := w.Mark()
-	time.Sleep(d)
-	return w.CountSince(mark, "frame", "frame committed")
-}
-
 // TestHeadlessVideoPlays pins #149 on a real compositor: the video
-// demo's generated clip autoplays, presenting frames continuously off
-// the media frame clock, and Space pauses it until presentation goes
-// quiet.
+// demo's generated clip autoplays and its picture advances frame by
+// frame off the media frame clock, and Space pauses it, after which no
+// later frame is painted. It asserts on the frames the client reports
+// painting, each within a bounded deadline, not on a frame rate: a
+// software renderer under load presents slowly but must still progress.
+// The clip loops, so its three seconds cannot run out mid-check.
 func TestHeadlessVideoPlays(t *testing.T) {
 	requireEnv(t)
 	bin, err := BuildClient(testEnv.Dir, "./cmd/lys-ui-video", "lys-ui-video")
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := testEnv.StartClient(bin, "client-"+t.Name(), "input,frame,shell")
+	c, err := testEnv.StartClient(bin, "client-"+t.Name(), "input,frame,shell,media", "-loop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1575,23 +1572,52 @@ func TestHeadlessVideoPlays(t *testing.T) {
 	}
 	in := newInput(t)
 	waitKeyboard(t, w)
-	if err := w.WaitEver("frame", "frame committed", traceTimeout); err != nil {
-		t.Fatalf("the video never presented: %v", err)
-	}
-	mark := w.Mark()
-	time.Sleep(time.Second)
-	n := w.CountSince(mark, "frame", "frame committed")
-	gap := w.MaxGapSince(mark, "frame", "frame committed")
-	if n < 8 || gap > 0.5 {
-		t.Fatalf("%d frames presented in a second of playback with a %.2fs longest pause, want continuous presentation of a 25 fps clip (pace follows the compositor on a software renderer under load)", n, gap)
+	const advances = 8
+	painted := make(map[int]bool)
+	mark := 0
+	deadline := time.Now().Add(2 * traceTimeout)
+	for len(painted) < advances {
+		if time.Now().After(deadline) {
+			t.Fatalf("the video painted %d distinct frames in %s, want %d; log tail:\n%s", len(painted), 2*traceTimeout, advances, w.Tail(25))
+		}
+		seen := w.Since(mark)
+		for _, tr := range seen {
+			if n, ok := videoFrame(tr); ok {
+				painted[n] = true
+			}
+		}
+		mark += len(seen)
+		time.Sleep(pollInterval)
 	}
 	if err := in.Tap(KeySpace); err != nil {
 		t.Fatalf("tap space: %v", err)
 	}
-	time.Sleep(500 * time.Millisecond)
-	if n := commitsWithin(w, time.Second); n > 3 {
-		t.Errorf("%d frames presented in a second after pausing", n)
+	tr, err := w.Wait("media", "paused at frame", traceTimeout)
+	if err != nil {
+		t.Fatalf("Space did not pause the video: %v", err)
 	}
+	var at int
+	if _, err := fmt.Sscanf(tr.Message, "paused at frame %d", &at); err != nil {
+		t.Fatalf("pause trace %q: %v", tr.Message, err)
+	}
+	after := w.Mark()
+	time.Sleep(time.Second)
+	for _, tr := range w.Since(after) {
+		if n, ok := videoFrame(tr); ok && n > at {
+			t.Fatalf("frame %d painted after pausing at frame %d", n, at)
+		}
+	}
+}
+
+func videoFrame(tr Trace) (int, bool) {
+	var n int
+	if tr.Category != "frame" {
+		return 0, false
+	}
+	if _, err := fmt.Sscanf(tr.Message, "video frame %d painted", &n); err != nil {
+		return 0, false
+	}
+	return n, true
 }
 
 // TestHeadlessGPUAreaPaces pins #150's pacing on a real compositor: the

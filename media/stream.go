@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
@@ -192,6 +193,9 @@ func (s *Stream) Pause() {
 	s.playing = false
 	if s.audio != nil {
 		s.audio.Pause()
+	}
+	if debug.Enabled {
+		debug.Log("media", "paused at frame %d", s.frameSeq)
 	}
 	s.notify()
 	s.sync()
