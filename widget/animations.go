@@ -39,7 +39,8 @@ type nodeAnim struct {
 	props style.PropSet
 	// drive cancels the tween that ticks the frames; nil when no
 	// animation needs another frame.
-	drive anim.Cancel
+	drive  anim.Cancel
+	parked bool
 }
 
 // animRunner is one computed animation's timeline.
@@ -93,6 +94,15 @@ func (n *node) syncAnimation(v *style.Values) {
 	}
 	na.runs = runs
 	na.base = *v
+	n.animFrame(now)
+	n.driveAnimations(now)
+}
+
+func (n *node) resumeAnimations() {
+	if !n.anims.parked || !onScreen(n.self) {
+		return
+	}
+	now := animclock.Now()
 	n.animFrame(now)
 	n.driveAnimations(now)
 }
@@ -152,6 +162,7 @@ func (n *node) driveAnimations(now time.Time) {
 		na.drive()
 		na.drive = nil
 	}
+	na.parked = false
 	remaining := 0.0
 	for i := range na.runs {
 		r := &na.runs[i]
@@ -167,6 +178,12 @@ func (n *node) driveAnimations(now time.Time) {
 		span = time.Duration(math.Ceil(remaining * float64(time.Second)))
 	}
 	na.drive = anim.Play(anim.Animate(span, func(t float64) {
+		if !onScreen(n.self) {
+			na.drive()
+			na.drive = nil
+			na.parked = true
+			return
+		}
 		at := animclock.Now()
 		n.animFrame(at)
 		if t >= 1 {

@@ -38,7 +38,7 @@ type Spinner struct {
 // NewSpinner returns a spinner sized size×size pixels.
 func NewSpinner(size int) *Spinner {
 	s := &Spinner{size: size}
-	s.spin = loop{period: spinnerPeriod, step: func(t float64) {
+	s.spin = loop{period: spinnerPeriod, owner: s, step: func(t float64) {
 		s.angle = 2 * math.Pi * t
 		s.Invalidate()
 	}}
@@ -50,14 +50,14 @@ func (s *Spinner) Spinning() bool { return s.spin.on }
 
 // SetSpinning turns the rotation on or off. Stopping cancels the tween
 // at once — the frozen angle stays where it stopped and no wake
-// remains scheduled. Starting takes effect once the spinner is
-// arranged into a visible rect; until then nothing is scheduled.
+// remains scheduled. Starting takes effect once the spinner is on
+// screen; until then nothing is scheduled.
 func (s *Spinner) SetSpinning(on bool) { s.spin.set(on) }
 
 // Arrange records the rect and syncs the rotation with visibility.
 func (s *Spinner) Arrange(r render.Rect) {
 	s.node.Arrange(r)
-	s.spin.arranged(r)
+	s.spin.arranged()
 }
 
 // Measure wants a size×size square.

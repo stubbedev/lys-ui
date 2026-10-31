@@ -42,7 +42,7 @@ func NewProgressBar(value float64) *ProgressBar {
 	p.roundTrough = true
 	p.troughFill = func(fill Color) Color { return orColor(p.Trough, progressTrack(fill)) }
 	p.fillFill = func(t *Theme) Color { return orColor(p.Fill, t.Accent) }
-	p.pulse = loop{period: pulsePeriod, step: func(t float64) {
+	p.pulse = loop{period: pulsePeriod, owner: p, step: func(t float64) {
 		// A triangle wave: across and back once per period.
 		p.pos = (1 - pulseBlock) * (1 - math.Abs(2*t-1))
 		p.Invalidate()
@@ -120,7 +120,7 @@ func (p *ProgressBar) Measure(axis Axis, forSize int) Sizes { return p.measureMe
 // Arrange lays the bar out and syncs the pulse with visibility.
 func (p *ProgressBar) Arrange(r render.Rect) {
 	p.meter.Arrange(r)
-	p.pulse.arranged(r)
+	p.pulse.arranged()
 }
 
 // Paint draws the trough and the fill: the fraction, or the block.

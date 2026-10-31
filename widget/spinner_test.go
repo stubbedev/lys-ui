@@ -151,3 +151,79 @@ func TestGoldenSpinner(t *testing.T) {
 		NewGolden(t, NewSpinner(24), shot.name, goldenTheme(shot.th))
 	}
 }
+
+type visibler interface {
+	Widget
+	SetVisible(visible bool)
+}
+
+func TestHiddenIndicatorsScheduleNoFrames(t *testing.T) {
+	spinner := func() visibler {
+		s := NewSpinner(24)
+		s.SetSpinning(true)
+		return s
+	}
+	pulsing := func() visibler {
+		p := NewProgressBar(0)
+		p.SetPulsing(true)
+		return p
+	}
+	animated := func() visibler {
+		l := NewLabel(testFace(t), 12, "x", 0)
+		l.AddClass("pulse")
+		return l
+	}
+	inOverlay := func(w visibler) (Widget, visibler) {
+		return NewOverlay().Append(NewBox(Column, 0, 0)).AppendAligned(w, AlignCenter, AlignCenter), w
+	}
+	underFixed := func(w visibler) (Widget, visibler) {
+		card := NewBox(Column, 0, 0).Append(w, false)
+		return NewFixed().Put(card, 0, 0), card
+	}
+	inHiddenBox := func(w visibler) (Widget, visibler) {
+		card := NewBox(Column, 0, 0).Append(NewOverlay().Append(w), false)
+		return NewBox(Column, 0, 0).Append(card, false), card
+	}
+	cases := []struct {
+		name      string
+		indicator func() visibler
+		place     func(visibler) (host Widget, hide visibler)
+	}{
+		{"spinner hidden in an overlay", spinner, inOverlay},
+		{"pulsing bar hidden in an overlay", pulsing, inOverlay},
+		{"css animation hidden in an overlay", animated, inOverlay},
+		{"spinner under a hidden fixed child", spinner, underFixed},
+		{"css animation under a hidden fixed child", animated, underFixed},
+		{"spinner in a hidden box", spinner, inHiddenBox},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			loadCSS(t, `@keyframes beat { from { opacity: 1; } to { opacity: 0.5; } }
+				.pulse { animation: beat 1s infinite; }`)
+			c := pinAnimClock(t)
+			host, hide := tc.place(tc.indicator())
+			frame(t, host, 200, 100)
+			if !c.step() {
+				t.Fatal("visible indicator scheduled no frame")
+			}
+			hide.SetVisible(false)
+			frame(t, host, 200, 100)
+			CollectDamage(host)
+			gen := DamageGeneration()
+			for range 3 {
+				c.step()
+			}
+			if animActiveNow(t) {
+				t.Error("hidden indicator still schedules frames")
+			}
+			if DamageGeneration() != gen {
+				t.Error("hidden indicator still damages the tree")
+			}
+			hide.SetVisible(true)
+			frame(t, host, 200, 100)
+			if !animActiveNow(t) {
+				t.Error("shown again, the indicator did not resume")
+			}
+		})
+	}
+}

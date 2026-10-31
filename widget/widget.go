@@ -429,6 +429,11 @@ func IsVisible(w Widget) bool {
 	return true
 }
 
+func onScreen(w Widget) bool {
+	n := nodeOf(w)
+	return n != nil && !n.bounds.Empty() && IsVisible(w)
+}
+
 // ownVisible is IsVisible's per-widget half: w's own SetVisible flag
 // and computed display, its ancestors aside. A container testing its
 // children reads it alone — its own visibility is settled by its being
@@ -679,6 +684,9 @@ func (n *node) Arrange(r render.Rect) {
 		restyleSubtree(n.self)
 	}
 	n.bounds = r
+	if n.anims != nil {
+		n.resumeAnimations()
+	}
 }
 
 // queryContainer reports whether the node's computed container-type

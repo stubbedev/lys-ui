@@ -15,10 +15,9 @@ import (
 // screen, stops after the animation's loop count on its last frame,
 // and under reduced motion shows the first frame still.
 type imagePlayback struct {
-	frame   int
-	plays   int
-	visible bool
-	cancel  anim.Cancel
+	frame  int
+	plays  int
+	cancel anim.Cancel
 }
 
 // animation is the source's animation when it has more than one frame.
@@ -44,10 +43,7 @@ func (im *Image) Frame() int { return im.play.frame }
 // visibility.
 func (im *Image) Arrange(r render.Rect) {
 	im.node.Arrange(r)
-	if visible := !r.Empty(); visible != im.play.visible {
-		im.play.visible = visible
-		im.syncPlayback()
-	}
+	im.syncPlayback()
 }
 
 // restartPlayback rewinds for a new source.
@@ -70,7 +66,7 @@ func (im *Image) stopPlayback() {
 func (im *Image) syncPlayback() {
 	a := im.animation()
 	done := a != nil && a.Loops > 0 && im.play.plays >= a.Loops
-	if a == nil || !im.play.visible || anim.Instant() || done {
+	if a == nil || !onScreen(im) || anim.Instant() || done {
 		im.stopPlayback()
 		return
 	}
@@ -80,7 +76,7 @@ func (im *Image) syncPlayback() {
 	gen := im.gen
 	im.play.cancel = anim.Play(anim.Delay(a.Delays[im.play.frame]), anim.Animate(0, func(float64) {
 		im.play.cancel = nil
-		if gen != im.gen {
+		if gen != im.gen || !onScreen(im) {
 			return
 		}
 		next := im.play.frame + 1
