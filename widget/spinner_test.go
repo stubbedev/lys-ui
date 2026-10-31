@@ -227,3 +227,50 @@ func TestHiddenIndicatorsScheduleNoFrames(t *testing.T) {
 		})
 	}
 }
+
+func TestDetachedIndicatorsScheduleNoFrames(t *testing.T) {
+	cases := []struct {
+		name   string
+		detach func(box *Box, card Widget)
+	}{
+		{"removed", func(box *Box, card Widget) { box.Remove(card) }},
+		{"cleared", func(box *Box, _ Widget) { box.Clear() }},
+		{"tree detached", func(box *Box, _ Widget) { Detach(box) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			loadCSS(t, `@keyframes beat { from { opacity: 1; } to { opacity: 0.5; } }
+				.pulse { animation: beat 1s infinite; }`)
+			c := pinAnimClock(t)
+			s := NewSpinner(24)
+			s.SetSpinning(true)
+			l := NewLabel(testFace(t), 12, "x", 0)
+			l.AddClass("pulse")
+			card := NewBox(Column, 0, 0).Append(s, false).Append(l, false)
+			box := NewBox(Column, 0, 0).Append(card, false)
+			frame(t, box, 200, 100)
+			if !c.step() {
+				t.Fatal("attached indicators scheduled no frame")
+			}
+			tc.detach(box, card)
+			CollectDamage(box)
+			gen := DamageGeneration()
+			for range 3 {
+				c.step()
+			}
+			if animActiveNow(t) {
+				t.Error("detached indicators still schedule frames")
+			}
+			if DamageGeneration() != gen {
+				t.Error("detached indicators still damage the tree")
+			}
+			if len(box.child) == 0 {
+				box.Append(card, false)
+			}
+			frame(t, box, 200, 100)
+			if !animActiveNow(t) {
+				t.Error("attached again, the indicators did not resume")
+			}
+		})
+	}
+}

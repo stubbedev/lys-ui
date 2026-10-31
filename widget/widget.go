@@ -274,6 +274,8 @@ type node struct {
 	// in Measure, Arrange, Paint, and HitTest, so the space reflows to
 	// the siblings; widget.IsVisible folds the ancestors in.
 	hidden bool
+
+	detached bool
 }
 
 // SetOnHoverWithin registers fn to hear the pointer enter or leave the
@@ -431,8 +433,15 @@ func IsVisible(w Widget) bool {
 }
 
 func onScreen(w Widget) bool {
-	n := nodeOf(w)
-	return n != nil && !n.bounds.Empty() && IsVisible(w)
+	if n := nodeOf(w); n == nil || n.bounds.Empty() {
+		return false
+	}
+	for a := w; a != nil; a = parentOf(a) {
+		if n := nodeOf(a); !ownVisible(a) || n != nil && n.detached {
+			return false
+		}
+	}
+	return true
 }
 
 // ownVisible is IsVisible's per-widget half: w's own SetVisible flag
@@ -676,6 +685,7 @@ func (n *node) takeDamage() (bounds render.Rect, extra []render.Rect, dirty bool
 // the previous frame also invalidates the old pixels, so partial
 // damage does not leave the widget's old paint behind.
 func (n *node) Arrange(r render.Rect) {
+	n.detached = false
 	n.arranges++
 	if !n.bounds.Empty() && r != n.bounds {
 		n.InvalidateRect(n.ink.Grow(n.bounds))
@@ -726,6 +736,7 @@ func (n *node) setParent(p, self Widget) {
 	if self != nil {
 		n.self = self
 	}
+	n.detached = p == nil && (n.parent != nil || n.detached)
 	if b := n.departingFrom; b != nil && p != Widget(b) {
 		b.endDepartureOf(n)
 	}
