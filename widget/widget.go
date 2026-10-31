@@ -146,6 +146,7 @@ type node struct {
 	// the static-tree pin test reads it.
 	measureMisses int
 	arranges      int
+	restyles      int
 
 	// themeSeen stamps the theme generation this widget last joined a
 	// frame with; SetTheme bumps themeGen so every widget repaints once.
@@ -642,6 +643,8 @@ func (n *node) measureMiss(axis Axis, forSize int) {
 func (n *node) measureMissCount() int { return n.measureMisses }
 
 func (n *node) arrangeCount() int { return n.arranges }
+
+func (n *node) restyleCount() int { return n.restyles }
 
 // measureStore records s as the cache entry for axis at forSize and
 // returns it, closing the measureHit pair. The cache is stamped with the

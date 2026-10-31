@@ -1711,6 +1711,7 @@ func restyleParts(w Widget) {
 // recompute that leaves the values Equal — the common restyle — costs
 // the compute and one comparison, and touches nothing.
 func (n *node) restyle(w Widget) *style.Values {
+	n.restyles++
 	w = styleOwner(w)
 	if n.self == nil {
 		n.self = w

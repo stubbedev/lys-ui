@@ -213,3 +213,32 @@ func TestSteadyLayoutArrangesEachWidgetOnce(t *testing.T) {
 		t.Errorf("a steady frame arranges %d widgets, budget %d", total, budget)
 	}
 }
+
+func TestSteadyFrameRestylesNothing(t *testing.T) {
+	const w, h = 1605, 1391
+	root := settingsTree(t)
+	cv := render.New(make([]byte, render.Stride(w)*h), render.Stride(w), w, h)
+	settingsFrame(root, cv, w, h)
+	type counted interface {
+		Widget
+		restyleCount() int
+	}
+	restyles := func() int {
+		total := 0
+		walkWidgets(root, func(w Widget) bool {
+			if c, ok := w.(counted); ok {
+				total += c.restyleCount()
+			}
+			return true
+		})
+		return total
+	}
+	before := restyles()
+	if before == 0 {
+		t.Fatal("the first frame restyled nothing; the counter is not wired")
+	}
+	settingsFrame(root, cv, w, h)
+	if got := restyles() - before; got != 0 {
+		t.Errorf("a steady frame restyled %d widgets, want 0", got)
+	}
+}
