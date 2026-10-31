@@ -62,6 +62,7 @@ type Entry struct {
 	// is kept in view by panning, never by editing. View state — never
 	// an undo entry.
 	scrollX int
+	panned  entryPan
 
 	// MaxWidth caps the natural width Measure reports: a long paste
 	// stops growing the layout at the cap and pans inside it instead —
@@ -960,6 +961,15 @@ func (e *Entry) caretX(sh *render.ShapedText, caret int) int {
 // reading's start edge, or caretPad of following text inside the far
 // edge — measured from the left for an LTR line, from the right for an
 // RTL one. A view mutation — callers own the repaint.
+type entryPan struct {
+	text         string
+	font         render.Font
+	px           float64
+	dir          Direction
+	caret, avail int
+	scrollX      int
+}
+
 func (e *Entry) panToCaret() {
 	if e.face == nil {
 		return
@@ -969,9 +979,13 @@ func (e *Entry) panToCaret() {
 		e.scrollX = 0
 		return
 	}
-	sh := e.shape(e.displayText())
-	cx := int(sh.CaretX(e.panCaret()) + 0.5)
-	if text.RTL(e.displayText(), e.effDir()) {
+	key := entryPan{text: e.displayText(), font: e.font(), px: e.fontPx(), dir: e.effDir(), caret: e.panCaret(), avail: avail, scrollX: e.scrollX}
+	if key == e.panned {
+		return
+	}
+	sh := key.font.ShapeDir(key.text, key.px, key.dir)
+	cx := int(sh.CaretX(key.caret) + 0.5)
+	if text.RTL(key.text, key.dir) {
 		cx = int(sh.Advance()+0.5) - cx // the caret's distance from the reading start edge
 	}
 	switch {
@@ -980,7 +994,9 @@ func (e *Entry) panToCaret() {
 	case cx > e.scrollX+avail-caretPad:
 		e.scrollX = cx - avail + caretPad
 	}
-	e.clampPan()
+	e.clampPanTo(int(sh.Advance()+0.5), avail)
+	key.scrollX = e.scrollX
+	e.panned = key
 }
 
 // clampPan pulls scrollX into the scrollable range: zero to the
@@ -992,6 +1008,10 @@ func (e *Entry) clampPan() {
 	if e.face != nil && avail > 0 {
 		textW = int(e.shape(e.displayText()).Advance() + 0.5)
 	}
+	e.clampPanTo(textW, avail)
+}
+
+func (e *Entry) clampPanTo(textW, avail int) {
 	if avail <= 0 {
 		e.scrollX = 0
 		return
