@@ -69,29 +69,44 @@ func newSyncSession(t *testing.T) (*Session, net.Conn, *atomic.Int32) {
 }
 
 // A loop parked in Step returns once a WakeAfter fires, and many short
-// wakes against a dispatching loop are race-free (run under -race).
+// wakes against a dispatching loop are race-free (run under -race):
+// the loop keeps stepping until every wake's events are dispatched.
 func TestWakeAfterWakesTheLoop(t *testing.T) {
-	s, _, _ := newSyncSession(t)
+	s, _, answered := newSyncSession(t)
 	const wakes = 50
-	stepped := make(chan error, wakes)
+	drained := make(chan error, 1)
 	go func() {
-		for range wakes {
-			stepped <- s.Step()
+		ctx := s.Display.Context()
+		for {
+			if err := s.Step(); err != nil {
+				drained <- err
+				return
+			}
+			if answered.Load() < wakes || ctx.Buffered() {
+				continue
+			}
+			read, err := ctx.ReadReady()
+			if err != nil {
+				drained <- err
+				return
+			}
+			if !read {
+				drained <- nil
+				return
+			}
 		}
 	}()
 	start := time.Now()
 	for i := range wakes {
 		s.WakeAfter(time.Duration(i%3) * time.Millisecond)
 	}
-	for i := range wakes {
-		select {
-		case err := <-stepped:
-			if err != nil {
-				t.Fatalf("step %d: %v", i, err)
-			}
-		case <-time.After(5 * time.Second):
-			t.Fatalf("the loop parked after %d of %d wakes", i, wakes)
+	select {
+	case err := <-drained:
+		if err != nil {
+			t.Fatalf("step: %v", err)
 		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("the loop parked with %d of %d wakes answered", answered.Load(), wakes)
 	}
 	if time.Since(start) > 5*time.Second {
 		t.Error("the wakes took too long")

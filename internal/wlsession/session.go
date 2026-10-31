@@ -1409,14 +1409,37 @@ type syncDone bool
 
 func (d *syncDone) HandleCallbackDone(wl.CallbackDoneEvent) { *d = true }
 
-// Step dispatches exactly one event, blocking until one arrives. It is
-// the park point of an event-driven loop: with nothing to do, a loop
-// calling Step holds no CPU and wakes only when the compositor sends
-// something or a WakeAfter kick fires.
+// Step dispatches one event, blocking until one arrives, then every
+// event already pending: those its read buffered and those one more
+// non-blocking read brings in. It is the park point of an event-driven
+// loop: with nothing to do, a loop calling Step holds no CPU and wakes
+// only when the compositor sends something or a WakeAfter kick fires,
+// and a burst of events costs the loop one pass, not one per event.
 func (s *Session) Step() error {
-	return s.asDisconnect(runThroughProxyNil(func() error {
-		return s.Display.Context().Run()
-	}))
+	ctx := s.Display.Context()
+	if err := s.asDisconnect(runThroughProxyNil(ctx.Run)); err != nil {
+		return err
+	}
+	if err := s.dispatchBuffered(ctx); err != nil {
+		return err
+	}
+	read, err := ctx.ReadReady()
+	if err != nil {
+		return s.asDisconnect(err)
+	}
+	if !read {
+		return nil
+	}
+	return s.dispatchBuffered(ctx)
+}
+
+func (s *Session) dispatchBuffered(ctx *wl.Context) error {
+	for ctx.Buffered() {
+		if err := ctx.Run(); err != nil && !errors.Is(err, wl.ErrContextRunProxyNil) {
+			return s.asDisconnect(err)
+		}
+	}
+	return nil
 }
 
 // HandleDisplayError implements wl.DisplayErrorHandler: record the
