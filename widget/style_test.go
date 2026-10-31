@@ -34,6 +34,7 @@ func bareTheme(t *testing.T) {
 // so tests start from the steady state.
 func arrangeTree(t *testing.T, root Widget, w, h int) {
 	t.Helper()
+	t.Cleanup(Host(root))
 	SizeWithin(root, Size{W: w, H: h})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
 	CollectDamage(root)

@@ -13,6 +13,7 @@ import (
 // screen, and SetValue returns to the fraction.
 func TestProgressBarPulse(t *testing.T) {
 	p := NewProgressBar(0.3)
+	t.Cleanup(Host(p))
 	p.PulseStep = 0.3
 	p.Pulse()
 	if !p.Activity() || p.pos != 0.3 || !p.trough.fill.hasClass("pulse") {

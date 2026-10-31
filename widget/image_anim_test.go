@@ -47,6 +47,7 @@ func animatedGIF(t *testing.T, loops int) []byte {
 func TestImagePlayback(t *testing.T) {
 	c := pinAnimClock(t)
 	im := NewBytesImage(animatedGIF(t, 0), "anim.gif")
+	t.Cleanup(Host(im))
 	if _, ok := im.img.(*render.Animation); !ok {
 		t.Fatalf("source %T is not an animation", im.img)
 	}
@@ -71,6 +72,7 @@ func TestImagePlayback(t *testing.T) {
 	}
 
 	once := NewBytesImage(animatedGIF(t, 1), "once.gif")
+	t.Cleanup(Host(once))
 	once.Arrange(render.Rect{W: 8, H: 8})
 	c.drive()
 	if once.Frame() != 2 {

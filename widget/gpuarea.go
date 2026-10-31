@@ -175,9 +175,6 @@ func (a *GPUArea) detach() {
 // source only it holds. A tree shown again re-creates them on its
 // next paint.
 func Detach(w Widget) {
-	if n := nodeOf(w); n != nil {
-		n.detached = true
-	}
 	walkWidgets(w, func(w Widget) bool {
 		if d, ok := w.(detacher); ok {
 			d.detach()

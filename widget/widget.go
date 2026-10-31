@@ -275,8 +275,6 @@ type node struct {
 	// in Measure, Arrange, Paint, and HitTest, so the space reflows to
 	// the siblings; widget.IsVisible folds the ancestors in.
 	hidden bool
-
-	detached bool
 }
 
 // SetOnHoverWithin registers fn to hear the pointer enter or leave the
@@ -437,12 +435,28 @@ func onScreen(w Widget) bool {
 	if n := nodeOf(w); n == nil || n.bounds.Empty() {
 		return false
 	}
+	top := w
 	for a := w; a != nil; a = parentOf(a) {
-		if n := nodeOf(a); !ownVisible(a) || n != nil && n.detached {
+		if !ownVisible(a) {
 			return false
 		}
+		top = a
 	}
-	return true
+	_, ok := hosted[top]
+	return ok
+}
+
+var hosted = map[Widget]struct{}{}
+
+// Host marks root as the top of a tree a host shows on screen, a
+// window's or a popover's, and returns the call that ends it. Only
+// widgets under a hosted root animate: a subtree removed from its tree,
+// a tree whose window closed, or one a test arranged and dropped
+// schedules no frames. Hosting a widget twice is one hosting.
+func Host(root Widget) (unhost func()) {
+	checkLoop("Host")
+	hosted[root] = struct{}{}
+	return func() { delete(hosted, root) }
 }
 
 // ownVisible is IsVisible's per-widget half: w's own SetVisible flag
@@ -688,7 +702,6 @@ func (n *node) takeDamage() (bounds render.Rect, extra []render.Rect, dirty bool
 // the previous frame also invalidates the old pixels, so partial
 // damage does not leave the widget's old paint behind.
 func (n *node) Arrange(r render.Rect) {
-	n.detached = false
 	n.arranges++
 	if !n.bounds.Empty() && r != n.bounds {
 		n.InvalidateRect(n.ink.Grow(n.bounds))
@@ -739,7 +752,6 @@ func (n *node) setParent(p, self Widget) {
 	if self != nil {
 		n.self = self
 	}
-	n.detached = p == nil && (n.parent != nil || n.detached)
 	if b := n.departingFrom; b != nil && p != Widget(b) {
 		b.endDepartureOf(n)
 	}

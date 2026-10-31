@@ -52,6 +52,10 @@ type hostWindow struct {
 	host Host
 	sess *wlsession.Session
 	cfg  windowHooks
+	// hosted is the root this window hosts for animation (widget.Host),
+	// and unhost ends it.
+	hosted widget.Widget
+	unhost func()
 	// afterSync runs a func once the compositor has processed every
 	// request sent so far (Session.AfterSync); nil in wire-free tests,
 	// where held buffers wait for their release alone.
@@ -340,6 +344,16 @@ func (w *hostWindow) noteFootprint() {
 	debug.Log("frame", "surface %d holds %d buffers, %.1f MiB", w.host.HostSurface().Id(), n, float32(bytes)/(1<<20))
 }
 
+func (w *hostWindow) hostRoot() {
+	if w.hosted == w.router.Root {
+		return
+	}
+	if w.unhost != nil {
+		w.unhost()
+	}
+	w.hosted, w.unhost = w.router.Root, widget.Host(w.router.Root)
+}
+
 // release tears down the window's loop state: input handlers are
 // unregistered and the buffer pool's storage returns to the session
 // arena, so closing windows leaves no fds, mappings, or slots behind.
@@ -348,6 +362,10 @@ func (w *hostWindow) noteFootprint() {
 // the destroy (Pool.Reclaim); on a dead connection nothing is held any
 // more.
 func (w *hostWindow) release() {
+	if w.unhost != nil {
+		w.unhost()
+		w.unhost, w.hosted = nil, nil
+	}
 	if w.router != nil {
 		widget.Detach(w.router.Root)
 	}
@@ -867,6 +885,7 @@ func (w *hostWindow) draw() bool {
 	// nothing); Arrange invalidates the old rect of anything that moved,
 	// so the drain below sees moves from this frame too. All tree
 	// coordinates are logical pixels.
+	w.hostRoot()
 	w.router.Root.Arrange(render.Rect{X: 0, Y: 0, W: bw, H: bh})
 	// Arranging a new subtree parents it, and a widget first measured
 	// without ancestors resolved no scoped stylesheet: settle the layout

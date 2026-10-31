@@ -428,6 +428,7 @@ func (c confCase) run(t *testing.T) {
 	body.Append(f.build(c.tree), false)
 	f.name(body, "#root")
 	f.root = body
+	t.Cleanup(Host(body))
 	loadCSS(t, c.css)
 	f.settle()
 	if c.act != nil {

@@ -275,6 +275,7 @@ func (s staticRows) Row(i int) Widget { return s[i] }
 // materialized and styled its row proxies.
 func frame(t *testing.T, host Widget, w, h int) {
 	t.Helper()
+	t.Cleanup(Host(host))
 	for range 2 {
 		SizeWithin(host, Size{W: w, H: h})
 		host.Arrange(render.Rect{W: w, H: h})

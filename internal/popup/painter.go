@@ -40,7 +40,8 @@ type Renderer interface {
 // Pass drives at most one frame per call; the owning loop calls it
 // once per pass and parks however it likes between passes.
 type Painter struct {
-	p *Popup
+	p      *Popup
+	unhost func()
 
 	sess    *wlsession.Session
 	gpu     Renderer // nil draws on the CPU
@@ -87,6 +88,7 @@ func (p *Popup) NewPainter(sess *wlsession.Session, gpu Renderer, frac120 uint32
 	reveal, morph := p.fx.Visual()
 	p.anim = newAnimView(root, reveal, morph, p.gravity, p.gutter, pc.paintPlate)
 	pc.visual = p.anim.morph
+	pc.unhost = widget.Host(pc.visual)
 	pc.w, pc.h = p.Size()
 	pc.dirty.Store(true)
 	p.painter = pc
@@ -308,7 +310,10 @@ func (pc *Painter) paint(b *buffer.Buffer, region render.Rect) (bool, error) {
 }
 
 // Close releases the painter's pool storage back to the session arena.
-func (pc *Painter) Close() { pc.pool.Close() }
+func (pc *Painter) Close() {
+	pc.unhost()
+	pc.pool.Close()
+}
 
 // paintPlate fills the content rect with the popup background and,
 // when the theme reserves a shadow gutter, paints the elevation around

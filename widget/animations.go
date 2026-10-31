@@ -165,7 +165,10 @@ func (n *node) driveAnimations(now time.Time) {
 		na.drive()
 		na.drive = nil
 	}
-	na.parked = false
+	na.parked = !onScreen(n.self)
+	if na.parked {
+		return
+	}
 	remaining := 0.0
 	for i := range na.runs {
 		r := &na.runs[i]

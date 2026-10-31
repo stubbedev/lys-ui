@@ -13,6 +13,7 @@ import (
 func TestSpinnerNeedsSpinningAndVisible(t *testing.T) {
 	c := pinAnimClock(t)
 	s := NewSpinner(24)
+	t.Cleanup(Host(s))
 	con := Size{W: 100, H: 100}
 
 	t.Run("spinning but unarranged holds no timer", func(t *testing.T) {
@@ -80,6 +81,7 @@ func TestSpinnerNeedsSpinningAndVisible(t *testing.T) {
 func TestSpinnerAngleWraps(t *testing.T) {
 	c := pinAnimClock(t)
 	s := NewSpinner(24)
+	t.Cleanup(Host(s))
 	s.SetSpinning(true)
 	SizeWithin(s, Size{W: 100, H: 100})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 24, H: 24})
@@ -231,11 +233,11 @@ func TestHiddenIndicatorsScheduleNoFrames(t *testing.T) {
 func TestDetachedIndicatorsScheduleNoFrames(t *testing.T) {
 	cases := []struct {
 		name   string
-		detach func(box *Box, card Widget)
+		detach func(box *Box, card Widget, unhost func())
 	}{
-		{"removed", func(box *Box, card Widget) { box.Remove(card) }},
-		{"cleared", func(box *Box, _ Widget) { box.Clear() }},
-		{"tree detached", func(box *Box, _ Widget) { Detach(box) }},
+		{"removed", func(box *Box, card Widget, _ func()) { box.Remove(card) }},
+		{"cleared", func(box *Box, _ Widget, _ func()) { box.Clear() }},
+		{"host gone", func(_ *Box, _ Widget, unhost func()) { unhost() }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -248,11 +250,13 @@ func TestDetachedIndicatorsScheduleNoFrames(t *testing.T) {
 			l.AddClass("pulse")
 			card := NewBox(Column, 0, 0).Append(s, false).Append(l, false)
 			box := NewBox(Column, 0, 0).Append(card, false)
-			frame(t, box, 200, 100)
+			unhost := Host(box)
+			defer func() { unhost() }()
+			layout(box, 200, 100)
 			if !c.step() {
-				t.Fatal("attached indicators scheduled no frame")
+				t.Fatal("hosted indicators scheduled no frame")
 			}
-			tc.detach(box, card)
+			tc.detach(box, card, unhost)
 			CollectDamage(box)
 			gen := DamageGeneration()
 			for range 3 {
@@ -267,10 +271,32 @@ func TestDetachedIndicatorsScheduleNoFrames(t *testing.T) {
 			if len(box.child) == 0 {
 				box.Append(card, false)
 			}
-			frame(t, box, 200, 100)
+			unhost = Host(box)
+			layout(box, 200, 100)
 			if !animActiveNow(t) {
 				t.Error("attached again, the indicators did not resume")
 			}
 		})
 	}
+}
+
+func TestUnhostedTreeSchedulesNoFrames(t *testing.T) {
+	loadCSS(t, `@keyframes beat { from { opacity: 1; } to { opacity: 0.5; } }
+		.pulse { animation: beat 1s infinite; }`)
+	pinAnimClock(t)
+	s := NewSpinner(24)
+	s.SetSpinning(true)
+	l := NewLabel(testFace(t), 12, "x", 0)
+	l.AddClass("pulse")
+	page := NewScroll(NewBox(Column, 0, 0).Append(s, false).Append(l, false))
+	layout(page, 200, 100)
+	if animActiveNow(t) {
+		t.Error("a tree arranged without a host schedules frames")
+	}
+}
+
+func layout(root Widget, w, h int) {
+	SizeWithin(root, Size{W: w, H: h})
+	root.Arrange(render.Rect{W: w, H: h})
+	root.Paint(render.New(make([]byte, render.Stride(w)*h), render.Stride(w), w, h))
 }
