@@ -7,6 +7,7 @@
     ...
   }: {
     checks = lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+      inherit (self'.packages) lys-ui;
       # The Hyprland side of the compositor-in-the-loop gate (#66):
       # a private NixOS VM (own kernel, own virtio-gpu DRM node,
       # own seatd) that boots Hyprland and runs the same suite the

@@ -30,6 +30,11 @@ hyprland-vm:
 atspi:
     go test ./internal/atspi/
 
+# Build the Nix package with its sandboxed tests: a go.mod or go.sum
+# change without the matching vendorHash in nix/package.nix fails here.
+package:
+    nix build -L --no-link .#checks.{{ arch() }}-{{ os() }}.lys-ui
+
 # The GPU renderer's lys-ui tests on lavapipe, Mesa's CPU Vulkan
 # driver, so they gate without a GPU: every widget golden rendered on
 # the GPU against the CPU's pixels, and the app's GPU frame tests. The
