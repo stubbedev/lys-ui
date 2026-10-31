@@ -140,3 +140,25 @@ func TestAllocBudgetWrappedLabelRepaint(t *testing.T) {
 		t.Errorf("repainting wrapped labels allocates %v allocs/op, budget %d", allocs, budget)
 	}
 }
+
+func TestAllocBudgetResizeDamage(t *testing.T) {
+	skipAllocBudget(t)
+	const w, h = 1605, 1391
+	root := settingsTree(t)
+	var buf []render.Rect
+	i := 0
+	resize := func() {
+		i++
+		SizeWithin(root, Size{W: w - i%2*8, H: h})
+		root.Arrange(render.Rect{W: w - i%2*8, H: h})
+		buf, _ = CollectDamageInto(buf, root)
+	}
+	for range 8 {
+		resize()
+	}
+	const budget = 4
+	allocs := testing.AllocsPerRun(10, resize)
+	if allocs > budget {
+		t.Errorf("a resize's damage allocates %v allocs/op, budget %d", allocs, budget)
+	}
+}

@@ -654,7 +654,7 @@ func (n *node) takeDamage() (bounds render.Rect, extra []render.Rect, dirty bool
 	n.invalid = false
 	n.subInvalid = false
 	n.themeSeen = themeGen
-	extra, n.extras = n.extras, nil
+	extra, n.extras = n.extras, n.extras[:0]
 	if !boundsDirty && len(extra) == 0 {
 		return render.Rect{}, nil, false
 	}
