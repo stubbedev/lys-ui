@@ -71,24 +71,26 @@ func TestReusedPunchedSlotIsZeroAndUsable(t *testing.T) {
 	}
 }
 
-func TestRetirePunchesPagesSharedWithFreeNeighbor(t *testing.T) {
+func TestRetireFreesEveryPageOfASlotBetweenLiveNeighbors(t *testing.T) {
 	a := NewArena(nil)
 	t.Cleanup(func() { _ = a.Close() })
 	w := 3 * unix.Getpagesize() / 8
 	first := filled(t, a, w, 1)
 	second := filled(t, a, w, 1)
 	third := filled(t, a, w, 1)
-	if got := allocatedPages(t, a); got != 5 {
-		t.Fatalf("allocated pages = %d with three 1.5-page buffers drawn, want 5", got)
+	drawn := allocatedPages(t, a)
+	Cancel(second)
+	if got := allocatedPages(t, a); got != drawn-2 {
+		t.Errorf("allocated pages = %d after freeing a 1.5-page slot between live ones, want %d: a page it shares with a neighbor stays resident", got, drawn-2)
+	}
+	for _, b := range []*Buffer{first, third} {
+		for i, v := range a.data[b.slot.offset : b.slot.offset+len(b.Data)] {
+			if v != 0xff {
+				t.Fatalf("live buffer at %d: byte %d = %#x after its neighbor was freed", b.slot.offset, i, v)
+			}
+		}
 	}
 	Cancel(first)
-	if got := allocatedPages(t, a); got != 4 {
-		t.Fatalf("allocated pages = %d after the first retire, want 4", got)
-	}
-	Cancel(second)
-	if got := allocatedPages(t, a); got != 2 {
-		t.Errorf("allocated pages = %d after the merged retire, want 2: the page straddling both freed slots stays resident", got)
-	}
 	Cancel(third)
 	if got := allocatedPages(t, a); got != 0 {
 		t.Errorf("allocated pages = %d with every slot free, want 0", got)

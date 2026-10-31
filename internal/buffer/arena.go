@@ -114,7 +114,8 @@ func (a *Arena) Acquire(bufW, bufH, scale int) (*Buffer, error) {
 		return nil, fmt.Errorf("buffer: size %d exceeds the wayland int32 range", need)
 	}
 
-	s, err := a.take(need)
+	page := unix.Getpagesize()
+	s, err := a.take((need + page - 1) / page * page)
 	if err != nil {
 		return nil, err
 	}
