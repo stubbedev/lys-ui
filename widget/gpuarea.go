@@ -175,12 +175,18 @@ func (a *GPUArea) detach() {
 // source only it holds. A tree shown again re-creates them on its
 // next paint.
 func Detach(w Widget) {
-	walkWidgets(w, func(w Widget) bool {
+	walkOwned(w, func(w Widget) {
 		if d, ok := w.(detacher); ok {
 			d.detach()
 		}
-		return true
 	})
+}
+
+func walkOwned(w Widget, visit func(Widget)) {
+	visit(w)
+	for _, k := range styleKids(w) {
+		walkOwned(k, visit)
+	}
 }
 
 // detacher is a widget holding something for being on screen that a

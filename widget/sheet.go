@@ -368,8 +368,10 @@ func (s *Sheet) appendChildren(buf []Widget) []Widget {
 	return append(buf, s.root)
 }
 
-// appendStyleKids is the content and, while showing, the panel.
-func (s *Sheet) appendStyleKids(buf []Widget) []Widget { return s.appendChildren(buf) }
+// appendStyleKids is the content and the panel, shown or not
+// (styleKids): a hidden panel keeps its cascade, so a restyle reaches
+// it before it slides in.
+func (s *Sheet) appendStyleKids(buf []Widget) []Widget { return append(buf, s.root, s.panel) }
 
 // Content returns the widget the sheet slides over.
 func (s *Sheet) Content() Widget { return s.root }

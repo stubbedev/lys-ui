@@ -317,6 +317,13 @@ func (v *TabView) Children() []Widget {
 	return []Widget{v.selected.child}
 }
 
+func (v *TabView) appendStyleKids(buf []Widget) []Widget {
+	for _, p := range v.pages {
+		buf = append(buf, p.child)
+	}
+	return buf
+}
+
 // Measure is the widest page's request, so switching tabs does not
 // resize the window.
 func (v *TabView) Measure(axis Axis, forSize int) Sizes {
