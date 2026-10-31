@@ -63,6 +63,24 @@ type Label struct {
 	// (GTK lines); 0 is uncapped.
 	maxLines int
 	shaped   *render.ShapedText
+	rows     wrapMemo
+}
+
+type wrapKey struct {
+	face     render.Font
+	text     string
+	px       float64
+	width    float64
+	wrap     bool
+	opts     render.WrapOptions
+	ell      EllipsizeMode
+	maxLines int
+	indent   float64
+}
+
+type wrapMemo struct {
+	key   wrapKey
+	lines []string
 }
 
 // NewLabel returns a label that paints text with face at sizePx
@@ -581,21 +599,32 @@ func (l *Label) textRequest(axis Axis, forSize int) Sizes {
 func (l *Label) wrapped(width float64) []string {
 	face, px := l.effStyle()
 	v := l.style(l)
-	ell, maxLines := l.ellOf(v), l.maxLinesOf(v)
-	breakAt := width
-	if !l.wrapOf(v) {
+	k := wrapKey{
+		face: face, text: l.shown(), px: px, width: width, wrap: l.wrapOf(v), opts: l.wrapOpts(v),
+		ell: l.ellOf(v), maxLines: l.maxLinesOf(v), indent: l.indentOf(v),
+	}
+	if l.rows.lines != nil && l.rows.key == k {
+		return l.rows.lines
+	}
+	l.rows = wrapMemo{key: k, lines: wrapRows(k)}
+	return l.rows.lines
+}
+
+func wrapRows(k wrapKey) []string {
+	breakAt := k.width
+	if !k.wrap {
 		breakAt = math.Inf(1)
 	}
-	lines := render.WrapTextOpts(face, l.shown(), breakAt, px, l.wrapOpts(v))
-	if maxLines > 0 && ell != EllipsizeNone && len(lines) > maxLines {
-		lines = append(lines[:maxLines-1], strings.Join(lines[maxLines-1:], " "))
+	lines := render.WrapTextOpts(k.face, k.text, breakAt, k.px, k.opts)
+	if k.maxLines > 0 && k.ell != EllipsizeNone && len(lines) > k.maxLines {
+		lines = append(lines[:k.maxLines-1], strings.Join(lines[k.maxLines-1:], " "))
 	}
-	if last := len(lines) - 1; ell != EllipsizeNone && lines[last] != "" {
-		w := width
+	if last := len(lines) - 1; k.ell != EllipsizeNone && lines[last] != "" {
+		w := k.width
 		if last == 0 {
-			w -= l.indentOf(v)
+			w -= k.indent
 		}
-		lines[last] = render.EllipsizeText(face, lines[last], ell, w, px)
+		lines[last] = render.EllipsizeText(k.face, lines[last], k.ell, w, k.px)
 	}
 	return lines
 }

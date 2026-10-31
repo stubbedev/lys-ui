@@ -85,3 +85,23 @@ func TestCSSVerticalAlignShiftsBaseline(t *testing.T) {
 		t.Errorf("vertical-align 4px baseline %d, want %d", shifted, base-4)
 	}
 }
+
+func TestWrappedRowsFollowTextAndStyleChanges(t *testing.T) {
+	l := NewLabel(testFace(t), 12, "aa bb", render.RGB(0, 0, 0))
+	l.SetWrap(true)
+	if rows := l.wrapped(200); len(rows) != 1 {
+		t.Fatalf("rows = %q, want 1", rows)
+	}
+	l.SetText("one two three four five six seven eight")
+	if rows := l.wrapped(60); len(rows) < 2 {
+		t.Errorf("rows after SetText = %q, want the new text wrapped", rows)
+	}
+	loadCSS(t, `label { text-transform: uppercase; }`)
+	if rows := l.wrapped(60); rows[0][:3] != "ONE" {
+		t.Errorf("rows after restyle = %q, want the transformed text", rows)
+	}
+	loadCSS(t, `label { line-clamp: 2; }`)
+	if rows := l.wrapped(60); len(rows) != 2 || !endsWithEllipsis(rows[1]) {
+		t.Errorf("rows after line-clamp = %q, want 2 with an ellipsized tail", rows)
+	}
+}

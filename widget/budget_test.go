@@ -127,3 +127,16 @@ func skipAllocBudget(t *testing.T) {
 		t.Skip("allocation budgets do not hold under -race or lysdebug")
 	}
 }
+
+func TestAllocBudgetWrappedLabelRepaint(t *testing.T) {
+	skipAllocBudget(t)
+	const w, h = 1605, 1391
+	root := settingsTree(t)
+	cv := render.New(make([]byte, render.Stride(w)*h), render.Stride(w), w, h)
+	settingsFrame(root, cv, w, h)
+	const budget = 0
+	allocs := testing.AllocsPerRun(10, func() { root.Paint(cv) })
+	if allocs > budget {
+		t.Errorf("repainting wrapped labels allocates %v allocs/op, budget %d", allocs, budget)
+	}
+}
