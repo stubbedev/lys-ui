@@ -35,6 +35,9 @@
           # (layer shell + virtual pointer protocol included) without
           # touching the developer's real desktop. Linux only.
           ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.sway]
+          # The compositor without layer shell that `just headless` starts on
+          # the same headless backend, for a toplevel-only application.
+          ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.cage]
           ++ [
             # `just atspi`'s bus-level tests launch a private dbus-daemon as
             # the accessibility bus and skip when it is missing; shipping it

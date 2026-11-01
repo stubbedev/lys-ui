@@ -21,10 +21,25 @@ func TestMissingGlobals(t *testing.T) {
 	})
 
 	t.Run("only the absent ones are listed", func(t *testing.T) {
-		have := map[string]bool{"wl_compositor": true, "wl_shm": true}
+		have := map[string]bool{"wl_compositor": true}
 		got := missingGlobals(have)
-		if len(got) != 2 || got[0] != "wl_output" || got[1] != "zwlr_layer_shell_v1" {
-			t.Errorf("want [wl_output zwlr_layer_shell_v1], got %v", got)
+		if len(got) != 1 || got[0] != "wl_shm" {
+			t.Errorf("want [wl_shm], got %v", got)
+		}
+	})
+
+	t.Run("a compositor with neither layer shell nor outputs lists nothing", func(t *testing.T) {
+		have := map[string]bool{"wl_compositor": true, "wl_shm": true, "xdg_wm_base": true}
+		if got := missingGlobals(have); len(got) != 0 {
+			t.Errorf("want no missing globals, got %v", got)
+		}
+	})
+
+	t.Run("surfaces and buffers stay required", func(t *testing.T) {
+		have := map[string]bool{"wl_output": true, "xdg_wm_base": true, "zwlr_layer_shell_v1": true}
+		got := missingGlobals(have)
+		if len(got) != 2 || got[0] != "wl_compositor" || got[1] != "wl_shm" {
+			t.Errorf("want [wl_compositor wl_shm], got %v", got)
 		}
 	})
 }

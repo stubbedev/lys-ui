@@ -234,3 +234,18 @@ func TestReshapeValidatesTheFinalState(t *testing.T) {
 		t.Errorf("reshape on a closed surface = %v, want ErrClosed", err)
 	}
 }
+
+type shellWithout struct{}
+
+func (shellWithout) LayerShell() *wlr.ZwlrLayerShellV1 { return nil }
+func (shellWithout) LayerShellVersion() uint32         { return 0 }
+
+func TestNewWithoutLayerShellFailsAtTheCall(t *testing.T) {
+	s, err := New(shellWithout{}, nil, nil, Config{Anchor: AnchorTop, Width: 1, Height: 1})
+	if !errors.Is(err, ErrUnavailable) {
+		t.Errorf("err = %v, want ErrUnavailable", err)
+	}
+	if s != nil {
+		t.Errorf("surface = %v, want nil", s)
+	}
+}

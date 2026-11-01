@@ -546,9 +546,15 @@ func (a *Application) openWindow(w *Window, cfg WindowConfig) (*hostWindow, erro
 	return hw, nil
 }
 
+// ErrLayerShellUnavailable reports a compositor without
+// zwlr_layer_shell_v1, such as a kiosk: NewLayer and NewBar fail with it,
+// and toplevels keep working.
+var ErrLayerShellUnavailable = layersurface.ErrUnavailable
+
 // NewLayer creates a layer surface from a declarative config — the
 // bar/panel/launcher shape: anchors, margins, exclusive zone, and
-// keyboard interactivity declared up front.
+// keyboard interactivity declared up front. It fails with
+// ErrLayerShellUnavailable on a compositor without layer shell.
 func (a *Application) NewLayer(cfg LayerConfig) (*LayerWindow, error) {
 	l := &LayerWindow{app: a, cfg: cfg}
 	if _, err := a.openLayer(l, cfg); err != nil {
@@ -561,7 +567,7 @@ func (a *Application) NewLayer(cfg LayerConfig) (*LayerWindow, error) {
 // built from cfg - the first open and the rebuild, like openWindow.
 func (a *Application) openLayer(l *LayerWindow, cfg LayerConfig) (*hostWindow, error) {
 	if a.sess.LayerShell() == nil {
-		return nil, errors.New("app: compositor has no zwlr_layer_shell_v1")
+		return nil, ErrLayerShellUnavailable
 	}
 	surf, err := a.sess.Compositor().CreateSurface()
 	if err != nil {

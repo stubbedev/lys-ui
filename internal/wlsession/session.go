@@ -30,12 +30,13 @@ import (
 	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
-// requiredGlobals are the interfaces lys-ui cannot run without, in the order
-// they are reported as missing. The fractional-scale protocols
-// (wp_viewporter, wp_fractional_scale_manager_v1) are deliberately not
-// here: they are feature-detected and optional, and compositors without
-// them keep the exact integer-scale behavior.
-var requiredGlobals = []string{"wl_compositor", "wl_shm", "wl_output", "zwlr_layer_shell_v1"}
+// requiredGlobals are the interfaces no lys-ui surface can exist without, in
+// the order they are reported as missing: surfaces and the shm buffers every
+// renderer can fall back to. Everything else is feature-detected. A role's
+// global fails at the call asking for that role, so a kiosk without layer
+// shell runs toplevels, and outputs come and go at runtime, so a compositor
+// with none connected is not an error.
+var requiredGlobals = []string{"wl_compositor", "wl_shm"}
 
 // minCompositorVersion is the wl_surface version SetBufferScale needs
 // (set_buffer_scale is version 3).

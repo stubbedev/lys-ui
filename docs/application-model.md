@@ -17,6 +17,8 @@ gtk4-layer-shell concepts it borrows.
   zone, keyboard interactivity, namespace. No close request exists in
   the protocol; the surface dies when the compositor closes it or its
   output disappears.
+  On a compositor without layer shell, such as a kiosk, `NewLayer` fails
+  with `ErrLayerShellUnavailable` and toplevels keep working.
 
 ## Compositor disconnects
 

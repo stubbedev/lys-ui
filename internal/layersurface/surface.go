@@ -11,6 +11,9 @@ import (
 	"github.com/stubbedev/lys-lib/wlr"
 )
 
+// ErrUnavailable reports a compositor without zwlr_layer_shell_v1.
+var ErrUnavailable = errors.New("layersurface: compositor has no zwlr_layer_shell_v1")
+
 // ErrNotConfigured reports a draw attempt before the first configure
 // event. The compositor rejects buffers committed before the initial
 // configure.
@@ -140,7 +143,7 @@ type Surface struct {
 // configure event.
 func New(shell Shell, surf *wl.Surface, output *wl.Output, cfg Config) (*Surface, error) {
 	if shell.LayerShell() == nil {
-		return nil, errors.New("layersurface: compositor has no zwlr_layer_shell_v1")
+		return nil, ErrUnavailable
 	}
 	cfg.shellVersion = shell.LayerShellVersion()
 	if err := cfg.validate(); err != nil {

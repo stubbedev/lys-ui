@@ -29,8 +29,10 @@ func SetLogger(l *slog.Logger) { logutil.Set(l) }
 // without each one. Keep in sync with HandleRegistryGlobal's optional
 // cases.
 var optionalGlobals = []string{
+	"wl_output",
 	"wl_seat",
 	"xdg_wm_base",
+	"zwlr_layer_shell_v1",
 	"wl_data_device_manager",
 	"wp_viewporter",
 	"wp_presentation",

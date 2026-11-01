@@ -241,13 +241,15 @@ the wire rule for every concrete request (internal/layersurface), and
 
 ### 12. Optional globals are feature-detected and never gate Connect
 
-Every protocol beyond the required core — xdg-decoration,
-fractional-scale, text-input, the data device (version-capped) — binds
-optionally, reports its presence or negotiated version, and the
-callers gate on it. A compositor missing any of them gets the
-pre-feature behavior byte for byte; none of them fail `Connect`
-(internal/wlsession). Feature work adds capabilities without adding
-requirements.
+Every protocol beyond the required core of `wl_compositor` and `wl_shm` —
+xdg-decoration, fractional-scale, text-input, the data device
+(version-capped) — binds optionally, reports its presence or negotiated
+version, and the callers gate on it. A compositor missing any of them gets
+the pre-feature behavior byte for byte; none of them fail `Connect`
+(internal/wlsession). The shell roles are optional too: `NewWindow` without
+`xdg_wm_base` and `NewLayer` without `zwlr_layer_shell_v1` fail at that call,
+and a compositor with no `wl_output` right now is a session with no outputs
+yet. Feature work adds capabilities without adding requirements.
 
 ### 13. A surface declares its own opacity
 
