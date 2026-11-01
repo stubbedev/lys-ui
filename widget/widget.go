@@ -144,10 +144,13 @@ type node struct {
 	measures [4]measureEntry
 	// measureMisses tallies the measures the cache could not answer;
 	// the static-tree pin test reads it.
-	measureMisses int
-	arranges      int
-	arrangeStale  bool
-	restyles      int
+	measureMisses  int
+	arranges       int
+	arrangeStale   bool
+	damageStale    bool
+	damageVolatile bool
+	damageIcons    uint64
+	restyles       int
 
 	// themeSeen stamps the theme generation this widget last joined a
 	// frame with; SetTheme bumps themeGen so every widget repaints once.
@@ -512,7 +515,7 @@ func invalidateTree(self Widget) {
 func (n *node) Invalidate() {
 	checkLoop("Invalidate")
 	n.invalid = true
-	n.markArrangeStale()
+	n.markBranchStale()
 	if n.unseen() {
 		return
 	}
@@ -535,16 +538,16 @@ func (n *node) InvalidateRect(r render.Rect) {
 		return
 	}
 	n.extras = append(n.extras, r)
-	n.markArrangeStale()
+	n.markBranchStale()
 	markDamage()
 	n.markSub()
 }
 
-func (n *node) markArrangeStale() {
-	n.arrangeStale = true
+func (n *node) markBranchStale() {
+	n.arrangeStale, n.damageStale = true, true
 	for p := n.parent; p != nil; p = parentOf(p) {
 		if a := nodeOf(p); a != nil {
-			a.arrangeStale = true
+			a.arrangeStale, a.damageStale = true, true
 		}
 	}
 }
@@ -770,8 +773,8 @@ func (n *node) setParent(p, self Widget) {
 		b.endDepartureOf(n)
 	}
 	if n.parent != p {
-		n.markArrangeStale()
-		defer n.markArrangeStale()
+		n.markBranchStale()
+		defer n.markBranchStale()
 	}
 	if n.parent == nil && p != nil {
 		n.csGen = 0

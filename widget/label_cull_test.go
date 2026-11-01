@@ -19,7 +19,7 @@ func TestALabelFarFromTheClipPaintsNothing(t *testing.T) {
 		t.Error("a label far outside the clip was not culled")
 	}
 	cv.PopClip(prev)
-	prev = cv.PushClip(render.Rect{X: 201, Y: 0, W: 10, H: 10})
+	cv.PushClip(render.Rect{X: 201, Y: 0, W: 10, H: 10})
 	if label.outsideClip(cv, label.style(label)) {
 		t.Error("a clip within the label's ink reach culled it")
 	}

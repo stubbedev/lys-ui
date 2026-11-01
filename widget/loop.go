@@ -29,7 +29,7 @@ func (l *loop) set(on bool) {
 	}
 	l.on = on
 	if n := nodeOf(l.owner); n != nil {
-		n.markArrangeStale()
+		n.markBranchStale()
 	}
 	if !on {
 		l.stop()

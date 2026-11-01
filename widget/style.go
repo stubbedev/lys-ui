@@ -2245,10 +2245,10 @@ func restyleChildren(w Widget) {
 // layout drops their caches through InvalidateLayout as ever.
 func (n *node) markStyleDirty() {
 	n.styleDirty = true
-	n.arrangeStale = true
+	n.arrangeStale, n.damageStale = true, true
 	for p := parentNodeOf(n); p != nil; p = parentNodeOf(p) {
 		p.subStyle = true
-		p.arrangeStale = true
+		p.arrangeStale, p.damageStale = true, true
 	}
 }
 

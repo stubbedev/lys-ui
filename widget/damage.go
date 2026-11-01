@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/internal/icons"
 	"github.com/stubbedev/lys-ui/internal/style"
 )
 
@@ -96,6 +97,7 @@ func CollectDamageInto(buf []render.Rect, root Widget) (rects []render.Rect, any
 	}
 	damageWalks.Add(1)
 	backdropReach = backdropReach[:0]
+	walkIcons = icons.Default().Generation()
 	bbox := collectInto(root, &rects)
 	bbox = bbox.Union(widenForBackdrops(&rects))
 	if len(rects) > maxDamageRects {
@@ -107,12 +109,29 @@ func CollectDamageInto(buf []render.Rect, root Widget) (rects []render.Rect, any
 	return rects, len(rects) > 0
 }
 
+var walkIcons uint64
+
+func markUnlinked(w, kid Widget) {
+	n, k := nodeOf(w), nodeOf(kid)
+	if n != nil && (k == nil || k.parent != outerOf(w)) {
+		n.markBranchStale()
+	}
+}
+
 // collectInto walks w, appending drained rects and returning the
 // bounding box of everything it appended (empty when nothing). The
 // children iterate from the walk's own snapshot buffer, so a
 // container that mutates mid-drain changes the next frame, not this
 // walk.
 func collectInto(w Widget, rects *[]render.Rect) render.Rect {
+	if n := nodeOf(w); n != nil {
+		if !n.damageStale && !n.damageVolatile && !n.styleDirty && n.themeSeen == themeGen && n.styleDmg == styleGen && n.damageIcons == walkIcons {
+			return render.Rect{}
+		}
+		n.damageStale, n.damageIcons = false, walkIcons
+		reach := len(backdropReach)
+		defer func() { n.damageVolatile = len(backdropReach) != reach }()
+	}
 	// A style-marked widget recomputes before it drains: pre-order, so
 	// a parent's inherited change marks and damages its subtree within
 	// this same walk, and a class toggle lands in one frame.
@@ -152,6 +171,7 @@ func collectInto(w Widget, rects *[]render.Rect) render.Rect {
 	}
 	walkStack.each(func(kids []Widget) []Widget { return appendKids(w, kids) }, func(k Widget) {
 		if k != nil {
+			markUnlinked(w, k)
 			bbox = bbox.Union(collectInto(k, rects))
 		}
 	})

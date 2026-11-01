@@ -149,3 +149,74 @@ func TestASpinnerBackOnScreenResumesUnderASettledBox(t *testing.T) {
 		t.Error("the spinner did not resume back on screen")
 	}
 }
+
+func TestADamageWalkVisitsOnlyTheChangedBranch(t *testing.T) {
+	face := goldenFace(t)
+	changed := NewLabel(face, 14, "changed", 0)
+	root := NewBox(Row, 0, 0)
+	root.Append(changed, false)
+	for range 20 {
+		root.Append(NewLabel(face, 14, "still", 0), false)
+	}
+	r := render.Rect{W: 800, H: 40}
+	SizeWithin(root, Size{W: r.W, H: r.H})
+	settleArrange(root, r)
+	CollectDamage(root)
+	settleArrange(root, r)
+	CollectDamage(root)
+	if rects, any := CollectDamage(root); any {
+		t.Fatalf("a settled tree owes %v", rects)
+	}
+	changed.Invalidate()
+	rects, _ := CollectDamage(root)
+	if len(rects) != 1 || rects[0] != changed.Bounds() {
+		t.Errorf("damage %v, want the changed label's bounds %v", rects, changed.Bounds())
+	}
+}
+
+func TestABackdropFilterIsStillWidenedAfterASettledWalk(t *testing.T) {
+	loadCSS(t, `.glass { backdrop-filter: blur(4px); }`)
+	face := goldenFace(t)
+	glass := NewBox(Column, 0, 0)
+	glass.AddClass("glass")
+	glass.SetSizeRequest(40, 40)
+	under := NewLabel(face, 14, "under", 0)
+	holder := NewBox(Column, 0, 0)
+	holder.Append(glass, false)
+	root := NewFixed()
+	root.Put(under, 10, 10)
+	root.Put(holder, 0, 0)
+	r := render.Rect{W: 200, H: 200}
+	root.Measure(Row, Unknown)
+	settleArrange(root, r)
+	CollectDamage(root)
+	CollectDamage(root)
+	under.Invalidate()
+	rects, _ := CollectDamage(root)
+	if !render.UnionAll(rects).Contains(0, 0) {
+		t.Errorf("damage %v under a backdrop filter did not widen to its box", rects)
+	}
+}
+
+type nodelessWrapper struct {
+	Widget
+	content Widget
+}
+
+func (w *nodelessWrapper) Children() []Widget { return []Widget{w.content} }
+
+func TestDamageBelowAWrapperWithoutANodeStillSurfaces(t *testing.T) {
+	label := NewLabel(goldenFace(t), 14, "inside", 0)
+	content := NewBox(Column, 0, 0)
+	content.Append(label, false)
+	morph := NewMorph(&nodelessWrapper{Widget: content, content: content})
+	r := render.Rect{W: 100, H: 40}
+	SizeWithin(content, Size{W: r.W, H: r.H})
+	settleArrange(content, r)
+	CollectDamage(morph)
+	CollectDamage(morph)
+	label.Invalidate()
+	if _, any := CollectDamage(morph); !any {
+		t.Error("an invalidation below a wrapper the parent chain cannot cross was lost")
+	}
+}
