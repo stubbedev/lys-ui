@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -262,11 +263,11 @@ type Session struct {
 	// the touchpad, the end a kinetic scroll glides from.
 	axisStopped bool
 
-	// closed is set by Close, before the connection goes; WakeAfter
-	// timers still pending then stand down instead of writing to it.
+	// closed is set by Close, before the connection goes.
 	closed atomic.Bool
-	// wakeMu makes a WakeAfter timer's closed check and its request
-	// atomic with respect to Close.
+	// wakeMu guards wakes, the deadlines WakeAfter has armed, and makes
+	// arming one atomic with respect to Close.
+	wakes  []time.Time
 	wakeMu sync.Mutex
 
 	// protoErr carries the compositor's fatal wl_display.error, if one
@@ -1496,13 +1497,18 @@ func (d *syncDone) HandleCallbackDone(wl.CallbackDoneEvent) { *d = true }
 // and a burst of events costs the loop one pass, not one per event.
 func (s *Session) Step() error {
 	ctx := s.Display.Context()
-	if err := s.asDisconnect(runThroughProxyNil(ctx.Run)); err != nil {
+	if err := runThroughProxyNil(ctx.Run); errors.Is(err, wl.ErrContextRunTimeout) {
+		return s.wakeDue(ctx)
+	} else if err := s.asDisconnect(err); err != nil {
 		return err
 	}
 	if err := s.dispatchBuffered(ctx); err != nil {
 		return err
 	}
 	read, err := ctx.ReadReady()
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return s.wakeDue(ctx)
+	}
 	if err != nil {
 		return s.asDisconnect(err)
 	}
@@ -1554,31 +1560,46 @@ func (s *Session) withProtoErr(err error) error {
 	return err
 }
 
-// wakeup is the wl_display.sync callback a WakeAfter sends: its own
-// proxy, registered before the request goes out, so the timer
-// goroutine writes no handler the loop reads, and a done that arrives
-// at once still finds it. Dispatching the done ends the parked Step;
-// done is a destructor event, so the proxy unregisters itself.
-type wakeup struct{ wl.BaseProxy }
-
-// Dispatch implements wl.Dispatcher.
-func (w *wakeup) Dispatch(*wl.Event) { w.Context().Unregister(w.Id()) }
-
-// WakeAfter arranges for a loop parked in Step to return by waiting d:
-// a timer sends a wl_display.sync, and dispatching its done ends the
-// blocking read. A timer that fires after Close does nothing.
+// WakeAfter arranges for a loop parked in Step to return by waiting d,
+// through the socket's read deadline: no request reaches the compositor,
+// no goroutine waits, and Step returning is the whole cost. Safe from any
+// goroutine; after Close it does nothing.
 func (s *Session) WakeAfter(d time.Duration) {
-	time.AfterFunc(max(d, 0), func() {
-		s.wakeMu.Lock()
-		defer s.wakeMu.Unlock()
-		if s.closed.Load() {
-			return
-		}
-		ctx := s.Display.Context()
-		w := &wakeup{}
-		ctx.Register(w)
-		_ = ctx.SendRequest(s.Display, displaySyncOpcode, w)
-	})
+	at := time.Now().Add(max(d, 0))
+	s.wakeMu.Lock()
+	defer s.wakeMu.Unlock()
+	if s.closed.Load() {
+		return
+	}
+	next := len(s.wakes) == 0 || at.Before(slices.MinFunc(s.wakes, time.Time.Compare))
+	s.wakes = append(s.wakes, at)
+	if next {
+		s.setWakeDeadline(s.Display.Context(), at)
+	}
+}
+
+// wakeDue drops the wakes a read deadline just answered and arms the
+// earliest one left.
+func (s *Session) wakeDue(ctx *wl.Context) error {
+	now := time.Now()
+	s.wakeMu.Lock()
+	defer s.wakeMu.Unlock()
+	if s.closed.Load() {
+		return nil
+	}
+	s.wakes = slices.DeleteFunc(s.wakes, func(at time.Time) bool { return !at.After(now) })
+	var next time.Time
+	if len(s.wakes) > 0 {
+		next = slices.MinFunc(s.wakes, time.Time.Compare)
+	}
+	s.setWakeDeadline(ctx, next)
+	return nil
+}
+
+func (s *Session) setWakeDeadline(ctx *wl.Context, at time.Time) {
+	if err := ctx.SetReadDeadline(at); err != nil {
+		logutil.L().Error("wlsession: arm a loop wake", slog.Any("err", err))
+	}
 }
 
 // displaySyncOpcode is wl_display.sync's request opcode.

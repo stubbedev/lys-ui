@@ -74,9 +74,9 @@ session.go, app/application.go). Wayland requests from one client must
 stay ordered, and per-window goroutines would need a marshalling layer
 to preserve that, so lys-ui has none (see Non-goals). Timer work (key
 repeat, animation deadlines, tooltip dwell) runs on the loop. A
-`Session.WakeAfter` timer only kicks the parked read with a
-`wl_display.sync` and returns, and an animated cursor's timer pushes
-its own frame.
+`Session.WakeAfter` only sets the socket's read deadline, so the parked
+read returns without a word to the compositor, and an animated cursor's
+timer pushes its own frame.
 
 ### 2. The loop parks
 

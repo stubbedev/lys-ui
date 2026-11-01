@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"syscall"
+	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 )
@@ -131,6 +132,9 @@ const drainLimit = 4096
 // queued data or fails at once; it never blocks.
 func (s *Session) drainVerdict() {
 	if s.Display == nil {
+		return
+	}
+	if s.Display.Context().SetReadDeadline(time.Time{}) != nil {
 		return
 	}
 	for range drainLimit {

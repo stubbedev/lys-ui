@@ -18,8 +18,7 @@ Who may touch a widget, when, and how everything else gets in.
 3. **The compositor connection is loop-only.** Requests from one client
    must stay ordered ([architecture.md](architecture.md) rule 1), so
    nothing outside the loop goroutine issues protocol requests, except
-   the `WakeAfter` sync and animated-cursor frames, both under their
-   own locks.
+   animated-cursor frames, under their own lock.
 4. **Timer callbacks are loop callbacks.** `Application.Every(d, fn)`
    runs `fn` on the loop at a fixed cadence. No timer thread exists
    whose callback could race the tree.

@@ -68,52 +68,122 @@ func newSyncSession(t *testing.T) (*Session, net.Conn, *atomic.Int32) {
 	return s, srv, answered
 }
 
-// A loop parked in Step returns once a WakeAfter fires, and many short
-// wakes against a dispatching loop are race-free (run under -race):
-// the loop keeps stepping until every wake's events are dispatched.
-func TestWakeAfterWakesTheLoop(t *testing.T) {
+func stepWithin(t *testing.T, s *Session, limit time.Duration) time.Duration {
+	t.Helper()
+	start := time.Now()
+	done := make(chan error, 1)
+	go func() { done <- s.Step() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("step: %v", err)
+		}
+	case <-time.After(limit):
+		t.Fatalf("a loop parked in Step did not wake within %v", limit)
+	}
+	return time.Since(start)
+}
+
+func TestWakeAfterWakesTheLoopWithoutTheCompositor(t *testing.T) {
 	s, _, answered := newSyncSession(t)
-	const wakes = 50
-	drained := make(chan error, 1)
+	s.WakeAfter(10 * time.Millisecond)
+	if got := stepWithin(t, s, 5*time.Second); got < 9*time.Millisecond {
+		t.Errorf("woke after %v, before the 10ms it asked for", got)
+	}
+	if n := answered.Load(); n != 0 {
+		t.Errorf("a wake sent the compositor %d syncs", n)
+	}
+}
+
+func TestAWakeReachesAStepAlreadyParked(t *testing.T) {
+	s, _, _ := newSyncSession(t)
+	done := make(chan error, 1)
+	go func() { done <- s.Step() }()
+	time.Sleep(5 * time.Millisecond)
+	s.WakeAfter(0)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a parked Step never woke")
+	}
+}
+
+func TestEveryPendingWakeFiresInOrder(t *testing.T) {
+	s, _, _ := newSyncSession(t)
+	s.WakeAfter(60 * time.Millisecond)
+	s.WakeAfter(5 * time.Millisecond)
+	if got := stepWithin(t, s, 5*time.Second); got >= 60*time.Millisecond {
+		t.Errorf("the nearer wake came after %v", got)
+	}
+	start := time.Now()
+	stepWithin(t, s, 5*time.Second)
+	if time.Since(start) < 20*time.Millisecond {
+		t.Error("the later wake fired with the earlier one")
+	}
+}
+
+func TestADueWakeDoesNotSpinTheLoop(t *testing.T) {
+	s, _, answered := newSyncSession(t)
+	s.WakeAfter(0)
+	stepWithin(t, s, 5*time.Second)
+	done := make(chan error, 1)
+	go func() { done <- s.Step() }()
+	select {
+	case err := <-done:
+		t.Fatalf("Step returned with nothing to do: %v", err)
+	case <-time.After(30 * time.Millisecond):
+	}
+	if err := s.AfterSync(func() {}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatalf("compositor events no longer end a park; %d syncs answered", answered.Load())
+	}
+}
+
+func TestManyWakesRaceWithADispatchingLoop(t *testing.T) {
+	s, _, _ := newSyncSession(t)
+	stop := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
-		ctx := s.Display.Context()
 		for {
+			select {
+			case <-stop:
+				done <- nil
+				return
+			default:
+			}
 			if err := s.Step(); err != nil {
-				drained <- err
-				return
-			}
-			if answered.Load() < wakes || ctx.Buffered() {
-				continue
-			}
-			read, err := ctx.ReadReady()
-			if err != nil {
-				drained <- err
-				return
-			}
-			if !read {
-				drained <- nil
+				done <- err
 				return
 			}
 		}
 	}()
-	start := time.Now()
-	for i := range wakes {
+	for i := range 200 {
 		s.WakeAfter(time.Duration(i%3) * time.Millisecond)
 	}
+	time.Sleep(10 * time.Millisecond)
+	close(stop)
+	s.WakeAfter(0)
 	select {
-	case err := <-drained:
+	case err := <-done:
 		if err != nil {
-			t.Fatalf("step: %v", err)
+			t.Fatal(err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatalf("the loop parked with %d of %d wakes answered", answered.Load(), wakes)
-	}
-	if time.Since(start) > 5*time.Second {
-		t.Error("the wakes took too long")
+		t.Fatal("the loop stayed parked past its wakes")
 	}
 }
 
-// A WakeAfter that fires after Close neither panics nor writes.
+// A WakeAfter after Close neither panics nor writes.
 func TestWakeAfterCloseIsSilent(t *testing.T) {
 	s, _, answered := newSyncSession(t)
 	s.Close()
@@ -121,5 +191,8 @@ func TestWakeAfterCloseIsSilent(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	if answered.Load() != 0 {
 		t.Errorf("a wake after Close sent %d syncs", answered.Load())
+	}
+	if len(s.wakes) != 0 {
+		t.Errorf("a wake after Close stayed pending: %v", s.wakes)
 	}
 }
