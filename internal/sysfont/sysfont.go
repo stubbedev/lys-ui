@@ -100,12 +100,13 @@ func embeddedFamily(family string) (embeddedFont, bool) {
 func fontmap() (*fontscan.FontMap, error) {
 	storeOnce.Do(func() {
 		fm := fontscan.NewFontMap(quietLogger{})
-		if _, err := fontscan.DefaultFontDirectories(quietLogger{}); err == nil {
-			// An empty cache path lets fontscan pick its platform default.
-			if err := fm.UseSystemFonts(""); err != nil {
-				storeErr = fmt.Errorf("sysfont: scan system fonts: %w", err)
-				return
-			}
+		// An empty cache path lets fontscan pick its platform default.
+		err := fm.UseSystemFonts("")
+		if err != nil && !errors.Is(err, fontscan.ErrNoFontDirectories) {
+			storeErr = fmt.Errorf("sysfont: scan system fonts: %w", err)
+			return
+		}
+		if err == nil {
 			footprints, err := fontscan.SystemFonts(quietLogger{}, "")
 			if err != nil {
 				storeErr = fmt.Errorf("sysfont: index system fonts: %w", err)
