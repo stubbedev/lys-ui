@@ -1,21 +1,9 @@
 package sysfont
 
 import (
-	"encoding/binary"
-	"errors"
-	"os"
-	"unicode/utf16"
-
 	"github.com/stubbedev/lys-lib/third_party/typesetting/font"
-	"github.com/stubbedev/lys-lib/third_party/typesetting/font/opentype"
-	"github.com/stubbedev/lys-lib/third_party/typesetting/font/opentype/tables"
 	"github.com/stubbedev/lys-lib/third_party/typesetting/fontscan"
 )
-
-// familyNameIDs are the name records a family is matched by, as
-// fontconfig indexes them: the legacy family (1), the typographic
-// family (16), and the WWS family (21).
-var familyNameIDs = [...]uint16{1, 16, 21}
 
 // systemFace is one system face: where it is and its aspect.
 type systemFace struct {
@@ -23,14 +11,13 @@ type systemFace struct {
 	aspect font.Aspect
 }
 
-// aliasIndex maps every normalized family name a system face
-// declares, on any platform and in any language, to the faces
-// declaring it. fontscan indexes a face under the single English
-// record it selects (the last English Windows record wins), so a
-// family fontconfig matches - JetBrainsMono Nerd Font, whose en-US
-// typographic record is shadowed by an en-GB "JetBrainsMono NF" -
-// is unknown to the store. Built once, on the first lookup the store
-// cannot answer; guarded by storeMu.
+// aliasIndex maps every other family name a system face declares to the
+// faces declaring it, from the store's index: fontscan files a face
+// under the single English record it selects (the last English Windows
+// record wins), so a family fontconfig matches - JetBrainsMono Nerd
+// Font, whose en-US typographic record is shadowed by an en-GB
+// "JetBrainsMono NF" - is only an alias there. Built once, on the first
+// lookup the store cannot answer by family; guarded by storeMu.
 var (
 	aliasIndex      map[string][]systemFace
 	aliasIndexBuilt bool
@@ -43,119 +30,21 @@ func aliasFaces(family string) []systemFace {
 		aliasIndexBuilt = true
 		footprints, err := fontscan.SystemFonts(quietLogger{}, "")
 		if err == nil {
-			aliasIndex = buildAliasIndex(footprints, fileFamilyNames)
+			aliasIndex = buildAliasIndex(footprints)
 		}
 	}
 	return aliasIndex[font.NormalizeFamily(family)]
 }
 
-// buildAliasIndex indexes footprints by every family name names
-// reads for their location. A face whose names cannot be read is left
-// out: it stays reachable under the family the store gave it.
-func buildAliasIndex(footprints []fontscan.Footprint, names func(fontscan.Location) ([]string, error)) map[string][]systemFace {
-	index := make(map[string][]systemFace, len(footprints))
+// buildAliasIndex indexes footprints by their aliases.
+func buildAliasIndex(footprints []fontscan.Footprint) map[string][]systemFace {
+	index := map[string][]systemFace{}
 	for _, fp := range footprints {
-		declared, err := names(fp.Location)
-		if err != nil {
-			continue
-		}
-		for _, name := range declared {
+		for _, name := range fp.Aliases {
 			index[name] = append(index[name], systemFace{fp.Location, fp.Aspect})
 		}
 	}
 	return index
-}
-
-// fileFamilyNames reads the family names of the face at loc. The path
-// comes from fontscan's system font index, never from user input.
-func fileFamilyNames(loc fontscan.Location) ([]string, error) {
-	f, err := os.Open(loc.File)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	loaders, err := opentype.NewLoaders(f)
-	if err != nil {
-		return nil, err
-	}
-	if int(loc.Index) >= len(loaders) {
-		return nil, errors.New("sysfont: face index out of range")
-	}
-	raw, err := loaders[loc.Index].RawTable(opentype.MustNewTag("name"))
-	if err != nil {
-		return nil, err
-	}
-	return familyNames(raw)
-}
-
-// errNameTable reports a truncated or inconsistent 'name' table.
-var errNameTable = errors.New("sysfont: malformed name table")
-
-// familyNames decodes every family record of a raw 'name' table:
-// Unicode and Windows records as UTF-16BE, Mac Roman records through
-// the Macintosh encoding, normalized and deduped in table order.
-// Records in other Mac encodings are skipped, as fontconfig skips
-// encodings it cannot convert.
-func familyNames(raw []byte) ([]string, error) {
-	if len(raw) < 6 {
-		return nil, errNameTable
-	}
-	count := int(binary.BigEndian.Uint16(raw[2:]))
-	storage := int(binary.BigEndian.Uint16(raw[4:]))
-	if len(raw) < 6+12*count || storage > len(raw) {
-		return nil, errNameTable
-	}
-	var out []string
-	seen := map[string]bool{}
-	for i := range count {
-		rec := raw[6+12*i:]
-		platform := tables.PlatformID(binary.BigEndian.Uint16(rec))
-		encoding := tables.EncodingID(binary.BigEndian.Uint16(rec[2:]))
-		id := binary.BigEndian.Uint16(rec[6:])
-		length := int(binary.BigEndian.Uint16(rec[8:]))
-		offset := storage + int(binary.BigEndian.Uint16(rec[10:]))
-		if !isFamilyNameID(id) || length == 0 {
-			continue
-		}
-		if offset+length > len(raw) {
-			return nil, errNameTable
-		}
-		name, ok := decodeName(platform, encoding, raw[offset:offset+length])
-		if !ok {
-			continue
-		}
-		if norm := font.NormalizeFamily(name); norm != "" && !seen[norm] {
-			seen[norm] = true
-			out = append(out, norm)
-		}
-	}
-	return out, nil
-}
-
-// isFamilyNameID reports whether id is one of familyNameIDs.
-func isFamilyNameID(id uint16) bool {
-	for _, want := range familyNameIDs {
-		if id == want {
-			return true
-		}
-	}
-	return false
-}
-
-// decodeName decodes one name record's bytes; false for an encoding
-// it cannot convert.
-func decodeName(platform tables.PlatformID, encoding tables.EncodingID, b []byte) (string, bool) {
-	switch {
-	case platform == tables.PlatformUnicode || platform == tables.PlatformMicrosoft:
-		units := make([]uint16, len(b)/2)
-		for i := range units {
-			units[i] = binary.BigEndian.Uint16(b[2*i:])
-		}
-		return string(utf16.Decode(units)), true
-	case platform == tables.PlatformMac && encoding == tables.PEMacRoman:
-		return tables.DecodeMacintosh(b), true
-	}
-	return "", false
 }
 
 // closestFace picks the face of faces closest to want by the CSS
