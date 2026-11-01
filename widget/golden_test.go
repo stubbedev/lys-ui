@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -172,7 +171,7 @@ func NewGolden(t *testing.T, w Widget, name string, opts ...goldenOption) {
 	if warmHash != goldenStateHash(w) {
 		t.Fatalf("%s: Paint mutated widget state (state hash changed after the recorded paint):\n%s", name, DumpTree(w, nil))
 	}
-	golden.Check(t, filepath.Join("testdata", "golden"), name, render.NRGBA(first, stride, bw, bh), goldenTolerance())
+	golden.Check(t, filepath.Join("testdata", "golden"), name, render.NRGBA(first, stride, bw, bh), golden.Tolerance{})
 }
 
 // goldenStateHash hashes the widget tree's live state — type, name,
@@ -555,11 +554,4 @@ func diffPixels(a, b []byte) int {
 		}
 	}
 	return n
-}
-
-func goldenTolerance() golden.Tolerance {
-	if runtime.GOARCH == "amd64" {
-		return golden.Tolerance{}
-	}
-	return golden.Tolerance{ChannelDiff: 8, MaxMismatch: 16}
 }
