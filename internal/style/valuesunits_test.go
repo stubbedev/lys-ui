@@ -186,3 +186,31 @@ func TestVarInShorthands(t *testing.T) {
 		t.Errorf("var() fallback through a shorthand: %+v", v.Margin)
 	}
 }
+
+func TestSheetSummarizesSizeRelativeUnits(t *testing.T) {
+	resolve := func(ref, _ string) (string, string, error) { return ref, `a { padding: 2VMIN; }`, nil }
+	for _, tc := range []struct {
+		name, css string
+		want      UnitReads
+	}{
+		{"absolute only", `a { padding: 2px 1em; }`, UnitReads{}},
+		{"viewport", `a { padding: 2vw; }`, UnitReads{Viewport: true}},
+		{"small viewport", `a { padding: 2svh; }`, UnitReads{Viewport: true}},
+		{"container", `a { padding: 2cqi; }`, UnitReads{Container: true}},
+		{"custom property", `a { --x: 2dvw; }`, UnitReads{Viewport: true}},
+		{"var fallback", `a { padding: var(--x, 2cqh); }`, UnitReads{Container: true}},
+		{"keyframes", `@keyframes k { to { padding: 2vh; } }`, UnitReads{Viewport: true}},
+		{"import", `@import "b.css";`, UnitReads{Viewport: true}},
+	} {
+		s, warns := ParseImporting(tc.css, "/t/a.css", resolve)
+		if len(warns) != 0 {
+			t.Errorf("%s: warnings %v", tc.name, warns)
+		}
+		if got := s.Sensitivity().Units; got != tc.want {
+			t.Errorf("%s: units %+v, want %+v", tc.name, got, tc.want)
+		}
+	}
+	if got := ParseDeclarations(`padding: 2vw; --x: 2cqw`).Units(); got != (UnitReads{Viewport: true, Container: true}) {
+		t.Errorf("inline block: units %+v", got)
+	}
+}

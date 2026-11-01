@@ -27,6 +27,11 @@ type Env struct {
 	// Its Width and Height also resolve the vw/vh unit family and its
 	// Dark flag picks light-dark()'s half.
 	Media Media
+	// InlineContainerUnits reports that an inline style names a
+	// container-query unit, which no sheet's summary shows: the
+	// container resolution runs for every node, since a custom property
+	// carries the unit down the tree.
+	InlineContainerUnits bool
 }
 
 // maxVarDepth bounds var() expansion: a chain deeper than this is
@@ -73,6 +78,7 @@ func (sc *Scratch) computeAll(layers []Layer, n Node, parent, old *Values, env E
 	if sc.media.DPI <= 0 {
 		sc.media.DPI = 96
 	}
+	sc.inlineContainerUnits = env.InlineContainerUnits
 	sc.collect(layers, n)
 	sc.layers = layers
 

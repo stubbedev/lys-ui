@@ -98,7 +98,12 @@ type decl struct {
 // inline style.
 type Block struct {
 	decls []decl
+	units UnitReads
 }
+
+// Units reports which size-relative units an inline block's values
+// name, var() fallbacks and custom properties included.
+func (b *Block) Units() UnitReads { return b.units }
 
 // Len returns the number of valid declarations.
 func (b *Block) Len() int {
@@ -113,8 +118,8 @@ func (b *Block) Len() int {
 // declarations are warned about and dropped.
 func ParseDeclarations(css string) *Block {
 	p := parser{src: css}
-	ts := tokenize(css)
-	return &Block{decls: p.declarations(ts)}
+	decls := p.declarations(tokenize(css))
+	return &Block{decls: decls, units: p.sheet.sens.Units}
 }
 
 // Sheet is a parsed stylesheet: the rules in source order plus the
@@ -197,15 +202,22 @@ type Sensitivity struct {
 	// Counters reports counter-reset or counter-increment in play: the
 	// widget layer then chains siblings' counter scopes.
 	Counters bool
-	// Container reports a @container rule and CqUnits a
-	// container-query unit: either makes the per-compute container
-	// resolution (and a viewport change's restyle) necessary, since
-	// containers resize with the window.
+	// Container reports a @container rule: it makes the per-compute
+	// container resolution (and a viewport change's restyle) necessary,
+	// since containers resize with the window.
 	Container bool
-	CqUnits   bool
+	// Units reports the size-relative units the sheet's values name.
+	Units UnitReads
 	// Revert reports a revert or revert-layer value: the cascade then
 	// records every declaration, the chain the two roll back along.
 	Revert bool
+}
+
+// UnitReads names the sizes a value depends on through its units: a
+// viewport unit (vw and family) restyles on a viewport change, a
+// container-query unit also on a query container's resize.
+type UnitReads struct {
+	Viewport, Container bool
 }
 
 // Sensitivity returns the sheet's selector summary.
@@ -1271,6 +1283,7 @@ func (p *parser) declaration(ts []token) (decl, bool) {
 	}
 	p.order++
 	val = p.keep(val)
+	p.noteUnits(val)
 	d := decl{name: name, val: val, hasVar: containsVar(val), wide: wideOf(val), important: imp, order: p.order}
 	if strings.HasPrefix(name, "--") {
 		d.custom = true
@@ -1313,9 +1326,6 @@ func (p *parser) declaration(ts []token) (decl, bool) {
 		p.warnf("declaration skipped: %s: %s", name, badText(rawText(p.src, val)))
 		return decl{}, false
 	}
-	if cx.cqRead {
-		p.sheet.sens.CqUnits = true
-	}
 	if !cx.dep {
 		d.pre = &scratch
 		if cx.usedRem {
@@ -1323,6 +1333,22 @@ func (p *parser) declaration(ts []token) (decl, bool) {
 		}
 	}
 	return d, true
+}
+
+// noteUnits adds the size-relative units val names to the sheet's
+// summary. It reads the tokens rather than a parse, because a custom
+// property or a var() value only parses per node at compute time.
+func (p *parser) noteUnits(val []token) {
+	u := &p.sheet.sens.Units
+	for i := range val {
+		if val[i].kind != tkDim {
+			continue
+		}
+		var probe ctx
+		probe.unitScale(val[i].s)
+		u.Viewport = u.Viewport || probe.units.Viewport
+		u.Container = u.Container || probe.units.Container
+	}
 }
 
 // takeImportant strips a trailing `!important` from a value; a nil

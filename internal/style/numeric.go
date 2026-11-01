@@ -106,9 +106,9 @@ type ctx struct {
 	// the base it was computed with.
 	usedRem bool
 
-	// cq records a container-query unit read, for the sheet summary
-	// that gates the per-compute container resolution.
-	cqRead bool
+	// units records the viewport and container-query unit reads, for
+	// the parser's summary of what a value depends on.
+	units UnitReads
 
 	vpW, vpH float64
 	font     FontMetrics
@@ -195,19 +195,23 @@ func (cx *ctx) unitScale(unit string) (numKind, float64, bool) {
 		return numLength, cx.rlh, true
 	case "vw", "svw", "lvw", "dvw", "vi", "svi", "lvi", "dvi":
 		cx.dep = true
+		cx.units.Viewport = true
 		return numLength, cx.vpW / 100, true
 	case "vh", "svh", "lvh", "dvh", "vb", "svb", "lvb", "dvb":
 		cx.dep = true
+		cx.units.Viewport = true
 		return numLength, cx.vpH / 100, true
 	case "vmin", "svmin", "lvmin", "dvmin":
 		cx.dep = true
+		cx.units.Viewport = true
 		return numLength, math.Min(cx.vpW, cx.vpH) / 100, true
 	case "vmax", "svmax", "lvmax", "dvmax":
 		cx.dep = true
+		cx.units.Viewport = true
 		return numLength, math.Max(cx.vpW, cx.vpH) / 100, true
 	case "cqw", "cqh", "cqi", "cqb", "cqmin", "cqmax":
 		cx.dep = true
-		cx.cqRead = true
+		cx.units.Container = true
 		v, _ := cqUnit(unit, cx.conts, cx.vpW, cx.vpH)
 		return numLength, v, true
 	case "pt":

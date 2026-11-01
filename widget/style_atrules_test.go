@@ -209,3 +209,72 @@ func TestStringStylesheetImport(t *testing.T) {
 		t.Fatalf("string-sheet import resolves from the working directory: %08x", uint32(bg))
 	}
 }
+
+func TestViewportUnitsRestyleOnResize(t *testing.T) {
+	minWidth := func(b *Button) int { return b.style(b).Layout.MinWidth.Px() }
+	for _, tc := range []struct{ name, css, inline string }{
+		{name: "sheet", css: `button { min-width: 10vw; }`},
+		{name: "calc", css: `button { min-width: calc(10vw + 0px); }`},
+		{name: "custom property", css: `button { --w: 10vw; min-width: var(--w); }`},
+		{name: "var fallback", css: `button { min-width: var(--unset, 10vw); }`},
+		{name: "inline", inline: `min-width: 10vw;`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetMedia(t)
+			loadCSS(t, tc.css)
+			btn := NewButton(NewSpacer(0, 0), 4, 4)
+			btn.SetInlineStyle(tc.inline)
+			SetMediaViewport(800, 600)
+			if got := minWidth(btn); got != 80 {
+				t.Fatalf("at 800 wide: min-width %d, want 80", got)
+			}
+			SetMediaViewport(400, 600)
+			if got := minWidth(btn); got != 40 {
+				t.Errorf("after resizing to 400: min-width %d, want 40", got)
+			}
+
+			root := NewBox(Column, 0, 0)
+			inRoot := NewButton(NewSpacer(0, 0), 4, 4)
+			inRoot.SetInlineStyle(tc.inline)
+			root.Append(inRoot, false)
+			SetStyleRoot(root)
+			arrangeTree(t, root, 300, 300)
+			t.Cleanup(func() { SetMediaViewportFor(root, 0, 0) })
+			SetMediaViewportFor(root, 300, 300)
+			if got := minWidth(inRoot); got != 30 {
+				t.Fatalf("window at 300 wide: min-width %d, want 30", got)
+			}
+			SetMediaViewportFor(root, 500, 300)
+			if got := minWidth(inRoot); got != 50 {
+				t.Errorf("window resized to 500: min-width %d, want 50", got)
+			}
+		})
+	}
+}
+
+func TestContainerUnitsResolveAgainstTheContainer(t *testing.T) {
+	minWidth := func(b *Button) int { return b.style(b).Layout.MinWidth.Px() }
+	for _, tc := range []struct{ name, css, inline string }{
+		{name: "custom property", css: `.c { container-type: inline-size; } button { --w: 10cqw; min-width: var(--w); }`},
+		{name: "inline", css: `.c { container-type: inline-size; }`, inline: `min-width: 10cqw;`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resetMedia(t)
+			loadCSS(t, tc.css)
+			c := NewBox(Column, 0, 0)
+			c.AddClass("c")
+			btn := NewButton(NewSpacer(0, 0), 4, 4)
+			btn.SetInlineStyle(tc.inline)
+			c.Append(btn, false)
+			SetMediaViewport(800, 600)
+			arrangeTree(t, c, 300, 300)
+			if got := minWidth(btn); got != 30 {
+				t.Fatalf("in a 300 wide container: min-width %d, want 30", got)
+			}
+			arrangeTree(t, c, 500, 300)
+			if got := minWidth(btn); got != 50 {
+				t.Errorf("container resized to 500: min-width %d, want 50", got)
+			}
+		})
+	}
+}

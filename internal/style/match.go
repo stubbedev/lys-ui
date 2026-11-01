@@ -207,6 +207,8 @@ type Scratch struct {
 	// conts are the node's query containers, nearest first, that its
 	// @container conditions and container units resolve against.
 	conts []Container
+	// inlineContainerUnits is Env.InlineContainerUnits for this compute.
+	inlineContainerUnits bool
 	// revertChain records every declaration per layer when a loaded
 	// sheet carries a revert-layer value: the chain computeProp walks
 	// down, layer below layer.
@@ -290,12 +292,12 @@ func (sc *Scratch) collect(layers []Layer, n Node) {
 	sc.chain = sc.chain[:0]
 	sc.revertChain = false
 	sc.conts = sc.conts[:0]
-	var anyContainer bool
+	anyContainer := sc.inlineContainerUnits
 	for _, l := range layers {
 		if l.Sheet == nil {
 			continue
 		}
-		if len(l.Sheet.containerQs) > 0 || l.Sheet.sens.CqUnits {
+		if len(l.Sheet.containerQs) > 0 || l.Sheet.sens.Units.Container {
 			anyContainer = true
 		}
 		sc.revertChain = sc.revertChain || l.Sheet.sens.Revert

@@ -79,6 +79,10 @@ var (
 	sheets    []*Stylesheet
 	layersNow []style.Layer
 	sensNow   sensitivity
+	// inlineUnits is every size-relative unit an inline style has named
+	// so far. Inline blocks die with their widgets unannounced, so it
+	// only grows: a later resize costs an unneeded restyle at worst.
+	inlineUnits style.UnitReads
 )
 
 // sensitivity is the union of the loaded sheets' selector summaries.
@@ -89,8 +93,9 @@ type sensitivity struct {
 	// and SiblingFacts.
 	structural, siblingFacts bool
 	// media reports whether any loaded sheet carries @media or
-	// @container rules: the viewport and preference setters restyle
-	// only then (containers resize with the window).
+	// @container rules or anything names a viewport or container unit:
+	// the viewport and preference setters restyle only then (containers
+	// resize with the window).
 	media bool
 	// containers reports @container rules or container units: a query
 	// container's resize restyles then.
@@ -105,6 +110,12 @@ type sensitivity struct {
 	// counters reports counter-reset/counter-increment in play: restyle
 	// then chains the previous sibling's counter scope.
 	counters bool
+}
+
+// noteUnits folds what a value's units depend on into the union.
+func (s *sensitivity) noteUnits(u style.UnitReads) {
+	s.media = s.media || u.Viewport || u.Container
+	s.containers = s.containers || u.Container
 }
 
 // styleGen bumps on every stylesheet (re)load and environment change.
@@ -184,17 +195,19 @@ func relayer() {
 func resensitize() {
 	layersNow = layersNow[:0]
 	sensNow = sensitivity{}
+	sensNow.noteUnits(inlineUnits)
 	for _, s := range sheets {
 		layersNow = append(layersNow, style.Layer{Sheet: s.sheet, Priority: s.priority})
 	}
 	for _, s := range append(slices.Clone(sheets), scopedSheets...) {
-		if s.sheet.ContainerQueries() > 0 || s.sheet.Sensitivity().CqUnits {
+		sn := s.sheet.Sensitivity()
+		sensNow.noteUnits(sn.Units)
+		if s.sheet.ContainerQueries() > 0 {
 			sensNow.media, sensNow.containers = true, true
 		}
 		if s.sheet.MediaQueries() > 0 {
 			sensNow.media = true
 		}
-		sn := s.sheet.Sensitivity()
 		sensNow.states |= sn.AncestorStates
 		sensNow.structural = sensNow.structural || sn.Structural
 		sensNow.siblingFacts = sensNow.siblingFacts || sn.SiblingFacts
@@ -450,7 +463,7 @@ func envNow() style.Env {
 		Width: float64(mediaViewport.w), Height: float64(mediaViewport.h),
 		DPI: mediaDPI, Dark: currentDark(), HighContrast: mediaContrast,
 		ReducedMotion: !current.Animations,
-	}}
+	}, InlineContainerUnits: inlineUnits.Container}
 	env.RootLineHeight = env.Rem * ratioOr(m.LineHeight, 1.2)
 	return env
 }
@@ -922,6 +935,10 @@ func (n *node) SetInlineStylePriority(css string, priority int) {
 		n.inline = nil
 	} else {
 		n.inline = style.ParseDeclarations(css)
+		u := n.inline.Units()
+		inlineUnits.Viewport = inlineUnits.Viewport || u.Viewport
+		inlineUnits.Container = inlineUnits.Container || u.Container
+		sensNow.noteUnits(u)
 	}
 	n.invalidateStyle()
 }
