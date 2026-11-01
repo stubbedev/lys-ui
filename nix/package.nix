@@ -1,4 +1,4 @@
-{self, ...}: {
+{
   perSystem = {
     buildGoModule,
     lib,
@@ -6,6 +6,17 @@
     testFontsConf,
     ...
   }: let
+    src = lib.fileset.toSource {
+      root = ../.;
+      fileset = lib.fileset.difference (lib.fileset.gitTracked ../.) (
+        lib.fileset.unions [
+          ../flake.nix
+          ../flake.lock
+          ../nix
+          (lib.fileset.difference ../docs ../docs/css.md)
+        ]
+      );
+    };
     # Shared builder for every lys-ui derivation: pure Go (CGO off),
     # modules fetched through buildGoModule's standard flow with
     # vendorHash pinning go.sum, so no build reaches the network.
@@ -17,17 +28,8 @@
     }:
       buildGoModule {
         inherit pname subPackages;
-        version = "0-unstable-${self.lastModifiedDate or "0"}";
-        src = lib.fileset.toSource {
-          root = ../.;
-          fileset = lib.fileset.difference (lib.fileset.gitTracked ../.) (
-            lib.fileset.unions [
-              ../flake.nix
-              ../flake.lock
-              ../nix
-            ]
-          );
-        };
+        version = "0-unstable-${lib.substring 0 8 (builtins.unsafeDiscardStringContext (baseNameOf src))}";
+        inherit src;
         env.CGO_ENABLED = "0";
         vendorHash = "sha256-260pczkWDcz8gV85iLE6u4xWGqtXMVV/RuCrjkdIoK0=";
         doCheck = true;
