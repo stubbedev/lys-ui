@@ -239,3 +239,18 @@ func TestLogutilDefaultDiscard(t *testing.T) {
 		t.Error("default logger must be enabled at no level")
 	}
 }
+
+// TestOptionalGlobalsAreBound: a name HandleRegistryGlobal has no case
+// for is never recorded as bound, so the debug log would call it missing
+// on every compositor.
+func TestOptionalGlobalsAreBound(t *testing.T) {
+	src, err := os.ReadFile("session.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range optionalGlobals {
+		if !strings.Contains(string(src), `"`+g+`"`) {
+			t.Errorf("optional global %s is no interface session.go handles", g)
+		}
+	}
+}

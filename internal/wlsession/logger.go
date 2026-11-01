@@ -40,7 +40,7 @@ var optionalGlobals = []string{
 	"zxdg_decoration_manager_v1",
 	"zwp_text_input_manager_v3",
 	"zwp_primary_selection_device_manager_v1",
-	"zwlr_foreign_toplevel_management_v1",
+	"zwlr_foreign_toplevel_manager_v1",
 	"xdg_activation_v1",
 	"zwp_idle_inhibit_manager_v1",
 	"zwp_keyboard_shortcuts_inhibit_manager_v1",
