@@ -146,6 +146,7 @@ type node struct {
 	// the static-tree pin test reads it.
 	measureMisses int
 	arranges      int
+	arrangeStale  bool
 	restyles      int
 
 	// themeSeen stamps the theme generation this widget last joined a
@@ -511,6 +512,7 @@ func invalidateTree(self Widget) {
 func (n *node) Invalidate() {
 	checkLoop("Invalidate")
 	n.invalid = true
+	n.markArrangeStale()
 	if n.unseen() {
 		return
 	}
@@ -533,8 +535,18 @@ func (n *node) InvalidateRect(r render.Rect) {
 		return
 	}
 	n.extras = append(n.extras, r)
+	n.markArrangeStale()
 	markDamage()
 	n.markSub()
+}
+
+func (n *node) markArrangeStale() {
+	n.arrangeStale = true
+	for p := n.parent; p != nil; p = parentOf(p) {
+		if a := nodeOf(p); a != nil {
+			a.arrangeStale = true
+		}
+	}
 }
 
 // markSub flags ancestors that some descendant needs a repaint, so
@@ -598,6 +610,7 @@ func (n *node) markSubLayout() {
 func (n *node) markMeasureDirty() bool {
 	was := n.measureDirty
 	n.measureDirty = true
+	n.arrangeStale = true
 	n.dropMeasureCache()
 	n.layout.dropExpand()
 	return was
@@ -715,6 +728,7 @@ func (n *node) Arrange(r render.Rect) {
 	}
 	n.bounds = r
 	if n.anims != nil {
+		arrangeVolatility++
 		n.resumeAnimations()
 	}
 }
@@ -754,6 +768,10 @@ func (n *node) setParent(p, self Widget) {
 	}
 	if b := n.departingFrom; b != nil && p != Widget(b) {
 		b.endDepartureOf(n)
+	}
+	if n.parent != p {
+		n.markArrangeStale()
+		defer n.markArrangeStale()
 	}
 	if n.parent == nil && p != nil {
 		n.csGen = 0

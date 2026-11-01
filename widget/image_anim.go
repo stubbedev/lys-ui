@@ -42,6 +42,9 @@ func (im *Image) Frame() int { return im.play.frame }
 // Arrange records the rect and starts or stops playback with
 // visibility.
 func (im *Image) Arrange(r render.Rect) {
+	if im.animation() != nil {
+		arrangeVolatility++
+	}
 	im.node.Arrange(r)
 	im.syncPlayback()
 }

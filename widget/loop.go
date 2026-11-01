@@ -28,6 +28,9 @@ func (l *loop) set(on bool) {
 		return
 	}
 	l.on = on
+	if n := nodeOf(l.owner); n != nil {
+		n.markArrangeStale()
+	}
 	if !on {
 		l.stop()
 		return
@@ -41,6 +44,9 @@ func (l *loop) set(on bool) {
 // off/on-screen transition starts or stops it, so a no-change Arrange
 // never restarts a cycle.
 func (l *loop) arranged() {
+	if l.on {
+		arrangeVolatility++
+	}
 	switch {
 	case !onScreen(l.owner):
 		l.stop()

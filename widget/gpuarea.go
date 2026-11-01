@@ -133,6 +133,7 @@ func (a *GPUArea) Measure(axis Axis, forSize int) Sizes {
 // Arrange places the area's surface over its bounds, creating it the
 // first time the area lands on screen.
 func (a *GPUArea) Arrange(r render.Rect) {
+	arrangeVolatility++
 	a.node.Arrange(r)
 	if r.Empty() {
 		return

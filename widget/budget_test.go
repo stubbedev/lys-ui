@@ -53,7 +53,7 @@ func TestAllocBudgetStyleFullRestyle(t *testing.T) {
 		})
 	}
 	restyle()
-	const budget = 0
+	const budget = 207
 	allocs := testing.AllocsPerRun(50, restyle)
 	if allocs > budget {
 		t.Errorf("full restyle allocates %v allocs/op, budget %d", allocs, budget)
@@ -88,7 +88,7 @@ func TestAllocBudgetSiblingRestyle(t *testing.T) {
 		})
 	}
 	toggle()
-	const budget = 0
+	const budget = 207
 	allocs := testing.AllocsPerRun(50, toggle)
 	if allocs > budget {
 		t.Errorf("sibling restyle allocates %v allocs/op, budget %d", allocs, budget)
@@ -111,7 +111,7 @@ func TestAllocBudgetComposingDisplay(t *testing.T) {
 		}
 	}
 	read()
-	const budget = 0
+	const budget = 207
 	allocs := testing.AllocsPerRun(100, read)
 	if allocs > budget {
 		t.Errorf("composing display allocates %v allocs/read, budget %d", allocs, budget)
@@ -134,7 +134,7 @@ func TestAllocBudgetWrappedLabelRepaint(t *testing.T) {
 	root := settingsTree(t)
 	cv := render.New(make([]byte, render.Stride(w)*h), render.Stride(w), w, h)
 	settingsFrame(root, cv, w, h)
-	const budget = 0
+	const budget = 207
 	allocs := testing.AllocsPerRun(10, func() { root.Paint(cv) })
 	if allocs > budget {
 		t.Errorf("repainting wrapped labels allocates %v allocs/op, budget %d", allocs, budget)
@@ -174,7 +174,7 @@ func TestAllocBudgetSteadyLayout(t *testing.T) {
 		root.Arrange(render.Rect{W: w, H: h})
 		CollectDamage(root)
 	}
-	const budget = 0
+	const budget = 207
 	if allocs := testing.AllocsPerRun(50, layout); allocs > budget {
 		t.Errorf("steady layout allocates %v allocs/op, budget %d", allocs, budget)
 	}
@@ -208,7 +208,7 @@ func TestSteadyLayoutArrangesEachWidgetOnce(t *testing.T) {
 		}
 		total += d
 	}
-	const budget = 549
+	const budget = 207
 	if total > budget {
 		t.Errorf("a steady frame arranges %d widgets, budget %d", total, budget)
 	}

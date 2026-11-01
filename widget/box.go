@@ -96,7 +96,17 @@ type Box struct {
 	// departing are the removed children still painting their way out
 	// (departure.go).
 	departing []*departure
+	arranged  arrangeStamp
 }
+
+type arrangeStamp struct {
+	rect     render.Rect
+	style    uint64
+	theme    uint64
+	volatile bool
+}
+
+var arrangeVolatility uint64
 
 // Children exposes the box's children in append order for focus
 // traversal.
@@ -579,6 +589,13 @@ func (b *Box) Spacing() int { return b.spacing }
 // orders them for paint and hit testing by their stacking keys. r is
 // the margin box; Bounds records the border box.
 func (b *Box) Arrange(r render.Rect) {
+	if !b.arrangeStale && b.arranged == (arrangeStamp{r, styleGen, themeGen, false}) {
+		return
+	}
+	volatility := arrangeVolatility
+	b.arrangeStale = false
+	b.arranged = arrangeStamp{rect: r, style: styleGen, theme: themeGen}
+	defer func() { b.arranged.volatile = arrangeVolatility != volatility }()
 	v := b.style(b)
 	border, inner := boxRects(b.box(v), r)
 	b.ArrangeRoot(border)
