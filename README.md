@@ -24,52 +24,11 @@
   <img src="https://stubbedev.github.io/lys-ui/components/card.png" width="380" alt="A card in lys-ui">
 </p>
 
-The [documentation site](https://stubbedev.github.io/lys-ui/) shows a
-screenshot of [every widget](https://stubbedev.github.io/lys-ui/widgets),
-taken from the current code on every push.
-
-## Status
-
-lys-ui runs on sway and Hyprland, and both are required CI gates: the
-compositor-in-the-loop suite runs against a private headless sway
-(`just headless`) and against Hyprland in a private NixOS VM
-(`just hyprland-vm`). [docs/completeness.md](docs/completeness.md) maps
-every capability against relm4, GTK4 and libadwaita.
-
 ## Install
 
 ```sh
 go get github.com/stubbedev/lys-ui@latest
 ```
-
-## Packages
-
-Apps import the public packages; everything under `internal/` is
-implementation.
-
-| Package | Contents |
-| --- | --- |
-| `component` | the component framework: components, controllers, factories, workers, commands |
-| `component/componenttest` | a loop that runs components in tests without a compositor |
-| `ui` | typed view builders, one per widget |
-| `app` | the session, windows and layer surfaces, the loop, dialogs, popovers, desktop services |
-| `widget` | the widget tree, theme, CSS, actions, bindings |
-| `widget/css` | libadwaita's style classes and named colors as constants |
-| `anim` | tweens, easing, springs and timelines |
-| `appearance` | the desktop's color scheme, accent and contrast preferences |
-| `gtksettings` | GTK 4's settings.ini, read with GTK's file order |
-| `icontheme` | freedesktop icon theme lookup for programs that draw icons without widgets |
-| `i18n` | gettext catalogs (`.mo`, `.po`) |
-| `highlight` | syntax highlighters for the code view |
-| `media` | video and sound playback |
-| `pdf` | PDF writing |
-| `transfer` | the shared shape of clipboard and drag-and-drop content |
-
-The canvas widgets paint on (`render`), the GPU renderer (`gpu`),
-screen capture (`capture`), virtual input (`vinput`), the Wayland
-protocol bindings (`wlr`), dmabufs, MP4/Matroska muxing and the Opus
-encoder live in [lys-lib](https://github.com/stubbedev/lys-lib), which
-lys-ui imports.
 
 ## A minimal app
 
@@ -135,116 +94,28 @@ func main() {
 ```
 
 This program is kept compiling as `ExampleRun` in
-`component/example_test.go`. [docs/components.md](docs/components.md)
-walks through components, the typed builders, factories, workers and
-actions. `app.NewApplication` and `NewWindow` are the lower-level
-path for apps that want the widget tree without components
-(`ExampleApplication` in `app/example_test.go`).
-
-## Development
-
-```sh
-nix develop        # pinned Go, gopls, golangci-lint, just, sway; CGO_ENABLED=0
-just demo          # the lys-ui-hello showcase
-```
-
-The gates, all required in CI:
-
-```sh
-just check         # go vet, golangci-lint, go test, build
-just fmt-check     # gofumpt and gci formatting
-just headless      # the compositor-in-the-loop suite on a private headless sway
-just hyprland-vm   # the same suite against Hyprland in a private NixOS VM (needs KVM)
-just atspi         # the AT-SPI bridge on a private accessibility bus
-just atspi-verify  # the bridge against real at-spi2-core
-```
-
-`just docker <recipe>` runs any recipe in a container that sees only the
-dev shell's store paths, the checkout, `/dev/kvm` and the GPUs' render
-nodes: no host runtime dir, session bus or display socket, so nothing it
-runs reaches the desktop session. `just docker race 16g` raises its
-memory cap.
-
-`just bench` runs the benchmarks; CI archives the numbers without
-gating on them ([bench/baseline.md](bench/baseline.md) holds the
-method and the allocation budgets the tests enforce). `just goldens`
-regenerates the golden-image snapshots after a deliberate visual
-change.
-
-`nix build .#lys-ui` builds the module and every demo with the pinned
-toolchain. Pushing a `v*` tag releases `lys-ui-hello`, `lys-ui-bar` and
-`lys-ui-panel` (linux/amd64 and arm64) through goreleaser.
-
-`.github/workflows/security.yml` runs CodeQL (Go and GitHub Actions),
-Grype and govulncheck; dependency review gates pull requests.
-Dependabot keeps the module and the pinned workflow actions current.
+`component/example_test.go`.
 
 ## Documentation
 
-| Document | Contents |
-| --- | --- |
-| [docs/completeness.md](docs/completeness.md) | the capability map against relm4/GTK/libadwaita, and the known gaps |
-| [docs/architecture.md](docs/architecture.md) | the layers, the invariants that keep them correct, theming, non-goals |
-| [docs/application-model.md](docs/application-model.md) | windows, layer surfaces, disconnects, single instance, file dialogs, data transfer, chrome |
-| [docs/components.md](docs/components.md) | the component framework: components, typed view builders, tracking, controllers, children, testing |
-| [docs/threading.md](docs/threading.md) | the loop goroutine, `Invoke`/`Every`, the off-loop guard, the typed messaging layer |
-| [docs/input-model.md](docs/input-model.md) | routing, implicit grab, click/drag, drag and drop, keyboard, IME, touch, tablets |
-| [docs/css.md](docs/css.md) | the CSS layer: selectors, values, properties, cascade, lifecycle |
-| [docs/appearance.md](docs/appearance.md) | following the desktop's color scheme, accent and contrast |
-| [docs/icons.md](docs/icons.md) | icon-theme lookup and symbolic recoloring |
-| [docs/a11y.md](docs/a11y.md) | semantic roles, the keyboard-first guarantee, the AT-SPI bridge |
-| [docs/inspector.md](docs/inspector.md) | the live widget inspector, tree dump, and doctor block |
+The [documentation site](https://stubbedev.github.io/lys-ui/) has the
+[getting started guide](https://stubbedev.github.io/lys-ui/guide/getting-started),
+a screenshot of [every widget](https://stubbedev.github.io/lys-ui/widgets)
+taken from the current code on every push, the
+[demos](https://stubbedev.github.io/lys-ui/guide/demos), the
+[development workflow](https://stubbedev.github.io/lys-ui/guide/development)
+and the reference.
 
-## Demos
+## The lys family
 
-| Command | What it shows |
-| --- | --- |
-| `cmd/lys-ui-hello` | the showcase as a component: core widgets, a context menu on typed actions, tooltips, Tab focus, drag-to-move |
-| `cmd/lys-ui-gallery` | every component in one window, both palettes; `-shots` screenshots each for the docs site |
-| `cmd/lys-ui-bar` | a layer-shell top bar repainting only what changed each second |
-| `cmd/lys-ui-panel` | a right-anchored layer-shell panel with live widgets |
-| `cmd/lys-ui-launcher` | a launcher: a keyboard-exclusive overlay, a filtered app grid, live toplevel thumbnails through `capture` |
-| `cmd/lys-ui-osd` | an OSD: a transient layer-shell volume/brightness popup over the overlay layer |
-| `cmd/lys-ui-lock` | a lock screen: one ext-session-lock surface per output with an auth entry |
-| `cmd/lys-ui-multi` | one loop: per-output layer bars, on-demand windows, close-request veto |
-| `cmd/lys-ui-invoke` | a lifetime-bound spawned command and `Every` feeding a component |
-| `cmd/lys-ui-messages` | the typed messaging layer and single-instance forwarding |
-| `cmd/lys-ui-settings` | a settings app: PreferencesView rows, the adaptive shell, typed persisted settings |
-| `cmd/lys-ui-columns` | ten thousand sorted, filtered rows; the tree view; drag-to-reorder |
-| `cmd/lys-ui-dialogs` | every dialog constructor: message, prompt, color, font, calendar, file, adaptive, about |
-| `cmd/lys-ui-dnd` | cross-window drag-and-drop: swatches that drag and drop between two toplevels |
-| `cmd/lys-ui-draw` | custom painting: a DrawingArea animating straight onto the Canvas |
-| `cmd/lys-ui-ime` | IME composition: preedit and commit mirrored from an entry and a text area |
-| `cmd/lys-ui-a11y` | a labeled form served over AT-SPI; builds with `-tags atspi` to force the bridge on |
-| `cmd/lys-ui-capture` | the capture consumer: list, screenshot, and monitor outputs and windows to PNG |
-| `cmd/lys-ui-gpu` | a GPUArea paced by its own frame callbacks, with lys-ui drawing over it |
-| `cmd/lys-ui-video` | a video with its controls: a file through ffmpeg, or a generated clip decoded in pure Go |
-| `cmd/lys-ui-i18n` | a gettext .po catalog (plurals included) localizing built-in and app strings |
-| `cmd/lys-ui-states` | the window-state client the headless suite drives: xdg state chords, mirrored from what the compositor confirms |
-| `cmd/lys-ui-multilist` | the multi-select client the headless suite drives: a multiple-selection list with keyboard and rubber-band selection |
-| `cmd/lys-ui-popover` | the popover client the headless suite drives: popup grabs, live repaints, nested menus |
-| `cmd/wlpointer`, `cmd/zz-vpclick` | synthetic input for the headless suite |
-
-## Dependencies
-
-All pure Go:
-[neurlang/wayland](https://github.com/neurlang/wayland) (patched, in
-lys-lib's `third_party/wayland`),
-[godbus/dbus](https://github.com/godbus/dbus) (patched, in lys-lib's
-`third_party/godbus`),
-[go-text/typesetting](https://github.com/go-text/typesetting),
-[rivo/uniseg](https://github.com/rivo/uniseg),
-[golang.org/x/image](https://pkg.go.dev/golang.org/x/image),
-[golang.org/x/text](https://pkg.go.dev/golang.org/x/text),
-[golang.org/x/sys](https://pkg.go.dev/golang.org/x/sys),
-[srwiley/oksvg](https://github.com/srwiley/oksvg) +
-[rasterx](https://github.com/srwiley/rasterx),
-[kettek/apng](https://github.com/kettek/apng),
-[unxed/xkb-go](https://github.com/unxed/xkb-go), and
-[jfreymuth/pulse](https://github.com/jfreymuth/pulse) (the PulseAudio
-protocol, which pipewire-pulse also serves). `media.OpenFile` runs
-`ffmpeg` and `ffprobe` from PATH when an app plays a file; nothing else
-needs them.
+lys-ui is the widget toolkit of the lys desktop:
+[lys-shell](https://stubbedev.github.io/lys-shell/) (desktop shell),
+[lys-wm](https://stubbedev.github.io/lys-wm/) (compositor),
+[lys-lib](https://stubbedev.github.io/lys-lib/) (building blocks),
+[lys-login](https://stubbedev.github.io/lys-login/) (display manager and lock screen),
+[lys-splash](https://stubbedev.github.io/lys-splash/) (boot splash),
+[lys-polkit](https://stubbedev.github.io/lys-polkit/) (polkit agent) and
+[lys-secrets](https://stubbedev.github.io/lys-secrets/) (Secret Service).
 
 ## License
 

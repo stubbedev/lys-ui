@@ -14,6 +14,8 @@ export default lysConfig({
       items: [
         { text: 'Getting started', link: '/guide/getting-started' },
         { text: 'Widgets', link: '/widgets' },
+        { text: 'Demos', link: '/guide/demos' },
+        { text: 'Development', link: '/guide/development' },
       ],
     },
     {

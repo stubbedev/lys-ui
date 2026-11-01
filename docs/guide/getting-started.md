@@ -21,7 +21,7 @@ example test:
 [Components](../components) walks through components, the typed
 builders, factories, workers and actions. `app.NewApplication` and
 `NewWindow` are the lower-level path for apps that want the widget tree
-without components.
+without components (`ExampleApplication` in `app/example_test.go`).
 
 ## Packages
 
@@ -31,15 +31,27 @@ implementation.
 | Package | Contents |
 | --- | --- |
 | `component` | the component framework: components, controllers, factories, workers, commands |
+| `component/componenttest` | a loop that runs components in tests without a compositor |
 | `ui` | typed view builders, one per widget |
 | `app` | the session, windows and layer surfaces, the loop, dialogs, popovers, desktop services |
 | `widget` | the widget tree, theme, CSS, actions, bindings |
 | `widget/css` | libadwaita's style classes and named colors as constants |
-| `render` | the premultiplied canvas, shaped text, icons |
 | `anim` | tweens, easing, springs and timelines |
+| `appearance` | the desktop's color scheme, accent and contrast preferences |
+| `gtksettings` | GTK 4's settings.ini, read with GTK's file order |
+| `icontheme` | freedesktop icon theme lookup for programs that draw icons without widgets |
+| `i18n` | gettext catalogs (`.mo`, `.po`) |
+| `highlight` | syntax highlighters for the code view |
+| `media` | video and sound playback |
+| `pdf` | PDF writing |
+| `transfer` | the shared shape of clipboard and drag-and-drop content |
 
-The [README](https://github.com/stubbedev/lys-ui#packages) lists every
-package and demo.
+The canvas widgets paint on (`render`), the GPU renderer (`gpu`), screen
+capture (`capture`), virtual input (`vinput`), the Wayland protocol
+bindings (`wlr`), dmabufs, MP4/Matroska muxing and the Opus encoder live
+in [lys-lib](https://github.com/stubbedev/lys-lib), which lys-ui imports.
+
+The [demos](./demos) show the packages at work.
 
 ## The gallery
 
