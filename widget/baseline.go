@@ -30,7 +30,7 @@ func baselineOf(w Widget) (int, bool) {
 // tall - the rule every text draw uses (drawAligned), so a reported
 // baseline is the painted one.
 func lineBaseline(h int, sh *render.ShapedText) int {
-	return int(math.Round((float64(h)-float64(sh.LineHeight()))/2 + sh.Ascent()))
+	return int(math.Round(float64((float64(h)-float64(sh.LineHeight()))/2) + sh.Ascent()))
 }
 
 // Baseline implements Baseliner: the first line inside the CSS box,

@@ -116,7 +116,7 @@ func (c *Chart) SetData(labels []string, series ...ChartSeries) {
 				if i < len(c.from) && j < len(c.from[i]) {
 					was = c.from[i][j]
 				}
-				c.shown[i][j] = was + (v-was)*t
+				c.shown[i][j] = was + float64((v-was)*t)
 			}
 		}
 		c.Invalidate()
@@ -271,12 +271,12 @@ func (c *Chart) Paint(cv *render.Canvas) {
 func (c *Chart) slot(plot render.Rect, i int) (x, w float64) {
 	n := max(1, len(c.labels))
 	w = float64(plot.W) / float64(n)
-	return float64(plot.X) + float64(i)*w, w
+	return float64(plot.X) + float64(float64(i)*w), w
 }
 
 // yOf maps a value to the plot's height on scale.
 func yOf(plot render.Rect, v, scale float64) float64 {
-	return float64(plot.Y+plot.H) - v/scale*float64(plot.H)
+	return float64(plot.Y+plot.H) - float64(v/scale*float64(plot.H))
 }
 
 // paintCartesian draws the grid, the value axis, the category labels
@@ -315,16 +315,16 @@ func (c *Chart) paintBars(cv *render.Canvas, plot render.Rect, scale float64) {
 	n := len(c.series)
 	for i := range c.labels {
 		x, w := c.slot(plot, i)
-		inner := w * 0.7
+		inner := float64(w * 0.7)
 		base := 0.0
 		for s := range n {
 			v := c.value(s, i)
 			var bx, bw float64
 			if c.stacked {
-				bx, bw = x+(w-inner)/2, inner
+				bx, bw = x+float64((w-inner)/2), inner
 			} else {
 				bw = inner / float64(max(1, n))
-				bx = x + (w-inner)/2 + float64(s)*bw
+				bx = x + float64((w-inner)/2) + float64(float64(s)*bw)
 			}
 			top, bottom := yOf(plot, base+v, scale), yOf(plot, base, scale)
 			if c.stacked {
@@ -351,8 +351,8 @@ func (c *Chart) points(plot render.Rect, scale float64, s int) (line, below []fl
 				base += c.value(t, i)
 			}
 		}
-		line = append(line, x+w/2, yOf(plot, base+c.value(s, i), scale))
-		below = append(below, x+w/2, yOf(plot, base, scale))
+		line = append(line, x+float64(w/2), yOf(plot, base+c.value(s, i), scale))
+		below = append(below, x+float64(w/2), yOf(plot, base, scale))
 	}
 	return line, below
 }
@@ -392,7 +392,7 @@ func strokePolyline(cv *render.Canvas, pts []float64, width float64, col render.
 		if l == 0 {
 			continue
 		}
-		nx, ny := -dy/l*h, dx/l*h
+		nx, ny := float64(-dy/l*h), float64(dx/l*h)
 		p := &render.Path{}
 		p.MoveTo(x0+nx, y0+ny)
 		p.LineTo(x1+nx, y1+ny)
@@ -416,7 +416,7 @@ func fillCircle(cv *render.Canvas, x, y, r float64, col render.Color) {
 // wedge to the center.
 func arcPath(cx, cy, outer, inner, a0, a1 float64) *render.Path {
 	steps := max(8, int(math.Abs(a1-a0)*outer/4))
-	at := func(r, a float64) (float64, float64) { return cx + r*math.Sin(a), cy - r*math.Cos(a) }
+	at := func(r, a float64) (float64, float64) { return cx + float64(r*math.Sin(a)), cy - float64(r*math.Cos(a)) }
 	p := &render.Path{}
 	x, y := at(outer, a0)
 	p.MoveTo(x, y)
@@ -438,7 +438,7 @@ func arcPath(cx, cy, outer, inner, a0, a1 float64) *render.Path {
 
 // roundCenter is a round chart's middle and radius and size in the plot.
 func roundCenter(plot render.Rect) (cx, cy, r float64) {
-	return float64(plot.X) + float64(plot.W)/2, float64(plot.Y) + float64(plot.H)/2, float64(min(plot.W, plot.H))/2 - 8
+	return float64(plot.X) + float64(float64(plot.W)/2), float64(plot.Y) + float64(float64(plot.H)/2), float64(float64(min(plot.W, plot.H))/2) - 8
 }
 
 // paintPie draws the first series as wedges.
@@ -457,7 +457,7 @@ func (c *Chart) paintPie(cv *render.Canvas, plot render.Rect) {
 	}
 	a := 0.0
 	for i := range c.labels {
-		da := c.value(0, i) / total * 2 * math.Pi
+		da := float64(c.value(0, i) / total * 2 * math.Pi)
 		grow := 0.0
 		if i == c.hover {
 			grow = 6
@@ -478,7 +478,7 @@ func (c *Chart) paintRadar(cv *render.Canvas, plot render.Rect) {
 	}
 	at := func(i int, f float64) (float64, float64) {
 		a := float64(i) / float64(n) * 2 * math.Pi
-		return cx + f*r*math.Sin(a), cy - f*r*math.Cos(a)
+		return cx + float64(f*r*math.Sin(a)), cy - float64(f*r*math.Cos(a))
 	}
 	for ring := 1; ring <= chartTicks; ring++ {
 		var pts []float64
@@ -523,8 +523,8 @@ func (c *Chart) paintRadial(cv *render.Canvas, plot render.Rect) {
 	scale := niceMax(c.top())
 	band := r * 0.7 / float64(n)
 	for i := range c.labels {
-		outer := r - float64(i)*band
-		inner := outer - band*0.7
+		outer := r - float64(float64(i)*band)
+		inner := outer - float64(band*0.7)
 		cv.FillPath(arcPath(cx, cy, outer, inner, 0, 2*math.Pi), scaleAlpha(th.MutedColor(), 0.6))
 		cv.FillPath(arcPath(cx, cy, outer, inner, 0, c.value(0, i)/scale*2*math.Pi), c.color(i))
 	}
@@ -650,7 +650,7 @@ func (c *Chart) categoryAt(p Point) int {
 		}
 		acc := 0.0
 		for i := range c.labels {
-			acc += c.value(0, i) / total * 2 * math.Pi
+			acc += float64(c.value(0, i) / total * 2 * math.Pi)
 			if a <= acc {
 				return i
 			}

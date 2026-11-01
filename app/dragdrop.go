@@ -50,7 +50,7 @@ func (in *surfaceInput) startDrag() {
 		return
 	}
 	dx, dy := in.x-in.pressX, in.y-in.pressY
-	if dx*dx+dy*dy < dragThreshold*dragThreshold {
+	if float64(dx*dx)+float64(dy*dy) < dragThreshold*dragThreshold {
 		return
 	}
 	content := src.DragContent()

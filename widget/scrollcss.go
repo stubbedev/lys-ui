@@ -85,7 +85,7 @@ func (s *Scroll) scrollTo(x, y int) (int, int) {
 	fx, fy := float64(s.offX), float64(s.offY)
 	tx, ty := float64(x), float64(y)
 	s.cancelScroll = anim.Play(anim.Animate(smoothScrollDur, func(t float64) {
-		s.SetOffset(int(math.Round(fx+(tx-fx)*t)), int(math.Round(fy+(ty-fy)*t)))
+		s.SetOffset(int(math.Round(fx+float64((tx-fx)*t))), int(math.Round(fy+float64((ty-fy)*t))))
 	}).Easing(anim.EaseOutCubic))
 	return x, y
 }

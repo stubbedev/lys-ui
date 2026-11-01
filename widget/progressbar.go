@@ -44,7 +44,7 @@ func NewProgressBar(value float64) *ProgressBar {
 	p.fillFill = func(t *Theme) Color { return orColor(p.Fill, t.Accent) }
 	p.pulse = loop{period: pulsePeriod, owner: p, step: func(t float64) {
 		// A triangle wave: across and back once per period.
-		p.pos = (1 - pulseBlock) * (1 - math.Abs(2*t-1))
+		p.pos = (1 - pulseBlock) * (1 - math.Abs(float64(2*t)-1))
 		p.Invalidate()
 	}}
 	return p
@@ -78,7 +78,7 @@ func (p *ProgressBar) Activity() bool { return p.activity }
 // bouncing off the trough's ends.
 func (p *ProgressBar) Pulse() {
 	p.setActivity(true)
-	p.pos += p.dir * p.PulseStep
+	p.pos += float64(p.dir * p.PulseStep)
 	if p.pos >= 1-pulseBlock {
 		p.pos, p.dir = 1-pulseBlock, -1
 	} else if p.pos <= 0 {

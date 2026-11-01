@@ -296,7 +296,7 @@ func (m *NavigationMenu) Paint(cv *render.Canvas) {
 	th := Current()
 	x := m.at[0]
 	y := float64(m.bounds.Y + m.bounds.H)
-	h := float64(navMenuIndicator) * m.at[1]
+	h := float64(float64(navMenuIndicator) * m.at[1])
 	p := &render.Path{}
 	p.MoveTo(x-navMenuIndicator, y)
 	p.LineTo(x, y-h)

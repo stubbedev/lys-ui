@@ -108,7 +108,7 @@ func (x *Xform) compose(p XformPart) {
 	x.M = x.M.Mul(partAffine(p))
 	x.m4 = x.m4.Mul(partM4(p))
 	x.P = x.m4.Plane3()
-	x.Backface = x.P[0]*x.P[4]-x.P[1]*x.P[3] < 0
+	x.Backface = float64(x.P[0]*x.P[4])-float64(x.P[1]*x.P[3]) < 0
 	x.Parts = append(x.Parts, p)
 }
 
@@ -140,7 +140,7 @@ func lerpParts(a, b []XformPart, t float64) (render.Affine, render.M3, bool) {
 		var part XformPart
 		part.Op = a[i].Op
 		for j := range a[i].N {
-			part.N[j] = a[i].N[j] + (b[i].N[j]-a[i].N[j])*t
+			part.N[j] = a[i].N[j] + float64((b[i].N[j]-a[i].N[j])*t)
 		}
 		m = m.Mul(partAffine(part))
 		m4 = m4.Mul(partM4(part))
@@ -171,13 +171,13 @@ func decomposeXform(m render.Affine) xformParts {
 	}
 	p.rot = math.Atan2(m.B, m.A)
 	s, c := math.Sincos(p.rot)
-	p.sy = -m.C*s + m.D*c
+	p.sy = float64(-m.C*s) + float64(m.D*c)
 	if math.Abs(p.sy) < 1e-12 {
 		p.sy = 0
 		p.kx = 0
 		return p
 	}
-	p.kx = (m.C*c + m.D*s) / p.sy
+	p.kx = (float64(m.C*c) + float64(m.D*s)) / p.sy
 	return p
 }
 
@@ -188,8 +188,8 @@ func recomposeXform(p xformParts) render.Affine {
 	return render.Affine{
 		A: c * p.sx,
 		B: s * p.sx,
-		C: c*p.kx*p.sy - s*p.sy,
-		D: s*p.kx*p.sy + c*p.sy,
+		C: float64(c*p.kx*p.sy) - float64(s*p.sy),
+		D: float64(s*p.kx*p.sy) + float64(c*p.sy),
 		E: p.tx,
 		F: p.ty,
 	}
@@ -212,16 +212,16 @@ func shortestTurn(a, b float64) float64 {
 // (a spin turns), the affines' decompositions otherwise.
 func LerpXform(a, b Xform, t float64) Xform {
 	if m, p, ok := lerpParts(a.Parts, b.Parts, t); ok {
-		return Xform{M: m, P: p, Backface: p[0]*p[4]-p[1]*p[3] < 0}
+		return Xform{M: m, P: p, Backface: float64(p[0]*p[4])-float64(p[1]*p[3]) < 0}
 	}
 	pa, pb := decomposeXform(a.M), decomposeXform(b.M)
 	m := recomposeXform(xformParts{
-		tx:  pa.tx + (pb.tx-pa.tx)*t,
-		ty:  pa.ty + (pb.ty-pa.ty)*t,
-		rot: pa.rot + shortestTurn(pa.rot, pb.rot)*t,
-		sx:  pa.sx + (pb.sx-pa.sx)*t,
-		sy:  pa.sy + (pb.sy-pa.sy)*t,
-		kx:  pa.kx + (pb.kx-pa.kx)*t,
+		tx:  pa.tx + float64((pb.tx-pa.tx)*t),
+		ty:  pa.ty + float64((pb.ty-pa.ty)*t),
+		rot: pa.rot + float64(shortestTurn(pa.rot, pb.rot)*t),
+		sx:  pa.sx + float64((pb.sx-pa.sx)*t),
+		sy:  pa.sy + float64((pb.sy-pa.sy)*t),
+		kx:  pa.kx + float64((pb.kx-pa.kx)*t),
 	})
 	return Xform{M: m, P: render.PlaneRotZ(m).Plane3()}
 }

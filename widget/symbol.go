@@ -175,8 +175,8 @@ func paintSymbol(cv *render.Canvas, kind SymbolKind, b render.Rect, size int, co
 		cv.Line(cx-r/4, cy-r, cx, top, 1, col)
 	case SymbolUser:
 		fx, fy, fr := float64(cx), float64(cy), float64(r)
-		cv.Arc(fx, fy-fr/2, fr/2, 1, 0, 2*math.Pi, col)
-		cv.Arc(fx, fy+1.2*fr, 0.95*fr, 1, math.Pi, math.Pi, col)
+		cv.Arc(fx, fy-float64(fr/2), fr/2, 1, 0, 2*math.Pi, col)
+		cv.Arc(fx, fy+float64(1.2*fr), 0.95*fr, 1, math.Pi, math.Pi, col)
 	case SymbolEllipsis:
 		d := max(2, size/8)
 		for _, x := range [...]int{cx - r, cx, cx + r} {
@@ -208,7 +208,7 @@ func strokeCheck(cv *render.Canvas, cx, cy, r int, col render.Color) {
 func strokeChevron(cv *render.Canvas, cx, cy, r int, ang float64, col render.Color) {
 	c, s := math.Cos(ang), math.Sin(ang)
 	rot := func(px, py float64) (int, int) {
-		return cx + int(math.Round(px*c-py*s)), cy + int(math.Round(px*s+py*c))
+		return cx + int(math.Round(float64(px*c)-float64(py*s))), cy + int(math.Round(float64(px*s)+float64(py*c)))
 	}
 	h := float64(r)
 	tx, ty := rot(h/2, 0)

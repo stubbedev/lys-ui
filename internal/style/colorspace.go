@@ -65,13 +65,13 @@ func predefinedOf(sp space) predefined { return predefinedSpaces[predefinedNames
 func mixSpace(a, b rgbaf, wa float64, sp space, hue hueMethod, scale float64) rgbaf {
 	ca, cb := toComps(a, sp), toComps(b, sp)
 	var out [4]float64
-	out[3] = ca[3]*wa + cb[3]*(1-wa)
+	out[3] = float64(ca[3]*wa) + float64(cb[3]*(1-wa))
 	for i := range 3 {
 		if i == hueIdx[sp] {
 			continue
 		}
 		pa, pb := ca[i]*ca[3], cb[i]*cb[3]
-		v := pa*wa + pb*(1-wa)
+		v := float64(pa*wa) + float64(pb*(1-wa))
 		if out[3] > 0 {
 			v /= out[3]
 		}
@@ -149,7 +149,7 @@ func interpHue(h1, h2, t float64, m hueMethod) float64 {
 			d -= 360
 		}
 	}
-	return math.Mod(h1+d*t+360, 360)
+	return math.Mod(h1+float64(d*t)+360, 360)
 }
 
 // hueMethod is color-mix()'s hue interpolation strategy.
@@ -242,9 +242,9 @@ func hwbToRGB(h, w, bk float64) rgbaf {
 	}
 	base := fromHLS(h, 0.5, 1)
 	return rgbaf{
-		r: base.r*(1-w-bk) + w,
-		g: base.g*(1-w-bk) + w,
-		b: base.b*(1-w-bk) + w,
+		r: float64(base.r*(1-w-bk)) + w,
+		g: float64(base.g*(1-w-bk)) + w,
+		b: float64(base.b*(1-w-bk)) + w,
 		a: 1,
 	}
 }
@@ -265,7 +265,7 @@ func srgbEncode(c float64) float64 {
 	if a <= 0.0031308 {
 		return c * 12.92
 	}
-	return math.Copysign(1.055*math.Pow(a, 1/2.4)-0.055, c)
+	return math.Copysign(float64(1.055*math.Pow(a, 1/2.4))-0.055, c)
 }
 
 // signed extends a transfer function over [0, ∞) to negative inputs,
@@ -304,9 +304,9 @@ var (
 
 func matApply(m [9]float64, v xyz) xyz {
 	return xyz{
-		x: m[0]*v.x + m[1]*v.y + m[2]*v.z,
-		y: m[3]*v.x + m[4]*v.y + m[5]*v.z,
-		z: m[6]*v.x + m[7]*v.y + m[8]*v.z,
+		x: float64(m[0]*v.x) + float64(m[1]*v.y) + float64(m[2]*v.z),
+		y: float64(m[3]*v.x) + float64(m[4]*v.y) + float64(m[5]*v.z),
+		z: float64(m[6]*v.x) + float64(m[7]*v.y) + float64(m[8]*v.z),
 	}
 }
 
@@ -314,7 +314,7 @@ func matMul(a, b [9]float64) [9]float64 {
 	var out [9]float64
 	for r := range 3 {
 		for c := range 3 {
-			out[r*3+c] = a[r*3]*b[c] + a[r*3+1]*b[3+c] + a[r*3+2]*b[6+c]
+			out[r*3+c] = float64(a[r*3]*b[c]) + float64(a[r*3+1]*b[3+c]) + float64(a[r*3+2]*b[6+c])
 		}
 	}
 	return out
@@ -336,7 +336,7 @@ func labF(t float64) float64 {
 	if t > 216.0/24389 {
 		return math.Cbrt(t)
 	}
-	return (841.0/108)*t + 4.0/29
+	return float64((841.0/108)*t) + 4.0/29
 }
 
 func labInvF(t float64) float64 {
@@ -350,7 +350,7 @@ func labInvF(t float64) float64 {
 func xyzToLab(v xyz) (l, a, b float64) {
 	v = matApply(d65ToD50, v)
 	fx, fy, fz := labF(v.x/labWhite.x), labF(v.y/labWhite.y), labF(v.z/labWhite.z)
-	l = 116*fy - 16
+	l = float64(116*fy) - 16
 	a = 500 * (fx - fy)
 	b = 200 * (fy - fz)
 	return l, a, b
@@ -376,23 +376,23 @@ func lchToLab(l, c, h float64) (l2, a, b float64) {
 }
 
 func linearToOklab(c rgbaf) (l, a, b float64) {
-	l0 := math.Cbrt(0.4122214708*c.r + 0.5363325363*c.g + 0.0514459929*c.b)
-	m := math.Cbrt(0.2119034982*c.r + 0.6806995451*c.g + 0.1073969566*c.b)
-	s := math.Cbrt(0.0883024619*c.r + 0.2817188376*c.g + 0.6299787005*c.b)
-	return 0.2104542553*l0 + 0.7936177850*m - 0.0040720468*s,
-		1.9779984951*l0 - 2.4285922050*m + 0.4505937099*s,
-		0.0259040371*l0 + 0.7827717662*m - 0.8086757660*s
+	l0 := math.Cbrt(float64(0.4122214708*c.r) + float64(0.5363325363*c.g) + float64(0.0514459929*c.b))
+	m := math.Cbrt(float64(0.2119034982*c.r) + float64(0.6806995451*c.g) + float64(0.1073969566*c.b))
+	s := math.Cbrt(float64(0.0883024619*c.r) + float64(0.2817188376*c.g) + float64(0.6299787005*c.b))
+	return float64(0.2104542553*l0) + float64(0.7936177850*m) - float64(0.0040720468*s),
+		float64(1.9779984951*l0) - float64(2.4285922050*m) + float64(0.4505937099*s),
+		float64(0.0259040371*l0) + float64(0.7827717662*m) - float64(0.8086757660*s)
 }
 
 func oklabToLinear(l, a, b float64) rgbaf {
-	l0 := l + 0.3963377774*a + 0.2158037573*b
-	m := l - 0.1055613458*a - 0.0638541728*b
-	s := l - 0.0894841775*a - 1.2914855480*b
+	l0 := l + float64(0.3963377774*a) + float64(0.2158037573*b)
+	m := l - float64(0.1055613458*a) - float64(0.0638541728*b)
+	s := l - float64(0.0894841775*a) - float64(1.2914855480*b)
 	l3, m3, s3 := l0*l0*l0, m*m*m, s*s*s
 	return rgbaf{
-		r: 4.0767416621*l3 - 3.3077115913*m3 + 0.2309699292*s3,
-		g: -1.2684380046*l3 + 2.6097574011*m3 - 0.3413193965*s3,
-		b: -0.0041960863*l3 - 0.7034186147*m3 + 1.7076147010*s3,
+		r: float64(4.0767416621*l3) - float64(3.3077115913*m3) + float64(0.2309699292*s3),
+		g: float64(-1.2684380046*l3) + float64(2.6097574011*m3) - float64(0.3413193965*s3),
+		b: float64(-0.0041960863*l3) - float64(0.7034186147*m3) + float64(1.7076147010*s3),
 		a: 1,
 	}
 }
@@ -722,7 +722,7 @@ func rec2020Space() predefined {
 		if v < beta {
 			return v * 4.5
 		}
-		return alpha*math.Pow(v, 0.45) - alpha + 1
+		return float64(alpha*math.Pow(v, 0.45)) - alpha + 1
 	})
 	return predefined{
 		toLinearSRGB:   matMul(xyzToLinSRGB, recToXYZ),

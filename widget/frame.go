@@ -116,7 +116,7 @@ func (a *AspectFrame) Measure(axis Axis, forSize int) Sizes {
 	r := a.effective(nat)
 	grown := nat
 	if float64(nat.W) < float64(nat.H)*r {
-		grown.W = int(float64(nat.H)*r + 0.5)
+		grown.W = int(float64(float64(nat.H)*r) + 0.5)
 	} else {
 		grown.H = int(float64(nat.W)/r + 0.5)
 	}
@@ -131,7 +131,7 @@ func (a *AspectFrame) Arrange(r render.Rect) {
 	ratio := a.effective(naturalChild(a, a.root))
 	w, h := r.W, int(float64(r.W)/ratio+0.5)
 	if h > r.H {
-		w, h = int(float64(r.H)*ratio+0.5), r.H
+		w, h = int(float64(float64(r.H)*ratio)+0.5), r.H
 	}
 	arrangeChild(a.root, render.Rect{X: r.X + (r.W-w)/2, Y: r.Y + (r.H-h)/2, W: w, H: h})
 }

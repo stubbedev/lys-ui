@@ -847,7 +847,7 @@ func (l *Label) drawShadows(cv *render.Canvas, sh *render.ShapedText, x, baselin
 		blur.Append(render.FilterOp{Kind: render.FilterBlur, Amount: float64(s.Blur) / 2})
 		ink := render.Rect{
 			X: x + s.X, Y: baseline + s.Y - int(math.Ceil(sh.Ascent())),
-			W: int(math.Ceil(sh.Advance()+justify*float64(sh.SeparatorCount()))) + 1, H: sh.LineHeight(),
+			W: int(math.Ceil(sh.Advance()+float64(justify*float64(sh.SeparatorCount())))) + 1, H: sh.LineHeight(),
 		}
 		region := cv.MapRect(blur.Extent().Grow(ink)).Intersect(cv.Rect())
 		if region.Empty() {

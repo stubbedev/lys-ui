@@ -220,13 +220,13 @@ func (n *node) paintTransition(cv *render.Canvas, tr *sharedTransition, now *sha
 
 // lerpRect interpolates two rects at t.
 func lerpRect(a, b render.Rect, t float64) render.Rect {
-	l := func(x, y int) int { return int(math.Round(float64(x) + (float64(y)-float64(x))*t)) }
+	l := func(x, y int) int { return int(math.Round(float64(x) + float64((float64(y)-float64(x))*t))) }
 	return render.Rect{X: l(a.X, b.X), Y: l(a.Y, b.Y), W: max(0, l(a.W, b.W)), H: max(0, l(a.H, b.H))}
 }
 
 // lerpCorners interpolates two corner sets at t.
 func lerpCorners(a, b render.Corners, t float64) render.Corners {
-	l := func(x, y int) int { return max(0, int(math.Round(float64(x)+(float64(y)-float64(x))*t))) }
+	l := func(x, y int) int { return max(0, int(math.Round(float64(x)+float64((float64(y)-float64(x))*t)))) }
 	return render.Corners{
 		TopLeft: l(a.TopLeft, b.TopLeft), TopRight: l(a.TopRight, b.TopRight),
 		BottomRight: l(a.BottomRight, b.BottomRight), BottomLeft: l(a.BottomLeft, b.BottomLeft),

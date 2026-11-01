@@ -820,8 +820,8 @@ func (b *Box) paintTransformed(cv *render.Canvas, v *style.Values) {
 	}
 	paintBackdropOf(cv, v, b.bounds, radii)
 	frac, off := v.Origin()
-	ox := float64(b.bounds.X) + frac[0]*float64(b.bounds.W) + off[0]
-	oy := float64(b.bounds.Y) + frac[1]*float64(b.bounds.H) + off[1]
+	ox := float64(b.bounds.X) + float64(frac[0]*float64(b.bounds.W)) + off[0]
+	oy := float64(b.bounds.Y) + float64(frac[1]*float64(b.bounds.H)) + off[1]
 	m := v.Transform.M.About(ox, oy)
 	region := m.MapBounds(b.bounds)
 	region = region.Union(b.bounds)

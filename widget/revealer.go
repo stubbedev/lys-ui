@@ -163,7 +163,7 @@ func (r *Revealer) SetRevealed(reveal bool) {
 			r.land(target)
 			return
 		}
-		r.setProgress(from + (target-from)*t)
+		r.setProgress(from + float64((target-from)*t))
 	}).Easing(anim.Linear))
 }
 
@@ -260,7 +260,7 @@ func (r *Revealer) Measure(axis Axis, forSize int) Sizes {
 	}
 	nat := measureChild(r, r.child, axis, forSize).Nat
 	t := anim.EaseInOutCubic(r.progress)
-	return r.measureStore(axis, forSize, FixedSizes(int(roundHalfUp(float64(nat)*t))))
+	return r.measureStore(axis, forSize, FixedSizes(int(roundHalfUp(float64(float64(nat)*t)))))
 }
 
 // slideAxis is the axis a slide runs along.
@@ -388,7 +388,7 @@ func (r *Revealer) ink() render.Rect {
 // within a clip, the rest transform about a pivot while fading).
 func (r *Revealer) transform(b render.Rect, p float64) (m render.Affine, alpha float64, clip bool) {
 	x, y, w, h := float64(b.X), float64(b.Y), float64(b.W), float64(b.H)
-	cx, cy := x+w/2, y+h/2
+	cx, cy := x+float64(w/2), y+float64(h/2)
 	t := anim.EaseInOutCubic(p)
 	switch r.transition {
 	case RevealSlideUp, RevealSlideDown, RevealSlideLeft, RevealSlideRight:
@@ -412,7 +412,7 @@ func (r *Revealer) transform(b render.Rect, p float64) (m render.Affine, alpha f
 	case RevealZoom:
 		return render.Scale(t, t).About(cx, cy), p, false
 	case RevealRotate:
-		s := 0.3 + 0.7*t
+		s := 0.3 + float64(0.7*t)
 		return render.Rotate((1-t)*180).Mul(render.Scale(s, s)).About(cx, cy), p, false
 	case RevealFlip:
 		return render.Scale(max(t, 0.001), 1).About(cx, cy), p, false
@@ -429,7 +429,7 @@ func (r *Revealer) transform(b render.Rect, p float64) (m render.Affine, alpha f
 			return render.Rotate(-angle).About(x, cy), p, false
 		}
 	case RevealGenie:
-		narrow := 0.15 + 0.85*t
+		narrow := 0.15 + float64(0.85*t)
 		switch r.edge {
 		case EdgeTop:
 			return render.Scale(max(narrow, 0.001), max(t, 0.001)).About(cx, y), p, false
@@ -450,7 +450,7 @@ func easeOutBackUnclamped(t float64) float64 {
 	const c1 = 1.70158
 	const c3 = c1 + 1
 	u := t - 1
-	return 1 + c3*u*u*u + c1*u*u
+	return 1 + float64(c3*u*u*u) + float64(c1*u*u)
 }
 
 func roundHalfUp(v float64) float64 {

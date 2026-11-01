@@ -128,7 +128,7 @@ func tileSize(img layerImage, size style.LayerSize, aw, ah float64) (float64, fl
 func tileAxis(k style.TileKind, pos style.AxisPos, start, area, size float64) (float64, bool, float64) {
 	if k == style.TileSpace {
 		if n := math.Floor(area / size); n >= 2 {
-			return start, true, (area - n*size) / (n - 1)
+			return start, true, (area - float64(n*size)) / (n - 1)
 		}
 		k = style.TileNoRepeat
 	}

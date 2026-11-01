@@ -382,7 +382,7 @@ func (s *Sidebar) SetExpanded(on bool) {
 	}
 	from := s.width
 	s.slide = anim.Start(sidebarSlide, func(t float64) {
-		s.width = from + (target-from)*easeOut(t)
+		s.width = from + float64((target-from)*easeOut(t))
 		s.dock.fixedWidth = int(s.width + 0.5)
 		s.dock.SetVisible(s.width > 0 && !s.narrow)
 		s.dock.InvalidateLayout()

@@ -195,7 +195,7 @@ func (s *Slider) ValueAt(p Point) float64 {
 	}
 	t := float64(pos-origin) / float64(span)
 	t = math.Min(1, math.Max(0, t))
-	return s.min + t*(s.max-s.min)
+	return s.min + float64(t*(s.max-s.min))
 }
 
 // Measure wants the trough's length (200px unstyled) by the thicker
@@ -340,7 +340,7 @@ func (s *Slider) KeyAction(a KeyAction, mods Mods) {
 	}
 	switch a {
 	case KeyLeft, KeyRight, KeyUp, KeyDown:
-		s.SetValue(s.value + step*s.keyDirection(a))
+		s.SetValue(s.value + float64(step*s.keyDirection(a)))
 	case KeyHome:
 		s.SetValue(s.min)
 	case KeyEnd:

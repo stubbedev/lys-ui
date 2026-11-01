@@ -519,7 +519,7 @@ func (g *Gradient) Resolve(line float64, dst []render.GradientStop) []render.Gra
 		}
 		for k := 1; k < hintSteps; k++ {
 			p := float64(k) / hintSteps
-			dst = append(dst, render.GradientStop{Pos: p0 + p*(p1-p0), Color: mixPremul(c0, c1, 1-hintCurve(p, h), 1)})
+			dst = append(dst, render.GradientStop{Pos: p0 + float64(p*(p1-p0)), Color: mixPremul(c0, c1, 1-hintCurve(p, h), 1)})
 		}
 	}
 	return dst

@@ -500,7 +500,7 @@ func (c *Carousel) snapTo(i int) {
 		c.cancel()
 	}
 	c.cancel = anim.Start(220*time.Millisecond, func(t float64) {
-		c.offset = from + (target-from)*easeOut(t)
+		c.offset = from + float64((target-from)*easeOut(t))
 		c.syncNav()
 		c.Invalidate()
 	})
@@ -510,7 +510,7 @@ func (c *Carousel) snapTo(i int) {
 }
 
 // easeOut is the snap curve.
-func easeOut(t float64) float64 { return 1 - (1-t)*(1-t) }
+func easeOut(t float64) float64 { return 1 - float64((1-t)*(1-t)) }
 
 // clamp01pages keeps the fractional offset inside the pages.
 func clamp01pages(v float64, pages int) float64 {

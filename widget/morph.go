@@ -180,10 +180,10 @@ func (m *Morph) Paint(cv *render.Canvas) {
 		in.ApplyPathMask(p, dev)
 		l.Canvas().DrawLayer(in, dev, render.BlendNormal)
 	}
-	s := morphScale + (1-morphScale)*r
+	s := morphScale + float64((1-morphScale)*r)
 	devContent := cv.MapRect(content)
-	ox := float64(devContent.X) + m.originX*float64(devContent.W)
-	oy := float64(devContent.Y) + m.originY*float64(devContent.H)
+	ox := float64(devContent.X) + float64(m.originX*float64(devContent.W))
+	oy := float64(devContent.Y) + float64(m.originY*float64(devContent.H))
 	prev := cv.PushClip(b)
 	cv.Composite(l, dev, render.Scale(s, s).About(ox, oy), math.Min(1, r*morphFade))
 	cv.PopClip(prev)
@@ -204,7 +204,7 @@ func keepOrFree(taken *render.Layer, kept **render.Layer) {
 // from the side opposite the origin, whole from morphClip of the size
 // at 0 to all of it at rest.
 func (m *Morph) clipAt(b render.Rect, r float64) render.Rect {
-	f := math.Min(1, math.Max(0, morphClip+(1-morphClip)*r))
+	f := math.Min(1, math.Max(0, morphClip+float64((1-morphClip)*r)))
 	switch {
 	case m.originY == 0:
 		b.H = int(math.Ceil(float64(b.H) * f))

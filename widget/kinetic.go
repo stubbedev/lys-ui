@@ -111,7 +111,7 @@ func (k *kinetic) fling(move func(dx, dy float64) bool, done func()) {
 		}
 		// Distance so far: v*tau*(1 - e^(-elapsed/tau)).
 		f := tau * (1 - math.Exp(-t*dur.Seconds()/tau))
-		dx, dy := v[0]*f-travelled[0], v[1]*f-travelled[1]
+		dx, dy := float64(v[0]*f)-travelled[0], float64(v[1]*f)-travelled[1]
 		travelled[0], travelled[1] = v[0]*f, v[1]*f
 		if move(dx, dy) && t < 1 {
 			return

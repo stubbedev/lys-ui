@@ -129,7 +129,7 @@ func newSpinSteppers(sizePx float64) Widget {
 // stepBy commits the typed text, then moves n steps from it.
 func (s *SpinButton) stepBy(n int) {
 	s.commit()
-	s.set(s.value + float64(n)*s.step)
+	s.set(s.value + float64(float64(n)*s.step))
 }
 
 // commit takes the typed text as the value, or reverts it.

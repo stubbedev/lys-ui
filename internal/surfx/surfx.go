@@ -80,7 +80,7 @@ func Rise(spec Spec, start float64, fn func(reveal float64)) anim.Cancel {
 		s.SetTarget(1)
 		return anim.Cancel(s.Stop)
 	}
-	tween := anim.Animate(spec.Duration, func(p float64) { fn(start + (1-start)*p) })
+	tween := anim.Animate(spec.Duration, func(p float64) { fn(start + float64((1-start)*p)) })
 	if spec.Easing != nil {
 		tween.Easing(spec.Easing)
 	}

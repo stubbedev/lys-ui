@@ -76,7 +76,7 @@ func (s *Spinner) Paint(cv *render.Canvas) {
 	}
 	d := float64(min(b.W, b.H))
 	col := pickc(0, s.style(s), style.PropColor, Current().Text)
-	cv.Arc(float64(b.X)+float64(b.W)/2, float64(b.Y)+float64(b.H)/2, d*spinnerRadius, d*spinnerWidth, s.angle, spinnerArc, col)
+	cv.Arc(float64(b.X)+float64(float64(b.W)/2), float64(b.Y)+float64(float64(b.H)/2), d*spinnerRadius, d*spinnerWidth, s.angle, spinnerArc, col)
 }
 
 // HitTest returns the spinner when p is inside its bounds.

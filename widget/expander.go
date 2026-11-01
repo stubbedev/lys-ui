@@ -160,7 +160,7 @@ func (e *Expander) animate() {
 		if t >= 1 {
 			e.progress = e.target() // the landing lands exactly
 		} else {
-			e.progress = from + (e.target()-from)*t
+			e.progress = from + float64((e.target()-from)*t)
 		}
 		// The height change re-measures the branch; the repaint is
 		// this expander's own bounds.
@@ -230,7 +230,7 @@ func (e *Expander) bodyH(r render.Rect) int {
 		return 0
 	}
 	nat := measureChild(e, e.child, Column, max(0, r.W-2*bodyPadX)).Nat
-	return min(max(0, r.H-e.headerH()), int(float64(nat)*e.progress+0.5))
+	return min(max(0, r.H-e.headerH()), int(float64(float64(nat)*e.progress)+0.5))
 }
 
 // headerRect is the clickable strip.
@@ -261,7 +261,7 @@ func (e *Expander) Measure(axis Axis, forSize int) Sizes {
 			width = max(0, width-2*bodyPadX)
 		}
 		body := measureChild(e, e.child, Column, width)
-		shown := func(n int) int { return int(float64(n)*e.progress + 0.5) }
+		shown := func(n int) int { return int(float64(float64(n)*e.progress) + 0.5) }
 		req = req.plus(Sizes{Min: shown(body.Min), Nat: shown(body.Nat)})
 	}
 	return e.measureStore(axis, forSize, req)
@@ -281,7 +281,7 @@ func (e *Expander) Paint(cv *render.Canvas) {
 	av := e.arrow.style(&e.arrow)
 	cx := head.X + head.W - headerPadX - chevronSize/2
 	cy := head.Y + head.H/2
-	strokeChevron(cv, cx, cy, chevronSize/3, math.Pi/2+math.Pi*math01(e.progress), pickc(0, av, style.PropColor, th.TextMuted))
+	strokeChevron(cv, cx, cy, chevronSize/3, math.Pi/2+float64(math.Pi*math01(e.progress)), pickc(0, av, style.PropColor, th.TextMuted))
 	if e.face != nil {
 		sh := e.face.Shape(e.title, e.sizePx)
 		baseline := head.Y + (head.H-sh.LineHeight())/2 + int(sh.Ascent()+0.5)

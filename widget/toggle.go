@@ -80,7 +80,7 @@ func (s *Switch) animate() {
 	from := s.progress
 	_, medium, _ := Current().MotionDurations()
 	s.cancel = anim.Play(anim.Animate(medium, func(t float64) {
-		s.progress = from + (to-from)*t
+		s.progress = from + float64((to-from)*t)
 		if t >= 1 {
 			s.progress = to
 		}

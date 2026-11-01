@@ -495,7 +495,7 @@ func (p *cssPass) resolveFlexible(ln *flexLine, avail, gaps float64) {
 			}
 			free -= it.base
 			sum += factor(it)
-			scaled += it.shrink * it.inner
+			scaled += float64(it.shrink * it.inner)
 			open++
 		}
 		if open == 0 {

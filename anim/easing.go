@@ -27,7 +27,7 @@ func EaseInOutQuad(t float64) float64 {
 		return 2 * t * t
 	}
 	u := float64(-2*t) + 2
-	return 1 - float64(u*u)/2
+	return 1 - float64(u*u/2)
 }
 
 // EaseInCubic starts slow and accelerates hard.
@@ -42,7 +42,7 @@ func EaseInOutCubic(t float64) float64 {
 		return 4 * t * t * t
 	}
 	u := float64(-2*t) + 2
-	return 1 - float64(u*u*u)/2
+	return 1 - float64(u*u*u/2)
 }
 
 // EaseOutBack overshoots the target by a fixed fraction and settles
@@ -80,17 +80,17 @@ func CubicBezierAt(x1, y1, x2, y2, t float64) float64 {
 		return 1
 	}
 	x1, x2 = min(max(x1, 0), 1), min(max(x2, 0), 1)
-	cx, cy := 3*x1, 3*y1
-	bx, by := 3*(x2-x1)-cx, 3*(y2-y1)-cy
+	cx, cy := float64(3*x1), float64(3*y1)
+	bx, by := float64(3*(x2-x1))-cx, float64(3*(y2-y1))-cy
 	ax, ay := 1-cx-bx, 1-cy-by
-	sampleX := func(u float64) float64 { return ((ax*u+bx)*u + cx) * u }
+	sampleX := func(u float64) float64 { return float64((float64((float64(ax*u)+bx)*u) + cx) * u) }
 	u := t
 	for range 8 {
 		dx := sampleX(u) - t
 		if dx > -1e-7 && dx < 1e-7 {
-			return ((ay*u+by)*u + cy) * u
+			return (float64((float64(ay*u)+by)*u) + cy) * u
 		}
-		d := (3*ax*u+2*bx)*u + cx
+		d := float64((float64(3*ax*u)+float64(2*bx))*u) + cx
 		if d < 1e-6 && d > -1e-6 {
 			break
 		}
@@ -106,7 +106,7 @@ func CubicBezierAt(x1, y1, x2, y2, t float64) float64 {
 		}
 		u = (lo + hi) / 2
 	}
-	return ((ay*u+by)*u + cy) * u
+	return (float64((float64(ay*u)+by)*u) + cy) * u
 }
 
 // StepPos is where a steps() curve jumps: at the start of each
@@ -246,7 +246,7 @@ func PiecewiseAt(pts []LinearPt, t float64) float64 {
 	if pa.Pos == pb.Pos {
 		return pb.Value
 	}
-	return pa.Value + (t-pa.Pos)/(pb.Pos-pa.Pos)*(pb.Value-pa.Value)
+	return pa.Value + float64((t-pa.Pos)/(pb.Pos-pa.Pos)*(pb.Value-pa.Value))
 }
 
 // SpringEasing returns a damped-spring easing: the value leaves 0 with

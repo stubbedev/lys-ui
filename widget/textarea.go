@@ -1116,7 +1116,7 @@ func (t *TextArea) Paint(cv *render.Canvas) {
 			x = c.X + c.W - int(ph.Advance()+0.5)
 		}
 		prev := cv.PushClip(render.Rect{X: c.X, Y: t.bounds.Y, W: c.W, H: t.bounds.H})
-		ph.Draw(cv, x, c.Y+int(math.Round((float64(lineH)-float64(ph.LineHeight()))/2+ph.Ascent())), fade(col))
+		ph.Draw(cv, x, c.Y+int(math.Round(float64((float64(lineH)-float64(ph.LineHeight()))/2)+ph.Ascent())), fade(col))
 		cv.PopClip(prev)
 		return
 	}
@@ -1160,7 +1160,7 @@ func (t *TextArea) Paint(cv *render.Canvas) {
 			}
 		}
 		rowClip := cv.PushClip(box)
-		baseline := box.Y + int(math.Round((float64(box.H)-float64(sh.LineHeight()))/2+sh.Ascent()))
+		baseline := box.Y + int(math.Round(float64((float64(box.H)-float64(sh.LineHeight()))/2)+sh.Ascent()))
 		t.drawRow(cv, r, line, sh, rowX, baseline, textCol, rtl, fade)
 		if deco := cssDecoration(t.style(t)); deco.Lines != 0 {
 			sh.DrawDecoration(cv, rowX, baseline, deco, textCol)
@@ -1232,7 +1232,7 @@ func (t *TextArea) caretRectAt(caret pos) (render.Rect, bool) {
 	}
 	lineH := t.lineHeight()
 	top := t.textRect().Y + t.rowOf(caret)*lineH
-	baseline := top + int(math.Round((float64(lineH)-float64(lsh.LineHeight()))/2+lsh.Ascent()))
+	baseline := top + int(math.Round(float64((float64(lineH)-float64(lsh.LineHeight()))/2)+lsh.Ascent()))
 	y, h := caretExtents(lsh, baseline)
 	return caretShapeRect(t.caretX(caret.line, caret.col), y, h, adv, t.style(t).CaretShape), true
 }

@@ -43,13 +43,13 @@ func run() error {
 		cv.Line(r.X+r.W/2, r.Y, r.X+r.W/2, r.Y+r.H, 1, theme.Border)
 		petals := 5.0
 		for t := 0.0; t < 2*math.Pi; t += 0.002 {
-			rr := 170 * math.Sin(petals*t+phase)
-			x := cx + rr*math.Cos(t)
-			y := cy + rr*math.Sin(t)
+			rr := 170 * math.Sin(float64(petals*t)+phase)
+			x := cx + float64(rr*math.Cos(t))
+			y := cy + float64(rr*math.Sin(t))
 			cv.FillRect(render.Rect{X: int(x), Y: int(y), W: 2, H: 2}, theme.Accent)
 		}
 		sweep := phase * 3
-		cv.Line(int(cx), int(cy), int(cx+150*math.Cos(sweep)), int(cy+150*math.Sin(sweep)), 3, render.RGB(0xF9, 0xE2, 0xAF))
+		cv.Line(int(cx), int(cy), int(cx+float64(150*math.Cos(sweep))), int(cy+float64(150*math.Sin(sweep))), 3, render.RGB(0xF9, 0xE2, 0xAF))
 		cv.Arc(cx, cy, 190, 2, phase, math.Pi, theme.TextMuted)
 	}
 	cancel := application.Every(16*time.Millisecond, func() {

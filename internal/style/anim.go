@@ -223,7 +223,7 @@ func (a *Animation) End() float64 {
 	if a.Duration <= 0 || a.Iterations <= 0 {
 		return a.Delay
 	}
-	return a.Delay + a.Duration*a.Iterations
+	return a.Delay + float64(a.Duration*a.Iterations)
 }
 
 // Apply writes the rule's effect at iteration progress into dst for

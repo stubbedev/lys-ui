@@ -232,17 +232,17 @@ func Compose(dst, under *Values, p Prop) {
 	}
 }
 
-func lerpF(a, b, t float64) float64 { return a + (b-a)*t }
+func lerpF(a, b, t float64) float64 { return a + float64((b-a)*t) }
 
 func lerpI(a, b int, t float64) int {
-	return int(math.Round(float64(a) + float64(b-a)*t))
+	return int(math.Round(float64(a) + float64(float64(b-a)*t)))
 }
 
 // lerpColor interpolates two premultiplied sRGB colors per channel,
 // the space CSS Color 4 §12 interpolates legacy colors in.
 func lerpColor(a, b render.Color, t float64) render.Color {
 	mix := func(x, y uint8) uint32 {
-		return uint32(min(max(math.Round(float64(x)+(float64(y)-float64(x))*t), 0), 255))
+		return uint32(min(max(math.Round(float64(x)+float64((float64(y)-float64(x))*t)), 0), 255))
 	}
 	return render.Color(mix(a.A(), b.A())<<24 | mix(a.R(), b.R())<<16 | mix(a.G(), b.G())<<8 | mix(a.B(), b.B()))
 }

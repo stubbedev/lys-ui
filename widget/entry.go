@@ -1322,7 +1322,7 @@ func (e *Entry) repaintCaret() {
 }
 
 func (e *Entry) baseline(sh *render.ShapedText, c render.Rect) int {
-	return c.Y + int(math.Round((float64(c.H)-float64(sh.LineHeight()))/2+sh.Ascent()))
+	return c.Y + int(math.Round(float64((float64(c.H)-float64(sh.LineHeight()))/2)+sh.Ascent()))
 }
 
 // bandRect is a selection band's rect: the band's run across the

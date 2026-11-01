@@ -187,10 +187,10 @@ func borderTileAxis(k style.TileKind, start, length, natural float64) (pos, size
 		if n < 1 {
 			return 0, 0, 0, false, false
 		}
-		gap = (length - n*natural) / (n + 1)
+		gap = (length - float64(n*natural)) / (n + 1)
 		return start + gap, natural, gap, true, true
 	}
-	return start + (length-natural)/2, natural, 0, true, true
+	return start + float64((length-natural)/2), natural, 0, true, true
 }
 
 // borderImageSource is the border image's pixels: a file's at its

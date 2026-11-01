@@ -574,7 +574,7 @@ func wcagLuminance(c Color) float64 {
 		}
 		return math.Pow((s+0.055)/1.055, 2.4)
 	}
-	return 0.2126*lin(c.R()) + 0.7152*lin(c.G()) + 0.0722*lin(c.B())
+	return float64(0.2126*lin(c.R())) + float64(0.7152*lin(c.G())) + float64(0.0722*lin(c.B()))
 }
 
 // or picks b when a is the zero color.
@@ -590,7 +590,7 @@ func (t *Theme) or(a Color, b Color) Color {
 // interpolate correctly.
 func mix(a, b Color, p float64) Color {
 	ch := func(x, y uint8) uint32 {
-		return uint32(float64(x) + (float64(y)-float64(x))*p + 0.5)
+		return uint32(float64(x) + float64((float64(y)-float64(x))*p) + 0.5)
 	}
 	return Color(ch(a.A(), b.A())<<24 |
 		ch(a.R(), b.R())<<16 |
@@ -610,7 +610,7 @@ func scaleAlpha(c Color, p float64) Color {
 		return 0
 	}
 	ch := func(shift uint) Color {
-		return Color(uint32(float64(uint8(c>>shift&0xff))*p+0.5)) << shift
+		return Color(uint32(float64(float64(uint8(c>>shift&0xff))*p)+0.5)) << shift
 	}
 	return ch(24) | ch(16) | ch(8) | ch(0)
 }

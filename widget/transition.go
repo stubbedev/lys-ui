@@ -108,7 +108,7 @@ func transitionStep(tt style.TransitionTiming, apply func(e float64)) anim.Step 
 		if dur <= 0 {
 			return 1
 		}
-		at := raw*float64(total-min(skip, total)) - float64(delay) + float64(skip)
+		at := float64(raw*float64(total-min(skip, total))) - float64(delay) + float64(skip)
 		return tt.Timing.At(math.Min(math.Max(at/float64(dur), 0), 1), false)
 	})
 }

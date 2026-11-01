@@ -315,7 +315,7 @@ func (l *RichLabel) shapeOne(spans []MarkupRun) (*richLine, float64, float64) {
 			face := l.faceFor(spans[k].Style)
 			px := l.runPx(spans[k].Style)
 			sh := face.ShapeDir(string(rs[lo:hi]), px, dir)
-			rise := spans[k].Style.Shift * px
+			rise := float64(spans[k].Style.Shift * px)
 			asc = math.Max(asc, sh.Ascent()+rise)
 			desc = math.Max(desc, sh.Descent()-rise)
 			adv += sh.Advance()
@@ -697,7 +697,7 @@ func (l *RichLabel) lineBox() (int, float64) {
 			above, below := 0.0, 0.0
 			for i, r := range l.shaped {
 				asc, desc := r.sh.Ascent(), r.sh.Descent()
-				lead := (f*l.runPx(r.style) - (asc + desc)) / 2
+				lead := float64((float64(f*l.runPx(r.style)) - (asc + desc)) / 2)
 				if i == 0 || asc+lead > above {
 					above = asc + lead
 				}
@@ -706,7 +706,7 @@ func (l *RichLabel) lineBox() (int, float64) {
 				}
 			}
 			if len(l.shaped) == 0 {
-				lead := (f*l.shapedPx - glyphs) / 2
+				lead := float64((float64(f*l.shapedPx) - glyphs) / 2)
 				above, below = l.lineAsc+lead, l.lineDesc+lead
 			}
 			return int(math.Ceil(above + below)), above
@@ -715,7 +715,7 @@ func (l *RichLabel) lineBox() (int, float64) {
 			h = math.Ceil(v.LineHeight)
 		}
 	}
-	return int(h), (h-glyphs)/2 + l.lineAsc
+	return int(h), float64((h-glyphs)/2) + l.lineAsc
 }
 
 // widthCap is the max-width-chars cap in pixels: n approximate
@@ -756,13 +756,13 @@ func (l *RichLabel) lineGeom() (lineX float64, baseline int, ok bool) {
 	}
 	switch align {
 	case render.AlignCenter:
-		lineX = float64(l.content.X) + (float64(l.content.W)-l.advance)/2
+		lineX = float64(l.content.X) + float64((float64(l.content.W)-l.advance)/2)
 	case render.AlignEnd:
 		lineX = float64(l.content.X) + float64(l.content.W) - l.advance
 	default:
 		lineX = float64(l.content.X)
 	}
-	baseline = l.content.Y + int(math.Round(float64(l.content.H-lineH)/2+depth))
+	baseline = l.content.Y + int(math.Round(float64(float64(l.content.H-lineH)/2)+depth))
 	return lineX, baseline, true
 }
 
@@ -782,7 +782,7 @@ func (l *RichLabel) rowGeom(i int) (float64, int) {
 	var x float64
 	switch align {
 	case render.AlignCenter:
-		x = float64(l.content.X) + (float64(l.content.W)-line.advance)/2
+		x = float64(l.content.X) + float64((float64(l.content.W)-line.advance)/2)
 	case render.AlignEnd:
 		x = float64(l.content.X) + float64(l.content.W) - line.advance
 	default:

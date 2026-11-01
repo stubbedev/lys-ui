@@ -108,9 +108,9 @@ func (b *Box) paintDepartures(cv *render.Canvas) {
 		}
 		shown := d.from
 		if b.axis == Row {
-			shown.W = int(float64(shown.W)*d.left + 0.5)
+			shown.W = int(float64(float64(shown.W)*d.left) + 0.5)
 		} else {
-			shown.H = int(float64(shown.H)*d.left + 0.5)
+			shown.H = int(float64(float64(shown.H)*d.left) + 0.5)
 		}
 		d.layer = cv.Layer(d.layer, dev)
 		d.w.Paint(d.layer.Canvas())

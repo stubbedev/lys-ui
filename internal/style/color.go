@@ -94,7 +94,7 @@ func gamutMap(c rgbaf) rgbaf {
 func deltaEOK(a, b rgbaf) float64 {
 	l1, a1, b1 := linearToOklab(rgbaf{srgbDecode(a.r), srgbDecode(a.g), srgbDecode(a.b), 1})
 	l2, a2, b2 := linearToOklab(rgbaf{srgbDecode(b.r), srgbDecode(b.g), srgbDecode(b.b), 1})
-	return math.Sqrt((l1-l2)*(l1-l2) + (a1-a2)*(a1-a2) + (b1-b2)*(b1-b2))
+	return math.Sqrt(float64((l1-l2)*(l1-l2)) + float64((a1-a2)*(a1-a2)) + float64((b1-b2)*(b1-b2)))
 }
 
 // fromColor unpremultiplies a render.Color.
@@ -376,7 +376,7 @@ func mixPremul(a, b render.Color, wa, scale float64) render.Color {
 	for shift := uint(0); shift <= 24; shift += 8 {
 		ca := float64((uint32(a) >> shift) & 0xff)
 		cb := float64((uint32(b) >> shift) & 0xff)
-		v := math.Round((ca*wa + cb*(1-wa)) * scale)
+		v := math.Round((float64(ca*wa) + float64(cb*(1-wa))) * scale)
 		out |= uint32(math.Min(255, math.Max(0, v))) << shift
 	}
 	return render.Color(out)
@@ -432,7 +432,7 @@ func gtkMix(args []token, cx *ctx) (colorVal, bool) {
 	}
 	fa, fb := fromColor(cx.resolve(a)), fromColor(cx.resolve(b))
 	t := n.v
-	lerp := func(x, y float64) float64 { return x + (y-x)*t }
+	lerp := func(x, y float64) float64 { return x + float64((y-x)*t) }
 	return colorVal{c: rgbaf{lerp(fa.r, fb.r), lerp(fa.g, fb.g), lerp(fa.b, fb.b), lerp(fa.a, fb.a)}.color()}, true
 }
 
@@ -457,7 +457,7 @@ func toHLS(c rgbaf) (h, l, s float64) {
 	default:
 		h = 4 + (c.r-c.g)/d
 	}
-	h *= 60
+	h = float64(h * 60)
 	if h < 0 {
 		h += 360
 	}
@@ -472,9 +472,9 @@ func fromHLS(h, l, s float64) rgbaf {
 	if l <= 0.5 {
 		m2 = l * (1 + s)
 	} else {
-		m2 = l + s - l*s
+		m2 = l + s - float64(l*s)
 	}
-	m1 := 2*l - m2
+	m1 := float64(2*l) - m2
 	f := func(hue float64) float64 {
 		hue = math.Mod(hue+360, 360)
 		switch {

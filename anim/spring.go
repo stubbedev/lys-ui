@@ -176,25 +176,25 @@ func springStep(w, z, x0, v0, dt float64) (x, v float64) {
 	z = math.Max(z, 0)
 	switch {
 	case z < 1:
-		wd := w * math.Sqrt(1-z*z)
+		wd := w * math.Sqrt(1-float64(z*z))
 		e := math.Exp(-z * w * dt)
 		c, sn := math.Cos(wd*dt), math.Sin(wd*dt)
-		b := (v0 + z*w*x0) / wd
-		x = e * (x0*c + b*sn)
-		v = e * ((b*wd-z*w*x0)*c - (x0*wd+z*w*b)*sn)
+		b := (v0 + float64(z*w*x0)) / wd
+		x = e * (float64(x0*c) + float64(b*sn))
+		v = e * (float64((float64(b*wd)-float64(z*w*x0))*c) - float64((float64(x0*wd)+float64(z*w*b))*sn))
 	case z == 1:
 		e := math.Exp(-w * dt)
-		b := v0 + w*x0
-		x = (x0 + b*dt) * e
-		v = (b - w*(x0+b*dt)) * e
+		b := v0 + float64(w*x0)
+		x = (x0 + float64(b*dt)) * e
+		v = (b - float64(w*(x0+float64(b*dt)))) * e
 	default:
-		s := math.Sqrt(z*z - 1)
-		r1, r2 := w*(-z+s), w*(-z-s)
-		c2 := (v0 - r1*x0) / (r2 - r1)
+		s := math.Sqrt(float64(z*z) - 1)
+		r1, r2 := float64(w*(-z+s)), float64(w*(-z-s))
+		c2 := (v0 - float64(r1*x0)) / (r2 - r1)
 		c1 := x0 - c2
 		e1, e2 := math.Exp(r1*dt), math.Exp(r2*dt)
-		x = c1*e1 + c2*e2
-		v = c1*r1*e1 + c2*r2*e2
+		x = float64(c1*e1) + float64(c2*e2)
+		v = float64(c1*r1*e1) + float64(c2*r2*e2)
 	}
 	return x, v
 }

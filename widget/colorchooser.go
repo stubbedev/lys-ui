@@ -179,10 +179,10 @@ func hsvOf(col render.Color) (h, s, v float64) {
 // hsvColor converts HSV in [0,1] plus alpha in [0,1] to a color.
 func hsvColor(h, s, v, a float64) render.Color {
 	i := int(h*6) % 6
-	f := h*6 - float64(int(h*6))
+	f := float64(h*6) - float64(int(h*6))
 	p := v * (1 - s)
-	q := v * (1 - f*s)
-	t := v * (1 - (1-f)*s)
+	q := v * (1 - float64(f*s))
+	t := v * (1 - float64((1-f)*s))
 	var r, g, b float64
 	switch i {
 	case 0:
@@ -198,7 +198,7 @@ func hsvColor(h, s, v, a float64) render.Color {
 	default:
 		r, g, b = v, p, q
 	}
-	return render.RGBA(uint8(r*255+0.5), uint8(g*255+0.5), uint8(b*255+0.5), uint8(a*255+0.5))
+	return render.RGBA(uint8(float64(r*255)+0.5), uint8(float64(g*255)+0.5), uint8(float64(b*255)+0.5), uint8(float64(a*255)+0.5))
 }
 
 func maxf(a, b float64) float64 {

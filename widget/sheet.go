@@ -155,7 +155,7 @@ func (s *Sheet) SetOpen(on bool) {
 		to = 1
 	}
 	s.cancel = anim.Start(sheetDuration, func(t float64) {
-		s.progress = from + (to-from)*easeOut(t)
+		s.progress = from + float64((to-from)*easeOut(t))
 		s.InvalidateLayout()
 		if t >= 1 && !on && s.OnClosed != nil {
 			s.OnClosed()

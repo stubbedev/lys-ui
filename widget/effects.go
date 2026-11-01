@@ -271,7 +271,7 @@ func clipShapePath(c *style.ClipShape, bounds render.Rect, radii render.Corners)
 // mathSqrtDiag is sqrt(w²+h²)/sqrt(2): CSS's reference for a
 // percentage circle radius.
 func mathSqrtDiag(w, h float64) float64 {
-	return math.Sqrt(w*w+h*h) / math.Sqrt2
+	return math.Sqrt(float64(w*w)+float64(h*h)) / math.Sqrt2
 }
 
 // applyMaskLayer paints the mask layer into its own layer over the

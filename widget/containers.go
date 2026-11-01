@@ -682,7 +682,7 @@ func (s *Scroll) fadeTo(to float64) {
 	from := s.alpha
 	s.fadeTarget = to
 	s.cancelFade = anim.Start(barFade, func(t float64) {
-		s.alpha = from + (to-from)*t
+		s.alpha = from + float64((to-from)*t)
 		s.invalidateBars()
 	})
 }

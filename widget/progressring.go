@@ -65,7 +65,7 @@ func (r *ProgressRing) SetValue(v float64) {
 	from := r.shown
 	_, medium, _ := Current().MotionDurations()
 	r.cancel = anim.Start(medium, func(t float64) {
-		r.shown = from + (v-from)*t
+		r.shown = from + float64((v-from)*t)
 		r.Invalidate()
 	})
 }
@@ -133,11 +133,11 @@ func (r *ProgressRing) Paint(cv *render.Canvas) {
 	tv := r.trough.style(&r.trough)
 	fv := r.trough.fill.style(&r.trough.fill)
 	stroke := float64(picki(tv, style.PropMinHeight, progressRingStroke))
-	radius := float64(sq.W)/2 - stroke/2
+	radius := float64(float64(sq.W)/2) - float64(stroke/2)
 	if radius > 0 {
 		fill := pickc(0, fv, style.PropBackgroundColor, accentOf(r.style(r), Current().Accent))
 		track := pickc(0, tv, style.PropBackgroundColor, progressTrack(fill))
-		cx, cy := float64(sq.X)+float64(sq.W)/2, float64(sq.Y)+float64(sq.H)/2
+		cx, cy := float64(sq.X)+float64(float64(sq.W)/2), float64(sq.Y)+float64(float64(sq.H)/2)
 		cv.Arc(cx, cy, radius, stroke, 0, 2*math.Pi, track)
 		cv.Arc(cx, cy, radius, stroke, -math.Pi/2, 2*math.Pi*r.shown, fill)
 	}

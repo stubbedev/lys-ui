@@ -15,7 +15,7 @@ type AxisPos struct {
 
 // Within is the offset along the axis of an object placed with free
 // pixels of free space: its fraction of the free space plus its pixels.
-func (a AxisPos) Within(free float64) float64 { return a.Frac*free + a.Px }
+func (a AxisPos) Within(free float64) float64 { return float64(a.Frac*free) + a.Px }
 
 // objectFitNames are the object-fit keywords, each computing to the
 // render scale policy that implements it.

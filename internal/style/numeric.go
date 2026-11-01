@@ -481,7 +481,7 @@ func mathFunc(name string, args []token, cx *ctx, refs map[string]numeric) (nume
 		} else {
 			q = math.Trunc(q)
 		}
-		return numeric{v: ns[0].v - ns[1].v*q, kind: ns[0].kind}, true
+		return numeric{v: ns[0].v - float64(ns[1].v*q), kind: ns[0].kind}, true
 	case "abs":
 		n, ok := mathOne(args, cx, refs)
 		if !ok {
@@ -575,7 +575,7 @@ func mathFunc(name string, args []token, cx *ctx, refs map[string]numeric) (nume
 		}
 		sq := 0.0
 		for _, n := range ns {
-			sq += n.v * n.v
+			sq += float64(n.v * n.v)
 		}
 		return numeric{v: math.Sqrt(sq), kind: ns[0].kind}, true
 	case "env":
@@ -824,8 +824,8 @@ func (p *calcParser) sum() (numeric, bool) {
 				return numeric{}, false
 			}
 		}
-		left.v += sign * right.v
-		left.pct += sign * right.pct
+		left.v += float64(sign * right.v)
+		left.pct += float64(sign * right.pct)
 		left = settleMix(left)
 	}
 }
