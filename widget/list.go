@@ -102,6 +102,7 @@ type List struct {
 	offY  int
 	hover int
 	rows  map[int]*listRow
+	order []*listRow
 
 	// pointer gesture state: dragging while a press is down, the row
 	// the press anchored on (-1 until a point resolves it), the last
@@ -326,6 +327,7 @@ func (l *List) reveal(i int) {
 // back to the model's pool.
 func (l *List) evict(i int) {
 	delete(l.rows, i)
+	l.order = nil
 	if u, ok := l.model.(rowUnbinder); ok {
 		u.unbind(i)
 	}
@@ -516,6 +518,7 @@ func (l *List) visible() (first, last int) {
 		if !ok {
 			r = l.newRow(i)
 			l.rows[i] = r
+			l.order = nil
 		}
 		r.SetClass(listRowLast, i == n-1)
 	}
@@ -1130,20 +1133,26 @@ func (l *List) appendStyleKids(buf []Widget) []Widget {
 // screen, each the proxy around its model widget. Rows off screen do
 // not exist.
 func (l *List) Children() []Widget {
-	kids := make([]Widget, 0, len(l.rows))
+	return l.appendChildren(make([]Widget, 0, len(l.rows)))
+}
+
+func (l *List) appendChildren(buf []Widget) []Widget {
 	for _, r := range l.realized() {
-		kids = append(kids, r)
+		buf = append(buf, r)
 	}
-	return kids
+	return buf
 }
 
 // realized is the realized rows in model order.
 func (l *List) realized() []*listRow {
-	rows := make([]*listRow, 0, len(l.rows))
-	for _, i := range slices.Sorted(maps.Keys(l.rows)) {
-		rows = append(rows, l.rows[i])
+	if l.order != nil || len(l.rows) == 0 {
+		return l.order
 	}
-	return rows
+	l.order = make([]*listRow, 0, len(l.rows))
+	for _, i := range slices.Sorted(maps.Keys(l.rows)) {
+		l.order = append(l.order, l.rows[i])
+	}
+	return l.order
 }
 
 // focusGroup implements focusGroup: the rows are one Tab stop with the
