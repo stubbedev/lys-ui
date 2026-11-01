@@ -122,6 +122,18 @@ func SetIconSearchPaths(paths []string) {
 	icons.Default().SetSearchPaths(paths)
 }
 
+// SetIconNamespace declares icon names starting with one of prefixes
+// and a dash to be the application's own, kept in dir (relative) below
+// the icon search paths, such as "hicolor/scalable/actions". The first
+// themed icon an application draws otherwise lists every directory of
+// the theme chain; these names need only dir, so an application drawing
+// nothing else never lists the chain. A theme cannot override them. A
+// name dir does not hold resolves as usual, so ThemeIconExists stays
+// exact.
+func SetIconNamespace(dir string, prefixes []string) {
+	icons.Default().SetNamespace(dir, prefixes)
+}
+
 // RefreshIcons forgets every resolved theme icon, a found file and a
 // miss alike, so icons installed or removed under the search paths
 // since are picked up; live themed icons re-resolve on the repaint the

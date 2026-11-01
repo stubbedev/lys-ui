@@ -68,6 +68,11 @@ type Cache struct {
 	// index is the theme chain's directories, read on the first lookup
 	// after a reset, with its memoized resolutions. A reset drops it.
 	index *themeIndex
+	// namespace is an application's own icons (SetNamespace), and
+	// namespaceIndex its directory under each base, read on the first
+	// lookup of one of its names after a reset.
+	namespace      iconNamespace
+	namespaceIndex *themeIndex
 }
 
 // DefaultTheme is GTK's default icon theme, the one lookups start on
@@ -177,6 +182,7 @@ func (c *Cache) resetLocked() []func() {
 	c.entries = map[cacheKey]*cacheEntry{}
 	c.order = nil
 	c.index = nil
+	c.namespaceIndex = nil
 	c.gen++
 	return slices.Clone(c.resetListeners)
 }

@@ -24,7 +24,9 @@ How lys-ui resolves and paints themed icons.
   a theme name resolves, `widget.SetIconSearchPaths` replaces the base
   directories (GTK's `IconTheme.set_search_path`; nil restores the XDG
   default), and `widget.RefreshIcons` forgets every resolved icon so
-  icons installed or removed since are picked up.
+  icons installed or removed since are picked up. `widget.SetIconNamespace`
+  names an application's own icons by prefix and directory, so drawing
+  them never lists the theme chain.
 - `render.Icon.Tint` — the recoloring primitive.
 
 ## Symbolic recoloring

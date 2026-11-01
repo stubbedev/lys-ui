@@ -46,6 +46,9 @@ func (c *Cache) Lookup(name string, size int, frac120 uint32) (string, error) {
 // Results, misses included, are memoized in the theme index until a
 // reset drops it.
 func (c *Cache) resolveLocked(name string, size int, frac120 uint32) (string, error) {
+	if path := c.namespaceFileLocked(name); path != "" {
+		return path, nil
+	}
 	if c.index == nil {
 		c.index = buildThemeIndex(c.fsys, c.theme, c.searchPathsLocked())
 	}
@@ -55,6 +58,68 @@ func (c *Cache) resolveLocked(name string, size int, frac120 uint32) (string, er
 		return "", fmt.Errorf("%w: %q at size %d scale %d", ErrNotFound, name, size, scale)
 	}
 	return path, nil
+}
+
+// iconNamespace is a set of icon names one directory below each base
+// directory holds, recognized by what precedes their first dash.
+type iconNamespace struct {
+	dir      string
+	prefixes []string
+}
+
+func (n iconNamespace) owns(name string) bool {
+	prefix, _, found := strings.Cut(name, "-")
+	return found && slices.Contains(n.prefixes, prefix)
+}
+
+// SetNamespace declares names starting with one of prefixes and a dash
+// to be the application's own, kept in dir (relative) below the base
+// directories: a lookup of one finds it there, at any size and scale,
+// without listing the theme chain, which is what costs a first lookup
+// its thousand directories, so a theme cannot override it. One found
+// nowhere there resolves as any other name. Changing it drops every
+// cached raster.
+func (c *Cache) SetNamespace(dir string, prefixes []string) {
+	c.mu.Lock()
+	if c.namespace.dir == dir && slices.Equal(c.namespace.prefixes, prefixes) {
+		c.mu.Unlock()
+		return
+	}
+	c.namespace = iconNamespace{dir: dir, prefixes: slices.Clone(prefixes)}
+	listeners := c.resetLocked()
+	c.mu.Unlock()
+	runAll(listeners)
+}
+
+// namespaceFileLocked returns the file of a name in the namespace, ""
+// for any other name and for one its directories do not hold.
+func (c *Cache) namespaceFileLocked(name string) string {
+	if !c.namespace.owns(name) {
+		return ""
+	}
+	if c.namespaceIndex == nil {
+		c.namespaceIndex = buildNamespaceIndex(c.fsys, c.namespace.dir, c.searchPathsLocked())
+	}
+	st := stems{name: name, nameHits: c.namespaceIndex.stems[name]}
+	for sh := range st.slots() {
+		if path := c.namespaceIndex.file(sh); path != "" {
+			return path
+		}
+	}
+	return ""
+}
+
+func buildNamespaceIndex(fsys themeFS, dir string, baseDirs []string) *themeIndex {
+	ix := &themeIndex{fsys: fsys, stems: map[string][]hit{}}
+	for _, base := range baseDirs {
+		path := filepath.Join(base, dir)
+		des, err := fsys.ReadDir(path)
+		if err != nil {
+			continue
+		}
+		ix.add(slot{path: path}, des)
+	}
+	return ix
 }
 
 // themeFS is the file system a theme index reads: the OS's, or a

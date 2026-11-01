@@ -74,6 +74,8 @@ takes no pointer events.
 |---|---|---|---|
 | Lookup72/cold/scale1 (index built) | 1.67ms | 899Ki | 6300 |
 | Lookup72/warm/scale1 | 7.6µs | 1344 | 36 |
+| FirstNamespacedLookup/chain (one name, index built) | 12.6ms | 865Ki | 5844 |
+| FirstNamespacedLookup/namespace (one name, `SetIconNamespace`) | 318µs | 9.6Ki | 122 |
 
 ## App loop
 
