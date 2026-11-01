@@ -54,6 +54,9 @@ type Output = wlsession.Output
 // Mods is the held-modifier mask the OnKey hooks receive.
 type Mods = wlsession.Mods
 
+// Locks is which lock keys are on: Caps, Num and Scroll Lock.
+type Locks = wlsession.Locks
+
 // Modifier bits of Mods.
 const (
 	ModShift    = wlsession.ModShift

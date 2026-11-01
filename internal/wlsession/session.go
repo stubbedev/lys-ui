@@ -92,6 +92,12 @@ const (
 	ModSuper Mods = 1 << 6
 )
 
+// Locks is which lock keys are on, read from the keymap's indicators,
+// so a layout that moves Num Lock to another modifier still reads true.
+type Locks struct {
+	Caps, Num, Scroll bool
+}
+
 // Session is a connected display with the globals lys-ui needs bound.
 type Session struct {
 	Display *wl.Display
@@ -166,6 +172,7 @@ type Session struct {
 	globalVersions      map[string]uint32
 	ifaceNames          map[uint32]string
 	mods                uint32
+	locks               Locks
 	repeatRate          uint32
 	repeatDelay         uint32
 	xkbContext          *xkb.Context
@@ -271,6 +278,10 @@ type Session struct {
 	// keycode and the held modifiers. Keyboard focus is seat-wide,
 	// unlike pointer events which route per surface.
 	OnKey func(keycode uint32, mods Mods)
+	// OnLocks fires on the loop when a lock key's state changes, the
+	// first modifiers event after the keyboard's enter included: Caps
+	// Lock already on at startup arrives this way.
+	OnLocks func(Locks)
 	// OnKeyUp fires on key releases with the evdev keycode.
 	OnKeyUp func(keycode uint32)
 	// OnKeyboardFocus fires when keyboard focus moves: an enter, a
@@ -1221,6 +1232,7 @@ func (s *Session) HandleKeyboardKeymap(ev wl.KeyboardKeymapEvent) {
 func (s *Session) dropKeymap(err error) {
 	logutil.L().Error("wlsession: keyboard input is untranslated until a keymap compiles", slog.Any("err", err))
 	s.xkbKeymap, s.xkbState = nil, nil
+	s.syncLocks()
 }
 
 // HandleKeyboardEnter implements wl.KeyboardEnterHandler: the named
@@ -1261,6 +1273,29 @@ func (s *Session) HandleKeyboardModifiers(ev wl.KeyboardModifiersEvent) {
 	if s.xkbState != nil {
 		s.xkbState.UpdateMask(xkb.ModMask(ev.ModsDepressed), xkb.ModMask(ev.ModsLatched), xkb.ModMask(ev.ModsLocked), 0, 0, ev.Group)
 	}
+	s.syncLocks()
+}
+
+func lockActive(state *xkb.State, mod, led string) bool {
+	return state.ModNameIsActive(mod, xkb.StateModLocked) || state.LEDNameIsActive(led)
+}
+
+func (s *Session) syncLocks() {
+	var now Locks
+	if s.xkbState != nil {
+		now = Locks{
+			Caps:   lockActive(s.xkbState, "Lock", "Caps Lock"),
+			Num:    lockActive(s.xkbState, "NumLock", "Num Lock"),
+			Scroll: lockActive(s.xkbState, "ScrollLock", "Scroll Lock"),
+		}
+	}
+	if now == s.locks {
+		return
+	}
+	s.locks = now
+	if s.OnLocks != nil {
+		s.OnLocks(now)
+	}
 }
 
 // KeyUTF8 translates an evdev keycode through the compositor's keymap
@@ -1294,6 +1329,10 @@ func (s *Session) KeySym(code uint32) xkb.Keysym {
 func (s *Session) Mods() Mods {
 	return Mods(s.mods & uint32(ModShift|ModCtrl|ModAlt|ModSuper))
 }
+
+// Locks returns which lock keys are on. It reads all off until the
+// compositor has sent a keymap and a modifiers event.
+func (s *Session) Locks() Locks { return s.locks }
 
 // HandleKeyboardRepeatInfo implements wl.KeyboardRepeatInfoHandler: the
 // compositor's rate (keys per second) and delay (milliseconds).

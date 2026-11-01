@@ -103,6 +103,7 @@ type Application struct {
 	// gtkIni is settings.ini, read on first use (gtkSettings).
 	gtkIniOnce     sync.Once
 	gtkIni         gtksettings.Settings
+	lockWatchers   []*func(Locks)
 	stopIconFollow func()
 	// windowIcons (windowicon.go): per-window overrides and the app
 	// default posted through xdg-toplevel-icon-v1, plus the icons
@@ -806,6 +807,7 @@ func (a *Application) wireSession() {
 	a.sess.OnKeyboardFocus = a.rep.stop
 	a.sess.OnIME = a.imeEvent
 	a.sess.OnIMEFocus = a.ime.reset
+	a.sess.OnLocks = a.locksChanged
 }
 
 // stepFn is the dispatch step: the test seam when set, else the
@@ -1420,6 +1422,30 @@ func (l *LayerWindow) Closed() bool {
 		return true
 	}
 	return l.ls.Closed()
+}
+
+// Locks returns which lock keys are on.
+func (a *Application) Locks() Locks { return a.sess.Locks() }
+
+// OnLocks calls fn with the lock keys' state now and on the loop at each
+// change, so a Caps Lock warning needs no timer and shows for a Caps Lock
+// already on at startup, which arrives with the first keyboard focus. The
+// returned stop ends the calls.
+func (a *Application) OnLocks(fn func(Locks)) (stop func()) {
+	w := &fn
+	a.lockWatchers = append(a.lockWatchers, w)
+	fn(a.Locks())
+	return func() {
+		a.lockWatchers = slices.DeleteFunc(a.lockWatchers, func(o *func(Locks)) bool { return o == w })
+	}
+}
+
+func (a *Application) locksChanged(l Locks) {
+	gen := widget.DamageGeneration()
+	for _, w := range slices.Clone(a.lockWatchers) {
+		(*w)(l)
+	}
+	a.markDirtyIfDamaged(gen)
 }
 
 // HeldMods is the modifiers held right now (shift, ctrl, alt): what a

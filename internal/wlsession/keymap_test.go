@@ -162,3 +162,37 @@ func TestControlCharactersAreNotText(t *testing.T) {
 		t.Errorf("Ctrl+A typed %q", got)
 	}
 }
+
+func TestLocksFollowTheCompositor(t *testing.T) {
+	s := usKeymap(t)
+	const capsLocked, numLocked = 2, 16
+	var seen []Locks
+	s.OnLocks = func(l Locks) { seen = append(seen, l) }
+
+	s.HandleKeyboardModifiers(wl.KeyboardModifiersEvent{})
+	if len(seen) != 0 {
+		t.Fatalf("an event with no lock on reported %v", seen)
+	}
+	s.HandleKeyboardModifiers(wl.KeyboardModifiersEvent{ModsLocked: capsLocked})
+	if got := s.Locks(); !got.Caps || got.Num || got.Scroll {
+		t.Errorf("Locks with Caps locked = %+v", got)
+	}
+	if len(seen) != 1 || !seen[0].Caps {
+		t.Errorf("Caps already on at the first modifiers event reported %v", seen)
+	}
+	if s.Mods()&ModCapsLock != 0 {
+		t.Error("Mods reports a lock as a held key")
+	}
+	s.HandleKeyboardModifiers(wl.KeyboardModifiersEvent{ModsLocked: capsLocked, ModsDepressed: 1})
+	if len(seen) != 1 {
+		t.Errorf("holding Shift reported a lock change: %v", seen)
+	}
+	s.HandleKeyboardModifiers(wl.KeyboardModifiersEvent{ModsLocked: capsLocked | numLocked})
+	if got := s.Locks(); !got.Caps || !got.Num {
+		t.Errorf("Locks with Caps and Num locked = %+v", got)
+	}
+	s.HandleKeyboardModifiers(wl.KeyboardModifiersEvent{})
+	if got := s.Locks(); got != (Locks{}) || len(seen) != 3 {
+		t.Errorf("after unlocking: Locks = %+v, reported %v", got, seen)
+	}
+}
