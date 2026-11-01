@@ -74,14 +74,7 @@ func (osFS) ReadFile(name string) ([]byte, error) {
 
 // ReadDir lists name unsorted: the index groups entries by stem, so
 // the sort os.ReadDir does would be wasted.
-func (osFS) ReadDir(name string) ([]fs.DirEntry, error) {
-	f, err := os.Open(name) //nolint:gosec // the path comes from the XDG search path, not untrusted input
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return f.ReadDir(-1)
-}
+func (osFS) ReadDir(name string) ([]fs.DirEntry, error) { return listDir(name) }
 
 func (osFS) Stat(name string) (fs.FileInfo, error) {
 	return os.Stat(name)
