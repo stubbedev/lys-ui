@@ -58,8 +58,7 @@
     # The module itself: one build of every package in the repo -
     # all demo binaries plus the wlpointer test driver. Downstream
     # nix Go builds can also reach lys-ui.goModules for the vendored
-    # dependency tree; plain Go consumers pin this repo by semver
-    # tag in go.mod (see README, Packaging).
+    # dependency tree; plain Go consumers pin this repo in go.mod.
     lys-ui = mkLysUI {
       pname = "lys-ui";
       description = "pure-Go Wayland widget toolkit (module and demos)";

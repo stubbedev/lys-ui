@@ -55,9 +55,9 @@ type DisconnectedEvent struct {
 	Reconnecting bool
 }
 
-// OnDisconnect installs the disconnect policy hook (also available as
-// Config.OnDisconnect for the single-window Run). It fires at most once
-// per Run, on the loop goroutine, before any teardown: the callback may
+// OnDisconnect installs the disconnect policy hook. It fires at most
+// once per connection, SetReconnect's rebuilt session re-arming it,
+// on the loop goroutine, before any teardown: the callback may
 // flush state, but must not block indefinitely and must not route work
 // back through the loop (Invoke already drops once Run is unwinding).
 // After it returns, Run releases every window's pool and closes the

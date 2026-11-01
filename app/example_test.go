@@ -13,7 +13,7 @@ import (
 	"github.com/stubbedev/lys-ui/widget"
 )
 
-// ExampleApplication is the README's minimal app, on the public API
+// ExampleApplication is a minimal app on the lower-level path, public API
 // only: one toplevel window with a button that counts clicks.
 func ExampleApplication() {
 	if err := run(); err != nil && !errors.Is(err, app.ErrClosed) {
