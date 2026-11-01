@@ -18,7 +18,7 @@ func Linear(t float64) float64 { return t }
 func EaseInQuad(t float64) float64 { return t * t }
 
 // EaseOutQuad starts fast and decelerates.
-func EaseOutQuad(t float64) float64 { return 1 - (1-t)*(1-t) }
+func EaseOutQuad(t float64) float64 { return 1 - float64((1-t)*(1-t)) }
 
 // EaseInOutQuad accelerates through the first half, decelerates
 // through the second.
@@ -26,23 +26,23 @@ func EaseInOutQuad(t float64) float64 {
 	if t < 0.5 {
 		return 2 * t * t
 	}
-	u := -2*t + 2
-	return 1 - u*u/2
+	u := float64(-2*t) + 2
+	return 1 - float64(u*u)/2
 }
 
 // EaseInCubic starts slow and accelerates hard.
 func EaseInCubic(t float64) float64 { return t * t * t }
 
 // EaseOutCubic is lys-ui's default curve: fast start, gentle landing.
-func EaseOutCubic(t float64) float64 { return 1 - (1-t)*(1-t)*(1-t) }
+func EaseOutCubic(t float64) float64 { return 1 - float64((1-t)*(1-t)*(1-t)) }
 
 // EaseInOutCubic eases both ends of the tween.
 func EaseInOutCubic(t float64) float64 {
 	if t < 0.5 {
 		return 4 * t * t * t
 	}
-	u := -2*t + 2
-	return 1 - u*u*u/2
+	u := float64(-2*t) + 2
+	return 1 - float64(u*u*u)/2
 }
 
 // EaseOutBack overshoots the target by a fixed fraction and settles
@@ -57,7 +57,7 @@ func EaseOutBack(t float64) float64 {
 		return min(max(t, 0), 1)
 	}
 	u := t - 1
-	return 1 + c3*u*u*u + c1*u*u
+	return 1 + float64(c3*u*u*u) + float64(c1*u*u)
 }
 
 // CubicBezier returns the CSS cubic-bezier(x1, y1, x2, y2) timing
