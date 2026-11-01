@@ -55,18 +55,46 @@ var (
 )
 
 // matcherFamilies are the normalized families only the CSS matcher
-// resolves: the generics, which name no face, and the embedded
-// families, which the store holds as its own faces.
+// resolves: the generics, which name no face.
 var matcherFamilies = func() map[string]bool {
 	out := map[string]bool{}
 	for _, f := range []string{
 		fontscan.SansSerif, fontscan.Serif, fontscan.Monospace, fontscan.Cursive,
-		fontscan.Fantasy, fontscan.Math, fontscan.Emoji, uifont.Family, uifont.MonoFamily,
+		fontscan.Fantasy, fontscan.Math, fontscan.Emoji,
 	} {
 		out[font.NormalizeFamily(f)] = true
 	}
 	return out
 }()
+
+type embeddedFont struct {
+	family string
+	data   []byte
+}
+
+func (e embeddedFont) location() fontscan.Location {
+	return fontscan.Location{File: "embedded:" + e.family}
+}
+
+var (
+	embeddedSans = embeddedFont{uifont.Family, uifont.Sans}
+	embeddedMono = embeddedFont{uifont.MonoFamily, uifont.Mono}
+)
+
+var (
+	sansKey = font.NormalizeFamily(uifont.Family)
+	monoKey = font.NormalizeFamily(uifont.MonoFamily)
+)
+
+func embeddedFamily(family string) (embeddedFont, bool) {
+	switch font.NormalizeFamily(family) {
+	case sansKey:
+		return embeddedSans, true
+	case monoKey:
+		return embeddedMono, true
+	}
+	return embeddedFont{}, false
+}
 
 // fontmap builds the shared store once; the first error sticks.
 func fontmap() (*fontscan.FontMap, error) {
@@ -85,12 +113,9 @@ func fontmap() (*fontscan.FontMap, error) {
 			}
 			installed = indexFamilies(footprints)
 		}
-		for _, f := range []struct {
-			family string
-			data   []byte
-		}{{uifont.Family, uifont.Sans}, {uifont.MonoFamily, uifont.Mono}} {
-			if err := fm.AddFont(opentype.NewMapped(f.data), "embedded:"+f.family, f.family); err != nil {
-				storeErr = fmt.Errorf("sysfont: register embedded %s: %w", f.family, err)
+		for _, e := range []embeddedFont{embeddedSans, embeddedMono} {
+			if err := fm.AddFont(opentype.NewMapped(e.data), e.location().File, e.family); err != nil {
+				storeErr = fmt.Errorf("sysfont: register embedded %s: %w", e.family, err)
 				return
 			}
 		}
@@ -119,6 +144,9 @@ func indexFamilies(footprints []fontscan.Footprint) map[string][]systemFace {
 // matcher, whose fallback rules honor the user's font configuration;
 // an empty database errors.
 func lookup(family string, aspect font.Aspect) (*render.Typeface, error) {
+	if e, ok := embeddedFamily(family); ok {
+		return embeddedTypeface(e)
+	}
 	fm, err := fontmap()
 	if err != nil {
 		return nil, err
@@ -168,6 +196,20 @@ func monospaced(fm *fontscan.FontMap, face *font.Face, aspect font.Aspect, r run
 		return mono
 	}
 	return face
+}
+
+func embeddedTypeface(e embeddedFont) (*render.Typeface, error) {
+	storeMu.Lock()
+	defer storeMu.Unlock()
+	loc := e.location()
+	if tf, ok := typefaces[loc]; ok {
+		return tf, nil
+	}
+	face, err := parseFace(e.data, loc.File, loc.Index)
+	if err != nil {
+		return nil, err
+	}
+	return remember(loc, face)
 }
 
 // typefaceAt returns the typeface of the system face at loc, parsing
@@ -263,25 +305,11 @@ func Sans() (*render.Typeface, error) {
 
 // UI returns the face lys-ui's default look is drawn in: Geist,
 // embedded in the binary, so every desktop renders the same UI face.
-func UI() (*render.Typeface, error) { return embedded(uifont.Family) }
+func UI() (*render.Typeface, error) { return embeddedTypeface(embeddedSans) }
 
 // UIMono returns the default look's monospace face: Geist Mono,
 // embedded beside UI.
-func UIMono() (*render.Typeface, error) { return embedded(uifont.MonoFamily) }
-
-// embedded resolves an embedded family by name. The store registers
-// them at its first use, so a resolution to another family is a store
-// defect, not a missing install, and errors.
-func embedded(family string) (*render.Typeface, error) {
-	tf, err := lookup(family, regAspect)
-	if err != nil {
-		return nil, err
-	}
-	if got := tf.Family(); got != family {
-		return nil, fmt.Errorf("sysfont: embedded %s resolved to %s", family, got)
-	}
-	return tf, nil
-}
+func UIMono() (*render.Typeface, error) { return embeddedTypeface(embeddedMono) }
 
 // Monospace returns the system's default monospace face.
 func Monospace() (*render.Typeface, error) {

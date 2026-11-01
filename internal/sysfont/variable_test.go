@@ -2,6 +2,7 @@ package sysfont
 
 import (
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -62,5 +63,32 @@ func TestEmbeddedUIFaces(t *testing.T) {
 		if vs := medium.Variations(); len(vs) != 1 || vs[0].Tag != "wght" || vs[0].Value != 500 {
 			t.Errorf("%s at 500 = %v, want the wght 500 instance", tc.name, vs)
 		}
+	}
+}
+
+func TestTheDefaultLookScansNoFontDirectory(t *testing.T) {
+	if os.Getenv("LYS_UI_SYSFONT_PROBE") == "" {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestTheDefaultLookScansNoFontDirectory$")
+		cmd.Env = append(os.Environ(), "LYS_UI_SYSFONT_PROBE=1")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("probe: %v\n%s", err, out)
+		}
+		return
+	}
+	face, err := UI()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := UIMono(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Variant(face, true, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Weighted(uifont.MonoFamily, 14, 500, false); err != nil {
+		t.Fatal(err)
+	}
+	if storeFM != nil {
+		t.Error("resolving the embedded families built the system font store")
 	}
 }
