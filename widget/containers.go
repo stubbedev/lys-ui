@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 
 	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/style"
@@ -1013,7 +1014,7 @@ func wheelStep(extent int) int {
 	if extent <= 0 {
 		return scrollStepPx
 	}
-	return max(1, int(math.Pow(float64(extent), 2.0/3.0)))
+	return max(1, int(gomath.Pow(float64(extent), 2.0/3.0)))
 }
 
 // SetPressed implements PressSetter: ending the press ends any drag.

@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 
 	"github.com/stubbedev/lys-ui/internal/style"
 )
@@ -141,7 +142,7 @@ func (p *Pile) SetPeekOpacity(f float32) {
 }
 
 // depthPow is f to the power d, one factor per level of depth.
-func depthPow(f float32, d int) float32 { return float32(math.Pow(float64(f), float64(d))) }
+func depthPow(f float32, d int) float32 { return float32(gomath.Pow(float64(f), float64(d))) }
 
 // SetSpacing sets the gap between expanded cards.
 func (p *Pile) SetSpacing(px int) {

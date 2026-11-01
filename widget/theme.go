@@ -3,10 +3,10 @@ package widget
 import (
 	"cmp"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 
 	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/logutil"
@@ -572,7 +572,7 @@ func wcagLuminance(c Color) float64 {
 		if s <= 0.04045 {
 			return s / 12.92
 		}
-		return math.Pow((s+0.055)/1.055, 2.4)
+		return gomath.Pow((s+0.055)/1.055, 2.4)
 	}
 	return float64(0.2126*lin(c.R())) + float64(0.7152*lin(c.G())) + float64(0.0722*lin(c.B()))
 }

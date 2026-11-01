@@ -9,9 +9,9 @@ package main
 import (
 	"image"
 	"log"
-	"math"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 
 	"github.com/stubbedev/lys-ui/app"
 	"github.com/stubbedev/lys-ui/component"
@@ -43,11 +43,11 @@ func (d *demo) render(f widget.GPUFrame) {
 	d.phase += 0.05
 	for y := range h {
 		for x := range w {
-			v := math.Sin(float64(x)/9+d.phase) + math.Sin(float64(y)/7-d.phase) + math.Sin(float64(x+y)/13+float64(d.phase/2))
+			v := gomath.Sin(float64(x)/9+d.phase) + gomath.Sin(float64(y)/7-d.phase) + gomath.Sin(float64(x+y)/13+float64(d.phase/2))
 			i := d.frame.PixOffset(x, y)
-			d.frame.Pix[i] = uint8(128 + float64(120*math.Sin(v)))
-			d.frame.Pix[i+1] = uint8(128 + float64(120*math.Sin(v+2)))
-			d.frame.Pix[i+2] = uint8(128 + float64(120*math.Sin(v+4)))
+			d.frame.Pix[i] = uint8(128 + float64(120*gomath.Sin(v)))
+			d.frame.Pix[i+1] = uint8(128 + float64(120*gomath.Sin(v+2)))
+			d.frame.Pix[i+2] = uint8(128 + float64(120*gomath.Sin(v+4)))
 			d.frame.Pix[i+3] = 255
 		}
 	}

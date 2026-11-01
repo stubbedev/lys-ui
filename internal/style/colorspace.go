@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
 // space is one CSS Color 4 interpolation space: the component layout
@@ -257,7 +258,7 @@ func srgbDecode(c float64) float64 {
 	if a <= 0.04045 {
 		return c / 12.92
 	}
-	return math.Copysign(math.Pow((a+0.055)/1.055, 2.4), c)
+	return math.Copysign(gomath.Pow((a+0.055)/1.055, 2.4), c)
 }
 
 func srgbEncode(c float64) float64 {
@@ -265,7 +266,7 @@ func srgbEncode(c float64) float64 {
 	if a <= 0.0031308 {
 		return c * 12.92
 	}
-	return math.Copysign(float64(1.055*math.Pow(a, 1/2.4))-0.055, c)
+	return math.Copysign(float64(1.055*gomath.Pow(a, 1/2.4))-0.055, c)
 }
 
 // signed extends a transfer function over [0, ∞) to negative inputs,
@@ -334,7 +335,7 @@ var labWhite = xyz{x: 0.9642956764295677, y: 1, z: 0.8251046025104602}
 
 func labF(t float64) float64 {
 	if t > 216.0/24389 {
-		return math.Cbrt(t)
+		return gomath.Cbrt(t)
 	}
 	return float64((841.0/108)*t) + 4.0/29
 }
@@ -365,20 +366,20 @@ func labToXYZ(l, a, b float64) xyz {
 }
 
 func labToLch(l, a, b float64) (l2, c, h float64) {
-	c = math.Hypot(a, b)
-	h = math.Mod(math.Atan2(b, a)*180/math.Pi+360, 360)
+	c = gomath.Hypot(a, b)
+	h = math.Mod(gomath.Atan2(b, a)*180/math.Pi+360, 360)
 	return l, c, h
 }
 
 func lchToLab(l, c, h float64) (l2, a, b float64) {
 	rad := h * math.Pi / 180
-	return l, c * math.Cos(rad), c * math.Sin(rad)
+	return l, c * gomath.Cos(rad), c * gomath.Sin(rad)
 }
 
 func linearToOklab(c rgbaf) (l, a, b float64) {
-	l0 := math.Cbrt(float64(0.4122214708*c.r) + float64(0.5363325363*c.g) + float64(0.0514459929*c.b))
-	m := math.Cbrt(float64(0.2119034982*c.r) + float64(0.6806995451*c.g) + float64(0.1073969566*c.b))
-	s := math.Cbrt(float64(0.0883024619*c.r) + float64(0.2817188376*c.g) + float64(0.6299787005*c.b))
+	l0 := gomath.Cbrt(float64(0.4122214708*c.r) + float64(0.5363325363*c.g) + float64(0.0514459929*c.b))
+	m := gomath.Cbrt(float64(0.2119034982*c.r) + float64(0.6806995451*c.g) + float64(0.1073969566*c.b))
+	s := gomath.Cbrt(float64(0.0883024619*c.r) + float64(0.2817188376*c.g) + float64(0.6299787005*c.b))
 	return float64(0.2104542553*l0) + float64(0.7936177850*m) - float64(0.0040720468*s),
 		float64(1.9779984951*l0) - float64(2.4285922050*m) + float64(0.4505937099*s),
 		float64(0.0259040371*l0) + float64(0.7827717662*m) - float64(0.8086757660*s)
@@ -657,8 +658,8 @@ func a98Space() predefined {
 	return predefined{
 		toLinearSRGB:   matMul(xyzToLinSRGB, a98ToXYZ),
 		fromLinearSRGB: matMul(xyzToA98, linSRGBToXYZ),
-		decode:         signed(func(v float64) float64 { return math.Pow(v, 563.0/256) }),
-		encode:         signed(func(v float64) float64 { return math.Pow(v, 256.0/563) }),
+		decode:         signed(func(v float64) float64 { return gomath.Pow(v, 563.0/256) }),
+		encode:         signed(func(v float64) float64 { return gomath.Pow(v, 256.0/563) }),
 	}
 }
 
@@ -680,13 +681,13 @@ func prophotoSpace() predefined {
 		if v <= 0.03125 {
 			return v / 16
 		}
-		return math.Pow(v, 1.8)
+		return gomath.Pow(v, 1.8)
 	})
 	enc := signed(func(v float64) float64 {
 		if v <= 0.001953125 {
 			return v * 16
 		}
-		return math.Pow(v, 1/1.8)
+		return gomath.Pow(v, 1/1.8)
 	})
 	return predefined{
 		toLinearSRGB:   matMul(xyzToLinSRGB, matMul(d50ToD65, proToXYZ)),
@@ -716,13 +717,13 @@ func rec2020Space() predefined {
 		if v < beta*4.5 {
 			return v / 4.5
 		}
-		return math.Pow((v+alpha-1)/alpha, 1/0.45)
+		return gomath.Pow((v+alpha-1)/alpha, 1/0.45)
 	})
 	enc := signed(func(v float64) float64 {
 		if v < beta {
 			return v * 4.5
 		}
-		return float64(alpha*math.Pow(v, 0.45)) - alpha + 1
+		return float64(alpha*gomath.Pow(v, 0.45)) - alpha + 1
 	})
 	return predefined{
 		toLinearSRGB:   matMul(xyzToLinSRGB, recToXYZ),

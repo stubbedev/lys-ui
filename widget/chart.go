@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 
 	"github.com/stubbedev/lys-ui/anim"
 )
@@ -190,7 +191,7 @@ func niceMax(v float64) float64 {
 		return 1
 	}
 	raw := v / chartTicks
-	p := math.Pow(10, math.Floor(math.Log10(raw)))
+	p := gomath.Pow(10, math.Floor(gomath.Log10(raw)))
 	for _, m := range []float64{1, 2, 2.5, 5, 10} {
 		if raw <= m*p {
 			return m * p * chartTicks
@@ -388,7 +389,7 @@ func strokePolyline(cv *render.Canvas, pts []float64, width float64, col render.
 	for k := 0; k+3 < len(pts); k += 2 {
 		x0, y0, x1, y1 := pts[k], pts[k+1], pts[k+2], pts[k+3]
 		dx, dy := x1-x0, y1-y0
-		l := math.Hypot(dx, dy)
+		l := gomath.Hypot(dx, dy)
 		if l == 0 {
 			continue
 		}
@@ -416,7 +417,9 @@ func fillCircle(cv *render.Canvas, x, y, r float64, col render.Color) {
 // wedge to the center.
 func arcPath(cx, cy, outer, inner, a0, a1 float64) *render.Path {
 	steps := max(8, int(math.Abs(a1-a0)*outer/4))
-	at := func(r, a float64) (float64, float64) { return cx + float64(r*math.Sin(a)), cy - float64(r*math.Cos(a)) }
+	at := func(r, a float64) (float64, float64) {
+		return cx + float64(r*gomath.Sin(a)), cy - float64(r*gomath.Cos(a))
+	}
 	p := &render.Path{}
 	x, y := at(outer, a0)
 	p.MoveTo(x, y)
@@ -478,7 +481,7 @@ func (c *Chart) paintRadar(cv *render.Canvas, plot render.Rect) {
 	}
 	at := func(i int, f float64) (float64, float64) {
 		a := float64(i) / float64(n) * 2 * math.Pi
-		return cx + float64(f*r*math.Sin(a)), cy - float64(f*r*math.Cos(a))
+		return cx + float64(f*r*gomath.Sin(a)), cy - float64(f*r*gomath.Cos(a))
 	}
 	for ring := 1; ring <= chartTicks; ring++ {
 		var pts []float64
@@ -637,10 +640,10 @@ func (c *Chart) categoryAt(p Point) int {
 	case ChartPie:
 		cx, cy, r := roundCenter(plot)
 		dx, dy := float64(p.X)-cx, float64(p.Y)-cy
-		if math.Hypot(dx, dy) > r || c.donut && math.Hypot(dx, dy) < r*0.6 {
+		if gomath.Hypot(dx, dy) > r || c.donut && gomath.Hypot(dx, dy) < r*0.6 {
 			return -1
 		}
-		a := math.Atan2(dx, -dy)
+		a := gomath.Atan2(dx, -dy)
 		if a < 0 {
 			a += 2 * math.Pi
 		}

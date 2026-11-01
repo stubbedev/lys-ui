@@ -1,8 +1,9 @@
 package widget
 
 import (
-	"math"
 	"time"
+
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 
 	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
@@ -95,13 +96,13 @@ func (k *kinetic) velocity() [2]float64 {
 func (k *kinetic) fling(move func(dx, dy float64) bool, done func()) {
 	v := k.velocity()
 	k.n = 0
-	speed := math.Hypot(v[0], v[1])
+	speed := gomath.Hypot(v[0], v[1])
 	if speed < kineticMinSpeed {
 		done()
 		return
 	}
 	tau := kineticTau.Seconds()
-	dur := time.Duration(tau * math.Log(speed/kineticMinSpeed) * float64(time.Second))
+	dur := time.Duration(tau * gomath.Log(speed/kineticMinSpeed) * float64(time.Second))
 	var travelled [2]float64
 	var cancel anim.Cancel
 	finished := false
@@ -110,7 +111,7 @@ func (k *kinetic) fling(move func(dx, dy float64) bool, done func()) {
 			return
 		}
 		// Distance so far: v*tau*(1 - e^(-elapsed/tau)).
-		f := tau * (1 - math.Exp(-t*dur.Seconds()/tau))
+		f := tau * (1 - gomath.Exp(-t*dur.Seconds()/tau))
 		dx, dy := float64(v[0]*f)-travelled[0], float64(v[1]*f)-travelled[1]
 		travelled[0], travelled[1] = v[0]*f, v[1]*f
 		if move(dx, dy) && t < 1 {

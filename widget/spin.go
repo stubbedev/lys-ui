@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
 // SpinButton is a numeric entry, GtkSpinButton: the text shows the
@@ -161,7 +162,7 @@ func (s *SpinButton) set(v float64) {
 // clamp bounds v and rounds it to the shown digits, so the value is
 // exactly what the text says.
 func (s *SpinButton) clamp(v float64) float64 {
-	p := math.Pow(10, float64(s.digits))
+	p := gomath.Pow(10, float64(s.digits))
 	if r := math.Round(v*p) / p; !math.IsInf(r, 0) {
 		v = r
 	}

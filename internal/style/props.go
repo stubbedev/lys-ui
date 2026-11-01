@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
 // propDef describes one property name: the longhands it sets and the
@@ -729,7 +730,7 @@ func (g *Gradient) linearPrelude(first [][]token, cx *ctx) bool {
 				return false
 			}
 		}
-		g.Angle = math.Mod(math.Atan2(float64(dx), float64(-dy))*180/math.Pi+360, 360)
+		g.Angle = math.Mod(gomath.Atan2(float64(dx), float64(-dy))*180/math.Pi+360, 360)
 		return true
 	}
 	if len(first) != 1 {
@@ -1404,8 +1405,8 @@ func transformPrim(name string, args [][]token, cx *ctx) (render.Affine, XformPa
 func skewAffine(ax, ay float64) render.Affine {
 	return render.Affine{
 		A: 1,
-		B: math.Tan(ay * math.Pi / 180),
-		C: math.Tan(ax * math.Pi / 180),
+		B: gomath.Tan(ay * math.Pi / 180),
+		C: gomath.Tan(ax * math.Pi / 180),
 		D: 1,
 	}
 }

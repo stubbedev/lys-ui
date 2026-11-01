@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 	"github.com/stubbedev/lys-lib/xkb"
 
 	"github.com/stubbedev/lys-ui/app"
@@ -43,13 +44,13 @@ func run() error {
 		cv.Line(r.X+r.W/2, r.Y, r.X+r.W/2, r.Y+r.H, 1, theme.Border)
 		petals := 5.0
 		for t := 0.0; t < 2*math.Pi; t += 0.002 {
-			rr := 170 * math.Sin(float64(petals*t)+phase)
-			x := cx + float64(rr*math.Cos(t))
-			y := cy + float64(rr*math.Sin(t))
+			rr := 170 * gomath.Sin(float64(petals*t)+phase)
+			x := cx + float64(rr*gomath.Cos(t))
+			y := cy + float64(rr*gomath.Sin(t))
 			cv.FillRect(render.Rect{X: int(x), Y: int(y), W: 2, H: 2}, theme.Accent)
 		}
 		sweep := phase * 3
-		cv.Line(int(cx), int(cy), int(cx+float64(150*math.Cos(sweep))), int(cy+float64(150*math.Sin(sweep))), 3, render.RGB(0xF9, 0xE2, 0xAF))
+		cv.Line(int(cx), int(cy), int(cx+float64(150*gomath.Cos(sweep))), int(cy+float64(150*gomath.Sin(sweep))), 3, render.RGB(0xF9, 0xE2, 0xAF))
 		cv.Arc(cx, cy, 190, 2, phase, math.Pi, theme.TextMuted)
 	}
 	cancel := application.Every(16*time.Millisecond, func() {

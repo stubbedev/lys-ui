@@ -13,6 +13,7 @@ import (
 	"math"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
 // XformOp names one transform primitive.
@@ -165,12 +166,12 @@ type xformParts struct {
 // axis rather than NaNs.
 func decomposeXform(m render.Affine) xformParts {
 	p := xformParts{tx: m.E, ty: m.F, sx: 1, sy: 1}
-	p.sx = math.Hypot(m.A, m.B)
+	p.sx = gomath.Hypot(m.A, m.B)
 	if p.sx < 1e-12 {
 		return p
 	}
-	p.rot = math.Atan2(m.B, m.A)
-	s, c := math.Sincos(p.rot)
+	p.rot = gomath.Atan2(m.B, m.A)
+	s, c := gomath.Sincos(p.rot)
 	p.sy = float64(-m.C*s) + float64(m.D*c)
 	if math.Abs(p.sy) < 1e-12 {
 		p.sy = 0
@@ -184,7 +185,7 @@ func decomposeXform(m render.Affine) xformParts {
 // recomposeXform rebuilds the affine from lerped parts: the
 // translation, the rotation, the shear, then the scale.
 func recomposeXform(p xformParts) render.Affine {
-	s, c := math.Sincos(p.rot)
+	s, c := gomath.Sincos(p.rot)
 	return render.Affine{
 		A: c * p.sx,
 		B: s * p.sx,

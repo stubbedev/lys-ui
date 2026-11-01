@@ -4,6 +4,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/stubbedev/lys-lib/third_party/gomath"
+
 	"github.com/stubbedev/lys-ui/anim"
 )
 
@@ -324,11 +326,11 @@ func (t *TouchTracker) cancelLongPress() {
 
 func midpoint(a, b Point) Point { return Point{X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2} }
 
-func pairDistance(a, b Point) float64 { return math.Hypot(float64(b.X-a.X), float64(b.Y-a.Y)) }
+func pairDistance(a, b Point) float64 { return gomath.Hypot(float64(b.X-a.X), float64(b.Y-a.Y)) }
 
 // pairAngle is the pair's angle in degrees, clockwise on screen.
 func pairAngle(a, b Point) float64 {
-	return math.Atan2(float64(b.Y-a.Y), float64(b.X-a.X)) * 180 / math.Pi
+	return gomath.Atan2(float64(b.Y-a.Y), float64(b.X-a.X)) * 180 / math.Pi
 }
 
 // StylusTool is a tablet tool's kind.

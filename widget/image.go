@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 
 	"github.com/stubbedev/lys-ui/internal/imgcache"
 	"github.com/stubbedev/lys-ui/internal/logutil"
@@ -546,7 +547,7 @@ func sourceShrink(natural image.Point, box render.Rect, fit render.ImageScale) i
 	if s >= 0.5 {
 		return 0
 	}
-	return int(math.Floor(math.Log2(1 / s)))
+	return int(math.Floor(gomath.Log2(1 / s)))
 }
 
 // loadImage fetches and decodes src off the loop goroutine, divided by

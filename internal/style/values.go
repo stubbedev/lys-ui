@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
 // Prop names one longhand property of the docs/css.md table. Shorthands
@@ -536,7 +537,7 @@ func hintCurve(p, h float64) float64 {
 	case h >= 1:
 		return 0
 	}
-	return math.Pow(p, math.Log(0.5)/math.Log(h))
+	return gomath.Pow(p, gomath.Log(0.5)/gomath.Log(h))
 }
 
 // TextTransform is the text-transform keyword.

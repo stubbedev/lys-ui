@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 
 	"github.com/stubbedev/lys-ui/internal/style"
 )
@@ -206,7 +207,7 @@ func strokeCheck(cv *render.Canvas, cx, cy, r int, col render.Color) {
 // half-span r, rotated ang radians from right-pointing - the stroke the
 // dropdown face and every Symbol chevron share.
 func strokeChevron(cv *render.Canvas, cx, cy, r int, ang float64, col render.Color) {
-	c, s := math.Cos(ang), math.Sin(ang)
+	c, s := gomath.Cos(ang), gomath.Sin(ang)
 	rot := func(px, py float64) (int, int) {
 		return cx + int(math.Round(float64(px*c)-float64(py*s))), cy + int(math.Round(float64(px*s)+float64(py*c)))
 	}

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
 // numKind is the type of a numeric value after unit resolution.
@@ -508,11 +509,11 @@ func mathFunc(name string, args []token, cx *ctx, refs map[string]numeric) (nume
 		var v float64
 		switch name {
 		case "sin":
-			v = math.Sin(a)
+			v = gomath.Sin(a)
 		case "cos":
-			v = math.Cos(a)
+			v = gomath.Cos(a)
 		default:
-			v = math.Tan(a)
+			v = gomath.Tan(a)
 		}
 		return numeric{v: v, kind: numNumber}, true
 	case "asin", "acos", "atan", "atan2":
@@ -526,22 +527,22 @@ func mathFunc(name string, args []token, cx *ctx, refs map[string]numeric) (nume
 			if len(ns) != 1 || ns[0].kind != numNumber {
 				return numeric{}, false
 			}
-			a = math.Asin(ns[0].v)
+			a = gomath.Asin(ns[0].v)
 		case "acos":
 			if len(ns) != 1 || ns[0].kind != numNumber {
 				return numeric{}, false
 			}
-			a = math.Acos(ns[0].v)
+			a = gomath.Acos(ns[0].v)
 		case "atan":
 			if len(ns) != 1 || ns[0].kind != numNumber {
 				return numeric{}, false
 			}
-			a = math.Atan(ns[0].v)
+			a = gomath.Atan(ns[0].v)
 		default:
 			if len(ns) != 2 {
 				return numeric{}, false
 			}
-			a = math.Atan2(ns[0].v, ns[1].v)
+			a = gomath.Atan2(ns[0].v, ns[1].v)
 		}
 		return numeric{v: a * 180 / math.Pi, kind: numAngle}, true
 	case "pow", "log":
@@ -553,12 +554,12 @@ func mathFunc(name string, args []token, cx *ctx, refs map[string]numeric) (nume
 			if len(ns) != 2 {
 				return numeric{}, false
 			}
-			return numeric{v: math.Pow(ns[0].v, ns[1].v), kind: numNumber}, true
+			return numeric{v: gomath.Pow(ns[0].v, ns[1].v), kind: numNumber}, true
 		}
 		if len(ns) == 2 {
-			return numeric{v: math.Log(ns[0].v) / math.Log(ns[1].v), kind: numNumber}, true
+			return numeric{v: gomath.Log(ns[0].v) / gomath.Log(ns[1].v), kind: numNumber}, true
 		}
-		return numeric{v: math.Log(ns[0].v), kind: numNumber}, true
+		return numeric{v: gomath.Log(ns[0].v), kind: numNumber}, true
 	case "sqrt", "exp":
 		n, ok := mathOne(args, cx, refs)
 		if !ok || n.kind != numNumber {
@@ -567,7 +568,7 @@ func mathFunc(name string, args []token, cx *ctx, refs map[string]numeric) (nume
 		if name == "sqrt" {
 			return numeric{v: math.Sqrt(n.v), kind: numNumber}, true
 		}
-		return numeric{v: math.Exp(n.v), kind: numNumber}, true
+		return numeric{v: gomath.Exp(n.v), kind: numNumber}, true
 	case "hypot":
 		ns, ok := mathNums(args, cx, refs)
 		if !ok || len(ns) == 0 {
