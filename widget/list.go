@@ -429,7 +429,7 @@ func (l *List) measureRowH() {
 		return
 	}
 	if l.probe == nil {
-		l.probe = l.newRow(0)
+		l.probe = l.newProxy(0)
 	}
 	setParents(l, l.probe)
 	w := l.view.W
@@ -532,10 +532,7 @@ const listRowLast = "last"
 // newRow wraps model row i in its proxy, claiming the checkbox of a
 // checkbox row in multiple mode and syncing it to membership.
 func (l *List) newRow(i int) *listRow {
-	r := &listRow{list: l, idx: i, row: l.model.row(i)}
-	if l.rowElement != "" {
-		r.SetElement(l.rowElement)
-	}
+	r := l.newProxy(i)
 	if l.isSelected(i) {
 		r.flags = StateSelected // seeded pre-style; syncSelected carries the flips
 	}
@@ -544,6 +541,16 @@ func (l *List) newRow(i int) *listRow {
 		if r.check != nil {
 			r.check.SetChecked(l.isSelected(i))
 		}
+	}
+	return r
+}
+
+// newProxy wraps model row i with no selection state: all a height
+// probe is, as the height of the rows does not follow what is selected.
+func (l *List) newProxy(i int) *listRow {
+	r := &listRow{list: l, idx: i, row: l.model.row(i)}
+	if l.rowElement != "" {
+		r.SetElement(l.rowElement)
 	}
 	return r
 }

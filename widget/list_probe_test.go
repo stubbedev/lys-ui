@@ -162,3 +162,30 @@ func TestAnAutosizedListLeavesARecycledProbeRowWithItsNewProxy(t *testing.T) {
 		t.Error("a settled list whose probe row was recycled left its host marked")
 	}
 }
+
+func TestAnAutosizedListsRowHeightDoesNotFollowTheSelection(t *testing.T) {
+	loadCSS(t, `row:selected { padding: 5px 0; }`)
+	l, host := probedList(newStub(20, 10), newStub(20, 10))
+	l.SetSelectionMode(SelectionSingle)
+	l.Select(0)
+	settleList(host)
+	if l.rowH != 10 {
+		t.Errorf("row height %d with the first row selected as the probe was made, want the plain row's 10", l.rowH)
+	}
+	if !l.rows[0].HasState(StateSelected) {
+		t.Error("the realized first row is not selected")
+	}
+	if l.probe.HasState(StateSelected) {
+		t.Error("the probe took the first row's :selected")
+	}
+	l.Select(-1)
+	settleList(host)
+	if l.rowH != 10 {
+		t.Errorf("row height %d after clearing the selection, want 10", l.rowH)
+	}
+	l.Select(0)
+	settleList(host)
+	if l.rowH != 10 {
+		t.Errorf("row height %d after selecting the first row again, want 10", l.rowH)
+	}
+}
