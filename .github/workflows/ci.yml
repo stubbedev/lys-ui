@@ -52,7 +52,12 @@ jobs:
         run: nix develop -c just lint fmt-check
 
   check:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -82,11 +87,18 @@ jobs:
         shell: bash
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: benchmarks-${{ github.sha }}
+          name: benchmarks-${{ runner.arch }}-${{ github.sha }}
           path: bench.txt
 
   package:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, system: x86_64-linux }
+          - { runner: ubuntu-24.04-arm, system: aarch64-linux }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -95,7 +107,7 @@ jobs:
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
       - name: Nix package (vendorHash, sandboxed build and tests)
-        run: nix build -L .#checks.x86_64-linux.lys-ui
+        run: nix build -L .#checks.${{ matrix.system }}.lys-ui
 
   # The Hyprland side of the compositor-in-the-loop gate (#66): the
   # same suite the check job's sway gate runs, against Hyprland in a
