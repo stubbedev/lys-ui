@@ -972,13 +972,22 @@ type listRow struct {
 
 // Measure wraps the row widget in the row's CSS box: margin, border,
 // and padding around the row's natural size. The row is parented first
-// so it measures as styled.
+// so it measures as styled, unless a realized proxy holds it: the probe
+// then measures in place, since taking the row would mark its branch
+// for another arrange every frame.
 func (r *listRow) Measure(axis Axis, forSize int) Sizes {
-	setParents(r, r.row)
+	r.claimRow()
 	v := r.style(r)
 	return measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
 		return r.row.Measure(axis, forSize)
 	})
+}
+
+func (r *listRow) claimRow() {
+	if holder, ok := parentOf(r.row).(*listRow); ok && holder != r && holder.list == r.list && r.list.rows[holder.idx] == holder {
+		return
+	}
+	setParents(r, r.row)
 }
 
 // Arrange records the proxy's border box and lays the row widget out

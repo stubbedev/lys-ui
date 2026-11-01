@@ -101,3 +101,24 @@ func BenchmarkSettingsFrame(b *testing.B) {
 		}
 	})
 }
+
+func BenchmarkAutosizedListFrame(b *testing.B) {
+	const w, h = 400, 300
+	face := goldenFace(b)
+	rows := make(staticRows, 200)
+	for i := range rows {
+		rows[i] = NewLabel(face, 14, "row", 0)
+	}
+	host := NewBox(Column, 0, 0)
+	host.Append(NewList[Widget](rows, 0), true)
+	frame := func() {
+		SizeWithin(host, Size{W: w, H: h})
+		host.Arrange(render.Rect{W: w, H: h})
+		CollectDamage(host)
+	}
+	frame()
+	frame()
+	for b.Loop() {
+		frame()
+	}
+}

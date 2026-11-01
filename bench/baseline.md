@@ -36,6 +36,7 @@ benchmarks load a 25-rule stylesheet over the same tree.
 | ShowcaseArrange (settled tree) | 6.6ns | 0 | 0 |
 | ShowcasePaint (full frame: measure+arrange+damage+paint) | 353µs | 162 | 1 |
 | ProgressOnlyFrame (one bar animating, damage-clipped) | 33.7µs | 32 | 1 |
+| AutosizedListFrame (settled 200-row list, nothing changed) | 69ns | 0 | 0 |
 | EntryPaint (steady entry repaint) | 49.6µs | 3 | 0 |
 | SettingsFrame/layout (settled tree) | 66ns | 0 | 0 |
 | SettingsFrame/paint (whole window) | 1.71ms | 0 | 0 |
@@ -173,10 +174,6 @@ why it stays:
   canvas (`Canvas.Reset`).
 - **The Go runtime's background monitor**: nanosleep calls during tweens,
   inflated by strace, none at idle. It is not lys-ui code.
-- **A List's probe row**: an autosized list measures a probe sharing its
-  first row's widget, whose parent then flips each arrange, so that list's
-  branch stays marked and arranges in every frame of its window: its rows
-  and spine, not the tree.
 - **Walk snapshot buffers** (`widget.walkStack`, `styleStack`,
   `walkTreeStack`, the per-parent sibling lists) and **the rune-keyed
   shaping table**: the buffers are retained at the deepest tree the
