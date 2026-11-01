@@ -70,9 +70,7 @@
       description = "pure-Go Wayland widget toolkit (module and demos)";
     };
   in {
-    # A Wayland toolkit: the builds exist on Linux only, while the dev
-    # shell stays available on every system.
-    packages = lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+    packages = {
       inherit lys-ui;
 
       lys-ui-bar = mkLysUI {

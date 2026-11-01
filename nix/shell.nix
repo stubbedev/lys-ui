@@ -33,11 +33,11 @@
           # Headless test compositor: sway on WLR_BACKENDS=headless gives
           # input integration tests a private, deterministic Wayland session
           # (layer shell + virtual pointer protocol included) without
-          # touching the developer's real desktop. Linux only.
-          ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.sway]
+          # touching the developer's real desktop.
+          ++ [pkgs.sway]
           # The compositor without layer shell that `just headless` starts on
           # the same headless backend, for a toplevel-only application.
-          ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.cage]
+          ++ [pkgs.cage]
           ++ [
             # `just atspi`'s bus-level tests launch a private dbus-daemon as
             # the accessibility bus and skip when it is missing; shipping it
@@ -86,7 +86,7 @@
 
         LYS_UI_TEST_FONTCONFIG = testFontsConf;
       }
-      // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+      // {
         # lys-lib's package gpu loads libvulkan and libva at runtime;
         # the loaders find the host's drivers (/run/opengl-driver on
         # NixOS).
