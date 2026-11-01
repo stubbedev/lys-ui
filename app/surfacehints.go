@@ -1,6 +1,8 @@
 package app
 
 import (
+	"errors"
+
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/internal/window"
@@ -68,6 +70,16 @@ func (w *Window) BackgroundBlurActive() bool {
 
 // Capabilities reports the compositor's window-management offer.
 func (w *Window) Capabilities() WMCapabilities { return w.win.Capabilities() }
+
+// WhenPresented runs fn on the loop goroutine once the window's first commit after this call is presented.
+func (w *Window) WhenPresented(fn func()) error {
+	hw := w.app.hostWindowOf(w)
+	if hw == nil {
+		return errors.New("app: WhenPresented on a window that has no surface")
+	}
+	hw.whenNextPresented(fn)
+	return nil
+}
 
 // requestFrame marks the window for a frame (the commit that applies
 // surface state).

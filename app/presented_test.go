@@ -82,3 +82,44 @@ func TestLayerOnPresentedDoesNotFireAtCommit(t *testing.T) {
 		}
 	}
 }
+
+func TestWhenPresentedWaitsForTheNextCommit(t *testing.T) {
+	h := newPresentedHarness(true)
+	h.commit()
+	ran := 0
+	h.wnd.whenNextPresented(func() { ran++ })
+	h.surf.feedback[0](true)
+	if ran != 0 {
+		t.Fatalf("ran %d when the commit before the call was presented", ran)
+	}
+	h.commit()
+	if len(h.surf.feedback) != 2 {
+		t.Fatalf("feedback %d, want the commit after the call to arm one", len(h.surf.feedback))
+	}
+	h.surf.feedback[1](false)
+	h.commit()
+	h.surf.feedback[2](true)
+	if ran != 1 || h.fired != 1 {
+		t.Errorf("ran %d, fired %d, want each once, the discarded commit retried", ran, h.fired)
+	}
+	h.commit()
+	if len(h.surf.feedback) != 3 {
+		t.Errorf("feedback %d, want none armed with nothing waiting", len(h.surf.feedback))
+	}
+}
+
+func TestWhenPresentedFallsBackToFrameCallback(t *testing.T) {
+	h := newPresentedHarness(false)
+	h.commit()
+	h.wnd.takeFrame()
+	ran := 0
+	h.wnd.whenNextPresented(func() { ran++ })
+	h.commit()
+	if ran != 0 {
+		t.Fatalf("ran %d at the commit, want it to wait for the frame callback", ran)
+	}
+	h.wnd.takeFrame()
+	if ran != 1 {
+		t.Errorf("ran %d, want 1 from the commit's frame callback", ran)
+	}
+}

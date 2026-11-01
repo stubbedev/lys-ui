@@ -129,12 +129,11 @@ type hostWindow struct {
 	tip    *tooltipCtl
 	// keyChain is the window's OnKey hook pre-chained with the
 	// application-wide one, so a key press allocates nothing.
-	keyChain     func(r *widget.Router, keycode uint32, mods wlsession.Mods)
-	lastW, lastH int
-	// presented is set once the compositor reports the surface's
-	// first buffer presented.
-	presented      bool
-	presentOnFrame bool
+	keyChain           func(r *widget.Router, keycode uint32, mods wlsession.Mods)
+	lastW, lastH       int
+	firstPresentQueued bool
+	whenPresented      []func()
+	presentOnFrame     []func()
 	// reportedW and reportedH are the size OnResize last heard.
 	reportedW, reportedH int
 	// limits reports the host's min/max size in logical pixels (zero
@@ -998,11 +997,12 @@ func (w *hostWindow) draw() bool {
 		w.drawErr = fmt.Errorf("app: frame callback: %w", err)
 		return false
 	}
-	if !w.presented && w.cfg.onPresented != nil && !w.presentOnFrame {
-		switch err := w.surf.Feedback(w.notePresented); {
+	if batch := w.takePresentWaiters(); len(batch) > 0 {
+		switch err := w.surf.Feedback(w.presentFeedback(batch)); {
 		case errors.Is(err, errNoPresentation):
-			w.presentOnFrame = true
+			w.presentOnFrame = append(w.presentOnFrame, batch...)
 		case err != nil:
+			w.whenPresented = append(batch, w.whenPresented...)
 			w.drawErr = fmt.Errorf("app: presentation feedback: %w", err)
 			return false
 		}
@@ -1030,18 +1030,46 @@ func (w *hostWindow) takeFrame() {
 	}
 	w.frameReady = false
 	w.framePending = false
-	if w.presentOnFrame {
-		w.presentOnFrame = false
-		w.notePresented(true)
+	if batch := w.presentOnFrame; len(batch) > 0 {
+		w.presentOnFrame = nil
+		w.notePresented(batch, true)
 	}
 }
 
-func (w *hostWindow) notePresented(shown bool) {
-	if !shown || w.presented {
+func (w *hostWindow) whenNextPresented(fn func()) {
+	w.whenPresented = append(w.whenPresented, fn)
+	w.dirty = true
+}
+
+func (w *hostWindow) takePresentWaiters() []func() {
+	batch := w.whenPresented
+	w.whenPresented = nil
+	if !w.firstPresentQueued && w.cfg.onPresented != nil {
+		w.firstPresentQueued = true
+		batch = append(batch, w.cfg.onPresented)
+	}
+	return batch
+}
+
+func (w *hostWindow) presentFeedback(batch []func()) func(shown bool) {
+	return func(shown bool) {
+		pending := batch
+		batch = nil
+		if pending != nil {
+			w.notePresented(pending, shown)
+		}
+	}
+}
+
+func (w *hostWindow) notePresented(batch []func(), shown bool) {
+	if !shown {
+		w.whenPresented = append(batch, w.whenPresented...)
+		w.dirty = true
 		return
 	}
-	w.presented = true
-	w.cfg.onPresented()
+	for _, fn := range batch {
+		fn()
+	}
 }
 
 // copier is the window's GPU copier for Pool.CopyForward, nil drawing
