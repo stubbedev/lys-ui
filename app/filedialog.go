@@ -43,12 +43,12 @@ type SaveDialogConfig struct {
 	StartName string
 	Filters   []widget.FileFilter
 	Recents   bool
-	// ConfirmOverwrite asks before returning a path that already
-	// exists (the default); false returns it directly.
-	ConfirmOverwrite bool
+	// SkipOverwriteConfirm returns a path that already exists without
+	// asking. By default the picker asks, and declining returns to it.
+	SkipOverwriteConfirm bool
 	// OnSave receives the chosen absolute path exactly once, on the
-	// loop goroutine, after the dialog closed (and any overwrite
-	// confirmation was accepted).
+	// loop goroutine, after any replace question was accepted and the
+	// dialog closed.
 	OnSave func(path string)
 }
 
@@ -79,8 +79,8 @@ func (a *Application) SaveFileDialog(parent *Window, cfg SaveDialogConfig) (*Dia
 
 // fileDialog is the shared core of all four file dialogs: chooser in a
 // Dialog whose ok button validates through the chooser, recents wired
-// when asked, and save-side overwrite confirmation deferred one pass
-// so it opens on a settled window.
+// when asked, and the save-side replace question asked over the picker,
+// which stays open until the question is answered.
 func (a *Application) fileDialog(parent *Window, mode widget.FileMode, defTitle, okLabel string, cfg FileDialogConfig, save *SaveDialogConfig) (*Dialog, error) {
 	face := a.resolveFace(nil)
 	if face == nil {
@@ -128,32 +128,30 @@ func (a *Application) fileDialog(parent *Window, mode widget.FileMode, defTitle,
 			}
 		}
 	}
-	confirmOverwrite := func() {
-		if _, err := os.Stat(chosen[0]); err == nil {
-			// Replace? - parented to the picker's own window, so the
-			// question lands on top of the file that is about to go.
-			_, _ = a.NewDialog(d.win, DialogConfig{
-				Title:   widget.Tr("Replace file?"),
-				Content: a.confirmBody(filepath.Base(chosen[0])),
-				Modal:   true,
-				Buttons: []DialogButton{
-					{Label: widget.Tr("Cancel"), Response: "cancel", Role: ButtonRoleCancel},
-					{Label: widget.Tr("Replace"), Response: "replace", Role: ButtonRoleDefault},
-				},
-				DefaultResponse: "replace",
-				CancelResponse:  "cancel",
-				Width:           340, Height: 140,
-				OnResponse: func(resp string) {
-					if resp == "replace" {
-						record()
-						deliver()
-					}
-				},
-			})
-			return
-		}
-		record()
-		deliver()
+	var replaceQuestion *Dialog
+	replaceAccepted := false
+	askReplace := func() error {
+		var err error
+		replaceQuestion, err = a.NewDialog(d.win, DialogConfig{
+			Title:   widget.Tr("Replace file?"),
+			Content: a.confirmBody(filepath.Base(chosen[0])),
+			Modal:   true,
+			Buttons: []DialogButton{
+				{Label: widget.Tr("Cancel"), Response: "cancel", Role: ButtonRoleCancel},
+				{Label: widget.Tr("Replace"), Response: "replace", Role: ButtonRoleDefault},
+			},
+			DefaultResponse: "replace",
+			CancelResponse:  "cancel",
+			Width:           340, Height: 140,
+			OnResponse: func(resp string) {
+				if resp != "replace" {
+					return
+				}
+				replaceAccepted = true
+				d.Respond("ok")
+			},
+		})
+		return err
 	}
 	chooser.OnApply = func(paths []string) {
 		chosen = paths
@@ -171,25 +169,39 @@ func (a *Application) fileDialog(parent *Window, mode widget.FileMode, defTitle,
 		DefaultResponse: "ok",
 		CancelResponse:  "cancel",
 		ValidateResponse: func(resp string) bool {
-			if resp != "ok" {
+			if resp != "ok" || replaceAccepted {
 				return true
 			}
+			if replaceQuestion != nil && !replaceQuestion.Closed() {
+				return false
+			}
 			paths, ok := chooser.Apply()
+			if !ok {
+				return false
+			}
 			chosen = paths
-			return ok
+			if save == nil || save.SkipOverwriteConfirm {
+				return true
+			}
+			if _, err := os.Stat(chosen[0]); err != nil {
+				return true
+			}
+			if err := askReplace(); err != nil {
+				chooser.SetStatus(strings.ReplaceAll(widget.Tr("could not ask to replace the file: {error}"), "{error}", err.Error()))
+			}
+			return false
 		},
 		OnResponse: func(resp string) {
 			if resp != "ok" {
 				return
 			}
-			if save != nil && save.ConfirmOverwrite {
-				// One pass later: the picker window is closing under
-				// this response right now.
-				a.Invoke(confirmOverwrite)
-				return
-			}
 			record()
 			deliver()
+		},
+		OnClosed: func() {
+			if replaceQuestion != nil {
+				replaceQuestion.Close()
+			}
 		},
 	})
 	if err != nil {

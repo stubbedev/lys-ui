@@ -178,8 +178,8 @@ and `SaveFileDialog` wrap `widget.FileChooser` - the pure-Go picker
 Recent when recents are on), the directory listing, pattern filters,
 a name row in save mode, and an ok button that refuses to close the
 dialog until the choice is valid (the `DialogConfig.ValidateResponse`
-veto). With `ConfirmOverwrite` set, save asks before replacing an existing file;
-choices land in `OnOpen`/`OnSave` on the loop goroutine, exactly once.
+veto). Save asks before replacing an existing file, over the picker, and
+declining returns to it; `SkipOverwriteConfirm` turns the question off. Choices land in `OnOpen`/`OnSave` on the loop goroutine, exactly once.
 
 **The picker is portal-free by decision.** lys-ui ships every widget the
 picker needs, a portal FileChooser adds a second UI to keep honest, and portal-less sessions (lab machines,

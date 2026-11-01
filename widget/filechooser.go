@@ -222,13 +222,13 @@ func (c *FileChooser) Apply() ([]string, bool) {
 			}
 			return nil, false
 		}
-		c.setStatus(Tr("choose a file"))
+		c.SetStatus(Tr("choose a file"))
 	case FileModeOpenMultiple:
 		picked := c.pickedFiles()
 		if len(picked) > 0 {
 			return picked, true
 		}
-		c.setStatus(Tr("choose at least one file"))
+		c.SetStatus(Tr("choose at least one file"))
 	case FileModeOpenFolder:
 		if i := c.list.Selected(); i >= 0 && c.listing[i].Dir {
 			return []string{c.paths[i]}, true
@@ -236,19 +236,19 @@ func (c *FileChooser) Apply() ([]string, bool) {
 		if c.dir != "" {
 			return []string{c.dir}, true
 		}
-		c.setStatus(Tr("choose a folder"))
+		c.SetStatus(Tr("choose a folder"))
 	case FileModeSave:
 		if c.dir == "" {
-			c.setStatus(Tr("save needs a directory"))
+			c.SetStatus(Tr("save needs a directory"))
 			break
 		}
 		name := strings.TrimSpace(c.name.Text())
 		if name == "" {
-			c.setStatus(Tr("enter a file name"))
+			c.SetStatus(Tr("enter a file name"))
 			break
 		}
 		if strings.ContainsRune(name, '/') || strings.ContainsRune(name, os.PathSeparator) {
-			c.setStatus(Tr("the name cannot contain a path separator"))
+			c.SetStatus(Tr("the name cannot contain a path separator"))
 			break
 		}
 		return []string{filepath.Join(c.dir, name)}, true
@@ -302,7 +302,7 @@ func (c *FileChooser) activate(i int) {
 // applyOne validates a single file row against the active filter.
 func (c *FileChooser) applyOne(i int) ([]string, bool) {
 	if !c.passes(c.listing[i].Name) {
-		c.setStatus("\"" + c.listing[i].Name + "\" " + Tr("does not match") + " " + c.filters[c.filter].Name)
+		c.SetStatus("\"" + c.listing[i].Name + "\" " + Tr("does not match") + " " + c.filters[c.filter].Name)
 		return nil, false
 	}
 	return []string{c.paths[i]}, true
@@ -310,7 +310,7 @@ func (c *FileChooser) applyOne(i int) ([]string, bool) {
 
 // emitApply hands a valid result to the OnApply hook.
 func (c *FileChooser) emitApply(paths []string) {
-	c.setStatus("")
+	c.SetStatus("")
 	if c.OnApply != nil {
 		c.OnApply(paths)
 	}
@@ -366,7 +366,7 @@ func (c *FileChooser) refresh() {
 	c.path.SetText(c.dirLabel())
 	if c.inRecents {
 		if c.recents == nil {
-			c.setStatus(Tr("no recent files"))
+			c.SetStatus(Tr("no recent files"))
 		} else {
 			for _, p := range c.recents() {
 				c.listing = append(c.listing, FileEntry{Name: filepath.Base(p)})
@@ -376,7 +376,7 @@ func (c *FileChooser) refresh() {
 	} else {
 		entries, err := c.source(c.dir)
 		if err != nil {
-			c.setStatus(err.Error())
+			c.SetStatus(err.Error())
 		} else {
 			for _, e := range entries {
 				if e.Dir || c.passes(e.Name) {
@@ -388,7 +388,7 @@ func (c *FileChooser) refresh() {
 	}
 	c.model.set(c.listing)
 	c.list.Reset()
-	c.setStatus("")
+	c.SetStatus("")
 	c.InvalidateLayout()
 }
 
@@ -400,8 +400,8 @@ func (c *FileChooser) dirLabel() string {
 	return c.dir
 }
 
-// setStatus shows or clears the status line.
-func (c *FileChooser) setStatus(text string) {
+// SetStatus shows or clears the status line.
+func (c *FileChooser) SetStatus(text string) {
 	c.status.SetText(text)
 }
 
