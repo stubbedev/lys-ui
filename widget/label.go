@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/text"
@@ -640,6 +641,9 @@ func (l *Label) Arrange(r render.Rect) {
 // is multiline, the single line ellipsized as configured otherwise.
 func (l *Label) Paint(cv *render.Canvas) {
 	v := l.style(l)
+	if l.outsideClip(cv, v) {
+		return
+	}
 	b := boxOf(v, render.Insets{})
 	radii := radiusOr(v, 0)
 	fx := pushEffects(cv, v, l.bounds, radii)
@@ -658,6 +662,30 @@ func (l *Label) Paint(cv *render.Canvas) {
 	}
 	paintOutline(cv, v, l.bounds, radii)
 	fx.pop()
+}
+
+func (l *Label) outsideClip(cv *render.Canvas, v *style.Values) bool {
+	if l.pseudo != nil || v.TextShadow.N > 0 || l.multiline(v) ||
+		l.shaped == nil || l.shaped.Advance() > float64(l.bounds.W) {
+		return false
+	}
+	reach := 2 * int(math.Ceil(fontPx(v, l.sizePx)))
+	ink := render.Insets{Top: reach, Right: reach, Bottom: reach, Left: reach}
+	clip := cv.PushClipDevice(render.Rect{})
+	cv.PopClip(clip)
+	if !cv.MapRect(l.ink.Grow(ink.Grow(l.bounds))).Intersect(clip).Empty() {
+		return false
+	}
+	return !hasCombiningMark(l.shown())
+}
+
+func hasCombiningMark(s string) bool {
+	for _, r := range s {
+		if r >= utf8.RuneSelf && unicode.Is(unicode.M, r) {
+			return true
+		}
+	}
+	return false
 }
 
 // paintText draws the text inside the content box: the rows when the
