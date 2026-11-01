@@ -82,17 +82,17 @@ func DialPointerOnly(display string) (*VirtualInput, error) {
 }
 
 func dial(display string, keyboard bool) (*VirtualInput, error) {
-	return dialKeymap(display, keyboard, usKeymap)
+	dev, err := vinput.Dial(display, vinput.Options{Keyboard: keyboard, FallbackKeymap: []byte(usKeymap)})
+	if err != nil {
+		return nil, err
+	}
+	return &VirtualInput{dev: dev}, nil
 }
 
 // DialKeymap connects with a keyboard that uploads keymap, the way wtype and
 // other virtual keyboards number keys their own way.
 func DialKeymap(display, keymap string) (*VirtualInput, error) {
-	return dialKeymap(display, true, keymap)
-}
-
-func dialKeymap(display string, keyboard bool, keymap string) (*VirtualInput, error) {
-	dev, err := vinput.Dial(display, vinput.Options{Keyboard: keyboard, FallbackKeymap: []byte(keymap)})
+	dev, err := vinput.Dial(display, vinput.Options{Keyboard: true, Keymap: []byte(keymap)})
 	if err != nil {
 		return nil, err
 	}
