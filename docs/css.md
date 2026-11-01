@@ -3,8 +3,7 @@
 A GTK-flavored CSS layer above the typed `Theme`. The palette stays the
 source of truth and works with no stylesheet loaded. Stylesheets
 override individual properties where rules match. Real GTK application
-stylesheets load as they are: wayle's compiled SCSS, about 1800 rules,
-parses in about 6 ms with no warnings.
+stylesheets load as they are.
 
 ## API
 
@@ -182,7 +181,7 @@ box.AttachStylesheet(widget.NewStylesheet(css, widget.StylePriorityApplication))
   `:first-of-type`, `:last-of-type`, `:only-of-type` (over visible
   siblings of the same element name), `:root`, `:empty` (no children
   and no text: a label or entry showing text is not empty), and
-  `:not()` with compound lists and Level 4 specificity.
+  `:not()` with Level 4 specificity.
   `:nth-child(an+b of S)` counts only the siblings matching the
   selector list S and adds S's most specific member's specificity.
 - **Pseudo-elements.** `::before` and `::after` cascade their own
@@ -221,7 +220,7 @@ box.AttachStylesheet(widget.NewStylesheet(css, widget.StylePriorityApplication))
   `progressbar > trough > progress`, `paned > separator`, and menus as
   `popover.menu` with `modelbutton` rows. The app surfaces are
   `dialog`, `popover`, `tooltip` and `toast`. `TestCSSElementNames`
-  pins the list.
+  pins the widget-type names.
 - **Popovers style as GTK's.** A popover's content is the `popover`
   node with GtkPopover's `.background` class, styled as a child of the
   widget it opens from (`widget.SetStyleAnchor`): it inherits that
@@ -322,7 +321,7 @@ box.AttachStylesheet(widget.NewStylesheet(css, widget.StylePriorityApplication))
     theme layer defines all of libadwaita's named colors from the
     palette.
 - **Images.** Wherever an image is taken (`background-image`,
-  `mask-image`, `border-image-source`): `none`, `url("file")` (a local
+  `mask-image`, `border-image-source`): `none`, `url("file")` (quoted, as a bare path is rejected; a local
   path or `file://` URL; lys-ui loads no network images), the linear,
   radial and conic gradients and their `repeating-` forms — color
   stops with up to two positions each, as lengths or percentages along
@@ -378,14 +377,14 @@ Each longhand is listed with its shorthand.
     `stacked-fractions`, `ordinal`, `slashed-zero`), ligatures
     (`common-ligatures`, `discretionary-ligatures`,
     `historical-ligatures`, `contextual` and their `no-*` forms, which
-    turn the tags off), east-asian (`jis78` … `jis2004`, `simplified`,
+    turn the tags off), east-asian (`jis78` … `jis04`, `simplified`,
     `traditional`, `full-width`, `proportional-width`, `ruby`),
     position (`sub`, `super`) and alternates (`historical-forms`) — all
     mapping onto the OpenType feature tags, with
     `font-feature-settings` winning per tag
-  - `font-synthesis` (none/weight/style/small-caps — the engine
-    never synthesizes a face quality, so this parses as the guard it
-    is; there is nothing to gate), `font-optical-sizing` (auto feeds
+  - `font-synthesis` (none/weight/style/small-caps — it parses and
+    computes but gates nothing: a family without an italic paints a
+    synthetic oblique), `font-optical-sizing` (auto feeds
     the pixel size to the `opsz` axis in points, none keeps it),
     `font-palette` (normal, light, dark — see [Text limits](#text-limits))
   - `direction` (ltr/rtl — it forces a label's or entry's base
@@ -460,8 +459,8 @@ Each longhand is listed with its shorthand.
     start value holds through a positive one. Every interpolating
     longhand transitions (below); `transition-behavior: allow-discrete`
     also flips the discrete `isolation`, `mix-blend-mode`,
-    `backface-visibility`, `appearance`, `caret-shape` and `visibility`
-    halfway.
+    `backface-visibility`, `appearance`, `caret-shape`,
+    `-lys-layout-motion` and `visibility` halfway.
   - `animation` and its longhands `animation-name`, `-duration`,
     `-timing-function`, `-iteration-count`, `-direction`,
     `-play-state`, `-delay`, `-fill-mode` and `-composition`, each a
@@ -577,21 +576,22 @@ subtree, and ink outside the border box joins the damage rect.
 ### Text limits
 
 The CSS Text properties apply to the styled text surfaces: `Label`
-(and the buttons, rows and menus that hold one), `Entry` (direction)
+(and the buttons, rows and menus that hold one), `Entry` (direction, `text-decoration`)
 and the pseudo content. Within them:
 
 - `text-align` and `justify` do not apply to `Entry` and `TextArea`:
   editing widgets own their layout for caret and selection
   correctness, so they clip and scroll rather than justify.
-- `RichLabel` composes its runs itself and takes the font group only.
+- `RichLabel` composes its runs itself and takes the font group, `line-height`
+  and `text-decoration`.
 - CJK justify is not supported: rows without spaces stay
   start-aligned, since no inter-cluster distribution exists.
 - `hyphens: auto` (no hyphenation dictionary ships; without one, auto
   would guess) reads as manual.
 - The `line-break` strictness profiles for CJK punctuation are not
   distinguished: the typesetting segmenter computes one UAX #14
-  profile, so auto, normal and strict read the same; loose and
-  anywhere differ from them.
+  profile, so auto, loose, normal and strict read the same;
+  anywhere differs.
 - `unicode-bidi`'s embed and isolate embeddings are not supported:
   lys-lib's text resolves one paragraph per widget, so there is no
   embedding level to open.
@@ -1050,7 +1050,7 @@ functions and at-rules of its own, prefixed `-lys-`:
   Not valid as a border image.
 - **`-lys-layout-motion: none | smooth | snappy | bouncy`** springs the
   box from its old laid-out rect to a new one instead of jumping, laid
-  out once at the destination (`widget.SetLayoutMotion`).
+  out once at the destination (the widget's `SetLayoutMotion`).
 - **`-lys-spring(<bounce>?)`** and **`-lys-bounce`** are timing
   functions: a spring filling the duration, damped 1 - bounce, landing
   exactly at its end.
@@ -1100,11 +1100,11 @@ a concrete declaration or the bottom (then `unset`).
 Constructor metrics (a button's padding, a label's size) are
 defaults that a stylesheet overrides. `color`, the `font-*` group,
 `cursor`, `pointer-events`, `accent-color`, `caret-color`,
-`caret-shape`, `scrollbar-color`, `text-shadow`, the CSS Text
-properties and `visibility` inherit. Box and layout properties, the
+`caret-shape`, `scrollbar-color`, `text-shadow`, `font-synthesis`, the
+CSS Text properties and `visibility` inherit. Box and layout properties, the
 backgrounds, effects and motion, `user-select`, `scrollbar-width`, and
-`vertical-align`, `line-clamp`, `text-overflow`, `unicode-bidi` and
-`font-synthesis`, do not.
+`vertical-align`, `line-clamp`, `text-overflow` and `unicode-bidi` do
+not.
 
 ## Media state
 
@@ -1127,7 +1127,8 @@ state:
   `resolution` from `widget.SetMediaResolution` (dpi, 96 by default).
 
 A viewport or preference change restyles the whole tree — but only
-  when some loaded stylesheet carries `@media` rules; without one,
+  when some loaded stylesheet carries `@media` or `@container` rules or
+  container units; without one,
   the setters record the state and style nothing.
 
 ## Container queries
@@ -1156,8 +1157,8 @@ container's bounds when a sheet reads them).
 ## Conformance
 
 `widget/cssconformance_*_test.go` is the engine's conformance suite:
-one table of cases and one of documented exceptions per
-feature group, each case a stylesheet, a small widget tree and the outcomes
+one table of cases per feature group, and one of documented
+exceptions where a group has any, each case a stylesheet, a small widget tree and the outcomes
 the spec fixes for them — computed values, arranged bounds, hit tests
 and paint probes. Many adapt a named Web Platform Tests `css/` test
 (its path in the case's `wpt` field), and every case cites the
@@ -1185,8 +1186,7 @@ boxes; every CSS box roots its own formatting context (no margin
 collapsing through a parent); stacking contexts are per container; an
 absolute flex child's static position is the content start; `min()`,
 `max()` and `clamp()` cannot mix percentages with lengths; the window
-root takes the window size; a programmatic container clamps an
-oversized child; `::first-line` never matches; registered custom
+root takes the window size; `::first-line` never matches; registered custom
 properties do not animate; GTK's `@define-color` may precede an
 `@import`; `url()` filters, `preserve-3d`, the general 3-D matrix
 functions, mask layer lists and `background-blend-mode`; `hyphens:
@@ -1234,7 +1234,7 @@ Style is cached per widget and invalidated, never re-matched per paint:
   (`TestCSSLayoutSteadyFrameAllocatesNothing`); a layout property's
   change relayouts only the branch it sits in.
 
-The `BenchmarkStyleGallery*` benchmarks (73 widgets, 25 rules)
+The `BenchmarkStyleGallery*` benchmarks (75 widgets, 25 rules)
 measure it: the full-tree restyle and the single-widget class toggle
 allocate nothing, and a styled frame paints in the unstyled frame's
 time ([bench/baseline.md](https://github.com/stubbedev/lys-ui/blob/main/bench/baseline.md) has the numbers).

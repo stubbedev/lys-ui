@@ -15,8 +15,9 @@ How lys-ui resolves and paints themed icons.
   `internal/icons/lucide`): freedesktop names such as
   `document-save-symbolic` map onto them, so stock chrome draws on a
   host with no icon theme, and an installed theme always wins.
-- `widget.Icon` — four constructors: `NewIcon` (a raster the caller
-  made), `NewThemeIcon` (theme name), `NewFileIcon` (png / svg / svgz
+- `widget.Icon` — five constructors: `NewIcon` (a raster the caller
+  made), `NewThemeIcon` (theme name), `NewThemeIconFallback` (theme
+  name, with fallbacks), `NewFileIcon` (png / svg / svgz
   path), `NewSVGIcon` (embedded bytes, for apps that ship their own
   glyphs). Icons rasterize at the canvas device scale, so a fractional
   rescale re-rasterizes crisply. `widget.ThemeIconExists` asks whether
@@ -42,7 +43,8 @@ goes monochrome — which is the symbolic-icon contract, not a bug.
 Gradients that encode their shape in *alpha* (the common symbolic idiom,
 currentColor → transparent) survive unchanged.
 
-A symbolic `widget.Icon` follows `widget.Current().Accent` automatically;
+A symbolic `widget.Icon` takes the stylesheet's `color`, else
+`widget.Current().Accent`;
 `SetTint` pins a different color (zero un-pins). Non-symbolic sources
 keep their colors unless a tint is pinned.
 

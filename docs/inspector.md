@@ -78,7 +78,7 @@ The format is stable — `widget/testdata/dump.golden` pins it byte for
 byte — so a dump pasted into an issue means the same thing to
 everyone. Fields: type, `name=` (debug name, when set), `bounds=`
 (X,Y+WxH in surface pixels), `role=` (when not none), `tooltip=`
-(when set), then the flags `focusable` (Tab-reachable), `focused`,
+(the accessible name, when any), then the flags `focusable` (Tab-reachable), `focused`,
 `hover`, and `pressed` (this widget IS the router's target). Flags
 are absent without a router.
 

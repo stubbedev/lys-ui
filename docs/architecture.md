@@ -48,13 +48,15 @@ both, byte for byte (`just gpu`), under the Vulkan validation layer,
 whose every error fails the test. The Vulkan loader is found through
 the library path, which the nix packages set. A GPU frame that fails
 at run time (a device lost) is logged and turns every window to the
-CPU; a reconnect agrees the renderer with the new compositor again.
+CPU, except under `LYS_UI_RENDERER=gpu`, where it is fatal; a reconnect
+agrees the renderer with the new compositor again.
 
 An image the GPU should upload once and keep is a `render.StillImage`:
 an `*image.RGBA` its owner never changes. Icons, the image widget's
-decoded sources and cached rasters are still; any other image draws
-from its pixels at each draw, so changing one in place between frames
-(a video frame resampled into the same raster) always shows. An app
+decoded sources and cached rasters are still. A `render.VersionedImage`
+uploads when its version moves, as a video frame does. Any other image
+draws from its pixels at each draw, so changing one in place between
+frames always shows. An app
 that draws an image it never changes wraps it to save the uploads.
 
 Each layer talks only to its neighbors: widgets never touch the wire,
@@ -71,9 +73,10 @@ connection, and one goroutine drives the loop (internal/wlsession/
 session.go, app/application.go). Wayland requests from one client must
 stay ordered, and per-window goroutines would need a marshalling layer
 to preserve that, so lys-ui has none (see Non-goals). Timer work (key
-repeat, animation deadlines, tooltip dwell, animated cursors) runs on
-small goroutines that only arm `Session.WakeAfter`, which kicks the
-parked read with a `wl_display.sync` and returns.
+repeat, animation deadlines, tooltip dwell) runs on the loop. A
+`Session.WakeAfter` timer only kicks the parked read with a
+`wl_display.sync` and returns, and an animated cursor's timer pushes
+its own frame.
 
 ### 2. The loop parks
 
@@ -157,7 +160,8 @@ lys-lib/render/canvas.go):
   rects and land on device pixels rounded outward, so a logical rect
   covers every device pixel it spans;
 - text is shaped once at its logical size and rasterized at the device
-  scale — crisp at any factor, no glyph cache to invalidate;
+  scale — crisp at any factor; the glyph cache keys on scale, so nothing
+  is invalidated;
 - `preferred_scale` rescales the window in place (same router, focus,
   and pool; buffers rebuilt, whole window queued for repaint — the
   fresh buffers' full staleness is what guarantees the full repaint);
@@ -167,7 +171,8 @@ lys-lib/render/canvas.go):
 ### 7. Premultiplied alpha, and anti-aliasing must respect it
 
 `render.Color` is premultiplied ARGB end to end; blending is
-source-over, and straight alpha exists only at the PNG boundary.
+source-over, and straight alpha appears only at color construction,
+the PNG boundary and CSS blend modes.
 Anti-aliased primitives (signed-distance RoundedRect and Line)
 multiply the *coverage into all premultiplied channels*, not just
 alpha — scaling alpha alone leaves full-strength source color on edge
@@ -249,7 +254,7 @@ requirements.
 Every shm buffer is ARGB8888 premultiplied — `buffer.Format`
 (internal/buffer), never XRGB, because a translucent surface loses its
 alpha channel to XRGB and composites as garbage. The whole alpha path
-is pinned end to end in app/alpha_test.go: `Config.Background` through
+is pinned end to end in app/alpha_test.go: `WindowConfig.Background` through
 `ClearDevice` (an overwrite, so the background is premultiplied
 exactly once), widget blends on top, wl_shm bytes read back as B, G,
 R, A.
@@ -268,16 +273,16 @@ pipeline (app/window.go `syncOpaque`):
   panel exists for.
 - **Background alpha == 255 — opaque.** The pipeline promises that to
   the compositor once per size change: `wl_surface.set_opaque_region`
-  over the full device rect (region created from the compositor,
-  destroyed right after the set), re-sent on resize and rescale,
-  never per frame. The compositor can then skip blending behind the
-  window entirely. An explicit `Config.Opaque` forces the promise —
+  over the logical surface rect less any GPUArea holes (region created
+  from the compositor, destroyed right after the set), re-sent when the
+  size or the holes change, never per frame. The compositor can then skip blending behind the
+  window entirely. An explicit `WindowConfig.Opaque` forces the promise —
   only sound if the tree really paints every pixel opaquely.
 
 ## Theming
 
 The theme is a single palette value (`widget.Theme`): public color
-roles and three metrics (radius, spacing, padding), constructed from
+roles, metrics and motion settings, constructed from
 the `DarkTheme`/`LightTheme` presets and customized through `With*`
 methods. Every `With*` returns a fresh copy and never mutates the
 receiver, so a config-driven palette composes and branches without
@@ -360,7 +365,8 @@ applies; a theme is never rejected for its colors.
   decides whether to call `SetTheme` ([appearance.md](appearance.md)).
 - **One kind of subsurface: GPUArea's. No single-pixel buffers.** lys-ui
   draws each window into one buffer per surface. Overlays (popover
-  shadows, drag icons, the fader) are painted into that buffer, and
+  shadows, the fader) are painted into that buffer, a drag icon is its
+  own `start_drag` surface, and
   spacers are rectangle fills inside the damage, so damage and pacing
   stay one problem per window. The one exception is `widget.GPUArea`,
   whose pixels the application renders outside lys-ui. Each area gets one

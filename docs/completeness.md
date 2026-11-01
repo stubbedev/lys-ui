@@ -14,7 +14,7 @@ live in [architecture.md](architecture.md#non-goals).
 | `Component`, `Controller`, `RelmApp::run`, dialog components | `component.Component[In, Out]`, `Context`, `Controller` (`Forward`, `ForwardTo`, `Detach`, `State()` watcher: typed state observation after each update batch, no copy per notification), `component.Run`/`Window`/`Layer`/`Dialog`/`Popover`; headless tests with `componenttest.Loop` | component/, [components.md](components.md) |
 | `view!`, `#[name]`, `#[watch]` setters, `#[relm4::widget_template]` | `ui`: a generated typed builder per widget (setters, `Watch*`, hooks, `Bind*`, adders), `Ref`, `Column`/`Row`, `If`, `Match`, `Each`, `Use`; templates are functions; `ui.Mount`/`ui.Build` | ui/, internal/uigen, [components.md](components.md#views-typed-builders) |
 | `Command`, `oneshot_command`, `spawn_command`, `AsyncComponent` | `Context.Oneshot`, `Spawn`, `Context()` (cancelled at shutdown); `Loader` (loading view, `Load` off the loop, held input); `Context.Await`/`Busy` for awaiting updates | component/command.go |
-| `FactoryVecDeque`, `FactoryHashMap`, `FactoryComponent`, `AsyncFactoryComponent`, `DynamicIndex`, `FactoryView`, `FixedPosition` | `component.Factory[C, In, Out]` of item components with in-place edits (async items through `Loader`: loading view first, input held, mapped to relm4's AsyncFactoryComponent), `KeyedFactory[K, ...]`, `Index`, `BoxView`/`FlowBoxView`/`StackView`/`NotebookView`/`GridView`/`FixedView`/`ListBoxView` | component/factory.go, component/views.go |
+| `FactoryVecDeque`, `FactoryHashMap`, `FactoryComponent`, `AsyncFactoryComponent`, `DynamicIndex`, `FactoryView`, `FixedPosition` | `component.Factory[C, In, Out]` of item components with in-place edits (async items through `Loader`: loading view first, input held, mapped to relm4's AsyncFactoryComponent), `KeyedFactory[K, ...]`, `Index`, `BoxView`/`FlowBoxView`/`StackView`/`NotebookView`/`GridView`/`FixedView`/`ListBoxView` | component/factory.go, component/keyed.go, component/views.go |
 | `Worker`, `detach_worker` | `component.Worker[In, Out]` on its own goroutine, `LaunchWorker` (top-level or owned by a component), `WorkerController` | component/worker.go |
 | `tracker::track`, `#[watch]`, `#[track]` | `Context.Tracked` (`*Tracked[T]`, cleared after each refresh), `Context.Watch`, `Context.Track` | component/tracked.go |
 | `MessageBroker`, `SharedState`, `Reducer` | `app.Stream[Msg]`, `app.SharedState[T]`, `app.Reducer[S, M]` | app/message.go |
@@ -33,14 +33,14 @@ live in [architecture.md](architecture.md#non-goals).
 | Label, styled text | `Label` (UAX #14 wrap, start/middle/end ellipsize), `RichLabel` (markup, links) | widget/label.go, widget/richlabel.go |
 | Button, ToggleButton, CheckButton, Switch, radio groups | `Button` (any child), `ToggleButton`, `CheckButton`, `Switch`; toggles and checks join radio groups | widget/button.go, widget/toggle.go, widget/radio.go |
 | Scale, ProgressBar, LevelBar, SpinButton | `Slider`, `ProgressBar`, `ProgressRing` (circular, with a centred child), `LevelBar`, `SpinButton` | widget/slider.go, widget/progressbar.go, widget/progressring.go, widget/levelbar.go, widget/spin.go |
-| Entry, PasswordEntry, SearchEntry, EditableLabel | `Entry` (selection, clipboard, IME, `EchoPassword`/`EchoNone`), `SearchEntry`, `SearchBar`, `ComboEntry` + completion, `EditableLabel` | widget/entry.go, widget/search.go, widget/completion.go, widget/editablelabel.go |
+| Entry, PasswordEntry, SearchEntry, EditableLabel | `Entry` (selection, clipboard, IME, `EchoPassword`/`EchoNone`), `SearchEntry`, `SearchBar`, `ComboEntry` + completion, `EditableLabel` | widget/entry.go, widget/echo.go, widget/search.go, widget/completion.go, widget/editablelabel.go |
 | undo/redo | bounded coalescing stack shared by `Entry` and `TextArea` | widget/undo.go |
 | TextView, SourceView | `TextArea` (soft wrap, Tab trap), code view (line numbers, highlighters, auto-indent); `highlight`: TOML, Go, JSON, YAML, Markdown, Adwaita schemes | widget/textarea.go, widget/codeview.go, highlight/ |
 | DropDown, ComboBox | `Dropdown`, `DropdownOf[T]`, `NewDropdownRows` (icons, headers); type-ahead | widget/dropdown.go |
 | widget layout properties (`hexpand`, `vexpand`, `halign`, `valign`, `margin-*`, `set_size_request`, `max-width`/`max-height`) | `SetHExpand`/`SetVExpand` (propagated like GTK's computed expand), `SetHAlign`/`SetVAlign`, `SetMargin`, `SetSizeRequest` and `SetMaximumSize` (clipping what overflows) on every widget, honored by the containers | widget/layoutprops.go |
-| Box, CenterBox, Stack, Overlay, ScrolledWindow | `Box`, `CenterBox`, `Stack` (transitions), `Overlay`, `Scroll` (kinetic, `RevealRect`, smooth scrolling, snap, overscroll chaining), `Scrollbar` | widget/box.go, widget/centerbox.go, widget/containers.go |
+| Box, CenterBox, Stack, Overlay, ScrolledWindow | `Box`, `CenterBox`, `Stack` (transitions), `Overlay`, `Scroll` (kinetic, `RevealRect`, smooth scrolling, snap, overscroll chaining), `Scrollbar` | widget/box.go, widget/centerbox.go, widget/containers.go, widget/scrollbar.go |
 | Grid, FlowBox, adw WrapBox, Fixed | `Grid` (spans, squeeze to the children's minimums), `FlowBox`, `NewWrapBox`, `Fixed` (children at explicit (x, y) logical pixels, natural size, union measurement) | widget/grid.go, widget/flowbox.go, widget/fixed.go |
-| Paned, Frame, AspectFrame, Revealer, Expander, SizeGroup | the same names | widget/paned.go, widget/frame.go, widget/revealer.go, widget/expander.go, widget/shrink.go |
+| Paned, Frame, AspectFrame, Revealer, Expander, SizeGroup | the same names | widget/paned.go, widget/frame.go, widget/revealer.go, widget/expander.go |
 | Notebook | `Notebook`: close hook, reorder by drag, overflow scrolling | widget/notebook.go |
 | adw ToolbarView | `ToolbarView`: top and bottom bar stacks, sliding reveal, flat/raised/raised-border styles, content extending under the bars | widget/toolbarview.go |
 | adw TabView, TabBar, TabOverview | `TabView` (pages with title, icon, loading, indicator, attention, pinned; close veto; transfer between views), `TabBar` (select, close, drag to reorder or move to another window's bar), `TabOverview` (thumbnail grid); `Application.AttachTabView` binds ctrl+Tab, ctrl+PageUp/Down, alt+1..9 | widget/tabview.go, widget/tabbar.go, app/chrome.go |
@@ -56,17 +56,18 @@ live in [architecture.md](architecture.md#non-goals).
 | adw AboutDialog | `Application.AboutDialog` | app/about.go |
 | ShortcutsWindow | `ShortcutsView` + `Application.ShortcutsDialog` from the accelerator registry | widget/shortcuts.go, app/accel.go |
 | adw Toast | `Toast` + `Application.ShowToast` (stacking, action, hover pause) | widget/toast.go, app/toast.go |
-| Tooltip | `SetTooltip`, `SetTooltipMarkup`, `SetTooltipOptions` on any widget | widget/widget.go, app/tooltip.go |
+| Tooltip | `SetTooltip` and `SetTooltipMarkup` on any widget; `Application.SetTooltipOptions` for every window | widget/widget.go, app/tooltip.go |
 | GLArea | `widget.GPUArea`: application-rendered dmabufs (zero copy, async import checked against the advertised formats) or CPU images, on a subsurface below the window, paced by `OnFrame` | widget/gpuarea.go, app/gpuarea.go, lys-lib/dmabuf/ |
 | Video, MediaControls, MediaStream, MediaFile | `widget.Video` (fit policies, controls on hover or pause, autoplay), `widget.MediaControls`, `media.Stream` (play, pause, seek, loop, volume, mute, audio-clocked sync); sources: animated images, YUV4MPEG2 in pure Go, any file through an ffmpeg subprocess; sound through the PulseAudio protocol | media/, widget/video.go, widget/mediacontrols.go |
-| Spinner, Separator, Image, Icon | `Spinner`, `NewSeparator`, `Image` (fit/cover, async decode, PNG/JPEG/GIF/WebP, animated GIF/APNG), `Icon` (theme, file, SVG, symbolic tint, bundled Lucide fallback) | widget/spinner.go, widget/image.go, widget/icon.go |
+| Spinner, Separator, Image, Icon | `Spinner`, `NewSeparator`, `Image` (fit/cover, async decode, PNG/JPEG/GIF/WebP, animated GIF/APNG), `Icon` (theme, file, SVG, symbolic tint, bundled Lucide fallback) | widget/spinner.go, widget/separator.go, widget/image.go, widget/icon.go |
 | DrawingArea, GestureStylus | `DrawingArea` (`OnDraw`, `OnStylus`); relm4 DrawHandler as `DrawSurface`: a retained backing canvas (incremental `Draw`, damage limited to the touched rect, resize keeps content, rescale reallocates and calls `OnResize`) | widget/drawingarea.go, widget/drawsurface.go |
 | adw PreferencesDialog | `widget.PreferencesView` (page switcher, search over every searchable row's title and subtitle with jump-to-row results, subpages) in `Application.PreferencesDialog` with `AddToast` | widget/prefsview.go, app/dialog.go |
 | adw PreferencesPage/Group, ActionRow family | `PreferencesPage`, `PreferencesGroup`, `ActionRow`, `SwitchRow`, `SpinRow`, `ComboRow`, `EntryRow`, `ButtonRow`, `ExpanderRow` | widget/prefs.go, widget/actionrow.go, widget/controlrows.go |
 | adw NavigationView, NavigationSplitView, OverlaySplitView, Carousel, ViewSwitcher, StackSwitcher, Clamp, BreakpointBin | the same names; one breakpoint engine | widget/navigation.go, widget/adaptive.go |
-| adw Banner, BottomSheet, StatusPage, Avatar, SplitButton, ButtonContent, ToggleGroup | the same names | widget/adw.go, widget/bottomsheet.go |
+| adw Banner, BottomSheet, StatusPage, Avatar, SplitButton, ButtonContent, ToggleGroup | the same names | widget/adw.go, widget/sheet.go |
 | drag and drop | `DragSource`/`DragEnterer` per widget, action negotiation, cross-window | widget/input.go, app/dragdrop.go |
 | GestureClick, EventControllerScroll | `SetOnPointer` (any button, click count, modifiers) and `SetOnScroll` (steps, modifiers) on every widget; `List.OnPointer`/`OnScroll` with the row | widget/pointerhook.go, widget/list.go |
+| modern components (no GTK counterpart) | `Accordion`, `Alert`, `Badge`, `Breadcrumb`, `Chart`, `Combobox`, `DataTable`, `DatePicker`, `Form`, `HoverCard`, `InputOTP`, `Pagination`, `Sidebar` | widget/accordion.go, widget/alert.go, widget/display.go, widget/breadcrumb.go, widget/chart.go, widget/combobox.go, widget/datatable.go, widget/datepicker.go, widget/form.go, widget/hovercard.go, widget/inputotp.go, widget/pagination.go, widget/sidebar.go |
 | shell parts (no GTK counterpart) | `Bar` (start, center and end zones along an edge, turning with `SetEdge`), `BarButton`, `BarSeparator`, `SegmentIndicator`, `app.NewBar`; `FloatingPanel` (drag, resize, confinement, input-region pass-through via `InputRegioner`); `Card`; `Chip` and the drag-reorderable `ChipBox` | widget/bar.go, app/bar.go, widget/floatingpanel.go, widget/card.go, widget/chip.go |
 | RTL/bidi | UAX #9 in every text path; `Direction` on text widgets, menus, dropdowns and Box | lys-lib's text, widget/direction.go |
 
@@ -75,10 +76,13 @@ live in [architecture.md](architecture.md#non-goals).
 | Area | lys-ui | Where |
 | --- | --- | --- |
 | rendering | premultiplied ARGB8888, signed-distance AA, damage-clipped repaint, gradients (linear, radial, conic, repeating) | lys-lib/render/ |
+| GPU rendering | a Vulkan renderer into dmabufs through lys-lib's `gpu`, chosen by `LYS_UI_RENDERER` (`auto`, `gpu`, `cpu`), on the CPU where it cannot open | app/gpurender.go, lys-lib/gpu/ |
 | fonts | system lookup (`app.Font`, `FontWeighted`, `FontFamilies`), per-rune fallback chains, color emoji (CBDT/sbix, COLRv0/v1, OT-SVG), variable fonts | app/fonts.go, lys-lib/render/, internal/sysfont |
 | theming | typed `Theme` palette with copying `With*`, dark/light/high-contrast presets, WCAG guard | widget/theme.go |
 | CSS | GTK-flavored stylesheets above the palette: selectors, `@define-color`, transitions, `@keyframes`, hot reload; stylesheet files loadable at chosen priorities (`AddStylesheetFile`) with one shared poller | internal/style, widget/style.go, [css.md](css.md) |
-| icon themes | freedesktop spec in pure Go, live icon-theme following | internal/icons, [icons.md](icons.md) |
+| glass surfaces | the `css.Glass`, `css.LiquidGlass` and `css.Frosted` style classes; behind-window blur through ext_background_effect_v1 | widget/adwaita.go, app/surfacehints.go, cmd/lys-ui-glass |
+| GTK settings | `gtksettings`: GTK 4's settings.ini | gtksettings/ |
+| icon themes | freedesktop spec in pure Go, live icon-theme following; `icontheme` for programs that draw icons without widgets | internal/icons, icontheme/, [icons.md](icons.md) |
 | accessibility | semantic roles, keyboard-first guarantee, in-process AT-SPI bridge | widget/a11y.go, internal/atspi, [a11y.md](a11y.md) |
 | animation (`adw::TimedAnimation`, `SpringAnimation`) | `anim`: tweens, easing curves, springs, Sequence/Parallel/Delay timelines, reduced motion | anim/, internal/animclock |
 
@@ -111,5 +115,11 @@ live in [architecture.md](architecture.md#non-goals).
 
 ## Known gaps
 
-None. Sway and Hyprland both run the full compositor-in-the-loop
-suite as required CI gates.
+- The AT-SPI bridge has no Selection or Table interfaces and reports no
+  text attributes ([a11y.md](a11y.md)).
+- Tablet pads are not bound ([input-model.md](input-model.md)).
+- The CSS engine's limits are listed in [css.md](css.md).
+
+Sway and Hyprland are both required CI gates. Sway runs the full
+compositor-in-the-loop suite; Hyprland runs `internal/headlesstest`
+without the restart test, as its VM boots Hyprland once.

@@ -42,8 +42,7 @@ The destroyed-proxy retry inside dispatch (`ErrContextRunProxyNil`, a
 normal mid-queue abort) is bounded, so no error shape — a dead fd chief
 among them — can turn a roundtrip or the park into a spin.
 
-**Policy.** `Application.OnDisconnect` (or `Config.OnDisconnect` on the
-single-window `Run`) fires exactly once, on the loop goroutine, before
+**Policy.** `Application.OnDisconnect` fires exactly once, on the loop goroutine, before
 teardown, with `DisconnectedEvent{Reason, Err}`. After it returns, Run
 releases every window (buffer pools included), closes the session — the
 shared arena's memfd, mapping, and fd, and the display — and shuts the
@@ -179,12 +178,11 @@ and `SaveFileDialog` wrap `widget.FileChooser` - the pure-Go picker
 Recent when recents are on), the directory listing, pattern filters,
 a name row in save mode, and an ok button that refuses to close the
 dialog until the choice is valid (the `DialogConfig.ValidateResponse`
-veto). Save asks before replacing an existing file;
+veto). With `ConfirmOverwrite` set, save asks before replacing an existing file;
 choices land in `OnOpen`/`OnSave` on the loop goroutine, exactly once.
 
 **The picker is portal-free by decision.** lys-ui ships every widget the
-picker needs, a portal FileChooser adds a D-Bus dependency and a
-second UI to keep honest, and portal-less sessions (lab machines,
+picker needs, a portal FileChooser adds a second UI to keep honest, and portal-less sessions (lab machines,
 early boot, tests) get the same dialog. The seam is
 `FileChooser.SetSource` - the listing comes from an injected
 `DirSource`, so a different listing backend plugs in under the same

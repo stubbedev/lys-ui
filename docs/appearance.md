@@ -81,6 +81,6 @@ with a scripted mock portal. The tests cover:
 - reconnecting across a bus restart
 - `Close` draining goroutines
 
-They skip when no `dbus-daemon` binary exists. `app/appearance_test.go`
+They fail when no `dbus-daemon` binary exists. `app/appearance_test.go`
 pins loop delivery: hooks run on the pump, in order, and nothing is
 delivered after `off`.

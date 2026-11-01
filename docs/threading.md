@@ -17,7 +17,9 @@ Who may touch a widget, when, and how everything else gets in.
    value into the closure instead.
 3. **The compositor connection is loop-only.** Requests from one client
    must stay ordered ([architecture.md](architecture.md) rule 1), so
-   nothing outside the loop goroutine issues protocol requests.
+   nothing outside the loop goroutine issues protocol requests, except
+   the `WakeAfter` sync and animated-cursor frames, both under their
+   own locks.
 4. **Timer callbacks are loop callbacks.** `Application.Every(d, fn)`
    runs `fn` on the loop at a fixed cadence. No timer thread exists
    whose callback could race the tree.
@@ -25,8 +27,7 @@ Who may touch a widget, when, and how everything else gets in.
 Library code follows the same rule. `media.Stream` decodes on its own
 goroutine a few frames ahead and hands frames over through channels
 that the Stream drains on the loop's frame clock. Its sound plays on
-the audio client's goroutine, which shares only an atomic counter of
-frames played. Every Stream method, and every subscriber it calls,
+the audio client's goroutine, which shares only atomics: frames played, closed and drained. Every Stream method, and every subscriber it calls,
 runs on the loop. A `widget.GPUArea`'s `OnFrame` runs on the loop too.
 An application that renders on its own thread hands the finished
 buffer back through `Invoke` and presents it there.
@@ -57,7 +58,8 @@ dead application.
 mutation entry points (`Invalidate`, `InvalidateRect`, `SetTooltip`,
 and through `Invalidate` every `SetText`-style mutation) check it. A
 mutation from any other goroutine fires the hook installed by
-`widget.SetOffLoopHook`. The check costs one atomic load. It is a
+`widget.SetOffLoopHook`. Disarmed, the check costs one atomic load; armed with a hook, it also
+parses the goroutine id. It is a
 debugging aid that samples the common choke points, not a lock.
 
 ## The typed messaging layer

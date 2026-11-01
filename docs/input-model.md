@@ -30,7 +30,7 @@ replacement, decides who receives an event.
 ## The parked loop
 
 The app loop parks in `Session.Step` (one blocking dispatch) instead of
-polling. Wakeups come from exactly three sources:
+polling. Wakeups come from three sources:
 
 - compositor events: pointer, keyboard, frame callbacks, configure,
   buffer releases;
@@ -39,8 +39,10 @@ polling. Wakeups come from exactly three sources:
   schedules nothing), tooltip dwell — each
   armed through `Session.WakeAfter`, which kicks the parked read with a
   `wl_display.sync` from the timer goroutine;
-- nothing else. With no dirty state and no pending timers the loop
-  schedules no kick and holds no CPU.
+- `Application.Invoke` from other goroutines.
+
+With no dirty state and no pending timers the loop schedules no kick
+and holds no CPU.
 
 Redraws happen only when dirty, paced by the frame callback. A frame
 that never completes (fully occluded surface) leaves the loop waiting
@@ -70,7 +72,7 @@ complete before proceeding (popup configure).
   surface. While grabbed, motion, further buttons, and axis route to
   the grabbing surface even if the compositor would move focus — drags
   keep feeding the widget the drag started on.
-- A **release** of the grabbing button ends the grab. Press/release
+- A **release** of any button ends the grab. Press/release
   pairs of different buttons may nest conceptually; lys-ui tracks a
   single grab because its widgets act on the primary button.
 - This mirrors GTK: `gdk_seat_grab` semantics at the toolkit level,
@@ -88,8 +90,8 @@ complete before proceeding (popup configure).
   track from the first pixel), but the demo's chrome drag-move uses
   `xdg_toplevel.move`, whose threshold is the compositor's.
 - A scroll-drag distinction therefore does not arise inside a widget:
-  axis events route to the grab during a drag (scroll-follows-drag),
-  and to the hover chain otherwise.
+  axis events stay on the grabbing surface during a drag and go to the
+  hover chain there.
 
 ## Drag and drop (wl_data_device)
 
@@ -142,8 +144,9 @@ touches the selection and vice versa.
 
 ## Click-to-focus
 
-Pressing any widget moves keyboard focus to it (`Router.Press` sets
-focus from the hit test), matching GTK click-to-focus. Tab and
+A primary-button press moves keyboard focus to the widget (`Router.Press`
+sets focus from the hit test) unless `SetFocusOnClick(false)` opts it
+out, matching GTK click-to-focus. Tab and
 shift+Tab traverse focus (`FocusNext` / `FocusPrev`); shift+click
 extends a text selection (`Entry` / `TextArea` handle shift+left /
 shift+right and shift+click anchor).
@@ -210,7 +213,7 @@ mutates the tree mid-traversal.
 - Keymap-driven text goes to the focused widget (`RuneHandler`);
   editing keys map to `KeyAction`s; ctrl+c/x/v/a act on the focused
   widget's selection when a clipboard is configured; Escape is an app
-  keybinding (`Config.OnKey`).
+  keybinding (`WindowConfig.OnKey`).
 - Key repeat is synthesized on the compositor's reported rate/delay.
 - Tab trap: a plain Tab is indentation inside a widget that implements
   `widget.TabTrapper` (multi-line text areas); ctrl+Tab and shift+Tab
@@ -365,17 +368,17 @@ mode switches, and unplug-replug.
 
 lys-lib's `debug` (build tag `lysdebug`, categories via LYS_DEBUG)
 traces the path at its seams, and `app.Trace` lets an application
-trace its own events into the same timeline: `wire`-level pointer events with surface
+trace its own events into the same timeline: `input`-level pointer events with surface
 ids in `wlsession`, routing decisions and hit bounds in `app`, frame
 pacing under `frame`. Without the tag every call compiles out.
 
 Traces are not logging. The library itself is silent by default: an
 embedding application installs its `*slog.Logger` once
-(`app.SetLogger`; nil, the default, discards everything) and only three things flow through it: Warn for
+(`app.SetLogger`; nil, the default, discards everything) and only these flow through it: Warn for
 degraded-but-running (an advertised optional protocol whose bind
-failed, a theme below WCAG AA), Error for terminal conditions (the
+failed, a theme below WCAG AA), Info for the one-time note that no
+GPU renderer opened, Error for terminal conditions (the
 compositor raising a fatal protocol error), and Debug for protocol
 chatter (optional globals the compositor does not advertise,
-capability changes). Nothing logs per-frame or per-keypress, and
-nothing logs at Info. The demo binaries keep their own
+capability changes). Nothing logs per-frame or per-keypress. The demo binaries keep their own
 `log.Printf` — they are apps, not the library.

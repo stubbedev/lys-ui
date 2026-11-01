@@ -86,7 +86,7 @@ widget.
 - `ui.Mount(cx, env, node)` builds inside a component. Watches and
   tracks refresh after its updates, and bindings (`BindText`, ...)
   unbind when it shuts down.
-- `ui.Build(env, node)` builds on its own and returns a `*ui.View`
+- `ui.Build(env, node)` builds on its own and returns the root widget and a `*ui.View`
   whose `Refresh` and `Close` play those roles.
 
 Builders are descriptions. One builder placed in the tree and passed to
@@ -312,8 +312,8 @@ mid-load, or shutting the factory down, cancels its `Load` context and
 never runs its `Init`.
 
 Views: `BoxView`, `FlowBoxView`, `StackView` (pages named per item),
-`NotebookView` (tabs titled per item) and `GridView` (cells placed by
-index). The container holds only the factory's items. Implement
+`NotebookView` (tabs titled per item), `GridView` (cells placed by
+index), `FixedView` and `ListBoxView`. The container holds only the factory's items. Implement
 `FactoryView[C]` to render into anything else. Large, virtualized data
 sets use `widget.TypedList[T]`, `widget.List` or `ColumnView[T]` with a
 model instead, relm4's `TypedListView`.
