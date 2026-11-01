@@ -10,7 +10,7 @@
 package sysfont
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -21,6 +21,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/typesetting/font/opentype"
 	"github.com/stubbedev/lys-lib/third_party/typesetting/fontscan"
 	"github.com/stubbedev/lys-lib/third_party/typesetting/language"
+	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/uifont"
 )
@@ -88,7 +89,7 @@ func fontmap() (*fontscan.FontMap, error) {
 			family string
 			data   []byte
 		}{{uifont.Family, uifont.Sans}, {uifont.MonoFamily, uifont.Mono}} {
-			if err := fm.AddFont(bytes.NewReader(f.data), "embedded:"+f.family, f.family); err != nil {
+			if err := fm.AddFont(opentype.NewMapped(f.data), "embedded:"+f.family, f.family); err != nil {
 				storeErr = fmt.Errorf("sysfont: register embedded %s: %w", f.family, err)
 				return
 			}
@@ -208,16 +209,26 @@ func remember(loc fontscan.Location, face *font.Face) (*render.Typeface, error) 
 }
 
 // faceFromFile parses the face at index of a font file (0 for plain
-// single-font files). Only that face is read: a collection's other
-// faces (a CJK .ttc holds ten) would each copy every table. The path
-// comes from fontscan's system font index, never from user input.
+// single-font files) from a read-only mapping, which stays for the
+// process: a face reads its tables in place for as long as it lives, so
+// glyphs never drawn cost only reclaimable file pages, shared with every
+// other process using the font. As with FreeType, a font file truncated
+// under a running process faults. The path comes from fontscan's system
+// font index, never from user input.
 func faceFromFile(path string, index uint16) (*font.Face, error) {
-	f, err := os.Open(path) //nolint:gosec // path is fontscan's trusted font index, not user input
+	data, err := mapFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("sysfont: map %s: %w", path, err)
 	}
-	defer f.Close()
-	loaders, err := opentype.NewLoaders(f)
+	face, err := parseFace(data, path, index)
+	if err != nil {
+		return nil, errors.Join(err, unix.Munmap(data))
+	}
+	return face, nil
+}
+
+func parseFace(data []byte, path string, index uint16) (*font.Face, error) {
+	loaders, err := opentype.NewLoaders(opentype.NewMapped(data))
 	if err != nil {
 		return nil, fmt.Errorf("sysfont: read %s: %w", path, err)
 	}
@@ -229,6 +240,19 @@ func faceFromFile(path string, index uint16) (*font.Face, error) {
 		return nil, fmt.Errorf("sysfont: face %d of %s: %w", index, path, err)
 	}
 	return font.NewFace(ft), nil
+}
+
+func mapFile(path string) ([]byte, error) {
+	f, err := os.Open(path) //nolint:gosec // path is fontscan's trusted font index, not user input
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	return unix.Mmap(int(f.Fd()), 0, int(info.Size()), unix.PROT_READ, unix.MAP_PRIVATE)
 }
 
 // Sans returns the system's default sans-serif face, resolved with the
