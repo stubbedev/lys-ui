@@ -59,9 +59,8 @@ type Locks = wlsession.Locks
 
 // Modifier bits of Mods.
 const (
-	ModShift    = wlsession.ModShift
-	ModCapsLock = wlsession.ModCapsLock
-	ModCtrl     = wlsession.ModCtrl
-	ModAlt      = wlsession.ModAlt
-	ModSuper    = wlsession.ModSuper
+	ModShift = wlsession.ModShift
+	ModCtrl  = wlsession.ModCtrl
+	ModAlt   = wlsession.ModAlt
+	ModSuper = wlsession.ModSuper
 )
