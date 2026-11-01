@@ -27,9 +27,7 @@ Two equivalent paths:
 
 - `LYS_UI_INSPECT=1` (or `true`/`yes`/`on`) in the environment arms the
   inspector for any lys-ui app at startup, overlay on.
-- In code: `Application.SetInspect(true)` / `ToggleInspect()`, or
-  `app.Config{Inspect: true}` for the single-window `app.Run`
-  convenience.
+- In code: `Application.SetInspect(true)` / `ToggleInspect()`.
 
 ## The overlay
 

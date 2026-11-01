@@ -319,3 +319,4 @@ func (h *lockHost) EnsureUsable() error      { return h.s.EnsureUsable() }
 func (h *lockHost) Closed() bool             { return h.s.Closed() }
 func (h *lockHost) Size() (int, int)         { return h.s.Size() }
 func (h *lockHost) HostSurface() *wl.Surface { return h.s.HostSurface() }
+func (h *lockHost) DestroySurface()          { h.s.DestroySurface() }

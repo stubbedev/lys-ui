@@ -164,3 +164,46 @@ func TestSetSurfaceInputUnregisters(t *testing.T) {
 		t.Errorf("unregistered handler received %d enters", h.enters)
 	}
 }
+
+func TestSurfaceGoingAwayLeavesNoFocusBehind(t *testing.T) {
+	s := newRoutingSession()
+	gone, other := &wl.Surface{}, &wl.Surface{}
+	h := &recordingHandler{}
+	s.SetSurfaceInput(gone, h)
+	s.SetSurfaceInput(other, &recordingHandler{})
+	s.pointerFocus, s.grabSurface, s.gestureSurface, s.keyboardFocus = gone, gone, gone, gone
+	s.touchFocus = map[int32]*wl.Surface{1: gone, 2: other}
+
+	s.SetSurfaceInput(gone, nil)
+
+	if s.pointerFocus != nil || s.grabSurface != nil || s.gestureSurface != nil || s.keyboardFocus != nil {
+		t.Errorf("focus left on a removed surface: pointer %v grab %v gesture %v keyboard %v",
+			s.pointerFocus, s.grabSurface, s.gestureSurface, s.keyboardFocus)
+	}
+	if _, ok := s.touchFocus[1]; ok {
+		t.Error("a touch contact stayed on the removed surface")
+	}
+	if s.touchFocus[2] != other {
+		t.Error("removing a surface dropped another surface's touch contact")
+	}
+
+	s.HandlePointerLeave(wl.PointerLeaveEvent{})
+	s.HandlePointerEnter(wl.PointerEnterEvent{})
+	if h.leaves != 0 {
+		t.Errorf("a removed surface's handler got %d leaves", h.leaves)
+	}
+}
+
+func TestRemovingAnUnfocusedSurfaceKeepsTheFocus(t *testing.T) {
+	s := newRoutingSession()
+	focused, gone := &wl.Surface{}, &wl.Surface{}
+	s.SetSurfaceInput(focused, &recordingHandler{})
+	s.SetSurfaceInput(gone, &recordingHandler{})
+	s.pointerFocus, s.keyboardFocus = focused, focused
+
+	s.SetSurfaceInput(gone, nil)
+
+	if s.pointerFocus != focused || s.keyboardFocus != focused {
+		t.Error("removing another surface moved the focus")
+	}
+}

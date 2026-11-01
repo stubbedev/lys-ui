@@ -355,3 +355,13 @@ func (s *Surface) Close() {
 		delete(s.lock.outputs, s.out)
 	}
 }
+
+// DestroySurface destroys the lock role and then the wl_surface.
+// Idempotent.
+func (s *Surface) DestroySurface() {
+	s.Close()
+	if s.WLSurface != nil {
+		_ = s.WLSurface.Destroy()
+		s.WLSurface = nil
+	}
+}

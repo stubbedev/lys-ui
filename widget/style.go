@@ -1223,6 +1223,18 @@ type styleTargeter struct {
 	prev *styleTargeter // the reused adapter for the previous sibling
 }
 
+// forget drops the widgets the shared adapter chain points at once a
+// compute is done, keeping the adapters for the next one: a closed
+// window's tree must not stay reachable through the last restyle.
+func (s *styleTargeter) forget() {
+	if s == nil {
+		return
+	}
+	s.n, s.w = nil, nil
+	s.anc.forget()
+	s.prev.forget()
+}
+
 func (s *styleTargeter) StyleID() any { return s.n }
 
 func (s *styleTargeter) StyleTarget(t *style.Target) { s.n.fillTarget(t, s.w) }
@@ -1681,28 +1693,17 @@ func (n *node) style(w Widget) *style.Values {
 	return v
 }
 
-// partStack is restyleParts' per-depth kid buffers, reused across
-// restyles like styleStack; partDepth is the nesting in flight (a
-// part's restyle refreshes its own parts a level down).
-var (
-	partStack [][]Widget
-	partDepth int
-)
+// partStack is restyleParts' kid buffers, reused across restyles like
+// styleStack; a part's restyle refreshes its own parts a level down.
+var partStack kidStack
 
 // restyleParts refreshes w's style parts after w restyled.
 func restyleParts(w Widget) {
-	for len(partStack) <= partDepth {
-		partStack = append(partStack, nil)
-	}
-	kids := appendStyleKids(w, partStack[partDepth][:0])
-	partStack[partDepth] = kids
-	partDepth++
-	defer func() { partDepth-- }()
-	for _, k := range kids {
+	partStack.each(func(kids []Widget) []Widget { return appendStyleKids(w, kids) }, func(k Widget) {
 		if p, ok := k.(styleParter); ok {
 			p.partNode().style(k)
 		}
-	}
+	})
 }
 
 // restyle recomputes the cascade and invalidates the smallest correct
@@ -1745,6 +1746,7 @@ func (n *node) restyle(w Widget) *style.Values {
 		if sensNow.pseudo {
 			n.computePseudos(layers, v)
 		}
+		styleSelf.forget()
 	} else {
 		*v = style.Values{}
 		if n.pseudoGen != styleGen {
@@ -2160,35 +2162,28 @@ func inkOf(v *style.Values) render.Insets {
 	return ink
 }
 
+// styleStack is restyleSubtree's snapshot buffers, reused across passes
+// like the damage walk's walkStack.
+var styleStack kidStack
+
 // restyleSubtree marks every descendant's computed style stale:
 // something above them changed what they match or inherit, so each
 // recomputes on its next read — the damage walk reaches them
 // pre-order — and repaints only if its values actually moved (the
 // restyle diff invalidates).
-func restyleSubtree(w Widget) { restyleInto(w, 0) }
-
-// styleStack is restyleSubtree's per-depth snapshot buffers, reused
-// across passes like the damage walk's walkStack: tree walks are
-// loop-goroutine work, and a level's snapshot lives until its subtree
-// is done.
-var styleStack [][]Widget
-
-// restyleInto is restyleSubtree's recursive body, snapshotting the
-// kids at each depth into styleStack's slot.
-func restyleInto(w Widget, depth int) {
-	for len(styleStack) <= depth {
-		styleStack = append(styleStack, nil)
-	}
-	styleStack[depth] = appendStyleKids(w, styleStack[depth][:0])
-	if n := nodeOf(w); n != nil {
-		styleStack[depth] = append(styleStack[depth], n.anchored...)
-	}
-	for _, k := range styleStack[depth] {
+func restyleSubtree(w Widget) {
+	styleStack.each(func(kids []Widget) []Widget {
+		kids = appendStyleKids(w, kids)
+		if n := nodeOf(w); n != nil {
+			kids = append(kids, n.anchored...)
+		}
+		return kids
+	}, func(k Widget) {
 		if n := nodeOf(k); n != nil {
 			n.markStyleDirty()
 		}
-		restyleInto(k, depth+1)
-	}
+		restyleSubtree(k)
+	})
 	markDamage()
 }
 

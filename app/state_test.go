@@ -31,6 +31,7 @@ func (h *stateHost) EnsureUsable() error      { return h.win.EnsureUsable() }
 func (h *stateHost) Closed() bool             { return h.win.Closed() }
 func (h *stateHost) Size() (int, int)         { return h.win.Size() }
 func (h *stateHost) HostSurface() *wl.Surface { return &h.surf }
+func (h *stateHost) DestroySurface()          {}
 func (h *stateHost) State() window.State      { return h.win.State() }
 
 // configure plays one toplevel configure round: the state array and the

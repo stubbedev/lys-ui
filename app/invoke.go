@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"sync"
 	"time"
 
@@ -77,17 +78,12 @@ func (q *loopQueues) killTimer(t *loopTimer) {
 // goroutine, which alone touches their next field afterwards.
 func (q *loopQueues) timerWork(now time.Time) (due []*loopTimer) {
 	q.mu.Lock()
-	kept := q.timers[:0]
+	q.timers = slices.DeleteFunc(q.timers, func(t *loopTimer) bool { return t.stopped })
 	for _, t := range q.timers {
-		if t.stopped {
-			continue
-		}
-		kept = append(kept, t)
 		if !t.next.After(now) {
 			due = append(due, t)
 		}
 	}
-	q.timers = kept
 	q.mu.Unlock()
 	return due
 }

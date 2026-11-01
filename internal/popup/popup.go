@@ -500,6 +500,9 @@ func (p *Popup) Close() {
 func (p *Popup) Destroy() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if err := p.sc.Destroy(); err != nil {
+		debug.Log("input", "popup scale objects: %v", err)
+	}
 	if p.XdgPopup != nil {
 		_ = p.XdgPopup.Destroy()
 		p.XdgPopup = nil

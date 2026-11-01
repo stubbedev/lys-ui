@@ -49,7 +49,7 @@ import (
 
 // hostWindow couples a Host with everything the loop needs to drive it.
 type hostWindow struct {
-	host Host
+	host surfaceOwner
 	sess *wlsession.Session
 	cfg  windowHooks
 	// hosted is the root this window hosts for animation (widget.Host),
@@ -233,7 +233,7 @@ func opaqueFor(background render.Color, opaque bool) bool {
 	return opaque || background.A() == 255
 }
 
-func newHostWindow(sess *wlsession.Session, host Host, initialScale int, root widget.Widget, hooks windowHooks, dnd *dragdrop.Controller, primary *primarySelection, animKind surfx.Kind, destroy func()) *hostWindow {
+func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int, root widget.Widget, hooks windowHooks, dnd *dragdrop.Controller, primary *primarySelection, animKind surfx.Kind, destroy func()) *hostWindow {
 	if initialScale < 1 {
 		initialScale = 1
 	}
@@ -361,6 +361,11 @@ func (w *hostWindow) hostRoot() {
 // the destroy (Pool.Reclaim); on a dead connection nothing is held any
 // more.
 func (w *hostWindow) release() {
+	if w.sc != nil {
+		if err := w.sc.Destroy(); err != nil {
+			debug.Log("frame", "destroy the scale objects: %v", err)
+		}
+	}
 	if w.unhost != nil {
 		w.unhost()
 		w.unhost, w.hosted = nil, nil
@@ -374,6 +379,7 @@ func (w *hostWindow) release() {
 	if w.dnd != nil {
 		w.dnd.Bind(w.host.HostSurface(), nil)
 	}
+	w.host.DestroySurface()
 	if w.pool == nil {
 		return
 	}
@@ -514,6 +520,8 @@ type scaleWire interface {
 	// SetTransform publishes the output transform the buffers are
 	// submitted for (rotated outputs).
 	SetTransform(t int32) error
+	// Destroy releases the scale objects with the window.
+	Destroy() error
 }
 
 // allocator is the pool's buffer source: it always consults the

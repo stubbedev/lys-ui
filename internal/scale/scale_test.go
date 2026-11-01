@@ -27,11 +27,17 @@ func (f *fakeSurface) SetBufferTransform(t int32) error {
 // fakeViewport records the wp_viewport destination requests.
 type fakeViewport struct {
 	destW, destH int32
+	destroyed    int
 	err          error
 }
 
 func (f *fakeViewport) SetDestination(w, h int32) error {
 	f.destW, f.destH = w, h
+	return f.err
+}
+
+func (f *fakeViewport) Destroy() error {
+	f.destroyed++
 	return f.err
 }
 
@@ -155,4 +161,36 @@ func TestPreferredScaleHandler(t *testing.T) {
 	// A nil handler must not panic (popups bind without one).
 	var none Controller
 	none.HandleWpScaleV1PreferredScale(wlr.WpScaleV1PreferredScaleEvent{Scale: 240})
+}
+
+func TestDestroyReleasesTheViewportOnce(t *testing.T) {
+	vp := &fakeViewport{}
+	c := &Controller{surf: &fakeSurface{}, viewport: vp}
+	if err := c.Destroy(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Destroy(); err != nil {
+		t.Fatal(err)
+	}
+	if vp.destroyed != 1 {
+		t.Errorf("viewport destroyed %d times, want once", vp.destroyed)
+	}
+	if c.Fractional() {
+		t.Error("a destroyed controller still reports fractional scaling")
+	}
+	if err := c.Apply(150, 10, 10); err != nil {
+		t.Errorf("Apply on a destroyed controller = %v, want an inert no-op", err)
+	}
+	var none *Controller
+	if err := none.Destroy(); err != nil {
+		t.Errorf("nil controller Destroy = %v", err)
+	}
+}
+
+func TestDestroyReportsTheWireError(t *testing.T) {
+	broken := errors.New("connection gone")
+	c := &Controller{surf: &fakeSurface{}, viewport: &fakeViewport{err: broken}}
+	if err := c.Destroy(); !errors.Is(err, broken) {
+		t.Errorf("Destroy = %v, want %v", err, broken)
+	}
 }

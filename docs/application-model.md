@@ -17,8 +17,6 @@ gtk4-layer-shell concepts it borrows.
   zone, keyboard interactivity, namespace. No close request exists in
   the protocol; the surface dies when the compositor closes it or its
   output disappears.
-- `app.Run(Config)` — the single-window convenience, implemented on the
-  same loop and hostWindow machinery as Application.
 
 ## Compositor disconnects
 

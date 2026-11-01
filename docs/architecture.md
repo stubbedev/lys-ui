@@ -77,7 +77,7 @@ parked read with a `wl_display.sync` and returns.
 
 ### 2. The loop parks
 
-`app.Run` and `Application.Run` block in `Session.Step` (one blocking
+`Application.Run` blocks in `Session.Step` (one blocking
 dispatch) instead of polling. Wakeups come from exactly three sources:
 compositor events, frame callbacks, and timer deadlines armed through
 `WakeAfter` — key repeat, animation frames, tooltip dwell, `Every`

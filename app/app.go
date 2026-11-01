@@ -15,14 +15,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/stubbedev/lys-lib/debug"
-	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/unxed/xkb-go"
 
 	"github.com/stubbedev/lys-ui/internal/clipboard"
 	"github.com/stubbedev/lys-ui/internal/compose"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
-	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/touchinput"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
@@ -45,62 +43,12 @@ type Host interface {
 	HostSurface() *wl.Surface
 }
 
-// Config describes an app run.
-type Config struct {
-	// Session is the wayland connection.
-	Session *wlsession.Session
-	// Host carries the widget tree.
-	Host Host
-	// Scale is the initial integer output scale the surface renders at;
-	// zero means 1. With the fractional-scale protocol the compositor's
-	// preferred scale (1.25 and friends) overrides this live.
-	Scale int
-	// Root is the widget tree.
-	Root widget.Widget
-	// Background fills the frame before the tree paints. An alpha of
-	// 255 marks the surface fully opaque and the frame pipeline sets
-	// wl_surface.set_opaque_region automatically; an alpha below 255
-	// leaves the surface translucent so the compositor blends what is
-	// behind it (compositor blur: panels keep alpha in the 200-235
-	// range - see docs/architecture.md, rule 13).
-	Background render.Color
-	// Opaque forces the opaque region even though Background is
-	// translucent - a promise the tree must keep: every pixel painted
-	// fully opaque, or the compositor shows stale content behind the
-	// surface. Leave false and let the background alpha decide.
-	Opaque bool
-	// OnPress, when set, fires after the router recorded a press with
-	// the button and the widget under the pointer.
-	OnPress func(button uint32, over widget.Widget)
-	// OnPointerMove, when set, receives raw pointer positions in
-	// surface (logical) coordinates, for anchoring context menus.
-	OnPointerMove func(x, y float64)
-	// TooltipFace renders hover tooltips; nil is the system UI face.
-	TooltipFace *render.Typeface
-	// Clipboard, when set, enables ctrl+c, ctrl+x, and ctrl+v on the
-	// focused widget's selection, middle-click paste of the primary
-	// selection, and (with CopyOnSelect) copy-on-select.
-	Clipboard *clipboard.Clipboard
-	// CopyOnSelect mirrors selection changes into the primary
-	// selection (X11 style: select text, then middle-click elsewhere
-	// to paste it). Default off; needs a configured Clipboard.
-	CopyOnSelect bool
-	// OnKey, when set, receives every key press (repeats included)
-	// together with the router, for apps that map keycodes to typing
-	// or actions.
-	OnKey func(r *widget.Router, keycode uint32, mods wlsession.Mods)
-	// Inspect arms the debug inspector: the widget-tree overlay plus
-	// the ctrl+shift+i (toggle) and ctrl+shift+d (dump) chords.
-	// LYS_UI_INSPECT=1 arms it for every app; this field is the
-	// in-code opt-in. See docs/inspector.md.
-	Inspect bool
-	// OnDisconnect observes the compositor connection dying (restart,
-	// crash, reload): it fires exactly once on the loop goroutine
-	// before Run releases the windows and closes the session, with the
-	// classified reason. Run then returns an error matching
-	// ErrDisconnected; exit with DisconnectExitCode so a supervisor
-	// respawns on the new session. See docs/application-model.md.
-	OnDisconnect func(DisconnectedEvent)
+// surfaceOwner is a Host whose surface the loop owns: as it drops the
+// window, DestroySurface takes what is left of the surface off the wire,
+// its role and then the wl_surface, and HostSurface is nil afterwards.
+type surfaceOwner interface {
+	Host
+	DestroySurface()
 }
 
 // surfaceInput routes one host surface's pointer events into the
@@ -426,40 +374,6 @@ func (in *surfaceInput) applyCursorShape() {
 func (in *surfaceInput) pinCursor(shape string) {
 	in.cursorPin = shape
 	in.applyCursorShape()
-}
-
-// Run drives one host until it closes: acquire a buffer, measure and
-// arrange the tree, paint, commit full-frame damage, pace on the frame
-// callback, and dispatch input into a router meanwhile. It is the
-// single-window convenience over Application; the loop parks in
-// Session.Step between events, so with nothing pending the process
-// holds no CPU — even when the compositor stops sending frame callbacks
-// for an occluded surface. It returns ErrClosed when the surface ended.
-func Run(cfg Config) error {
-	app := NewApplication(cfg.Session)
-	if cfg.Inspect {
-		app.SetInspect(true)
-	}
-	app.SetClipboard(cfg.Clipboard)
-	app.SetCopyOnSelect(cfg.CopyOnSelect)
-	app.SetTooltipFace(cfg.TooltipFace)
-	if cfg.OnDisconnect != nil {
-		app.OnDisconnect(cfg.OnDisconnect)
-	}
-	// Layer hosts animate (launcher/panel overlays); other hosts get
-	// the plain toplevel behavior — instant open, instant close.
-	animKind := surfx.KindMenu
-	if _, isLayer := cfg.Host.(*layerHost); isLayer {
-		animKind = surfx.KindOverlay
-	}
-	app.newWindow(cfg.Host, cfg.Scale, cfg.Root, windowHooks{
-		background: cfg.Background,
-		opaque:     opaqueFor(cfg.Background, cfg.Opaque),
-		onPress:    cfg.OnPress,
-		onMove:     cfg.OnPointerMove,
-		onKey:      cfg.OnKey,
-	}, nil, animKind)
-	return app.Run()
 }
 
 // loopKicker coalesces timer wakeups: one outstanding WakeAfter per

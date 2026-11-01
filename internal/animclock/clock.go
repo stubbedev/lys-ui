@@ -226,6 +226,7 @@ func Tick(now time.Time) bool {
 			mu.Unlock()
 		}
 	}
+	clear(running)
 	mu.Lock()
 	drivers = slices.DeleteFunc(drivers, func(d *driver) bool { return d.dead })
 	mu.Unlock()

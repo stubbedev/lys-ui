@@ -1125,7 +1125,7 @@ func focusWalker(w Widget, fn func(Widget)) {
 // loop-goroutine work, a level's snapshot is a copy taken at visit
 // time (so a callback mutating the tree changes the next walk, not
 // this one), and a walk must not nest inside another walkTree.
-var walkTreeStack [][]Widget
+var walkTreeStack kidStack
 
 // walkTree visits w and every descendant in paint order (pre-order),
 // passing each widget's nesting depth; the root is depth 0. The same
@@ -1137,22 +1137,9 @@ func walkTree(w Widget, depth int, fn func(Widget, int)) {
 		return
 	}
 	fn(w, depth)
-	c, ok := w.(childser)
-	if !ok {
-		return
-	}
-	for len(walkTreeStack) <= depth {
-		walkTreeStack = append(walkTreeStack, nil)
-	}
-	walkTreeStack[depth] = walkTreeStack[depth][:0]
-	if cb, ok := c.(childBuf); ok {
-		walkTreeStack[depth] = cb.appendChildren(walkTreeStack[depth])
-	} else {
-		walkTreeStack[depth] = append(walkTreeStack[depth], c.Children()...)
-	}
-	for _, k := range walkTreeStack[depth] {
+	walkTreeStack.each(func(kids []Widget) []Widget { return appendKids(w, kids) }, func(k Widget) {
 		walkTree(k, depth+1, fn)
-	}
+	})
 }
 
 // ErrNotFocusable is SetFocus refusing a widget that cannot take

@@ -352,7 +352,7 @@ func TestStartDragHappyPath(t *testing.T) {
 	dev := &fakeDevice{}
 	src := &fakeSource{}
 	c := newSourceController(dev, src, minActionVersion)
-	origin, icon := &wl.Surface{}, &wl.Surface{}
+	origin, icon := &wl.Surface{}, &destroyRecorder{surf: &wl.Surface{}}
 	done := 0
 
 	err := c.StartDrag(StartConfig{
@@ -379,7 +379,7 @@ func TestStartDragHappyPath(t *testing.T) {
 		t.Fatalf("start_drag sent %d times, want once", len(dev.drags))
 	}
 	call := dev.drags[0]
-	if call.origin != origin || call.icon != icon {
+	if call.origin != origin || call.icon != icon.surf {
 		t.Errorf("start_drag origin=%v icon=%v, want the configured surfaces", call.origin, call.icon)
 	}
 	if call.serial != 1234 {
@@ -393,10 +393,6 @@ func TestStartDragHappyPath(t *testing.T) {
 	}
 
 	// The destination acknowledging the transfer concludes the source.
-	// Swap the icon for a recorder first: the wire surface's Destroy
-	// needs a live connection, its teardown is what we pin here.
-	iconRec := &destroyRecorder{}
-	c.icon = iconRec
 	c.HandleDataSourceDndFinished(wl.DataSourceDndFinishedEvent{})
 	if c.Dragging() {
 		t.Error("drag still running after dnd_finished")
@@ -404,16 +400,21 @@ func TestStartDragHappyPath(t *testing.T) {
 	if src.destroyed != 1 {
 		t.Errorf("source destroyed %d times, want once", src.destroyed)
 	}
-	if iconRec.destroyed != 1 {
-		t.Errorf("icon destroyed %d times, want once", iconRec.destroyed)
+	if icon.destroyed != 1 {
+		t.Errorf("icon destroyed %d times, want once", icon.destroyed)
 	}
 	if done != 1 {
 		t.Errorf("OnDone fired %d times, want once with dropped=true", done)
 	}
 }
 
-// destroyRecorder stands in for the icon surface.
-type destroyRecorder struct{ destroyed int }
+// destroyRecorder stands in for the drag icon.
+type destroyRecorder struct {
+	surf      *wl.Surface
+	destroyed int
+}
+
+func (d *destroyRecorder) Surface() *wl.Surface { return d.surf }
 
 func (d *destroyRecorder) Destroy() error { d.destroyed++; return nil }
 

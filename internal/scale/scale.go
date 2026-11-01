@@ -12,6 +12,8 @@
 package scale
 
 import (
+	"errors"
+
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
@@ -33,6 +35,7 @@ type surfaceWire interface {
 // viewportWire is the wp_viewport half; nil without wp_viewporter.
 type viewportWire interface {
 	SetDestination(width, height int32) error
+	Destroy() error
 }
 
 // Controller is one surface's scale state. The zero value is unusable;
@@ -83,6 +86,28 @@ func (c *Controller) HandleWpScaleV1PreferredScale(ev wlr.WpScaleV1PreferredScal
 	if c.onPreferred != nil && ev.Scale > 0 {
 		c.onPreferred(ev.Scale)
 	}
+}
+
+// Destroy releases the surface's wp_viewport and wp_fractional_scale
+// objects, which the client otherwise keeps registered, with their
+// handler, for as long as the connection lives. The controller is inert
+// afterwards; a nil controller and a second Destroy are no-ops.
+func (c *Controller) Destroy() error {
+	if c == nil {
+		return nil
+	}
+	var errs []error
+	if c.frac != nil {
+		c.frac.RemovePreferredScaleHandler(c)
+		errs = append(errs, c.frac.Destroy())
+		c.frac = nil
+	}
+	if c.viewport != nil {
+		errs = append(errs, c.viewport.Destroy())
+		c.viewport = nil
+	}
+	c.surf, c.onPreferred = nil, nil
+	return errors.Join(errs...)
 }
 
 // Fractional reports whether the surface follows the fractional-scale

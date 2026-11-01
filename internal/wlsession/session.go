@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -896,12 +897,38 @@ func (s *Session) SetSurfaceInput(surf *wl.Surface, h SurfacePointerHandler) {
 		s.releaseConstraint(surf)
 		s.releaseSurfaceHints(surf)
 		delete(s.surfaceHandlers, surf)
-		if surf == s.keyboardFocus {
-			s.loseKeyboardFocus()
-		}
+		s.forgetFocus(surf)
 		return
 	}
 	s.surfaceHandlers[surf] = h
+}
+
+// forgetFocus drops surf from every piece of seat focus as it goes away:
+// the compositor names a destroyed surface as nil in the leave that may
+// follow, which could not match it any more.
+func (s *Session) forgetFocus(surf *wl.Surface) {
+	if surf == s.keyboardFocus {
+		s.loseKeyboardFocus()
+	}
+	if surf == s.pointerFocus {
+		s.pointerFocus = nil
+	}
+	if surf == s.grabSurface {
+		s.grabSurface = nil
+	}
+	if surf == s.gestureSurface {
+		s.gestureSurface = nil
+	}
+	maps.DeleteFunc(s.touchFocus, func(_ int32, focus *wl.Surface) bool { return focus == surf })
+}
+
+// surfaceID is surf's wire id for a trace line; an event names a surface
+// the client already destroyed as nil.
+func surfaceID(surf *wl.Surface) wl.ProxyId {
+	if surf == nil {
+		return 0
+	}
+	return surf.Id()
 }
 
 // SetSurfaceDrop registers h as the receiver of drag-and-drop events
@@ -921,10 +948,8 @@ func (s *Session) SetSurfaceDrop(surf *wl.Surface, h SurfaceDropHandler) {
 // HandleDataDeviceEnter implements wl.DataDeviceEnterHandler: a drag
 // entered a surface; route it to that surface's drop handler.
 func (s *Session) HandleDataDeviceEnter(ev wl.DataDeviceEnterEvent) {
-	if ev.Surface != nil {
-		debug.Log("input", "wire dnd enter surf=%d (%.1f,%.1f) serial=%d",
-			ev.Surface.Id(), ev.X, ev.Y, ev.Serial)
-	}
+	debug.Log("input", "wire dnd enter surf=%d (%.1f,%.1f) serial=%d",
+		surfaceID(ev.Surface), ev.X, ev.Y, ev.Serial)
 	if h := s.dropHandlers[ev.Surface]; h != nil {
 		h.HandleDragEnter(float64(ev.X), float64(ev.Y), ev.Serial, ev.Id)
 	}
@@ -996,7 +1021,7 @@ func (s *Session) HandlePointerEnter(ev wl.PointerEnterEvent) {
 	_ = s.applyCursor()
 	s.pointerFocus = ev.Surface
 	debug.Log("input", "wire enter surf=%d (%.1f,%.1f)",
-		ev.Surface.Id(), ev.SurfaceX, ev.SurfaceY)
+		surfaceID(ev.Surface), ev.SurfaceX, ev.SurfaceY)
 	if h := s.surfaceHandlers[ev.Surface]; h != nil {
 		h.HandlePointerEnter(float64(ev.SurfaceX), float64(ev.SurfaceY))
 	}
@@ -1007,7 +1032,7 @@ func (s *Session) HandlePointerEnter(ev wl.PointerEnterEvent) {
 // compositor only strips focus when the pointer truly left or the
 // grabbing input device went away.
 func (s *Session) HandlePointerLeave(ev wl.PointerLeaveEvent) {
-	debug.Log("input", "wire leave surf=%d", ev.Surface.Id())
+	debug.Log("input", "wire leave surf=%d", surfaceID(ev.Surface))
 	grabbed := s.grabSurface != nil
 	s.grabSurface = nil
 	if s.pointerFocus == ev.Surface {

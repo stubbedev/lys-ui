@@ -626,6 +626,7 @@ type layerHost struct {
 func (h *layerHost) EnsureUsable() error      { return h.ls.EnsureUsable() }
 func (h *layerHost) Closed() bool             { return h.ls.Closed() }
 func (h *layerHost) HostSurface() *wl.Surface { return h.ls.HostSurface() }
+func (h *layerHost) DestroySurface()          { h.ls.DestroySurface() }
 
 // Size returns the configured size, substituting the output mode for
 // automatic axes so the buffer is never zero-sized.
@@ -646,7 +647,7 @@ func (h *layerHost) Size() (int, int) {
 // toplevels open and close instantly — while KindOverlay (layer
 // surfaces) and KindDialog get enter/exit tweens whose exit keeps the
 // loop alive until it lands.
-func (a *Application) newWindow(host Host, scale int, root widget.Widget, hooks windowHooks, onClosed func(), animKind surfx.Kind) *hostWindow {
+func (a *Application) newWindow(host surfaceOwner, scale int, root widget.Widget, hooks windowHooks, onClosed func(), animKind surfx.Kind) *hostWindow {
 	hooks.onClosed = onClosed
 	// Every window's tree sits behind the inspector overlay. While it
 	// is off the overlay is pure passthrough (measure, arrange, hit
@@ -869,29 +870,31 @@ func (a *Application) tick(step func() error, now time.Time) error {
 	}
 	a.updateTips(now)
 
-	kept := a.windows[:0]
-	var moved []movedToasts
-	for _, w := range a.windows {
+	var closed []*hostWindow
+	a.windows = slices.DeleteFunc(a.windows, func(w *hostWindow) bool {
 		// A tween-frame kick from another loop's tick (a popup's
 		// nested Run) marks the window for repaint.
 		if w.kick.Swap(false) {
 			w.dirty = true
 		}
-		if w.host.Closed() {
-			// Its live toasts move to the next toast window once the
-			// list is settled; the surface they painted on goes.
-			if m, ok := a.toasts.takeHost(w.host); ok {
-				moved = append(moved, m)
-			}
-			w.release()
-			if w.cfg.onClosed != nil {
-				w.cfg.onClosed()
-			}
-			continue
+		if !w.host.Closed() {
+			return false
 		}
-		kept = append(kept, w)
+		closed = append(closed, w)
+		return true
+	})
+	var moved []movedToasts
+	for _, w := range closed {
+		// Its live toasts move to the next toast window once the list
+		// is settled; the surface they painted on goes.
+		if m, ok := a.toasts.takeHost(w.host); ok {
+			moved = append(moved, m)
+		}
+		w.release()
+		if w.cfg.onClosed != nil {
+			w.cfg.onClosed()
+		}
 	}
-	a.windows = kept
 	a.rehostToasts(moved)
 	a.reapWindowIcons()
 	if a.done() {

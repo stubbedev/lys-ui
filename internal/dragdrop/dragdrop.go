@@ -42,13 +42,20 @@ var ErrNoPayload = errors.New("dragdrop: no drag payload available")
 // stream unbounded bytes into memory.
 var transferTimeout = xfer.DefaultTimeout
 
+// Icon is a drag icon: the surface start_drag names, destroyed with
+// everything it holds once the drag ends.
+type Icon interface {
+	Surface() *wl.Surface
+	Destroy() error
+}
+
 // StartConfig describes one start_drag request.
 type StartConfig struct {
 	// Origin is the surface the implicit grab belongs to.
 	Origin *wl.Surface
-	// Icon is an optional drag icon surface; the compositor moves it
+	// Icon is an optional drag icon; the compositor moves its surface
 	// with the pointer. Nil shows a fallback cursor graphic.
-	Icon *wl.Surface
+	Icon Icon
 	// GrabSerial is the pointer button-press serial of the gesture.
 	GrabSerial uint32
 	// Content is the offered payload with its actions and hooks.
@@ -109,12 +116,12 @@ type Controller struct {
 
 	// drag state on the source side: src is the wire proxy (the
 	// source events attach to it and StartDrag names it), srcReq its
-	// request side, srcData the offered content, icon the drag icon
-	// surface (destroy-on-finish seam so tests can record it).
+	// request side, srcData the offered content, icon the drag icon,
+	// destroyed when the drag ends.
 	src     *wl.DataSource
 	srcReq  sourceAPI
 	srcData transfer.Drag
-	icon    interface{ Destroy() error }
+	icon    Icon
 	// feedback is what the source last heard: the accepted mime and
 	// the negotiated action.
 	feedback transfer.Feedback
@@ -439,11 +446,10 @@ func (c *Controller) StartDrag(cfg StartConfig) error {
 			return fmt.Errorf("dragdrop: set actions: %w", err)
 		}
 	}
-	// Keep the icon interface nil for a nil surface: a typed nil would
-	// fail the non-nil check and panic on Destroy.
-	c.icon = nil
+	c.icon = cfg.Icon
+	var iconSurface *wl.Surface
 	if cfg.Icon != nil {
-		c.icon = cfg.Icon
+		iconSurface = cfg.Icon.Surface()
 	}
 	req.AddSendHandler(c)
 	req.AddCancelledHandler(c)
@@ -452,7 +458,7 @@ func (c *Controller) StartDrag(cfg StartConfig) error {
 	req.AddTargetHandler(c)
 	req.AddActionHandler(c)
 
-	if err := c.dev.StartDrag(source, cfg.Origin, cfg.Icon, cfg.GrabSerial); err != nil {
+	if err := c.dev.StartDrag(source, cfg.Origin, iconSurface, cfg.GrabSerial); err != nil {
 		c.concludeSource(transfer.ActionNone)
 		return fmt.Errorf("dragdrop: start drag: %w", err)
 	}

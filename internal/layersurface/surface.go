@@ -342,10 +342,24 @@ func (s *Surface) Closed() bool {
 
 // Close destroys the layer surface from the client side. The closed
 // flag turns on immediately so the owning loop drops the window.
+// Idempotent.
 func (s *Surface) Close() {
-	_ = s.Layer.Destroy()
-	s.destroyed = true
 	s.closed = true
+	if s.destroyed {
+		return
+	}
+	s.destroyed = true
+	_ = s.Layer.Destroy()
+}
+
+// DestroySurface destroys the layer role, closed by the client or the
+// compositor, and then the wl_surface. Idempotent.
+func (s *Surface) DestroySurface() {
+	s.Close()
+	if s.WLSurface != nil {
+		_ = s.WLSurface.Destroy()
+		s.WLSurface = nil
+	}
 }
 
 // Size returns the last configured size in surface (logical) pixels. An

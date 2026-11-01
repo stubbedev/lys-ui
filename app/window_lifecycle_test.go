@@ -6,7 +6,9 @@ package app
 
 import (
 	"testing"
+	"time"
 
+	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -86,4 +88,48 @@ func TestWindowCloseWithNothingHeldSendsNoSync(t *testing.T) {
 		b.Release()
 	}
 	h.wnd.release()
+}
+
+func budgetWindow(a *Application, host *fakeHost) *hostWindow {
+	router := &widget.Router{Root: widget.NewBox(widget.Column, 8, 0)}
+	return &hostWindow{
+		host: host, sess: a.sess, router: router,
+		input: &surfaceInput{router: router}, tip: &tooltipCtl{since: time.Now()},
+		frac120: 120, scale: 1, lastW: host.w, lastH: host.h,
+		pool: buffer.New(func() (*buffer.Buffer, error) { return fakeBuffer(host.w, host.h), nil }, 3),
+	}
+}
+
+func TestLoopDropsAClosedWindowAndItsSurface(t *testing.T) {
+	a := idleBudgetApp(t)
+	open := a.windows[0].host.(*fakeHost)
+	closing := &fakeHost{w: 100, h: 100, closed: true}
+	reopened := &fakeHost{w: 100, h: 100}
+	w := budgetWindow(a, closing)
+	w.sc = &fakeScaleWire{}
+	w.cfg.onClosed = func() { a.windows = append(a.windows, budgetWindow(a, reopened)) }
+	a.windows = append(a.windows, w)
+	backing := a.windows[:cap(a.windows)]
+
+	if err := a.tick(a.step, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	if closing.destroyed != 1 {
+		t.Errorf("closed surface destroyed %d times, want once", closing.destroyed)
+	}
+	if got := w.sc.(*fakeScaleWire).destroyed; got != 1 {
+		t.Errorf("scale objects destroyed %d times, want once", got)
+	}
+	if open.destroyed != 0 {
+		t.Error("an open window's surface was destroyed")
+	}
+	if len(a.windows) != 2 || a.windows[0].host != open || a.windows[1].host != reopened {
+		t.Errorf("windows after the tick = %d, want the open one and the one onClosed opened", len(a.windows))
+	}
+	for _, kept := range backing {
+		if kept == w {
+			t.Error("the window list's backing array still holds the closed window")
+		}
+	}
 }

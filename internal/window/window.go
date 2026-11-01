@@ -516,6 +516,17 @@ func (w *Window) teardownRole() {
 	}
 }
 
+// DestroySurface destroys the role objects, if the window still holds
+// them, and then the wl_surface. Idempotent.
+func (w *Window) DestroySurface() {
+	w.teardownRole()
+	w.closed = true
+	if w.WLSurface != nil {
+		_ = w.WLSurface.Destroy()
+		w.WLSurface = nil
+	}
+}
+
 // Size returns the last configured size in surface (logical) pixels. An
 // unconfigured window reports zeros.
 func (w *Window) Size() (int, int) {

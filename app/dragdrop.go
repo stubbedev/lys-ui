@@ -5,6 +5,8 @@
 package app
 
 import (
+	"errors"
+
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
@@ -81,7 +83,7 @@ func (in *surfaceInput) startDrag() {
 // source window's current 120-based device scale; the icon surface
 // scales to match. Any failure leaves the icon nil: start_drag takes a
 // nil icon and shows a fallback graphic.
-func renderDragIcon(sess *wlsession.Session, w widget.Widget, frac120 uint32) *wl.Surface {
+func renderDragIcon(sess *wlsession.Session, w widget.Widget, frac120 uint32) dragdrop.Icon {
 	if sess == nil || sess.Compositor() == nil || sess.Shm() == nil || w == nil {
 		return nil
 	}
@@ -110,12 +112,12 @@ func renderDragIcon(sess *wlsession.Session, w widget.Widget, frac120 uint32) *w
 		debug.Log("frame", "dnd icon surface: %v", err)
 		return nil
 	}
-	sc := scale.New(sess, surf, nil)
-	_ = sc.Apply(frac120, size.W, size.H)
+	icon := &dragIcon{surf: surf, sc: scale.New(sess, surf, nil)}
+	_ = icon.sc.Apply(frac120, size.W, size.H)
 	attach := func(err error, what string) bool {
 		if err != nil {
 			debug.Log("frame", "dnd icon %s: %v", what, err)
-			_ = surf.Destroy()
+			_ = icon.Destroy()
 			buffer.Cancel(b)
 			return false
 		}
@@ -129,7 +131,18 @@ func renderDragIcon(sess *wlsession.Session, w widget.Widget, frac120 uint32) *w
 	// One-shot: the commit was the buffer's only user. Its arena slot
 	// returns when the compositor releases the buffer (the icon surface
 	// itself is destroyed at drag end).
-	return surf
+	return icon
+}
+
+type dragIcon struct {
+	surf *wl.Surface
+	sc   *scale.Controller
+}
+
+func (i *dragIcon) Surface() *wl.Surface { return i.surf }
+
+func (i *dragIcon) Destroy() error {
+	return errors.Join(i.sc.Destroy(), i.surf.Destroy())
 }
 
 // DragEnter implements dragdrop.Target: route through the widget tree

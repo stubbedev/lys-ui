@@ -16,7 +16,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
-	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -30,17 +29,7 @@ func idleBudgetApp(tb testing.TB) *Application {
 	a := NewApplication(&wlsession.Session{})
 	a.step = func() error { return nil }
 	a.wake = func(time.Duration) {}
-	router := &widget.Router{Root: widget.NewBox(widget.Column, 8, 0)}
-	a.windows = append(a.windows, &hostWindow{
-		host:    &fakeHost{w: 640, h: 470},
-		sess:    a.sess,
-		router:  router,
-		input:   &surfaceInput{router: router},
-		tip:     &tooltipCtl{since: time.Now()},
-		frac120: 120, scale: 1,
-		lastW: 640, lastH: 470,
-		pool: buffer.New(func() (*buffer.Buffer, error) { return fakeBuffer(640, 470), nil }, 3),
-	})
+	a.windows = append(a.windows, budgetWindow(a, &fakeHost{w: 640, h: 470}))
 	return a
 }
 

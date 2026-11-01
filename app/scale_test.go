@@ -25,6 +25,7 @@ type scaleApply struct {
 type fakeScaleWire struct {
 	applies    []scaleApply
 	transforms []int32
+	destroyed  int
 }
 
 func (f *fakeScaleWire) Apply(frac120 uint32, w, h int) error {
@@ -34,6 +35,11 @@ func (f *fakeScaleWire) Apply(frac120 uint32, w, h int) error {
 
 func (f *fakeScaleWire) SetTransform(t int32) error {
 	f.transforms = append(f.transforms, t)
+	return nil
+}
+
+func (f *fakeScaleWire) Destroy() error {
+	f.destroyed++
 	return nil
 }
 

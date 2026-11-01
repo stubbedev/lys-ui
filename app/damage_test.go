@@ -19,14 +19,17 @@ import (
 
 // fakeHost is a wire-free Host of a fixed size.
 type fakeHost struct {
-	w, h int
-	surf wl.Surface
+	w, h      int
+	surf      wl.Surface
+	closed    bool
+	destroyed int
 }
 
 func (f *fakeHost) EnsureUsable() error      { return nil }
-func (f *fakeHost) Closed() bool             { return false }
+func (f *fakeHost) Closed() bool             { return f.closed }
 func (f *fakeHost) Size() (int, int)         { return f.w, f.h }
 func (f *fakeHost) HostSurface() *wl.Surface { return &f.surf }
+func (f *fakeHost) DestroySurface()          { f.destroyed++ }
 
 // resizeTo plays a compositor configure: the next frame sees the new
 // size.
