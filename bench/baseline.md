@@ -6,11 +6,13 @@ ceilings: a regression past one fails `just check`.
 
 ## Method
 
-Machine: Intel i5-10400F (6 cores, 12 threads), Go 1.27, Linux. Each
-benchmark runs six times; the tables give the median.
+Machine: Intel i5-10400F (6 cores, 12 threads), Go 1.27, Linux, measured
+2026-11-01 at load 3-20. Each benchmark runs six times; the tables give
+the median. The canvas and text benchmarks live with their code in
+lys-lib.
 
-    go test -run '^$' -bench . -benchmem -count 6 ./widget ./render ./app
-    go test -run TestAllocBudget -v ./app ./widget ./render
+    go test -run '^$' -bench . -benchmem -count 6 ./widget ./app ./internal/icons
+    go test -run TestAllocBudget -v ./app ./widget
 
 `just bench` runs every benchmark once; CI archives that output for
 trend watching and does not gate on it, since shared runners are too
@@ -23,23 +25,31 @@ before and after, and leaves the goldens byte-identical
 
 ## Widget gallery
 
-`buildShowcase` is the lys-ui-hello window shape: 73 widgets. The style
+`buildShowcase` is the lys-ui-hello window shape: 75 widgets. The style
 benchmarks load a 25-rule stylesheet over the same tree.
+`settingsTree` is a settings window at 1605x1391.
 
 | benchmark | sec/op | B/op | allocs/op |
 |---|---|---|---|
-| ShowcaseMeasure (cold measure, cache defeated) | 4.6ns | 0 | 0 |
-| StaticTreeMeasure (warm, cache hits) | 4.0ns | 0 | 0 |
-| ShowcaseArrange (per-frame layout walk) | 13.6µs | 0 | 0 |
-| ShowcasePaint (full frame: measure+arrange+damage+paint) | 2.28ms | 802 | 4 |
-| ProgressOnlyFrame (one bar animating, damage-clipped) | 198µs | 33 | 1 |
-| EntryPaint (steady entry repaint) | 410µs | 27 | 0 |
-| StyleGalleryFullRestyle (match+compute, whole tree) | 64.3µs | 0 | 0 |
-| StyleGalleryClassToggle (single restyle) | 940ns | 0 | 0 |
-| StyleGalleryPaint (styled steady frame) | 2.23ms | 794 | 4 |
+| ShowcaseMeasure (settled tree) | 31ns | 0 | 0 |
+| StaticTreeMeasure (warm, cache hits) | 30ns | 0 | 0 |
+| ShowcaseArrange (settled tree) | 6.6ns | 0 | 0 |
+| ShowcasePaint (full frame: measure+arrange+damage+paint) | 353µs | 162 | 1 |
+| ProgressOnlyFrame (one bar animating, damage-clipped) | 33.7µs | 32 | 1 |
+| EntryPaint (steady entry repaint) | 49.6µs | 3 | 0 |
+| SettingsFrame/layout (settled tree) | 66ns | 0 | 0 |
+| SettingsFrame/paint (whole window) | 1.71ms | 0 | 0 |
+| SettingsFrame/sweep (a new width each frame) | 2.04ms | 101Ki | 12 |
+| SettingsFrame/resize (two widths in turn) | 2.13ms | 101Ki | 12 |
+| StyleGalleryFullRestyle (match+compute, whole tree) | 271µs | 0 | 0 |
+| StyleGalleryClassToggle (single restyle) | 2.4µs | 0 | 0 |
+| StyleGalleryPaint (styled steady frame) | 260µs | 129 | 1 |
 
-A styled frame paints in the unstyled frame's time: the paint path
-reads the computed values and never restyles.
+A frame costs what it changes. A box no invalidation reached since its
+last arrange returns from Arrange at once, the damage walk skips a branch
+with no mark, and a label outside the damage skips its paint. SettingsFrame's
+101Ki is the harness collecting damage into a fresh rect list; a window
+reuses its buffer.
 
 ## Input events
 
@@ -48,64 +58,67 @@ frame, so each allocation here would multiply.
 
 | benchmark | sec/op | B/op | allocs/op |
 |---|---|---|---|
-| PointerMove (hover hit walk) | 307ns | 0 | 0 |
-| WheelOverScroll (one wheel tick into a scrolled list) | 265ns | 0 | 0 |
-| DragHover (drag-hover walk) | 274ns | 0 | 0 |
+| PointerMove (hover hit walk) | 274ns | 0 | 0 |
+| WheelOverScroll (one wheel tick into a scrolled list) | 250ns | 0 | 0 |
+| DragHover (drag-hover walk) | 250ns | 0 | 0 |
 
 A hit walks the ancestors' `clip-path`s, since a clipped-out region
 takes no pointer events.
 
-## Render path
+## Icon lookup
+
+72 names over a desktop-sized search path, as a settings page asks.
 
 | benchmark | sec/op | B/op | allocs/op |
 |---|---|---|---|
-| Shape200 (warm shaping cache) | 74ns | 0 | 0 |
-| Shape200Cold (cache bypassed) | 83.2µs | 20.0Ki | 10 |
-| ChainShape200 (fallback chain, warm) | 79ns | 0 | 0 |
-| DrawText (warm atlas) | 26.3µs | 1 | 0 |
-| DrawTextCold (atlas drained) | 461µs | 84.2Ki | 388 |
-| DrawAligned (warm) | 23.2µs | 2 | 0 |
-| CanvasPaint (clear+fill+border+rounded+gradient) | 323µs | 0 | 0 |
+| Lookup72/cold/scale1 (index built) | 1.67ms | 899Ki | 6300 |
+| Lookup72/warm/scale1 | 7.6µs | 1344 | 36 |
 
 ## App loop
 
 | benchmark | sec/op | B/op | allocs/op |
 |---|---|---|---|
-| ProgressOnlyFrames (real `hostWindow` draw, fake wire) | 120µs | 336 | 1 |
+| ProgressOnlyFrames (real `hostWindow` draw, fake wire) | 12.0µs | 342 | 0 |
 
 The idle tick over a wired window allocates nothing
 (`app.TestAllocBudgetIdleLoopTick`), and an idle loop schedules no
 wakeup at all (`app.TestIdleLoopDoesNotWake` pins zero wakeups across
 a 200ms idle window).
 
+## Startup
+
+From exec to the first committed frame, on private headless sway at load
+4, median of 12. lys-ui-columns draws no themed icon; lys-ui-hello does.
+
+| client | time |
+|---|---|
+| lys-ui-columns | 22ms |
+| lys-ui-hello | 59ms |
+| lys-ui-settings | 31ms |
+
+The default look draws in the embedded Geist, so it scans no font
+directory. The first system family or uncovered rune builds the font
+store: 12-14ms with about 470 fonts and a warm index. The first themed
+icon lists the theme's directories: 11.3ms, 6028 syscalls, on a desktop
+whose theme chain declares 1323 of them.
+
 ## Steady-state syscalls
 
-Measured with the compositor in the loop, in a private test
-environment only: `just test-env <dir>` and
-`just --set test_dir <dir> test-build`, then the showcase client
-launched under `strace -f -tt` inside that environment (its own
-`XDG_RUNTIME_DIR` and socket, never the desktop session). The pointer
-phases are driven with the `just move`, `click`, `axis`, `sweep` and
-`dwell` recipes against the same directory, and syscall entries are
-counted from the timestamped trace, resume lines excluded. The client
-is the 640x470 showcase on headless sway (pixman) at scale 120/120.
-Raw counts per phase: `bench/data/syscalls-by-window.txt`.
+Measured with the compositor in the loop, in a private test environment
+only (`just test-env <dir>`, its own `XDG_RUNTIME_DIR` and socket,
+never the desktop session). Each demo runs under `strace -f -ttt`, and
+its entries are counted over 5s after 3s of settling, resume lines
+excluded. Per demo: `bench/data/syscalls-by-window.txt`.
 
-| phase | window | syscall entries | rate |
-|---|---|---|---|
-| idle (no timers armed, loop parked in epoll) | 2.9s | **0** | **0 syscalls/sec** |
-| pointer move into window (enter+hover+cursor load) | 2.0s | 236 | one-shot; the first cursor-theme load is cached after |
-| button click + 600ms tween (~38 frames) | 0.8s | 3640 | ~96/frame ≈ 4550/s |
-| two wheel axis ticks over the list | 5.0s | 1198 | per-tick burst |
-| sweeps + tooltip dwell | 5.0s | 1675 | |
+A client with no timer armed is at zero: no syscalls and no context
+switches, lys-ui-multi over a 10s window once its spare buffers are
+trimmed, 5s after the last frame. Every syscall count above zero in that
+file is the demo's own timer or animation.
 
-Per animated frame during the tween: 28.4 `nanosleep`, 20.9
-`epoll_pwait`, 14.5 `futex`, 11.4 `recvmsg`, 8.7 `read`, 6.4 `sendmsg`
-and 4.8 `write`.
-
-Idle costs nothing: the parked loop holds when nothing is armed, and
-`loopKicker` coalesces the timer kicks. The animated-frame cost is
-dominated by the wire and the Go runtime; see the known costs below.
+A timer wake sends nothing: `Session.WakeAfter` sets the socket's read
+deadline, so the compositor does not hear of it. lys-ui-gallery's spinner
+costs 1.2-1.6% of a core at 60 frames a second, about 13 syscalls a frame
+under strace, 8 allocations.
 
 ## Budgets
 
@@ -129,6 +142,8 @@ in `just check` through `go test`.
 | file watch drain | 0 | 0 | `app.TestAllocBudgetFileWatchDrain` |
 | damage walk under a visible toast | 0 | 0 | `app.TestAllocBudgetToastDamageWalk` |
 | damage-restricted window frame | 0 | 0 | `app.TestAllocBudgetWindowFrame` |
+| widgets arranged in the first steady frame | 172 | 207 | `widget.TestSteadyLayoutArrangesEachWidgetOnce` |
+| widgets arranged once settled | 0 | 0 | `widget.TestASettledTreeArrangesNothing` |
 
 Two app gates count work instead of allocations:
 `app.TestAllocBudgetPumpScopedDamageWalk` (a drained `Invoke` that
@@ -150,23 +165,18 @@ Allocation and syscall sites the profiles show, each with its cost and
 why it stays:
 
 - **`widget.CollectDamage`'s rect list**: about one allocation per
-  dirty frame. The returned slice belongs to the caller; reusing a
-  shared buffer would alias earlier results, and a capacity hint
-  would spend an allocation on every walk, including the clean ones
-  the zero-allocation gates pin. Clean frames allocate nothing.
+  dirty frame when the caller keeps no buffer, as the benchmarks do. A
+  window passes its own to `CollectDamageInto`.
 - **`render.NewScaled` per non-window canvas** (`app/dragdrop.go`,
   `app/print.go`): one Canvas per dropped-image paint and per printed
   page. That is event-time work; the frame path reuses the window's
   canvas (`Canvas.Reset`).
-- **One `sendmsg` per Wayland request, one `recvmsg` and `read` per
-  inbound message** (the neurlang/wayland binding,
-  `Context.SendRequest` → `writeRequest`): the wire cannot batch below
-  one syscall per request without buffering inside the binding. A
-  frame is attach, damage per rect, commit and frame callback, and the
-  damage is usually one or two rects: about 6 `sendmsg` and 20
-  read-side syscalls per animated frame.
-- **The Go runtime's background monitor**: about 28 `nanosleep` calls
-  per animated frame during tweens, none at idle. It is not lys-ui code.
+- **The Go runtime's background monitor**: nanosleep calls during tweens,
+  inflated by strace, none at idle. It is not lys-ui code.
+- **A List's probe row**: an autosized list measures a probe sharing its
+  first row's widget, whose parent then flips each arrange, so that list's
+  branch stays marked and arranges in every frame of its window: its rows
+  and spine, not the tree.
 - **Walk snapshot buffers** (`widget.walkStack`, `styleStack`,
   `walkTreeStack`, the per-parent sibling lists) and **the rune-keyed
   shaping table**: the buffers are retained at the deepest tree the

@@ -1,76 +1,23 @@
-== idle
-       0 TOTAL
-== hover-move
-       1 ---
-      20 recvmsg
-       1 tgkill
-      17 sendmsg
-       1 munmap
-      75 nanosleep
-       1 getpid
-      42 futex
-      12 write
-       5 sched_yield
-      44 epoll_pwait
-       1 rt_sigreturn
-       2 mmap
-      12 read
-       1 ftruncate
-       1 sched_getaffinity
-     236 TOTAL
-== tween-pure
-       0 TOTAL
-== click-tween
-       2 sched_getaffinity
-       2 ---
-       2 getpid
-    1440 epoll_pwait
-    2097 nanosleep
-      47 sched_yield
-     794 recvmsg
-       2 rt_sigreturn
-     592 read
-    1026 futex
-       2 tgkill
-     357 write
-     414 sendmsg
-    6777 TOTAL
-== axis-x2
-       2 ---
-     384 nanosleep
-       2 sched_getaffinity
-       2 tgkill
-       2 rt_sigreturn
-     262 epoll_pwait
-      98 write
-     100 read
-     129 recvmsg
-       2 getpid
-      56 sendmsg
-     159 futex
-    1198 TOTAL
-== sweeps-tooltip
-     113 write
-      15 newfstatat
-       1 munmap
-       1 mmap
-       2 ---
-       2 getpid
-       2 sched_getaffinity
-     137 read
-       5 epoll_ctl
-     326 epoll_pwait
-       2 rt_sigreturn
-       1 sched_yield
-       2 ftruncate
-       1 fstat
-     219 recvmsg
-      20 fcntl
-       2 tgkill
-       1 lseek
-       5 close
-       5 openat
-     105 sendmsg
-     462 nanosleep
-     246 futex
-    1675 TOTAL
+# Syscalls in a 5s window after 3s of settling, strace -f -ttt under private
+# headless sway (bench/baseline.md, Steady-state syscalls). Resume lines are
+# excluded. nanosleep and futex are the Go runtime under strace's timing.
+hello         101 syscalls
+gallery      4056 syscalls
+multi          39 syscalls
+bar           158 syscalls
+panel          11 syscalls
+states       1375 syscalls
+popover      5034 syscalls
+settings        0 syscalls
+messages        0 syscalls
+launcher        9 syscalls
+draw         7405 syscalls
+glass        3358 syscalls
+dialogs         0 syscalls
+dnd            29 syscalls
+columns         0 syscalls
+ime           684 syscalls
+i18n            0 syscalls
+a11y            0 syscalls
+invoke        467 syscalls
+multilist     958 syscalls
