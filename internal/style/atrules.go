@@ -286,7 +286,7 @@ func (p *parser) propertyRule(ts []token, i int) int {
 				return end
 			}
 		case "initial-value":
-			reg.Initial = val
+			reg.Initial = p.keep(val)
 		default:
 			p.warnf("@property descriptor skipped: unknown %q", raw[0].s)
 		}

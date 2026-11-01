@@ -306,9 +306,27 @@ func parseSheet(css, base string, resolve ImportResolver, warn func(string)) *Sh
 	return s
 }
 
+// keptChunk is how many tokens one allocation of a parser's kept values
+// holds.
+const keptChunk = 1024
+
+// keep moves ts out of the token stream, capacity clipped so that no value
+// can grow over the next one.
+func (p *parser) keep(ts []token) []token {
+	if cap(p.kept)-len(p.kept) < len(ts) {
+		p.kept = make([]token, 0, max(keptChunk, len(ts)))
+	}
+	at := len(p.kept)
+	p.kept = append(p.kept, ts...)
+	return p.kept[at:len(p.kept):len(p.kept)]
+}
+
 // parser walks the token stream once.
 type parser struct {
-	src   string
+	src string
+	// kept holds the value tokens the sheet outlives the parse with, so the
+	// token stream itself, selectors and whitespace included, dies with it.
+	kept  []token
 	sheet Sheet
 	order int
 	// startBlock is the @starting-style block of the rule body being
@@ -476,7 +494,7 @@ func (p *parser) defineColor(ts []token, i int) int {
 		p.sheet.defines = make(map[string][]token)
 	}
 	if p.dead == 0 {
-		p.sheet.defines["--"+body[0].s] = val
+		p.sheet.defines["--"+body[0].s] = p.keep(val)
 	}
 	return next
 }
@@ -1252,6 +1270,7 @@ func (p *parser) declaration(ts []token) (decl, bool) {
 		return decl{}, false
 	}
 	p.order++
+	val = p.keep(val)
 	d := decl{name: name, val: val, hasVar: containsVar(val), wide: wideOf(val), important: imp, order: p.order}
 	if strings.HasPrefix(name, "--") {
 		d.custom = true
