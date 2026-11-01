@@ -388,3 +388,7 @@ panel:
 # Run the layer-shell status bar (lys-ui-bar).
 bar:
     go run ./cmd/lys-ui-bar
+
+# Set nix/package.nix's vendorHash to the hash of the modules go.sum pins.
+vendor-hash:
+    nix run github:stubbedev/lys-ci#vendor-hash -- nix/package.nix .#lys-ui.goModules
