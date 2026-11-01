@@ -51,7 +51,6 @@ keeps the module and the pinned workflow actions current.
 All Go, with no cgo. lys-ui requires
 [lys-lib](https://github.com/stubbedev/lys-lib),
 [stubbedev/memory-go](https://github.com/stubbedev/memory-go),
-[unxed/xkb-go](https://github.com/unxed/xkb-go),
 [jfreymuth/pulse](https://github.com/jfreymuth/pulse) (the PulseAudio
 protocol, which pipewire-pulse also serves),
 [golang.org/x/image](https://pkg.go.dev/golang.org/x/image) and

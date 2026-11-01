@@ -15,7 +15,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/capture"
 	"github.com/stubbedev/lys-lib/render"
-	"github.com/unxed/xkb-go"
+	"github.com/stubbedev/lys-lib/xkb"
 	"golang.org/x/image/draw"
 
 	"github.com/stubbedev/lys-ui/app"

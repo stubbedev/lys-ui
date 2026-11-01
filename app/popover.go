@@ -11,7 +11,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 	"github.com/stubbedev/lys-lib/wlr"
-	"github.com/unxed/xkb-go"
+	"github.com/stubbedev/lys-lib/xkb"
 
 	"github.com/stubbedev/lys-ui/internal/popup"
 	"github.com/stubbedev/lys-ui/internal/scale"

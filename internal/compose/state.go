@@ -1,6 +1,6 @@
 package compose
 
-import "github.com/unxed/xkb-go"
+import "github.com/stubbedev/lys-lib/xkb"
 
 // Result classifies what one Feed did to the sequence in flight.
 type Result uint8
@@ -45,12 +45,12 @@ func (s *State) Feed(sym xkb.Keysym) (Result, string) {
 	if s.cs.Feed(sym) == xkb.ComposeFeedIgnored {
 		return None, ""
 	}
-	switch s.cs.GetStatus() {
+	switch s.cs.Status() {
 	case xkb.ComposeComposing:
 		s.path = append(s.path, sym)
 		return Pending, ""
 	case xkb.ComposeComposed:
-		text := s.cs.GetUTF8()
+		text := s.cs.UTF8()
 		s.replay(nil)
 		return Done, text
 	default: // this keysym cancelled the sequence
@@ -87,7 +87,7 @@ func (s *State) Composing() bool { return s != nil && len(s.path) > 0 }
 // is a plain reset. The method takes a copy of the path it is handed
 // before touching s.path.
 func (s *State) replay(path []xkb.Keysym) {
-	s.cs = s.table.xkb.NewState(xkb.ComposeStateNoFlags)
+	s.cs = s.table.xkb.NewState()
 	s.path = append(s.path[:0], path...)
 	for _, sym := range path {
 		s.cs.Feed(sym)

@@ -1,13 +1,18 @@
 package wlsession
 
 import (
-	"context"
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
-	"github.com/unxed/xkb-go"
+	"github.com/stubbedev/lys-lib/xkb"
+	"golang.org/x/sys/unix"
+
+	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
 // findXKBData locates the system xkeyboard-config data directory; tests
@@ -29,9 +34,8 @@ func findXKBData(t *testing.T) string {
 
 func usKeymap(t *testing.T) *Session {
 	t.Helper()
-	ctx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
-	ctx.AppendIncludePath(findXKBData(t))
-	km, err := ctx.NewKeymapFromNames(&xkb.RuleNames{Layout: "us"})
+	t.Setenv("XKB_CONFIG_ROOT", findXKBData(t))
+	km, err := xkb.NewContext(os.Getenv).NewKeymapFromNames(xkb.Names{Layout: "us"})
 	if err != nil {
 		t.Skip("us keymap unavailable:", err)
 	}
@@ -79,4 +83,82 @@ func TestKeymapTranslation(t *testing.T) {
 			t.Error("no-keymap keysym must be KeyNoSymbol")
 		}
 	})
+}
+
+const wtypeKeymap = `xkb_keymap {
+xkb_keycodes "(unnamed)" {
+	minimum = 8;
+	maximum = 10;
+	<K1> = 9;
+	<K2> = 10;
+};
+xkb_types "(unnamed)" { include "complete" };
+xkb_compatibility "(unnamed)" { include "complete" };
+xkb_symbols "(unnamed)" {
+	key <K1> {[Return]};
+	key <K2> {[a]};
+};
+};
+`
+
+func deliverKeymap(t *testing.T, s *Session, text string) {
+	t.Helper()
+	fd, err := unix.MemfdCreate("keymap", unix.MFD_CLOEXEC)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unix.Write(fd, append([]byte(text), 0)); err != nil {
+		t.Fatal(err)
+	}
+	s.HandleKeyboardKeymap(wl.KeyboardKeymapEvent{Format: 1, Fd: uintptr(fd), Size: uint32(len(text) + 1)})
+}
+
+func TestVirtualKeyboardKeymapWithIncludesTranslates(t *testing.T) {
+	t.Setenv("XKB_CONFIG_ROOT", findXKBData(t))
+	s := usKeymap(t)
+	deliverKeymap(t, s, wtypeKeymap)
+	if got := s.KeySym(1); got != xkb.KeyReturn {
+		t.Errorf("keycode 9 (evdev 1, Escape on a real layout) = %v, want Return", got)
+	}
+	if got := s.KeyUTF8(2); got != "a" {
+		t.Errorf("keycode 10 = %q, want a", got)
+	}
+}
+
+func TestKeymapThatDoesNotCompileLeavesNoKeyTranslated(t *testing.T) {
+	s := usKeymap(t)
+	if got := s.KeySym(1); got != xkb.KeyEscape {
+		t.Fatalf("precondition: evdev 1 = %v, want Escape", got)
+	}
+	var logged bytes.Buffer
+	previous := logutil.L()
+	logutil.Set(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { logutil.Set(previous) })
+	deliverKeymap(t, s, "xkb_keymap { this does not compile")
+	if got := s.KeySym(1); got != xkb.KeyNoSymbol {
+		t.Errorf("after a bad keymap evdev 1 = %v, want no keysym rather than the old keymap's", got)
+	}
+	if got := s.KeyUTF8(30); got != "" {
+		t.Errorf("after a bad keymap the A key typed %q", got)
+	}
+	if !strings.Contains(logged.String(), "level=ERROR") {
+		t.Errorf("no error logged: %q", logged.String())
+	}
+	s.HandleKeyboardModifiers(wl.KeyboardModifiersEvent{ModsDepressed: 1})
+	if s.Mods()&ModShift == 0 {
+		t.Error("modifiers still track without a keymap")
+	}
+}
+
+func TestControlCharactersAreNotText(t *testing.T) {
+	s := usKeymap(t)
+	for name, code := range map[string]uint32{"Escape": 1, "Backspace": 14, "Tab": 15, "Return": 28, "Delete": 111} {
+		if got := s.KeyUTF8(code); got != "" {
+			t.Errorf("%s typed %q", name, got)
+		}
+	}
+	s.HandleKeyboardModifiers(wl.KeyboardModifiersEvent{ModsDepressed: 4})
+	if got := s.KeyUTF8(30); got != "" {
+		t.Errorf("Ctrl+A typed %q", got)
+	}
 }

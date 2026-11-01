@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/unxed/xkb-go"
+	"github.com/stubbedev/lys-lib/xkb"
 )
 
 // testTable parses the checked-in fixture: three sequences, an accent
@@ -202,13 +202,7 @@ func TestXComposeFileBeatsTheUserFile(t *testing.T) {
 func TestLoadWithoutAnyComposeFileIsDisabled(t *testing.T) {
 	t.Setenv("XCOMPOSEFILE", "")
 	t.Setenv("HOME", t.TempDir())
-	// Only honest when the system directories are absent too; where a
-	// system table exists the skip keeps this test from lying.
-	for _, dir := range []string{"/usr/share/X11/locale", "/usr/local/share/X11/locale"} {
-		if _, err := os.Stat(dir); err == nil {
-			t.Skipf("%s exists; cannot prove compose is disabled", dir)
-		}
-	}
+	t.Setenv("XLOCALEDIR", t.TempDir())
 	if tb := Load(); tb != nil {
 		t.Fatal("Load() should be nil with no compose file anywhere")
 	}

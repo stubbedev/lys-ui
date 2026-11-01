@@ -68,6 +68,8 @@
         # cgo: only that recipe points CC here and turns cgo on, so the
         # shell keeps no C compiler on PATH.
         LYS_UI_RACE_CC = "${pkgs.gcc}/bin/gcc";
+        XKB_CONFIG_ROOT = "${pkgs.xkeyboard-config}/share/X11/xkb";
+        XLOCALEDIR = "${pkgs.libX11}/share/X11/locale";
 
         # `just atspi-verify` runs the bridge against real at-spi2-core: its
         # bus launcher and registry daemon live in libexec, off PATH.

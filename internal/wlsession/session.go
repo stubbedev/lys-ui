@@ -4,12 +4,11 @@
 package wlsession
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
-	"math"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,7 +22,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 	"github.com/stubbedev/lys-lib/wlr"
-	"github.com/unxed/xkb-go"
+	"github.com/stubbedev/lys-lib/xkb"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/compose"
@@ -169,6 +168,7 @@ type Session struct {
 	mods                uint32
 	repeatRate          uint32
 	repeatDelay         uint32
+	xkbContext          *xkb.Context
 	xkbKeymap           *xkb.Keymap
 	xkbState            *xkb.State
 	dataDeviceManager   *wl.DataDeviceManager
@@ -1193,24 +1193,34 @@ func (s *Session) HandlePointerAxisValue120(ev wl.PointerAxisValue120Event) {
 // fd is mapped (keymapfd.Read), compiled, and closed.
 func (s *Session) HandleKeyboardKeymap(ev wl.KeyboardKeymapEvent) {
 	if ev.FdError != nil || ev.Fd == 0 {
-		debug.Log("input", "keymap event without an fd (format %d): %v", ev.Format, ev.FdError)
+		s.dropKeymap(errors.Join(fmt.Errorf("a keymap event without an fd (format %d)", ev.Format), ev.FdError))
 		return
 	}
 	data, err := keymapfd.Read(ev.Fd, ev.Size)
 	keymapfd.Close(ev.Fd)
 	if err != nil {
-		debug.Log("input", "keymap read: %v", err)
+		s.dropKeymap(fmt.Errorf("read the keymap: %w", err))
 		return
 	}
-	ctx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
-	km, err := ctx.NewKeymapFromString(data, xkb.KeymapFormatTextV1)
+	if s.xkbContext == nil {
+		s.xkbContext = xkb.NewContext(os.Getenv)
+	}
+	km, err := s.xkbContext.NewKeymapFromString(data)
 	if err != nil {
-		debug.Log("input", "keymap (format %d, %d bytes, size %d) does not compile: %v", ev.Format, len(data), ev.Size, err)
+		s.dropKeymap(fmt.Errorf("compile a %d byte keymap (format %d): %w", len(data), ev.Format, err))
 		return
 	}
 	s.xkbKeymap = km
 	s.xkbState = km.NewState()
 	debug.Log("input", "keymap (format %d, %d bytes) compiled: KEY_A=%v", ev.Format, len(data), s.xkbState.KeyGetOneSym(30+8))
+}
+
+// dropKeymap forgets the keymap a replacement for failed to arrive: key codes
+// mean what the new keymap says, so reading them through the old one acts on
+// the wrong key. Until a keymap compiles, keys translate to nothing.
+func (s *Session) dropKeymap(err error) {
+	logutil.L().Error("wlsession: keyboard input is untranslated until a keymap compiles", slog.Any("err", err))
+	s.xkbKeymap, s.xkbState = nil, nil
 }
 
 // HandleKeyboardEnter implements wl.KeyboardEnterHandler: the named
@@ -1249,20 +1259,25 @@ func (s *Session) HandleKeyboardModifiers(ev wl.KeyboardModifiersEvent) {
 	debug.Log("input", "wire modifiers depressed=%#x latched=%#x locked=%#x group=%d", ev.ModsDepressed, ev.ModsLatched, ev.ModsLocked, ev.Group)
 	s.mods = ev.ModsDepressed
 	if s.xkbState != nil {
-		s.xkbState.UpdateMask(xkb.ModMask(ev.ModsDepressed), xkb.ModMask(ev.ModsLatched),
-			xkb.ModMask(ev.ModsLocked), xkb.Group(min(ev.Group, math.MaxUint8)), xkb.Group(0), xkb.Group(0))
+		s.xkbState.UpdateMask(xkb.ModMask(ev.ModsDepressed), xkb.ModMask(ev.ModsLatched), xkb.ModMask(ev.ModsLocked), 0, 0, ev.Group)
 	}
 }
 
 // KeyUTF8 translates an evdev keycode through the compositor's keymap
 // and returns the text it produces with the current modifiers (shift,
-// AltGr, layout). Empty when no keymap arrived or the key types
-// nothing. Keycodes need the +8 evdev-to-xkb offset.
+// AltGr, layout). Empty when no keymap arrived or the key types nothing,
+// which holds for Return, Tab, Backspace, Escape and Ctrl chords: their
+// control characters are actions, handled through KeySym. Keycodes need the +8 evdev-to-xkb offset.
 func (s *Session) KeyUTF8(code uint32) string {
 	if s.xkbState == nil {
 		return ""
 	}
-	return s.xkbState.KeyGetUTF8(xkb.Keycode(code + 8))
+	var buf [16]byte
+	text := s.xkbState.AppendKeyUTF8(buf[:0], xkb.Keycode(code+8))
+	if len(text) == 1 && (text[0] < 0x20 || text[0] == 0x7f) {
+		return ""
+	}
+	return string(text)
 }
 
 // KeySym translates an evdev keycode to its primary keysym under the

@@ -1649,3 +1649,51 @@ func TestHeadlessGPUAreaPaces(t *testing.T) {
 		t.Errorf("%d GPUArea frames in a second with a %.2fs longest pause, want sustained pacing at the compositor's frame rate (absolute rate is renderer-bound)", n, gap)
 	}
 }
+
+// wtypeStyleKeymap numbers its keys from xkb keycode 9, Escape on a real
+// layout, and pulls its types and compat from xkeyboard-config with include,
+// the way wtype's generated keymap does.
+const wtypeStyleKeymap = `xkb_keymap {
+xkb_keycodes "(unnamed)" {
+	minimum = 8;
+	maximum = 10;
+	<K1> = 9;
+	<K2> = 10;
+};
+xkb_types "(unnamed)" { include "complete" };
+xkb_compatibility "(unnamed)" { include "complete" };
+xkb_symbols "(unnamed)" {
+	key <K1> {[Return]};
+	key <K2> {[Tab]};
+};
+};
+`
+
+// TestHeadlessVirtualKeyboardKeymapWithIncludes: a virtual keyboard's keymap
+// with include statements reaches the client through the compositor, and its
+// keys mean what it says, so Return on evdev code 1 clicks instead of closing
+// the window as the Escape it would be through the previous keymap.
+func TestHeadlessVirtualKeyboardKeymapWithIncludes(t *testing.T) {
+	requireEnv(t)
+	c, w, _ := startShowcase(t)
+	in, err := DialKeymap(os.Getenv("WAYLAND_DISPLAY"), wtypeStyleKeymap)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(in.Close)
+	waitKeyboard(t, w)
+	if err := in.Tap(2); err != nil {
+		t.Fatalf("tab: %v", err)
+	}
+	if err := in.Tap(1); err != nil {
+		t.Fatalf("return: %v", err)
+	}
+	if _, err := w.Wait("demo", "button clicked 1 times", traceTimeout); err != nil {
+		t.Errorf("the virtual keyboard's Return never clicked the button: %v", err)
+	}
+	select {
+	case <-c.Exited():
+		t.Error("the client exited: its keys were read through another keymap")
+	default:
+	}
+}

@@ -16,7 +16,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
-	"github.com/unxed/xkb-go"
+	"github.com/stubbedev/lys-lib/xkb"
 
 	"github.com/stubbedev/lys-ui/internal/clipboard"
 	"github.com/stubbedev/lys-ui/internal/compose"

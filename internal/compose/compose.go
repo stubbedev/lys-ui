@@ -4,7 +4,7 @@
 // (~/.XCompose plus the system file), which this package resolves and
 // parses once per process and shares across input contexts.
 //
-// The parser, trie, and state machine come from unxed/xkb-go's pure-Go
+// The parser, trie, and state machine come from lys-lib's pure-Go
 // compose implementation (no cgo, the Compose file is just data); this
 // package adds lys-ui's semantics on top: Feed answers pending,
 // done-with-text, or none; backspace unwinds one level; a nil table —
@@ -18,9 +18,9 @@
 package compose
 
 import (
-	"context"
+	"os"
 
-	"github.com/unxed/xkb-go"
+	"github.com/stubbedev/lys-lib/xkb"
 )
 
 // Table is an immutable set of compose sequences: keysym chains mapped
@@ -37,8 +37,7 @@ type Table struct {
 // dead-key layouts simply keep producing bare dead keysyms, which
 // callers then treat like any other non-text key.
 func Load() *Table {
-	ctx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
-	t, err := ctx.NewComposeTableFromLocale("", xkb.ComposeCompileNoFlags)
+	t, err := xkb.NewContext(os.Getenv).NewComposeTableFromLocale("")
 	if err != nil || t == nil {
 		return nil
 	}
@@ -48,8 +47,7 @@ func Load() *Table {
 // NewTableFile parses one explicit Compose file — the seam tests and
 // unusual setups use instead of the Load search order.
 func NewTableFile(path string) (*Table, error) {
-	ctx := xkb.NewContext(context.Background(), xkb.ContextNoFlags)
-	t, err := ctx.NewComposeTableFromFile(path, "", xkb.ComposeCompileNoFlags)
+	t, err := xkb.NewContext(os.Getenv).NewComposeTableFromFile(path, "")
 	if err != nil {
 		return nil, err
 	}
@@ -62,5 +60,5 @@ func (t *Table) Start() *State {
 	if t == nil {
 		return nil
 	}
-	return &State{table: t, cs: t.xkb.NewState(xkb.ComposeStateNoFlags)}
+	return &State{table: t, cs: t.xkb.NewState()}
 }

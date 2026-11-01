@@ -3959,6 +3959,18 @@ func (b *FileChooserBuilder) WatchSource(get func() widget.DirSource) *FileChoos
 	return b
 }
 
+// Status calls (*widget.FileChooser).SetStatus.
+func (b *FileChooserBuilder) Status(text string) *FileChooserBuilder {
+	b.do(func(s *Scope, w *widget.FileChooser) { w.SetStatus(text) })
+	return b
+}
+
+// WatchStatus re-applies SetStatus with get's value after every update.
+func (b *FileChooserBuilder) WatchStatus(get func() string) *FileChooserBuilder {
+	b.watch(func(w *widget.FileChooser) { w.SetStatus(get()) })
+	return b
+}
+
 // OnApply sets the widget's OnApply field.
 func (b *FileChooserBuilder) OnApply(fn func(paths []string)) *FileChooserBuilder {
 	b.do(func(_ *Scope, w *widget.FileChooser) { w.OnApply = fn })

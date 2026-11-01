@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
-	"github.com/unxed/xkb-go"
+	"github.com/stubbedev/lys-lib/xkb"
 )
 
 // captureMenuDebug swaps the mnemonic-conflict sink for the test's run

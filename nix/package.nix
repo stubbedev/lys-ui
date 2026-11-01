@@ -30,8 +30,12 @@
         inherit pname subPackages;
         version = "0-unstable-${lib.substring 0 8 (builtins.unsafeDiscardStringContext (baseNameOf src))}";
         inherit src;
+        ldflags = [
+          "-X github.com/stubbedev/lys-lib/xkb.defaultRoot=${pkgs.xkeyboard-config}/share/X11/xkb"
+          "-X github.com/stubbedev/lys-lib/xkb.defaultXLocaleDir=${pkgs.libX11}/share/X11/locale"
+        ];
         env.CGO_ENABLED = "0";
-        vendorHash = "sha256-260pczkWDcz8gV85iLE6u4xWGqtXMVV/RuCrjkdIoK0=";
+        vendorHash = "sha256-zelclaThxf+daX52jg+Er3V6/hQGRLQ7Uhq/iwxV8tc=";
         doCheck = true;
         preCheck = ''
           export HOME="$TMPDIR" FONTCONFIG_FILE=${testFontsConf}

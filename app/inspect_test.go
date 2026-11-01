@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
-	"github.com/unxed/xkb-go"
+	"github.com/stubbedev/lys-lib/xkb"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/stubbedev/lys-ui/internal/inspect"
