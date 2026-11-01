@@ -19,7 +19,15 @@ name: ci
 
 on:
   push:
+    paths:
+      - "**"
+      - "!docs/**"
+      - "docs/css.md"
   pull_request:
+    paths:
+      - "**"
+      - "!docs/**"
+      - "docs/css.md"
 
 # Every job only reads the repository: checkout, the Nix fetches the
 # token rate-limits, and artifact uploads (which use their own token).
