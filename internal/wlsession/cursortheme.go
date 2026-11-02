@@ -13,6 +13,7 @@ import (
 	sys "github.com/stubbedev/lys-lib/third_party/wayland/os"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/xcursor"
+	"golang.org/x/sys/unix"
 )
 
 // The xcursor names of the shapes the toolkit asks for by name.
@@ -27,6 +28,9 @@ const (
 	CursorBottomLeftCorner  = "bottom_left_corner"
 	CursorBottomRightCorner = "bottom_right_corner"
 )
+
+// maxPwriteIovs is IOV_MAX, the most one pwritev takes.
+const maxPwriteIovs = 1024
 
 // fallbackCursorTheme is the theme every lookup ends in, as in libXcursor.
 const fallbackCursorTheme = "default"
@@ -55,6 +59,9 @@ type cursorTheme struct {
 	file     *os.File
 	poolSize int32
 	cursors  map[string]*themedCursor
+	missing  map[string]error
+	files    map[string]*cursorImage
+	used     int64
 	lookup   []*xcursor.Theme
 	openErr  error
 }
@@ -87,6 +94,8 @@ func loadCursorThemeFromEnv(defaultSize uint32, shm *wl.Shm) (*cursorTheme, erro
 		file:     file,
 		poolSize: initialPoolSize,
 		cursors:  make(map[string]*themedCursor),
+		missing:  make(map[string]error),
+		files:    make(map[string]*cursorImage),
 		lookup:   lookup,
 		openErr:  openErr,
 	}, nil
@@ -146,52 +155,116 @@ func cursorFrames(themes []*xcursor.Theme, size int, name string) ([]xcursor.Ima
 }
 
 // cursor returns the named shape, loading its frames into the pool the
-// first time. A theme that did not open answers with why.
+// first time. A shape no theme has is remembered, because resolving a
+// requested shape walks its candidates on every apply. A theme that did not
+// open answers with why.
 func (t *cursorTheme) cursor(name string) (*themedCursor, error) {
 	if c, ok := t.cursors[name]; ok {
 		return c, nil
 	}
-	frames, err := cursorFrames(t.lookup, intconv.Clamp[int](t.size), name)
-	if err != nil {
-		return nil, errors.Join(err, t.openErr)
+	if err, ok := t.missing[name]; ok {
+		return nil, err
 	}
-	c := &themedCursor{images: make([]*cursorImage, len(frames))}
-	for i, frame := range frames {
-		img, err := t.addImage(frame)
-		if err != nil {
-			return nil, fmt.Errorf("cursor %q: %w", name, err)
+	c, err := t.loadCursor(name)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			t.missing[name] = err
 		}
-		c.images[i] = img
+		return nil, err
 	}
 	t.cursors[name] = c
 	return c, nil
 }
 
-// addImage appends one frame's pixels to the pool as a buffer.
-func (t *cursorTheme) addImage(img xcursor.Image) (*cursorImage, error) {
-	offset, err := t.file.Seek(0, 2)
+func (t *cursorTheme) loadCursor(name string) (*themedCursor, error) {
+	frames, err := cursorFrames(t.lookup, intconv.Clamp[int](t.size), name)
 	if err != nil {
-		return nil, fmt.Errorf("seek the cursor pool: %w", err)
+		return nil, errors.Join(err, t.openErr)
 	}
-	if err := t.grow(intconv.Clamp[int32](offset + int64(len(img.Pixels)))); err != nil {
+	images, err := t.addImages(frames)
+	if err != nil {
+		return nil, fmt.Errorf("cursor %q: %w", name, err)
+	}
+	return &themedCursor{images: images}, nil
+}
+
+// fileCursor returns the widest image of the xcursor file at path. It is
+// loaded once per file: the pool only grows, so showing a url() cursor again
+// must not add it again.
+func (t *cursorTheme) fileCursor(path string) (*cursorImage, error) {
+	if img, ok := t.files[path]; ok {
+		return img, nil
+	}
+	img, err := xcursor.ReadWidest(path)
+	if err != nil {
 		return nil, err
 	}
-	if _, err := t.file.Write(img.Pixels); err != nil {
+	images, err := t.addImages([]xcursor.Image{img})
+	if err != nil {
+		return nil, err
+	}
+	t.files[path] = images[0]
+	return images[0], nil
+}
+
+// addImages puts frames in the pool, growing it and writing them at once,
+// and makes a buffer of each.
+func (t *cursorTheme) addImages(frames []xcursor.Image) ([]*cursorImage, error) {
+	iovs := make([][]byte, len(frames))
+	var total int64
+	for i := range frames {
+		iovs[i] = frames[i].Pixels
+		total += int64(len(frames[i].Pixels))
+	}
+	if err := t.grow(intconv.Clamp[int32](t.used + total)); err != nil {
+		return nil, err
+	}
+	if err := pwriteAll(t.file, iovs, t.used); err != nil {
 		return nil, fmt.Errorf("write the cursor pool: %w", err)
 	}
-	w, h := intconv.Clamp[int32](img.Size.X), intconv.Clamp[int32](img.Size.Y)
-	buffer, err := t.pool.CreateBuffer(intconv.Clamp[int32](offset), w, h, w*4, wl.ShmFormatArgb8888)
-	if err != nil {
-		return nil, fmt.Errorf("cursor buffer: %w", err)
+	images := make([]*cursorImage, len(frames))
+	backing := make([]cursorImage, len(frames))
+	for i := range frames {
+		w, h := intconv.Clamp[int32](frames[i].Size.X), intconv.Clamp[int32](frames[i].Size.Y)
+		buffer, err := t.pool.CreateBuffer(intconv.Clamp[int32](t.used), w, h, w*4, wl.ShmFormatArgb8888)
+		if err != nil {
+			return nil, fmt.Errorf("cursor buffer: %w", err)
+		}
+		t.used += int64(len(frames[i].Pixels))
+		backing[i] = cursorImage{
+			buffer:   buffer,
+			delay:    frames[i].Delay,
+			hotspotX: intconv.Clamp[int32](frames[i].Hotspot.X),
+			hotspotY: intconv.Clamp[int32](frames[i].Hotspot.Y),
+			width:    w,
+			height:   h,
+		}
+		images[i] = &backing[i]
 	}
-	return &cursorImage{
-		buffer:   buffer,
-		delay:    img.Delay,
-		hotspotX: intconv.Clamp[int32](img.Hotspot.X),
-		hotspotY: intconv.Clamp[int32](img.Hotspot.Y),
-		width:    w,
-		height:   h,
-	}, nil
+	return images, nil
+}
+
+// pwriteAll writes iovs at off in as few syscalls as the kernel lets it.
+func pwriteAll(f *os.File, iovs [][]byte, off int64) error {
+	for len(iovs) > 0 {
+		n, err := unix.Pwritev(int(f.Fd()), iovs[:min(len(iovs), maxPwriteIovs)], off)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		off += int64(n)
+		for n > 0 {
+			if n < len(iovs[0]) {
+				iovs[0] = iovs[0][n:]
+				break
+			}
+			n -= len(iovs[0])
+			iovs = iovs[1:]
+		}
+	}
+	return nil
 }
 
 func (t *cursorTheme) grow(size int32) error {

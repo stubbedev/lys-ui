@@ -1,14 +1,11 @@
 package wlsession
 
 import (
-	"bytes"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
 	"github.com/stubbedev/lys-lib/debug"
-	"github.com/stubbedev/lys-lib/xcursor"
 )
 
 // File cursors (CSS cursor: url()): the stylesheet names an xcursor
@@ -73,19 +70,14 @@ func hotspotCoord(s string) (int32, bool) {
 // fallback keyword (the arrow without one). Called with
 // cursorState.mu held.
 func (s *Session) pushFileCursorLocked(fc fileCursor) error {
-	img, err := fileCursorImage(fc.path)
-	if err != nil {
-		debug.Log("input", "file cursor %q: %v", fc.path, err)
-		return s.applyNamedCursorLocked(fc.fallback)
-	}
 	theme, err := loadCursorTheme(s.shm)
 	if err != nil {
 		debug.Log("input", "file cursor theme: %v", err)
 		return s.applyNamedCursorLocked(fc.fallback)
 	}
-	ib, err := theme.addImage(img)
+	ib, err := theme.fileCursor(fc.path)
 	if err != nil {
-		debug.Log("input", "file cursor buffer: %v", err)
+		debug.Log("input", "file cursor %q: %v", fc.path, err)
 		return s.applyNamedCursorLocked(fc.fallback)
 	}
 	if s.crs.push != nil {
@@ -104,23 +96,4 @@ func (s *Session) pushFileCursorLocked(fc fileCursor) error {
 		return fmt.Errorf("set cursor: %w", err)
 	}
 	return nil
-}
-
-// fileCursorImage reads the xcursor file and picks its widest image.
-func fileCursorImage(path string) (xcursor.Image, error) {
-	buf, err := os.ReadFile(path) //nolint:gosec // the path is the stylesheet's own url() cursor
-	if err != nil {
-		return xcursor.Image{}, err
-	}
-	imgs, err := xcursor.All(bytes.NewReader(buf), int64(len(buf)))
-	if err != nil {
-		return xcursor.Image{}, err
-	}
-	img := imgs[0]
-	for _, cand := range imgs[1:] {
-		if cand.Size.X > img.Size.X {
-			img = cand
-		}
-	}
-	return img, nil
 }

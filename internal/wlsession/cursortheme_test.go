@@ -11,7 +11,6 @@ import (
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wltest"
-	"github.com/stubbedev/lys-lib/xcursor"
 )
 
 // frame is one image of a test Xcursor file; every pixel holds bgra.
@@ -106,13 +105,9 @@ func TestThemeLoadsAnAnimatedCursorIntoThePool(t *testing.T) {
 			t.Errorf("frame %d: %+v", i, img)
 		}
 	}
-	info, err := theme.file.Stat()
-	if err != nil {
-		t.Fatal(err)
-	}
 	const frameBytes = 24 * 24 * 4
 	pool := make([]byte, 2*frameBytes)
-	if _, err := theme.file.ReadAt(pool, info.Size()-2*frameBytes); err != nil {
+	if _, err := theme.file.ReadAt(pool, 0); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Equal(pool[:4], first[:]) || !slices.Equal(pool[frameBytes:frameBytes+4], second[:]) {
@@ -121,6 +116,21 @@ func TestThemeLoadsAnAnimatedCursorIntoThePool(t *testing.T) {
 	again, err := theme.cursor("watch")
 	if err != nil || again != cur {
 		t.Errorf("a second lookup = %p, %v; want the cached %p", again, err, cur)
+	}
+}
+
+// A lookup that fails is not repeated: resolving a shape retries its
+// missing candidates on every apply.
+func TestAMissingShapeIsLookedUpOnce(t *testing.T) {
+	base := t.TempDir()
+	writeCursor(t, base, "T", "watch", xcursorFile(frame{nominal: 24, side: 24}))
+	theme := loadedTheme(t, base, "T")
+	if _, err := theme.cursor("xterm"); err == nil {
+		t.Fatal("a shape the theme lacks loaded")
+	}
+	writeCursor(t, base, "T", "xterm", xcursorFile(frame{nominal: 24, side: 24}))
+	if _, err := theme.cursor("xterm"); err == nil {
+		t.Error("the second lookup went back to the disk")
 	}
 }
 
@@ -148,22 +158,13 @@ func TestAMissingThemeStillOpensThePool(t *testing.T) {
 	} else if !strings.Contains(err.Error(), `"Gone"`) {
 		t.Errorf("error %q does not name the theme", err)
 	}
-	if _, err := theme.addImage(fileImage(t)); err != nil {
-		t.Errorf("a file cursor on a missing theme: %v", err)
-	}
-}
-
-func fileImage(t *testing.T) xcursor.Image {
-	t.Helper()
 	path := filepath.Join(t.TempDir(), "c")
 	if err := os.WriteFile(path, xcursorFile(frame{nominal: 8, side: 8}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	img, err := fileCursorImage(path)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := theme.fileCursor(path); err != nil {
+		t.Errorf("a file cursor on a missing theme: %v", err)
 	}
-	return img
 }
 
 func TestFileCursorPicksTheWidestImage(t *testing.T) {
@@ -172,12 +173,42 @@ func TestFileCursorPicksTheWidestImage(t *testing.T) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	img, err := fileCursorImage(path)
+	theme := loadedTheme(t, t.TempDir(), "T")
+	img, err := theme.fileCursor(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if img.Size.X != 48 {
-		t.Errorf("picked width %d, want 48", img.Size.X)
+	if img.width != 48 {
+		t.Errorf("picked width %d, want 48", img.width)
+	}
+	used := theme.used
+	again, err := theme.fileCursor(path)
+	if err != nil || again != img || theme.used != used {
+		t.Errorf("showing it again: %p, %v, pool at %d from %d; want the same image", again, err, theme.used, used)
+	}
+}
+
+// A real theme, the dev shell's, end to end into the pool.
+func TestARealThemeLoadsIntoThePool(t *testing.T) {
+	path := os.Getenv("LYS_UI_TEST_XCURSOR_PATH")
+	if path == "" {
+		t.Skip("LYS_UI_TEST_XCURSOR_PATH is not set")
+	}
+	theme := loadedTheme(t, path, "Vanilla-DMZ")
+	cur, err := theme.cursor("watch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cur.images) < 2 {
+		t.Fatalf("watch has %d frames", len(cur.images))
+	}
+	for i, img := range cur.images {
+		if img.delay == 0 || img.width != 24 {
+			t.Errorf("frame %d: %+v", i, img)
+		}
+	}
+	if _, err := theme.cursor("left_ptr"); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -189,7 +220,7 @@ func TestFileCursorRefusesATruncatedFile(t *testing.T) {
 	if err := os.WriteFile(path, data[:len(data)/2], 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := fileCursorImage(path); err == nil {
+	if _, err := loadedTheme(t, t.TempDir(), "T").fileCursor(path); err == nil {
 		t.Error("a truncated file loaded")
 	}
 }
