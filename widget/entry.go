@@ -1314,6 +1314,9 @@ func (e *Entry) restartBlink() { e.blink.restart(e.repaintCaret) }
 // stopBlink implements caretBlinker.
 func (e *Entry) stopBlink() { e.blink.stop(e.repaintCaret) }
 
+// detach implements detacher: a field on no surface blinks for nobody.
+func (e *Entry) detach() { e.stopBlink() }
+
 // repaintCaret damages the caret's rect alone.
 func (e *Entry) repaintCaret() {
 	if r, ok := e.caretRect(e.shape(e.displayText())); ok {

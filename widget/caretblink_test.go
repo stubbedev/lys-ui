@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/anim"
+	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
 // A focused entry's caret spans the font's extents and blinks as GTK's
@@ -124,5 +125,33 @@ func TestTextAreaClickRepaintsTheCaret(t *testing.T) {
 	band := render.UnionAll(rects)
 	if band.Empty() || band.H >= ta.Bounds().H/2 {
 		t.Errorf("the drag damaged %v, want the rows its selection covers", band)
+	}
+}
+
+// A surface closing with a field still focused takes the blink with it:
+// its timeline would otherwise wake the loop and shape the field's text
+// for up to gtk-cursor-blink-timeout, for a widget nobody can see, and
+// race whatever the next surface's owner is doing to the theme.
+func TestDetachingATreeStopsItsCaret(t *testing.T) {
+	pinAnimClock(t)
+	for name, field := range map[string]Widget{
+		"entry":    NewEntry(testFace(t), 14, render.RGB(255, 255, 255)),
+		"textarea": NewTextArea(testFace(t), 14, render.RGB(255, 255, 255)),
+	} {
+		root := NewBox(Column, 0, 0)
+		root.Append(NewBox(Column, 0, 0).Append(field, false), false)
+		SizeWithin(root, Size{W: 160, H: 80})
+		root.Arrange(render.Rect{W: 160, H: 80})
+		r := &Router{Root: root}
+		if err := r.SetFocus(field); err != nil {
+			t.Fatal(err)
+		}
+		if !animclock.Active() {
+			t.Fatalf("%s: focus should start the blink", name)
+		}
+		Detach(root)
+		if animclock.Active() {
+			t.Errorf("%s: the blink outlived its surface", name)
+		}
 	}
 }

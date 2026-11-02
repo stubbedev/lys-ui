@@ -1243,6 +1243,9 @@ func (t *TextArea) restartBlink() { t.blink.restart(t.repaintCaret) }
 // stopBlink implements caretBlinker.
 func (t *TextArea) stopBlink() { t.blink.stop(t.repaintCaret) }
 
+// detach implements detacher: a field on no surface blinks for nobody.
+func (t *TextArea) detach() { t.stopBlink() }
+
 // repaintCaret damages the caret's rect alone.
 func (t *TextArea) repaintCaret() {
 	if r, ok := t.caretRect(); ok {
