@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/lys-ui/appearance"
 	"github.com/stubbedev/lys-ui/gtksettings"
 	"github.com/stubbedev/lys-ui/internal/logutil"
+	"github.com/stubbedev/lys-ui/widget"
 )
 
 // ColorScheme returns the desktop's current dark/light preference,
@@ -40,6 +41,33 @@ func (a *Application) Contrast() appearance.Contrast { return a.portal.Contrast(
 // goroutine like OnColorSchemeChange.
 func (a *Application) OnContrastChange(fn func(appearance.Contrast)) (off func()) {
 	return onLoop(a, a.portal.OnContrastChange, fn)
+}
+
+// ReducedMotion reports whether the desktop asks for reduced motion:
+// the portal's reduced-motion setting, else settings.ini's
+// gtk-enable-animations. An application needs nothing more than being
+// one to honour it: motion stops and surfaces fade from NewApplication
+// on, following changes live.
+func (a *Application) ReducedMotion() bool {
+	return resolveReducedMotion(a.portal.Motion(), a.gtkSettings().Animations)
+}
+
+// OnReducedMotionChange registers fn for every change of ReducedMotion,
+// on the loop goroutine like OnColorSchemeChange, after the toolkit has
+// applied it.
+func (a *Application) OnReducedMotionChange(fn func(bool)) (off func()) {
+	return onLoop(a, a.portal.OnMotionChange, func(appearance.Motion) { fn(a.ReducedMotion()) })
+}
+
+func resolveReducedMotion(portal appearance.Motion, ini gtksettings.Animations) bool {
+	return portal == appearance.MotionReduced || ini == gtksettings.AnimationsOff
+}
+
+func (a *Application) followReducedMotion() {
+	widget.SetReducedMotion(a.ReducedMotion())
+	a.stopMotionFollow = onLoop(a, a.portal.OnMotionChange, func(appearance.Motion) {
+		widget.SetReducedMotion(a.ReducedMotion())
+	})
 }
 
 // DesktopFontSize is the default font size, in logical pixels, a GTK

@@ -9,6 +9,9 @@ import (
 // contrastHigh is the portal's one defined contrast value.
 const contrastHigh uint32 = 1
 
+// motionReduced is the portal's one defined reduced-motion value.
+const motionReduced uint32 = 1
+
 // accentValue maps a portal value - a variant around a (ddd) RGB
 // triple - to an Accent. Anything else (wrong arity, out-of-range
 // components, wrong types) maps to the zero Accent rather than a
@@ -57,6 +60,18 @@ func contrastValue(v any) appearance.Contrast {
 		return appearance.ContrastHigh
 	}
 	return appearance.ContrastUnknown
+}
+
+// Motion: 1 is reduced, everything else (0 "no preference", out of
+// range, wrong type) is Unknown.
+func motionValue(v any) appearance.Motion {
+	if variant, ok := v.(dbus.Variant); ok {
+		v = variant.Value()
+	}
+	if u, ok := v.(uint32); ok && u == motionReduced {
+		return appearance.MotionReduced
+	}
+	return appearance.MotionUnknown
 }
 
 // scaleValue maps a portal value - a variant around a double - to a

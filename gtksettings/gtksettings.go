@@ -35,7 +35,22 @@ type Settings struct {
 	FontName string
 	// XftDPI is gtk-xft-dpi.
 	XftDPI XftDPI
+	// Animations is gtk-enable-animations.
+	Animations Animations
 }
+
+// Animations is gtk-enable-animations: unset when no file sets it, as
+// GTK's default is on.
+type Animations uint8
+
+const (
+	// AnimationsUnset means no file sets gtk-enable-animations.
+	AnimationsUnset Animations = iota
+	// AnimationsOn is gtk-enable-animations = true.
+	AnimationsOn
+	// AnimationsOff is gtk-enable-animations = false.
+	AnimationsOff
+)
 
 // XftDPI is gtk-xft-dpi: the text resolution in 1024ths of a dot per
 // inch, 0 when unset (GTK's -1, "default", reads as unset).
@@ -90,6 +105,7 @@ func (s Settings) merge(next Settings) Settings {
 	overlay(&s.CursorThemeSize, next.CursorThemeSize)
 	overlay(&s.FontName, next.FontName)
 	overlay(&s.XftDPI, next.XftDPI)
+	overlay(&s.Animations, next.Animations)
 	return s
 }
 
@@ -139,6 +155,13 @@ func (s *Settings) set(key, value string) {
 		}
 	case "gtk-font-name":
 		s.FontName = value
+	case "gtk-enable-animations":
+		switch strings.ToLower(value) {
+		case "1", "true", "yes":
+			s.Animations = AnimationsOn
+		case "0", "false", "no":
+			s.Animations = AnimationsOff
+		}
 	case "gtk-xft-dpi":
 		if n, err := strconv.ParseInt(value, 10, 32); err == nil && n > 0 {
 			s.XftDPI = XftDPI(n)

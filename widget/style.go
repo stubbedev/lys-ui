@@ -462,7 +462,7 @@ func envNow() style.Env {
 	env := style.Env{Rem: styleEnv.Rem, FontPx: styleEnv.FontPx, Font: m, Media: style.Media{
 		Width: float64(mediaViewport.w), Height: float64(mediaViewport.h),
 		DPI: mediaDPI, Dark: currentDark(), HighContrast: mediaContrast,
-		ReducedMotion: !current.Animations,
+		ReducedMotion: !current.Moves(),
 	}, InlineContainerUnits: inlineUnits.Container}
 	env.RootLineHeight = env.Rem * ratioOr(m.LineHeight, 1.2)
 	return env

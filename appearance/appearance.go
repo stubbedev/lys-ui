@@ -67,3 +67,14 @@ const (
 	// (widget.HighContrastTheme).
 	ContrastHigh
 )
+
+// Motion is the desktop's reduced-motion preference.
+type Motion uint8
+
+const (
+	// MotionUnknown is no preference, no portal, or an unreadable value.
+	MotionUnknown Motion = iota
+	// MotionReduced asks for things not to move: surfaces fade, and
+	// nothing slides, bounces or scrolls smoothly.
+	MotionReduced
+)

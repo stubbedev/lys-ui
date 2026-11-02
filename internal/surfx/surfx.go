@@ -192,14 +192,14 @@ func Enabled() bool {
 // LYS_UI_NO_ANIM collapse it to zero-duration tweens, which deliver
 // their end state once at launch, so the state machine's shape is
 // identical either way. A caller's reduced-motion source such as the
-// theme (motion false) degrades it to a short fade with no movement -
-// which is why callers pass their theme state here instead of
-// consulting it twice.
+// theme (motion false) or the desktop's preference (anim.Reduced)
+// degrades it to a short fade with no movement - which is why callers
+// pass their theme state here instead of consulting it twice.
 func Plan(k Kind, motion bool) Style {
 	switch {
-	case !Enabled() || anim.Instant():
+	case !Enabled() || anim.NoFades():
 		return Style{}
-	case !motion:
+	case !motion || anim.Reduced():
 		return reducedMotion
 	}
 	return Lookup(k)

@@ -101,10 +101,11 @@ type Application struct {
 	toasts toastRegistry
 	portal *portalsettings.Monitor
 	// gtkIni is settings.ini, read on first use (gtkSettings).
-	gtkIniOnce     sync.Once
-	gtkIni         gtksettings.Settings
-	lockWatchers   []*func(Locks)
-	stopIconFollow func()
+	gtkIniOnce       sync.Once
+	gtkIni           gtksettings.Settings
+	stopMotionFollow func()
+	lockWatchers     []*func(Locks)
+	stopIconFollow   func()
 	// windowIcons (windowicon.go): per-window overrides and the app
 	// default posted through xdg-toplevel-icon-v1, plus the icons
 	// currently applied to live host windows.
@@ -251,6 +252,7 @@ func NewApplication(sess *wlsession.Session) *Application {
 	}
 	a.stopIconFollow = a.portal.OnIconThemeChange(icons.Default().ApplyIconTheme)
 	a.repaintOnIconReset(icons.Default())
+	a.followReducedMotion()
 	if inspect.Enabled() {
 		a.setInspect(true)
 	}
@@ -739,6 +741,9 @@ func (a *Application) Run() error {
 		a.stopAccessibility()
 		// Unwind the NewApplication icon-follow wiring: stop the cache's
 		// subscription, then the monitor's goroutines and connection.
+		if a.stopMotionFollow != nil {
+			a.stopMotionFollow()
+		}
 		if a.stopIconFollow != nil {
 			a.stopIconFollow()
 		}

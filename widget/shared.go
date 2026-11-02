@@ -154,7 +154,7 @@ func (n *node) startShared(from sharedShot) {
 	if n.shared != nil {
 		n.shared.stop()
 	}
-	tr := &sharedTransition{from: from, geometry: Current().Animations}
+	tr := &sharedTransition{from: from, geometry: Current().Moves()}
 	n.shared = tr
 	step := func(p float64) {
 		tr.progress = p

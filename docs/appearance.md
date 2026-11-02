@@ -53,6 +53,18 @@ application.OnContrastChange(func(c appearance.Contrast) {
 false mean no preference, no portal, or an unreadable value. They are a
 reason to keep the current theme.
 
+## Reduced motion
+
+The portal's `reduced-motion` key, and `gtk-enable-animations = false` in
+`settings.ini` where it is not set, is the one preference lys-ui applies on its
+own, because an app has no reason to overrule it and should not need to know:
+`NewApplication` calls `widget.SetReducedMotion` and follows changes. Springs,
+smooth scrolling, keyframes, spinners and the caret's blink stop; a surface's
+enter and exit become a short fade; `Theme.Moves` answers false, so the motion
+tokens are zero and `prefers-reduced-motion` matches. `Application.ReducedMotion`
+and `OnReducedMotionChange` report it. `LYS_UI_NO_ANIM=1` goes further and
+collapses fades as well.
+
 ## Failure model
 
 - **No session bus.** The monitor is inert: everything reads unknown

@@ -479,7 +479,7 @@ func themeCSS(t *Theme) string {
 			fmt.Fprintf(&b, "%s { %s }\n", r[0], r[1])
 		}
 	}
-	if t.Animations {
+	if t.Moves() {
 		// The skeleton's pulse; reduced motion regenerates the layer
 		// without it.
 		b.WriteString("@keyframes lys-pulse { 50% { opacity: 0.5; } }\nskeleton { animation: lys-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }\n")

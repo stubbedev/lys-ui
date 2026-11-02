@@ -380,10 +380,30 @@ const titleStep = 1.125
 // dialog's or a window's heading.
 func (t *Theme) TitleSize() float64 { return t.TextSize * titleStep }
 
+// Moves reports whether this theme's motion runs: Animations, unless
+// the desktop asks for reduced motion (SetReducedMotion).
+func (t *Theme) Moves() bool { return t.Animations && !anim.Reduced() }
+
+// SetReducedMotion applies the desktop's reduced-motion preference: what
+// moves stops moving and surfaces fade instead, the
+// prefers-reduced-motion media feature turns on, and every Theme's Moves
+// answers false, whatever its Animations says. app.Application calls it
+// from the portal's reduced-motion setting, so apps need not.
+func SetReducedMotion(on bool) {
+	if on == anim.Reduced() {
+		return
+	}
+	anim.SetReduced(on)
+	themeGen++
+	markDamage()
+	syncThemeSheet(current)
+	bumpStyleGen("reduced motion")
+}
+
 // MotionDurations returns the motion tokens in effect: the theme's, the
-// toolkit's where unset, and zero throughout when Animations is off.
+// toolkit's where unset, and zero throughout when Moves is false.
 func (t *Theme) MotionDurations() (short, medium, long time.Duration) {
-	if !t.Animations {
+	if !t.Moves() {
 		return 0, 0, 0
 	}
 	return cmp.Or(t.MotionShort, anim.DurationShort), cmp.Or(t.MotionMedium, anim.DurationMedium), cmp.Or(t.MotionLong, anim.DurationLong)

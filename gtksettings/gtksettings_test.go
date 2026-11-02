@@ -149,3 +149,17 @@ func TestLoadReportsAnUnreadableFileAndKeepsTheRest(t *testing.T) {
 		t.Errorf("Load = %+v, want %+v", got, want)
 	}
 }
+
+func TestParseReadsEnableAnimations(t *testing.T) {
+	for value, want := range map[string]Animations{"false": AnimationsOff, "0": AnimationsOff, "FALSE": AnimationsOff, "true": AnimationsOn, "1": AnimationsOn, "maybe": AnimationsUnset} {
+		if got := Parse("[Settings]\ngtk-enable-animations=" + value + "\n").Animations; got != want {
+			t.Errorf("%q: %v, want %v", value, got, want)
+		}
+	}
+	if got := Parse("[Settings]\ngtk-font-name=Sans 10\n").Animations; got != AnimationsUnset {
+		t.Errorf("no key: %v", got)
+	}
+	if got := (Settings{Animations: AnimationsOff}).merge(Settings{Animations: AnimationsOn}).Animations; got != AnimationsOn {
+		t.Errorf("a later file does not override: %v", got)
+	}
+}

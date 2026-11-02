@@ -171,7 +171,7 @@ func (t *Toast) HoverMove(p Point) {
 // toastPlan resolves the toast kind's tween profile: the surfx table
 // gated by the theme's motion switch (the package toggle and anim's
 // reduced-motion state fold in inside Plan).
-func toastPlan() surfx.Style { return surfx.Plan(surfx.KindToast, Current().Animations) }
+func toastPlan() surfx.Style { return surfx.Plan(surfx.KindToast, Current().Moves()) }
 
 // armTimer schedules the exit: hold for the timeout minus the fade,
 // then fade out. It launches only on a visible toast — a hidden one

@@ -103,3 +103,38 @@ func TestSettingUnregisterTombstones(t *testing.T) {
 		t.Errorf("after unregister: first=%d second=%d, want 0 and 1", first, second)
 	}
 }
+
+// TestMotionValue pins the reduced-motion mapping: 1 is reduced, 0 and
+// anything else are no preference.
+func TestMotionValue(t *testing.T) {
+	if got := motionValue(dbus.MakeVariant(uint32(1))); got != appearance.MotionReduced {
+		t.Errorf("1 mapped to %v", got)
+	}
+	for _, v := range []any{dbus.MakeVariant(uint32(0)), dbus.MakeVariant(uint32(7)), dbus.MakeVariant("reduce")} {
+		if got := motionValue(v); got != appearance.MotionUnknown {
+			t.Errorf("%v mapped to %v, want unknown", v, got)
+		}
+	}
+}
+
+func TestMonitorFollowsReducedMotion(t *testing.T) {
+	m := &Monitor{done: make(chan struct{})}
+	var seen []appearance.Motion
+	m.OnMotionChange(func(v appearance.Motion) { seen = append(seen, v) })
+	signal := func(ns, key string, v uint32) {
+		m.signal(&dbus.Signal{Name: changedSig, Path: portalPath, Body: []any{ns, key, dbus.MakeVariant(v)}})
+	}
+	signal(schemeNamespace, contrastKey, 1)
+	if m.Motion() != appearance.MotionUnknown || len(seen) != 0 {
+		t.Fatalf("a contrast change moved motion to %v, %v", m.Motion(), seen)
+	}
+	signal(schemeNamespace, motionKey, 1)
+	signal(schemeNamespace, motionKey, 1)
+	if m.Motion() != appearance.MotionReduced || len(seen) != 1 {
+		t.Fatalf("motion %v, heard %v", m.Motion(), seen)
+	}
+	signal(schemeNamespace, motionKey, 0)
+	if m.Motion() != appearance.MotionUnknown || len(seen) != 2 {
+		t.Fatalf("motion %v, heard %v", m.Motion(), seen)
+	}
+}

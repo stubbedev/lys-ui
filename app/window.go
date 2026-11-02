@@ -250,7 +250,7 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 	if animKind != surfx.KindMenu {
 		w.morph = widget.NewMorph(root)
 		w.router.Root = w.morph
-		w.fx = surfx.NewCoordinator(animKind, w, func() bool { return widget.Current().Animations })
+		w.fx = surfx.NewCoordinator(animKind, w, func() bool { return widget.Current().Moves() })
 	}
 	// Toplevel hosts carry the size limits, the resize grab, and the
 	// decoration state; layer surfaces implement none of it.

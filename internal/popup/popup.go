@@ -195,7 +195,7 @@ func New(sess *wlsession.Session, cfg Config) (*Popup, error) {
 	debug.Log("input", "popup surface %d created", surf.Id())
 	p := &Popup{WLSurface: surf, w: intconv.Clamp[int32](cfg.Width), h: intconv.Clamp[int32](cfg.Height), sess: sess, gravity: cfg.Gravity, gutter: cfg.Gutter, cfg: cfg}
 	p.sc = scale.New(sess, surf, nil)
-	p.fx = surfx.NewCoordinator(cfg.Kind, p, func() bool { return widget.Current().Animations })
+	p.fx = surfx.NewCoordinator(cfg.Kind, p, func() bool { return widget.Current().Moves() })
 	// The gutter is display-only: clicks in it route to whatever is
 	// beneath instead of landing on a shadow pixel. Sealed at open (and
 	// at each resize); the dismissal state machine re-seals it empty,

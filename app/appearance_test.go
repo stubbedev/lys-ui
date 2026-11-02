@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-ui/appearance"
+	"github.com/stubbedev/lys-ui/gtksettings"
 )
 
 func TestOnLoopDeliversOnPumpAndDropsAfterOff(t *testing.T) {
@@ -52,5 +53,23 @@ func TestAccentColor(t *testing.T) {
 	c, ok := appearance.Accent{R: 1, G: 0.5, B: 0, Known: true}.Color()
 	if !ok || c.R() != 255 || c.G() != 128 || c.B() != 0 || c.A() != 255 {
 		t.Errorf("accent color = %v, want opaque rgb(255,128,0)", c)
+	}
+}
+
+func TestReducedMotionComesFromThePortalThenSettingsIni(t *testing.T) {
+	for _, c := range []struct {
+		portal appearance.Motion
+		ini    gtksettings.Animations
+		want   bool
+	}{
+		{appearance.MotionUnknown, gtksettings.AnimationsUnset, false},
+		{appearance.MotionUnknown, gtksettings.AnimationsOn, false},
+		{appearance.MotionUnknown, gtksettings.AnimationsOff, true},
+		{appearance.MotionReduced, gtksettings.AnimationsUnset, true},
+		{appearance.MotionReduced, gtksettings.AnimationsOn, true},
+	} {
+		if got := resolveReducedMotion(c.portal, c.ini); got != c.want {
+			t.Errorf("portal %v, ini %v: %v", c.portal, c.ini, got)
+		}
 	}
 }

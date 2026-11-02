@@ -14,16 +14,34 @@ import (
 	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
-var instant atomic.Bool
+var (
+	instant atomic.Bool
+	reduced atomic.Bool
+)
 
 func init() {
 	instant.Store(os.Getenv("LYS_UI_NO_ANIM") == "1")
 }
 
-// Instant reports whether tweens collapse to their end state: the
-// reduced-motion mode, on with LYS_UI_NO_ANIM=1 or SetInstant. Delays
-// keep their durations, so timing survives and only motion goes away.
-func Instant() bool { return instant.Load() }
+// Instant reports whether things that move land at once: springs,
+// smooth scrolling, keyframes, spinners. It is true with LYS_UI_NO_ANIM=1
+// or SetInstant, under which tweens collapse as well (delays keep their
+// durations, so timing survives), and under SetReduced, the desktop's
+// reduced-motion preference, under which tweens still run so that a
+// surface can fade.
+func Instant() bool { return instant.Load() || reduced.Load() }
+
+// NoFades reports whether even fades collapse: LYS_UI_NO_ANIM=1 or
+// SetInstant.
+func NoFades() bool { return instant.Load() }
+
+// Reduced reports the desktop's reduced-motion preference: SetReduced.
+func Reduced() bool { return reduced.Load() }
+
+// SetReduced records the desktop's reduced-motion preference, which
+// app.Application follows. Use widget.SetReducedMotion, which also
+// restyles, from anything that draws.
+func SetReduced(on bool) { reduced.Store(on) }
 
 // SetInstant turns reduced motion on or off for later launches and
 // returns the restore function.

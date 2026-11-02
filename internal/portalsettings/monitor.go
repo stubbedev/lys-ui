@@ -32,6 +32,7 @@ const (
 	schemeKey       = "color-scheme"
 	accentKey       = "accent-color"
 	contrastKey     = "contrast"
+	motionKey       = "reduced-motion"
 
 	interfaceNamespace = "org.gnome.desktop.interface"
 	iconThemeKey       = "icon-theme"
@@ -95,6 +96,7 @@ type Monitor struct {
 	icons    setting[string]
 	accent   setting[appearance.Accent]
 	contrast setting[appearance.Contrast]
+	motion   setting[appearance.Motion]
 	font     setting[string]
 	scale    setting[float64]
 }
@@ -166,6 +168,7 @@ func (m *Monitor) refresh(conn *dbus.Conn, deliver bool) {
 	m.icons.update(m, readSetting(conn, interfaceNamespace, iconThemeKey, stringValue, ""), deliver)
 	m.accent.update(m, readSetting(conn, schemeNamespace, accentKey, accentValue, appearance.Accent{}), deliver)
 	m.contrast.update(m, readSetting(conn, schemeNamespace, contrastKey, contrastValue, appearance.ContrastUnknown), deliver)
+	m.motion.update(m, readSetting(conn, schemeNamespace, motionKey, motionValue, appearance.MotionUnknown), deliver)
 	m.font.update(m, readSetting(conn, interfaceNamespace, fontNameKey, stringValue, ""), deliver)
 	m.scale.update(m, readSetting(conn, interfaceNamespace, textScaleKey, scaleValue, 0), deliver)
 }
@@ -291,6 +294,9 @@ func (m *Monitor) signal(sig *dbus.Signal) {
 	if v, ok := settingChanged(sig, schemeNamespace, contrastKey, contrastValue, appearance.ContrastUnknown); ok {
 		m.contrast.update(m, v, true)
 	}
+	if v, ok := settingChanged(sig, schemeNamespace, motionKey, motionValue, appearance.MotionUnknown); ok {
+		m.motion.update(m, v, true)
+	}
 	if v, ok := settingChanged(sig, interfaceNamespace, fontNameKey, stringValue, ""); ok {
 		m.font.update(m, v, true)
 	}
@@ -367,6 +373,20 @@ func (m *Monitor) Contrast() appearance.Contrast {
 // OnChange.
 func (m *Monitor) OnContrastChange(fn func(appearance.Contrast)) (off func()) {
 	return m.contrast.on(m, fn)
+}
+
+// Motion returns the desktop's reduced-motion preference: MotionReduced
+// or MotionUnknown (no portal, no preference, unreadable value). Safe
+// from any goroutine.
+func (m *Monitor) Motion() appearance.Motion {
+	return m.motion.get(m)
+}
+
+// OnMotionChange registers fn for every reduced-motion change; the
+// returned function unregisters it. Same threading contract as
+// OnChange.
+func (m *Monitor) OnMotionChange(fn func(appearance.Motion)) (off func()) {
+	return m.motion.on(m, fn)
 }
 
 // FontName returns the desktop's interface font description (the
