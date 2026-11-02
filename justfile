@@ -396,3 +396,14 @@ bar:
 # Set nix/package.nix's vendorHash to the hash of the modules go.sum pins.
 vendor-hash:
     nix run github:stubbedev/lys-ci#vendor-hash -- nix/package.nix .#lys-ui.goModules
+
+# Tag the current commit as the next release and push it, refusing anything but
+# a clean default branch whose CI succeeded.
+release-patch:
+    nix run github:stubbedev/lys-ci#release -- patch
+
+release-minor:
+    nix run github:stubbedev/lys-ci#release -- minor
+
+release-major:
+    nix run github:stubbedev/lys-ci#release -- major
