@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
-	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor"
 )
 
 // Regression: the client never set a pointer cursor, leaving the
@@ -195,12 +194,12 @@ func TestCursorFrame(t *testing.T) {
 type cursorHarness struct {
 	s      *Session
 	now    time.Time
-	arms   []time.Duration         // durations the frame timer was armed with
-	frames []*wlcursor.ImageBuffer // frames pushed to the wire, in order
-	fire   func()                  // fires the most recent timer, if any
+	arms   []time.Duration // durations the frame timer was armed with
+	frames []*cursorImage  // frames pushed to the wire, in order
+	fire   func()          // fires the most recent timer, if any
 }
 
-func newCursorHarness(t *testing.T, cursors map[string]*wlcursor.Cursor) *cursorHarness {
+func newCursorHarness(t *testing.T, cursors map[string]*themedCursor) *cursorHarness {
 	t.Helper()
 	h := &cursorHarness{s: &Session{}}
 	s := h.s
@@ -212,7 +211,7 @@ func newCursorHarness(t *testing.T, cursors map[string]*wlcursor.Cursor) *cursor
 		h.arms = append(h.arms, d)
 		h.fire = f
 	}
-	s.crs.theme = func(desired string) (*wlcursor.Cursor, string, error) {
+	s.crs.theme = func(desired string) (*themedCursor, string, error) {
 		name := resolveCursorName(func(n string) bool { _, ok := cursors[n]; return ok }, desired)
 		cur, ok := cursors[name]
 		if !ok {
@@ -220,7 +219,7 @@ func newCursorHarness(t *testing.T, cursors map[string]*wlcursor.Cursor) *cursor
 		}
 		return cur, name, nil
 	}
-	s.crs.push = func(img *wlcursor.ImageBuffer) error {
+	s.crs.push = func(img *cursorImage) error {
 		h.frames = append(h.frames, img)
 		return nil
 	}
@@ -242,30 +241,28 @@ func (h *cursorHarness) advance(d time.Duration) {
 // armed reports whether a frame timer is pending.
 func (h *cursorHarness) armed() bool { return h.s.crs.armed }
 
-func fakeCursor(name string, delays ...uint32) *wlcursor.Cursor {
-	images := make([]*wlcursor.ImageBuffer, len(delays))
-	var total uint32
+func fakeCursor(delays ...uint32) *themedCursor {
+	images := make([]*cursorImage, len(delays))
 	for i, d := range delays {
-		images[i] = &wlcursor.ImageBuffer{Delay: d}
-		total += d
+		images[i] = &cursorImage{delay: d}
 	}
-	return &wlcursor.Cursor{Name: name, Images: images, TotalDuration: total}
+	return &themedCursor{images: images}
 }
 
 // The watch cursor must show the right frame at the right time and
 // stop advancing entirely once it is no longer shown.
 func TestCursorFrameAdvancement(t *testing.T) {
-	watch := fakeCursor("watch", 30, 40, 30)
-	h := newCursorHarness(t, map[string]*wlcursor.Cursor{
+	watch := fakeCursor(30, 40, 30)
+	h := newCursorHarness(t, map[string]*themedCursor{
 		"watch":       watch,
-		defaultCursor: fakeCursor(defaultCursor, 1),
+		defaultCursor: fakeCursor(1),
 	})
 
 	t.Run("the first frame arms the timer for its delay", func(t *testing.T) {
 		if err := h.s.SetCursor("watch"); err != nil {
 			t.Fatalf("SetCursor: %v", err)
 		}
-		if len(h.frames) != 1 || h.frames[0] != watch.Images[0] {
+		if len(h.frames) != 1 || h.frames[0] != watch.images[0] {
 			t.Fatal("first apply did not push frame 0")
 		}
 		if !h.armed() || h.arms[len(h.arms)-1] != 30*time.Millisecond {
@@ -275,18 +272,18 @@ func TestCursorFrameAdvancement(t *testing.T) {
 
 	t.Run("each fire shows the frame due at the injected clock", func(t *testing.T) {
 		h.advance(35 * time.Millisecond) // 35ms in: frame 1 runs
-		if len(h.frames) != 2 || h.frames[1] != watch.Images[1] {
+		if len(h.frames) != 2 || h.frames[1] != watch.images[1] {
 			t.Fatalf("after 35ms the pushed frame is not frame 1")
 		}
 		if h.arms[len(h.arms)-1] != 35*time.Millisecond {
 			t.Errorf("re-armed with %v, want 35ms (frame 1 started 5ms in)", h.arms[len(h.arms)-1])
 		}
 		h.advance(39 * time.Millisecond) // 74ms in: frame 2
-		if len(h.frames) != 3 || h.frames[2] != watch.Images[2] {
+		if len(h.frames) != 3 || h.frames[2] != watch.images[2] {
 			t.Fatalf("after 74ms the pushed frame is not frame 2")
 		}
 		h.advance(31 * time.Millisecond) // 105ms in: wrapped to frame 0
-		if len(h.frames) != 4 || h.frames[3] != watch.Images[0] {
+		if len(h.frames) != 4 || h.frames[3] != watch.images[0] {
 			t.Fatalf("after 105ms the pushed frame is not the wrapped frame 0")
 		}
 	})
@@ -295,7 +292,7 @@ func TestCursorFrameAdvancement(t *testing.T) {
 		if err := h.s.SetCursor(""); err != nil {
 			t.Fatalf("SetCursor(default): %v", err)
 		}
-		if len(h.frames) != 5 || h.frames[4] != h.s.crs.cur.Images[0] {
+		if len(h.frames) != 5 || h.frames[4] != h.s.crs.cur.images[0] {
 			t.Fatalf("the static cursor did not push its frame")
 		}
 		if h.armed() {
@@ -327,8 +324,8 @@ func TestCursorFrameAdvancement(t *testing.T) {
 // carries a shape by that name, so a lookup would show the arrow), and
 // any later shape brings a visible cursor back.
 func TestCursorHidden(t *testing.T) {
-	h := newCursorHarness(t, map[string]*wlcursor.Cursor{
-		defaultCursor: fakeCursor(defaultCursor, 1),
+	h := newCursorHarness(t, map[string]*themedCursor{
+		defaultCursor: fakeCursor(1),
 	})
 	if err := h.s.SetCursor(CursorHidden); err != nil {
 		t.Fatalf("SetCursor(none): %v", err)
@@ -355,9 +352,9 @@ func TestCursorHidden(t *testing.T) {
 // so the next surface would otherwise inherit the old shape.
 func TestCursorRestoreOnLeave(t *testing.T) {
 	surf := &wl.Surface{}
-	h := newCursorHarness(t, map[string]*wlcursor.Cursor{
-		"xterm":       fakeCursor("xterm", 1),
-		defaultCursor: fakeCursor(defaultCursor, 1),
+	h := newCursorHarness(t, map[string]*themedCursor{
+		"xterm":       fakeCursor(1),
+		defaultCursor: fakeCursor(1),
 	})
 
 	t.Run("leave restores the default", func(t *testing.T) {

@@ -6,10 +6,10 @@ package app
 
 import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
-	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor"
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 
 	"github.com/stubbedev/lys-ui/internal/window"
+	"github.com/stubbedev/lys-ui/internal/wlsession"
 )
 
 // resizer is the interactive-resize slice of a toplevel host; layer
@@ -81,21 +81,21 @@ func resizeEdge(w, h int, x, y float64) uint32 {
 func resizeCursor(edges uint32) string {
 	switch edges {
 	case xdg.ToplevelResizeEdgeTop:
-		return wlcursor.TopSide
+		return wlsession.CursorTopSide
 	case xdg.ToplevelResizeEdgeBottom:
-		return wlcursor.BottomSide
+		return wlsession.CursorBottomSide
 	case xdg.ToplevelResizeEdgeLeft:
-		return wlcursor.LeftSide
+		return wlsession.CursorLeftSide
 	case xdg.ToplevelResizeEdgeRight:
-		return wlcursor.RightSide
+		return wlsession.CursorRightSide
 	case xdg.ToplevelResizeEdgeTopLeft:
-		return wlcursor.TopLeftCorner
+		return wlsession.CursorTopLeftCorner
 	case xdg.ToplevelResizeEdgeTopRight:
-		return wlcursor.TopRightCorner
+		return wlsession.CursorTopRightCorner
 	case xdg.ToplevelResizeEdgeBottomLeft:
-		return wlcursor.BottomLeftCorner
+		return wlsession.CursorBottomLeftCorner
 	case xdg.ToplevelResizeEdgeBottomRight:
-		return wlcursor.BottomRightCorner
+		return wlsession.CursorBottomRightCorner
 	}
 	return ""
 }

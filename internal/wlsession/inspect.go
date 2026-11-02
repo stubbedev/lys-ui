@@ -72,5 +72,5 @@ func (s *Session) CursorTheme() (name string, size uint32, err error) {
 	if cursorThm == nil {
 		return "", 0, errNoShm
 	}
-	return cursorThm.Name, cursorThm.Size, nil
+	return cursorThm.name, cursorThm.size, nil
 }

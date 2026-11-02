@@ -8,12 +8,11 @@ import (
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
-	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor"
 )
 
 // defaultCursor is shown whenever the app has not asked for another
 // shape: the classic arrow.
-const defaultCursor = wlcursor.LeftPtr
+const defaultCursor = CursorLeftPtr
 
 // CursorHidden is the shape name that hides the pointer over a surface
 // (GTK's "none"): set_cursor with no surface, no theme lookup. A
@@ -21,12 +20,12 @@ const defaultCursor = wlcursor.LeftPtr
 const CursorHidden = "none"
 
 // cursorThemeSize is the nominal cursor size in pixels; XCURSOR_SIZE
-// overrides it through wlcursor.
+// overrides it.
 const cursorThemeSize = 24
 
 var (
 	cursorOnce sync.Once
-	cursorThm  *wlcursor.Theme
+	cursorThm  *cursorTheme
 	cursorErr  error
 )
 
@@ -44,7 +43,7 @@ type cursorState struct {
 	// delays and loop total, when the loop began, the pending frame
 	// timer, and a generation that drops stale timers once another
 	// apply superseded them.
-	cur     *wlcursor.Cursor
+	cur     *themedCursor
 	delays  []uint32
 	totalMs uint32
 	start   time.Time
@@ -57,8 +56,8 @@ type cursorState struct {
 	// nil in production.
 	now   func() time.Time
 	after func(time.Duration, func())
-	theme func(desired string) (*wlcursor.Cursor, string, error)
-	push  func(*wlcursor.ImageBuffer) error
+	theme func(desired string) (*themedCursor, string, error)
+	push  func(*cursorImage) error
 }
 
 // cursorAliases maps requested shape names to the xcursor names to
@@ -157,8 +156,8 @@ func resolveCursorName(has func(string) bool, desired string) string {
 	return defaultCursor
 }
 
-// SetCursor shows the named xcursor shape (wlcursor.LeftPtr, Xterm,
-// Grabbing, ...) on the pointer. Window-edge interactions can use the
+// SetCursor shows the named xcursor shape (CursorLeftPtr, "xterm",
+// "grabbing", ...) on the pointer. Window-edge interactions can use the
 // toolkit aliases - "resize_e", "resize_nw", the CSS spellings
 // ("ns-resize", "e-resize", ...) - which resolve to the shapes the
 // loaded theme actually carries and degrade to the arrow when it has
@@ -226,7 +225,7 @@ func (s *Session) applyNamedCursorLocked(desired string) error {
 	if err != nil {
 		return err
 	}
-	if cur.ImageCount() == 0 {
+	if len(cur.images) == 0 {
 		return nil
 	}
 	if c.shown != name || c.cur != cur {
@@ -238,7 +237,7 @@ func (s *Session) applyNamedCursorLocked(desired string) error {
 	if err := s.pushCursorLocked(img); err != nil {
 		return err
 	}
-	debug.Log("input", "cursor %q -> %q (%d frames, %dms loop)", desired, name, cur.ImageCount(), c.totalMs)
+	debug.Log("input", "cursor %q -> %q (%d frames, %dms loop)", desired, name, len(cur.images), c.totalMs)
 	s.armCursorLocked(rest)
 	return nil
 }
@@ -247,7 +246,7 @@ func (s *Session) applyNamedCursorLocked(desired string) error {
 // first candidate the theme carries, else the default arrow. It is
 // the only theme-facing step of the cursor path, so tests substitute
 // it through cursorState.theme.
-func (s *Session) themeCursor(desired string) (*wlcursor.Cursor, string, error) {
+func (s *Session) themeCursor(desired string) (*themedCursor, string, error) {
 	if s.crs.theme != nil {
 		return s.crs.theme(desired)
 	}
@@ -256,14 +255,14 @@ func (s *Session) themeCursor(desired string) (*wlcursor.Cursor, string, error) 
 		return nil, "", fmt.Errorf("cursor theme: %w", err)
 	}
 	has := func(name string) bool {
-		_, err := theme.GetCursor(name)
+		_, err := theme.cursor(name)
 		return err == nil
 	}
 	name := resolveCursorName(has, desired)
-	cur, err := theme.GetCursor(name)
+	cur, err := theme.cursor(name)
 	if err != nil {
 		// Unknown shape: fall back rather than failing the call.
-		cur, err = theme.GetCursor(defaultCursor)
+		cur, err = theme.cursor(defaultCursor)
 		if err != nil {
 			return nil, "", fmt.Errorf("default cursor: %w", err)
 		}
@@ -275,7 +274,7 @@ func (s *Session) themeCursor(desired string) (*wlcursor.Cursor, string, error) 
 // pushCursorLocked attaches one frame of the shown cursor to the
 // cursor surface and hands it to the compositor for the current enter
 // serial. Called with cursorState.mu held.
-func (s *Session) pushCursorLocked(img *wlcursor.ImageBuffer) error {
+func (s *Session) pushCursorLocked(img *cursorImage) error {
 	if s.crs.push != nil {
 		return s.crs.push(img)
 	}
@@ -288,17 +287,16 @@ func (s *Session) pushCursorLocked(img *wlcursor.ImageBuffer) error {
 		}
 		return nil
 	}
-	if err := s.crs.surface.Attach(img.GetBuffer(), 0, 0); err != nil {
+	if err := s.crs.surface.Attach(img.buffer, 0, 0); err != nil {
 		return fmt.Errorf("cursor attach: %w", err)
 	}
-	if err := s.crs.surface.DamageBuffer(0, 0, intconv.Clamp[int32](img.GetWidth()), intconv.Clamp[int32](img.GetHeight())); err != nil {
+	if err := s.crs.surface.DamageBuffer(0, 0, img.width, img.height); err != nil {
 		return fmt.Errorf("cursor damage: %w", err)
 	}
 	if err := s.crs.surface.Commit(); err != nil {
 		return fmt.Errorf("cursor commit: %w", err)
 	}
-	if err := s.pointer.SetCursor(s.pointerEnterSerial, s.crs.surface,
-		intconv.Clamp[int32](img.GetHotspotX()), intconv.Clamp[int32](img.GetHotspotY())); err != nil {
+	if err := s.pointer.SetCursor(s.pointerEnterSerial, s.crs.surface, img.hotspotX, img.hotspotY); err != nil {
 		return fmt.Errorf("set cursor: %w", err)
 	}
 	return nil
@@ -348,7 +346,7 @@ func (s *Session) stopCursorAnim() {
 // frame picks the frame of the shown cursor due at now and reports
 // when it ends. It reads only cursorState fields, so callers hold the
 // mutex.
-func (c *cursorState) frame(now func() time.Time) (*wlcursor.ImageBuffer, time.Duration) {
+func (c *cursorState) frame(now func() time.Time) (*cursorImage, time.Duration) {
 	if c.cur == nil {
 		return nil, 0
 	}
@@ -357,7 +355,7 @@ func (c *cursorState) frame(now func() time.Time) (*wlcursor.ImageBuffer, time.D
 		elapsed = intconv.Clamp[uint32](t.Sub(c.start).Milliseconds())
 	}
 	idx, rest := cursorFrame(c.totalMs, c.delays, elapsed)
-	return c.cur.GetCursorImage(idx), rest
+	return c.cur.images[idx], rest
 }
 
 // armCursorLocked schedules the next frame advance rest from now;
@@ -389,16 +387,15 @@ func (c *cursorState) stopTimer() {
 
 // cursorDelays collects the per-frame delays (ms) of cur and their
 // sum; static cursors report no delays.
-func cursorDelays(cur *wlcursor.Cursor) ([]uint32, uint32) {
-	if cur == nil || cur.ImageCount() < 2 {
+func cursorDelays(cur *themedCursor) ([]uint32, uint32) {
+	if cur == nil || len(cur.images) < 2 {
 		return nil, 0
 	}
-	delays := make([]uint32, 0, cur.ImageCount())
+	delays := make([]uint32, len(cur.images))
 	var total uint32
-	for i := range cur.ImageCount() {
-		d := cur.GetCursorImage(i).Delay
-		delays = append(delays, d)
-		total += d
+	for i, img := range cur.images {
+		delays[i] = img.delay
+		total += img.delay
 	}
 	return delays, total
 }
@@ -426,9 +423,9 @@ func cursorFrame(totalMs uint32, delays []uint32, elapsedMs uint32) (index int, 
 }
 
 // loadCursorTheme parses the system xcursor theme once per process.
-func loadCursorTheme(shm *wl.Shm) (*wlcursor.Theme, error) {
+func loadCursorTheme(shm *wl.Shm) (*cursorTheme, error) {
 	cursorOnce.Do(func() {
-		cursorThm, cursorErr = wlcursor.LoadTheme(cursorThemeSize, shm)
+		cursorThm, cursorErr = loadCursorThemeFromEnv(cursorThemeSize, shm)
 	})
 	return cursorThm, cursorErr
 }

@@ -6,7 +6,6 @@ import (
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
-	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor"
 )
 
 // fakePointer records the requests the capability and cursor paths
@@ -85,10 +84,10 @@ func newSeatFixture() *seatFixture {
 	f.s.seatDev = f.seat
 	f.s.seatVersion = 7 // modern default: release requests exist
 	f.s.crs.surface = &wl.Surface{}
-	f.s.crs.theme = func(desired string) (*wlcursor.Cursor, string, error) {
-		return fakeCursor(defaultCursor, 1), defaultCursor, nil
+	f.s.crs.theme = func(desired string) (*themedCursor, string, error) {
+		return fakeCursor(1), defaultCursor, nil
 	}
-	f.s.crs.push = func(*wlcursor.ImageBuffer) error {
+	f.s.crs.push = func(*cursorImage) error {
 		f.pushes++
 		return nil
 	}

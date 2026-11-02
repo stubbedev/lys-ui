@@ -1,16 +1,14 @@
 package wlsession
 
 import (
-	"errors"
+	"bytes"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/stubbedev/lys-lib/debug"
-	"github.com/stubbedev/lys-lib/intconv"
-	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor"
-	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor/xcursor"
+	"github.com/stubbedev/lys-lib/xcursor"
 )
 
 // File cursors (CSS cursor: url()): the stylesheet names an xcursor
@@ -85,7 +83,7 @@ func (s *Session) pushFileCursorLocked(fc fileCursor) error {
 		debug.Log("input", "file cursor theme: %v", err)
 		return s.applyNamedCursorLocked(fc.fallback)
 	}
-	ib, err := wlcursor.NewImageBuffer(theme, img)
+	ib, err := theme.addImage(img)
 	if err != nil {
 		debug.Log("input", "file cursor buffer: %v", err)
 		return s.applyNamedCursorLocked(fc.fallback)
@@ -93,10 +91,10 @@ func (s *Session) pushFileCursorLocked(fc fileCursor) error {
 	if s.crs.push != nil {
 		return s.crs.push(ib)
 	}
-	if err := s.crs.surface.Attach(ib.GetBuffer(), 0, 0); err != nil {
+	if err := s.crs.surface.Attach(ib.buffer, 0, 0); err != nil {
 		return fmt.Errorf("cursor attach: %w", err)
 	}
-	if err := s.crs.surface.DamageBuffer(0, 0, intconv.Clamp[int32](ib.GetWidth()), intconv.Clamp[int32](ib.GetHeight())); err != nil {
+	if err := s.crs.surface.DamageBuffer(0, 0, ib.width, ib.height); err != nil {
 		return fmt.Errorf("cursor damage: %w", err)
 	}
 	if err := s.crs.surface.Commit(); err != nil {
@@ -109,21 +107,18 @@ func (s *Session) pushFileCursorLocked(fc fileCursor) error {
 }
 
 // fileCursorImage reads the xcursor file and picks its widest image.
-func fileCursorImage(path string) (*xcursor.Image, error) {
+func fileCursorImage(path string) (xcursor.Image, error) {
 	buf, err := os.ReadFile(path) //nolint:gosec // the path is the stylesheet's own url() cursor
 	if err != nil {
-		return nil, err
+		return xcursor.Image{}, err
 	}
-	imgs, err := xcursor.ParseXcursor(buf)
+	imgs, err := xcursor.All(bytes.NewReader(buf), int64(len(buf)))
 	if err != nil {
-		return nil, err
-	}
-	if len(imgs) == 0 {
-		return nil, errors.New("no images")
+		return xcursor.Image{}, err
 	}
 	img := imgs[0]
 	for _, cand := range imgs[1:] {
-		if cand.Width > img.Width {
+		if cand.Size.X > img.Size.X {
 			img = cand
 		}
 	}

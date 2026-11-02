@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
-	"github.com/stubbedev/lys-lib/third_party/wayland/wlcursor"
 	"github.com/stubbedev/lys-lib/wlr"
 )
 
@@ -90,7 +89,7 @@ func TestInspectSnapshot(t *testing.T) {
 func TestCursorThemeReportsLoadedTheme(t *testing.T) {
 	s := &Session{}
 	oldThm, oldErr := cursorThm, cursorErr
-	cursorThm = &wlcursor.Theme{Name: "Sentinel", Size: 24}
+	cursorThm = &cursorTheme{name: "Sentinel", size: 24}
 	cursorErr = nil
 	t.Cleanup(func() { cursorThm, cursorErr = oldThm, oldErr })
 
