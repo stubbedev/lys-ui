@@ -236,8 +236,7 @@ func SpringEasingAt(zeta, omega, t float64) float64 {
 	case t >= 1:
 		return 1
 	}
-	x, _ := motion.SpringStep(omega, zeta, -1, 0, t)
-	return 1 + x
+	return 1 + motion.SpringPosition(omega, zeta, -1, 0, t)
 }
 
 // BounceSpring is the damping ratio and angular frequency of a

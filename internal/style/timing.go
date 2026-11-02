@@ -4,6 +4,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/stubbedev/lys-lib/motion"
+
 	"github.com/stubbedev/lys-ui/anim"
 )
 
@@ -16,8 +18,10 @@ import (
 type Timing struct {
 	// Zeta and Omega are -lys-spring()'s damping ratio and angular
 	// frequency over the normalized duration (anim.BounceSpring).
-	Zeta, Omega    float64
-	X1, Y1, X2, Y2 float64
+	Zeta, Omega float64
+	// Bezier is the cubic-bezier() curve, its coefficients solved once.
+	// The zero value is the curve of four zero controls.
+	Bezier motion.CubicBezier
 	// Steps is non-zero for steps(n); the bezier is then unused.
 	Steps int
 	// StepPos is steps' jump position.
@@ -35,12 +39,19 @@ const MaxLinearPts = 8
 
 // The named timing functions (CSS Easing 2 §2.2, §2.3).
 var (
-	TimingLinear    = Timing{X1: 0, Y1: 0, X2: 1, Y2: 1}
-	TimingEase      = Timing{X1: 0.25, Y1: 0.1, X2: 0.25, Y2: 1}
-	TimingEaseIn    = Timing{X1: 0.42, Y1: 0, X2: 1, Y2: 1}
-	TimingEaseOut   = Timing{X1: 0, Y1: 0, X2: 0.58, Y2: 1}
-	TimingEaseInOut = Timing{X1: 0.42, Y1: 0, X2: 0.58, Y2: 1}
+	TimingLinear    = bezierTiming(0, 0, 1, 1)
+	TimingEase      = bezierTiming(0.25, 0.1, 0.25, 1)
+	TimingEaseIn    = bezierTiming(0.42, 0, 1, 1)
+	TimingEaseOut   = bezierTiming(0, 0, 0.58, 1)
+	TimingEaseInOut = bezierTiming(0.42, 0, 0.58, 1)
 )
+
+func bezierTiming(x1, y1, x2, y2 float64) Timing {
+	return Timing{Bezier: motion.NewCubicBezier(x1, y1, x2, y2)}
+}
+
+// zeroControlsBezier is what a zero Timing evaluates.
+var zeroControlsBezier = motion.NewCubicBezier(0, 0, 0, 0)
 
 // timingKeywords are the timing-function keywords.
 var timingKeywords = map[string]Timing{
@@ -71,7 +82,10 @@ func (tm *Timing) At(t float64, before bool) float64 {
 	case tm.Steps > 0:
 		return anim.StepsAt(tm.Steps, tm.StepPos, t, before)
 	}
-	return anim.CubicBezierAt(tm.X1, tm.Y1, tm.X2, tm.Y2, t)
+	if tm.Bezier == (motion.CubicBezier{}) {
+		return zeroControlsBezier.Ease(t)
+	}
+	return tm.Bezier.Ease(t)
 }
 
 // Easing is the timing function as an anim curve.
@@ -136,7 +150,7 @@ func parseCubicBezier(args [][]token, cx *ctx) (Timing, bool) {
 	if f[0] < 0 || f[0] > 1 || f[2] < 0 || f[2] > 1 {
 		return Timing{}, false
 	}
-	return Timing{X1: f[0], Y1: f[1], X2: f[2], Y2: f[3]}, true
+	return bezierTiming(f[0], f[1], f[2], f[3]), true
 }
 
 // parseSteps reads steps(<integer>, <step-position>?): a positive

@@ -155,9 +155,10 @@ func (s *Spring) step(now time.Time) bool {
 // the settled ones to their target. It reports whether all settled.
 func (s *Spring) advance(dt float64) bool {
 	all := true
-	vEps := s.precision * springOmega(s.params)
+	omega := springOmega(s.params)
+	vEps := s.precision * omega
 	for i := range s.pos {
-		x, v := motion.SpringStep(springOmega(s.params), s.params.Damping, s.pos[i]-s.target[i], s.vel[i], dt)
+		x, v := motion.SpringStep(omega, s.params.Damping, s.pos[i]-s.target[i], s.vel[i], dt)
 		if math.Abs(x) < s.precision && math.Abs(v) < vEps {
 			x, v = 0, 0
 		} else {
