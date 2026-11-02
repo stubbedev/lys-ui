@@ -71,11 +71,13 @@ collapses fades as well.
   forever, no events fire, and no goroutines run.
 - **No portal, or the key is unreadable.** The values read unknown. The
   name-ownership probe is a fast bus call, so lys-ui never waits on dbus
-  activation at startup. A portal that appears later is picked up on
-  the next start.
+  activation at startup. A portal that appears later is read as its
+  name appears, and any value that differs is reported.
 - **The bus or portal restarts mid-session.** The monitor reconnects
   with exponential backoff (250ms doubling to 8s), re-reads every key,
   and reports any preference that changed while it was disconnected.
+  While no portal is on the bus, each value stays as it last was: a
+  portal going away says nothing about the preference.
 - **Bounded calls.** Every bus round trip is bounded (3s probe, 5s
   read), so a stalled portal costs an unknown, never a hung startup.
 

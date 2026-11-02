@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -109,19 +110,27 @@ func (p *mockPortal) ReadOne(namespace, key string) (dbus.Variant, error) {
 // and exports the mock on the portal object path.
 func publishMock(t *testing.T, bus *dbustest.Bus) *mockPortal {
 	t.Helper()
+	return publishMockSaying(t, bus, 0)
+}
+
+// publishMockSaying is publishMock with the color scheme already in
+// place, and like a real service it answers before it takes the name:
+// whoever sees the name appear can read at once.
+func publishMockSaying(t *testing.T, bus *dbustest.Bus, value uint32) *mockPortal {
+	t.Helper()
 	conn := bus.Conn(t)
+	p := &mockPortal{conn: conn, value: value}
+	// ExportAll, not Export: the plain-Go-error return is only accepted
+	// by the ExportAll path (Export wants a *dbus.Error tail).
+	if err := conn.ExportAll(p, portalPath, portalIface); err != nil {
+		t.Fatalf("mock portal: export: %v", err)
+	}
 	reply, err := conn.RequestName(portalName, dbus.NameFlagDoNotQueue)
 	if err != nil {
 		t.Fatalf("mock portal: request name: %v", err)
 	}
 	if reply != dbus.RequestNameReplyPrimaryOwner {
 		t.Fatalf("mock portal: %s already owned", portalName)
-	}
-	p := &mockPortal{conn: conn}
-	// ExportAll, not Export: the plain-Go-error return is only accepted
-	// by the ExportAll path (Export wants a *dbus.Error tail).
-	if err := conn.ExportAll(p, portalPath, portalIface); err != nil {
-		t.Fatalf("mock portal: export: %v", err)
 	}
 	return p
 }
@@ -390,8 +399,6 @@ func TestReconnectAfterBusRestart(t *testing.T) {
 	first := dbustest.StartAt(t, sock)
 	mock := publishMock(t, first)
 	mock.set(1)
-	// The default backoff (250ms first attempt) is long enough for the
-	// restart below to complete before the first re-dial lands.
 	m := newMonitor(func() (*dbus.Conn, error) { return dbus.Connect("unix:path=" + sock) },
 		defaultRetry)
 	t.Cleanup(m.Close)
@@ -407,8 +414,7 @@ func TestReconnectAfterBusRestart(t *testing.T) {
 	first.Stop(t)
 
 	// Generation two on the same socket path, mock now saying light.
-	mock2 := publishMock(t, dbustest.StartAt(t, sock))
-	mock2.set(2)
+	mock2 := publishMockSaying(t, dbustest.StartAt(t, sock), 2)
 
 	// The reconnect path re-reads (2 -> light, delivered because it
 	// differs), re-subscribes, and this very emit proves the new
@@ -418,6 +424,88 @@ func TestReconnectAfterBusRestart(t *testing.T) {
 	if got := m.ColorScheme(); got != appearance.Light {
 		t.Fatalf("ColorScheme() = %v, want light after reconnect", got)
 	}
+}
+
+// A bus comes back before the services on it, so a monitor can reconnect
+// to a bus with no portal yet: that is no news about the preference.
+func TestReconnectingBeforeThePortalIsBackKeepsThePreference(t *testing.T) {
+	sock := dbustest.SocketPath(t)
+	first := dbustest.StartAt(t, sock)
+	publishMockSaying(t, first, 1)
+	m := newMonitor(func() (*dbus.Conn, error) { return dbus.Connect("unix:path=" + sock) }, time.Millisecond)
+	t.Cleanup(m.Close)
+	onChange, snapshot := collect()
+	m.OnColorSchemeChange(onChange)
+
+	first.Stop(t)
+	second := dbustest.StartAt(t, sock)
+	awaitOtherClient(t, second)
+	wantNoEvents(t, snapshot)
+	if got := m.ColorScheme(); got != appearance.Dark {
+		t.Fatalf("ColorScheme() = %v, want the last known dark while the portal is away", got)
+	}
+
+	publishMockSaying(t, second, 2)
+	wantEvents(t, snapshot, appearance.Light)
+	if got := m.ColorScheme(); got != appearance.Light {
+		t.Fatalf("ColorScheme() = %v, want light once the portal is back", got)
+	}
+}
+
+// awaitOtherClient returns once a connection other than the one it asks
+// on is on bus: the monitor has reconnected and subscribed or is about to.
+func awaitOtherClient(t *testing.T, bus *dbustest.Bus) {
+	t.Helper()
+	conn := bus.Conn(t)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var names []string
+		if err := conn.BusObject().Call("org.freedesktop.DBus.ListNames", 0).Store(&names); err != nil {
+			t.Fatal(err)
+		}
+		unique := 0
+		for _, n := range names {
+			if strings.HasPrefix(n, ":") {
+				unique++
+			}
+		}
+		if unique >= 2 {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("the monitor never reconnected")
+}
+
+func TestAPortalThatStartsLaterIsReadAtOnce(t *testing.T) {
+	bus := dbustest.Start(t)
+	m := NewOn(bus.Conn(t))
+	t.Cleanup(m.Close)
+	if got := m.ColorScheme(); got != appearance.Unknown {
+		t.Fatalf("ColorScheme() = %v before the portal", got)
+	}
+	onChange, snapshot := collect()
+	m.OnColorSchemeChange(onChange)
+	publishMockSaying(t, bus, 1)
+	wantEvents(t, snapshot, appearance.Dark)
+}
+
+func TestAPortalThatGoesAwayLeavesTheLastKnownPreference(t *testing.T) {
+	bus := dbustest.Start(t)
+	mock := publishMockSaying(t, bus, 1)
+	m := NewOn(bus.Conn(t))
+	t.Cleanup(m.Close)
+	onChange, snapshot := collect()
+	m.OnColorSchemeChange(onChange)
+	if err := mock.conn.Close(); err != nil {
+		t.Fatal(err)
+	}
+	wantNoEvents(t, snapshot)
+	if got := m.ColorScheme(); got != appearance.Dark {
+		t.Fatalf("ColorScheme() = %v with the portal gone", got)
+	}
+	publishMockSaying(t, bus, 2)
+	wantEvents(t, snapshot, appearance.Light)
 }
 
 func TestSharedConnFailsSilentOnDeath(t *testing.T) {

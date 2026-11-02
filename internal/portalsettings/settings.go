@@ -1,6 +1,7 @@
 package portalsettings
 
 import (
+	"errors"
 	"slices"
 	"sync"
 
@@ -69,19 +70,55 @@ func (s *setting[T]) update(m *Monitor, v T, deliver bool) {
 	}
 }
 
-// readSetting reads one portal key once through the shared probe and
-// ReadOne, mapping the value with mapFn; any failure - no portal, no
-// key, unreadable value - maps to zero.
-func readSetting[T any](conn *dbus.Conn, namespace, key string, mapFn func(any) T, zero T) T {
-	if !portalOwned(conn) {
-		return zero
-	}
+// readSetting reads one portal key with ReadOne, mapping the value with
+// mapFn: a key the portal refuses or an unreadable value maps to zero.
+// ok is false when the portal gave no answer at all, which says nothing
+// about the preference.
+func readSetting[T any](conn *dbus.Conn, namespace, key string, mapFn func(any) T, zero T) (value T, ok bool) {
 	body, err := call(conn.Object(portalName, portalPath), readTimeout,
 		readOne, namespace, key)
-	if err != nil || len(body) != 1 {
-		return zero
+	switch {
+	case err != nil && !portalAnswered(err):
+		return zero, false
+	case err != nil || len(body) != 1:
+		return zero, true
 	}
-	return mapFn(body[0])
+	return mapFn(body[0]), true
+}
+
+// portalAnswered reports whether err is the portal's own reply rather
+// than the bus or the connection failing to reach a portal ready to read.
+func portalAnswered(err error) bool {
+	var reply dbus.Error
+	if !errors.As(err, &reply) {
+		return false
+	}
+	switch reply.Name {
+	case "org.freedesktop.DBus.Error.ServiceUnknown", "org.freedesktop.DBus.Error.NameHasNoOwner",
+		"org.freedesktop.DBus.Error.NoReply", "org.freedesktop.DBus.Error.Timeout", "org.freedesktop.DBus.Error.Disconnected",
+		"org.freedesktop.DBus.Error.UnknownObject", "org.freedesktop.DBus.Error.UnknownInterface", "org.freedesktop.DBus.Error.UnknownMethod":
+		return false
+	}
+	return true
+}
+
+// refreshSetting moves one setting to what the portal says, leaving it
+// alone when the portal gave no answer.
+func refreshSetting[T comparable](m *Monitor, s *setting[T], conn *dbus.Conn, namespace, key string, mapFn func(any) T, zero T, deliver bool) {
+	if v, ok := readSetting(conn, namespace, key, mapFn, zero); ok {
+		s.update(m, v, deliver)
+	}
+}
+
+// portalAppeared reports whether sig says the portal's name has just
+// gained an owner.
+func portalAppeared(sig *dbus.Signal) bool {
+	if sig == nil || sig.Name != nameOwnerChanged || len(sig.Body) != 3 {
+		return false
+	}
+	name, _ := sig.Body[0].(string)
+	owner, _ := sig.Body[2].(string)
+	return name == portalName && owner != ""
 }
 
 // settingChanged reports whether sig is the SettingChanged for one
@@ -102,7 +139,7 @@ func settingChanged[T any](sig *dbus.Signal, namespace, key string, mapFn func(a
 	return mapFn(sig.Body[2]), true
 }
 
-// portalOwned is the bounded name-ownership probe every read starts
+// portalOwned is the bounded name-ownership probe every refresh starts
 // with: no portal means Unknown-shaped zeros, deliberately without
 // on-demand activation (a startup that may sit 25s waiting for dbus
 // activation is worse than Unknown).

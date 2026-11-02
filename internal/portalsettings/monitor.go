@@ -28,6 +28,9 @@ const (
 	readOne    = portalIface + ".ReadOne"
 	changedSig = portalIface + ".SettingChanged"
 
+	busName          = "org.freedesktop.DBus"
+	nameOwnerChanged = busName + ".NameOwnerChanged"
+
 	schemeNamespace = "org.freedesktop.appearance"
 	schemeKey       = "color-scheme"
 	accentKey       = "accent-color"
@@ -162,15 +165,20 @@ func startOn(m *Monitor, conn *dbus.Conn) *Monitor {
 
 // refresh reads every tracked setting from conn; deliver decides
 // whether a moved value fires its listeners (the startup read is the
-// baseline and never fires; the reconnect refresh is an event).
+// baseline and never fires; a later refresh is an event). With no portal
+// on the bus there is nothing to read and nothing is known to have
+// changed: the values stay, and the portal's arrival refreshes them.
 func (m *Monitor) refresh(conn *dbus.Conn, deliver bool) {
-	m.scheme.update(m, readSetting(conn, schemeNamespace, schemeKey, schemeValue, appearance.Unknown), deliver)
-	m.icons.update(m, readSetting(conn, interfaceNamespace, iconThemeKey, stringValue, ""), deliver)
-	m.accent.update(m, readSetting(conn, schemeNamespace, accentKey, accentValue, appearance.Accent{}), deliver)
-	m.contrast.update(m, readSetting(conn, schemeNamespace, contrastKey, contrastValue, appearance.ContrastUnknown), deliver)
-	m.motion.update(m, readSetting(conn, schemeNamespace, motionKey, motionValue, appearance.MotionUnknown), deliver)
-	m.font.update(m, readSetting(conn, interfaceNamespace, fontNameKey, stringValue, ""), deliver)
-	m.scale.update(m, readSetting(conn, interfaceNamespace, textScaleKey, scaleValue, 0), deliver)
+	if !portalOwned(conn) {
+		return
+	}
+	refreshSetting(m, &m.scheme, conn, schemeNamespace, schemeKey, schemeValue, appearance.Unknown, deliver)
+	refreshSetting(m, &m.icons, conn, interfaceNamespace, iconThemeKey, stringValue, "", deliver)
+	refreshSetting(m, &m.accent, conn, schemeNamespace, accentKey, accentValue, appearance.Accent{}, deliver)
+	refreshSetting(m, &m.contrast, conn, schemeNamespace, contrastKey, contrastValue, appearance.ContrastUnknown, deliver)
+	refreshSetting(m, &m.motion, conn, schemeNamespace, motionKey, motionValue, appearance.MotionUnknown, deliver)
+	refreshSetting(m, &m.font, conn, interfaceNamespace, fontNameKey, stringValue, "", deliver)
+	refreshSetting(m, &m.scale, conn, interfaceNamespace, textScaleKey, scaleValue, 0, deliver)
 }
 
 // ColorScheme returns the current color-scheme preference, Unknown when
@@ -227,7 +235,8 @@ func (m *Monitor) run(conn *dbus.Conn, ch chan *dbus.Signal, owned bool) {
 		}
 		// A reconnect is a fresh read of a possibly-changed world: the
 		// refresh is an event (unlike the startup read), but only when
-		// a value actually moved (update dedups).
+		// a value actually moved (update dedups). The subscription above
+		// is live first, so a portal arriving after this read is heard.
 		m.refresh(conn, true)
 	}
 }
@@ -244,6 +253,15 @@ func (m *Monitor) subscribe(conn *dbus.Conn) chan *dbus.Signal {
 		dbus.WithMatchInterface(portalIface),
 		dbus.WithMatchMember("SettingChanged"),
 		dbus.WithMatchObjectPath(portalPath),
+	)
+	if err != nil {
+		return nil
+	}
+	err = conn.AddMatchSignal(
+		dbus.WithMatchSender(busName),
+		dbus.WithMatchInterface(busName),
+		dbus.WithMatchMember("NameOwnerChanged"),
+		dbus.WithMatchArg(0, portalName),
 	)
 	if err != nil {
 		return nil
@@ -271,6 +289,10 @@ func (m *Monitor) listen(conn *dbus.Conn, ch chan *dbus.Signal, owned bool) (sto
 				// godbus closes registered signal channels when the
 				// connection dies — our disconnect signal.
 				return false
+			}
+			if portalAppeared(sig) {
+				m.refresh(conn, true)
+				continue
 			}
 			m.signal(sig)
 		case <-m.done:
