@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.1
+
+Dependencies only: lys-lib at the commit of its v0.2.1 and the latest modules.
+
 ## v0.1.0
 
 The first release of lys-ui, a pure-Go Wayland widget toolkit and relm4
