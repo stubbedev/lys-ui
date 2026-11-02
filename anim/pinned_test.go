@@ -1,7 +1,10 @@
 package anim
 
 import (
+	"math"
 	"testing"
+
+	"github.com/stubbedev/lys-lib/motion"
 )
 
 type pinnedBezier struct {
@@ -40,23 +43,29 @@ var pinnedSteps = []pinnedStep{
 }
 
 // The values CubicBezierAt gave before its solver moved to lys-lib's
-// motion package.
+// motion package, whose tighter tolerance is what the margin allows for.
 func TestCubicBezierHoldsItsPinnedValues(t *testing.T) {
 	for _, c := range pinnedBeziers {
 		for i, want := range c.want {
 			x := float64(i+1) / 10
-			if got := CubicBezierAt(c.points[0], c.points[1], c.points[2], c.points[3], x); got != want {
+			if got := CubicBezierAt(c.points[0], c.points[1], c.points[2], c.points[3], x); math.Abs(got-want) > 3e-7 {
 				t.Errorf("%v at %v = %x, want %x", c.points, x, got, want)
 			}
 		}
 	}
 }
 
-// The values springStep gave before its solver moved to lys-lib's
-// motion package.
+// The values anim's own solver gave before it moved to lys-lib's motion
+// package: the same bits up to critical damping, and rounding above it,
+// where the two forms of the overdamped solution differ.
 func TestSpringStepHoldsItsPinnedValues(t *testing.T) {
 	for _, c := range pinnedSteps {
-		if x, v := springStep(c.omega, c.zeta, c.x0, c.v0, c.dt); x != c.wantX || v != c.wantV {
+		tolerance := 0.0
+		if c.zeta > 1 {
+			tolerance = 1e-11
+		}
+		x, v := motion.SpringStep(c.omega, c.zeta, c.x0, c.v0, c.dt)
+		if math.Abs(x-c.wantX) > tolerance || math.Abs(v-c.wantV) > tolerance {
 			t.Errorf("%+v = (%x, %x)", c, x, v)
 		}
 	}

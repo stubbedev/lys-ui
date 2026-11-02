@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/motion"
+
 	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
@@ -59,10 +61,10 @@ func TestSpringSettles(t *testing.T) {
 func TestSpringStepIsExact(t *testing.T) {
 	for _, p := range []SpringParams{SpringBouncy, SpringSmooth, {Response: 300 * time.Millisecond, Damping: 1.6}} {
 		w := springOmega(p)
-		x1, v1 := springStep(w, p.Damping, -80, 40, 0.12)
+		x1, v1 := motion.SpringStep(w, p.Damping, -80, 40, 0.12)
 		x, v := -80.0, 40.0
 		for range 12 {
-			x, v = springStep(w, p.Damping, x, v, 0.01)
+			x, v = motion.SpringStep(w, p.Damping, x, v, 0.01)
 		}
 		if math.Abs(x-x1) > 1e-9 || math.Abs(v-v1) > 1e-9 {
 			t.Errorf("%+v: one step (%v, %v), twelve steps (%v, %v)", p, x1, v1, x, v)

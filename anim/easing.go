@@ -3,6 +3,8 @@ package anim
 import (
 	"math"
 	"time"
+
+	"github.com/stubbedev/lys-lib/motion"
 )
 
 // Easing maps linear progress t in [0, 1] to eased progress. Most
@@ -63,50 +65,13 @@ func EaseOutBack(t float64) float64 {
 // CubicBezier returns the CSS cubic-bezier(x1, y1, x2, y2) timing
 // function; see CubicBezierAt.
 func CubicBezier(x1, y1, x2, y2 float64) Easing {
-	return func(t float64) float64 { return CubicBezierAt(x1, y1, x2, y2, t) }
+	return motion.NewCubicBezier(x1, y1, x2, y2).Ease
 }
 
 // CubicBezierAt evaluates the CSS cubic-bezier(x1, y1, x2, y2) timing
-// function at t: x is time, y progress, the curve's parameter solved
-// for x (Newton where it converges, bisection where it does not). x1
-// and x2 clamp to [0, 1], the range CSS admits, so the curve stays a
-// function of time; the y controls are free. Outside (0, 1) the
-// output holds at the end it passed.
+// function at t: see lys-lib's motion.CubicBezier, whose solver this is.
 func CubicBezierAt(x1, y1, x2, y2, t float64) float64 {
-	switch {
-	case t <= 0:
-		return 0
-	case t >= 1:
-		return 1
-	}
-	x1, x2 = min(max(x1, 0), 1), min(max(x2, 0), 1)
-	cx, cy := float64(3*x1), float64(3*y1)
-	bx, by := float64(3*(x2-x1))-cx, float64(3*(y2-y1))-cy
-	ax, ay := 1-cx-bx, 1-cy-by
-	sampleX := func(u float64) float64 { return float64((float64((float64(ax*u)+bx)*u) + cx) * u) }
-	u := t
-	for range 8 {
-		dx := sampleX(u) - t
-		if dx > -1e-7 && dx < 1e-7 {
-			return (float64((float64(ay*u)+by)*u) + cy) * u
-		}
-		d := float64((float64(3*ax*u)+float64(2*bx))*u) + cx
-		if d < 1e-6 && d > -1e-6 {
-			break
-		}
-		u -= dx / d
-	}
-	lo, hi := 0.0, 1.0
-	u = t
-	for range 40 {
-		if sampleX(u) < t {
-			lo = u
-		} else {
-			hi = u
-		}
-		u = (lo + hi) / 2
-	}
-	return (float64((float64(ay*u)+by)*u) + cy) * u
+	return motion.NewCubicBezier(x1, y1, x2, y2).Ease(t)
 }
 
 // StepPos is where a steps() curve jumps: at the start of each
@@ -271,7 +236,7 @@ func SpringEasingAt(zeta, omega, t float64) float64 {
 	case t >= 1:
 		return 1
 	}
-	x, _ := springStep(omega, zeta, -1, 0, t)
+	x, _ := motion.SpringStep(omega, zeta, -1, 0, t)
 	return 1 + x
 }
 

@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/stubbedev/lys-lib/third_party/gomath"
+	"github.com/stubbedev/lys-lib/motion"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
 )
@@ -157,7 +157,7 @@ func (s *Spring) advance(dt float64) bool {
 	all := true
 	vEps := s.precision * springOmega(s.params)
 	for i := range s.pos {
-		x, v := springStep(springOmega(s.params), s.params.Damping, s.pos[i]-s.target[i], s.vel[i], dt)
+		x, v := motion.SpringStep(springOmega(s.params), s.params.Damping, s.pos[i]-s.target[i], s.vel[i], dt)
 		if math.Abs(x) < s.precision && math.Abs(v) < vEps {
 			x, v = 0, 0
 		} else {
@@ -166,39 +166,6 @@ func (s *Spring) advance(dt float64) bool {
 		s.pos[i], s.vel[i] = s.target[i]+x, v
 	}
 	return all
-}
-
-// springStep is the damped harmonic oscillator's exact solution at
-// angular frequency w and damping ratio z: the displacement from the
-// target and the velocity dt after displacement x0 at velocity v0.
-func springStep(w, z, x0, v0, dt float64) (x, v float64) {
-	if dt <= 0 {
-		return x0, v0
-	}
-	z = math.Max(z, 0)
-	switch {
-	case z < 1:
-		wd := w * math.Sqrt(1-float64(z*z))
-		e := gomath.Exp(-z * w * dt)
-		c, sn := gomath.Cos(wd*dt), gomath.Sin(wd*dt)
-		b := (v0 + float64(z*w*x0)) / wd
-		x = e * (float64(x0*c) + float64(b*sn))
-		v = e * (float64((float64(b*wd)-float64(z*w*x0))*c) - float64((float64(x0*wd)+float64(z*w*b))*sn))
-	case z == 1:
-		e := gomath.Exp(-w * dt)
-		b := v0 + float64(w*x0)
-		x = (x0 + float64(b*dt)) * e
-		v = (b - float64(w*(x0+float64(b*dt)))) * e
-	default:
-		s := math.Sqrt(float64(z*z) - 1)
-		r1, r2 := float64(w*(-z+s)), float64(w*(-z-s))
-		c2 := (v0 - float64(r1*x0)) / (r2 - r1)
-		c1 := x0 - c2
-		e1, e2 := gomath.Exp(r1*dt), gomath.Exp(r2*dt)
-		x = float64(c1*e1) + float64(c2*e2)
-		v = float64(c1*r1*e1) + float64(c2*r2*e2)
-	}
-	return x, v
 }
 
 // springOmega is the spring's undamped angular frequency.
