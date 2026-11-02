@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.0
+
+- `PopoverConfig.BackgroundBlur` asks the compositor to blur behind a popover through `ext_background_effect_v1`, from its first frame.
+- A `PopoverClickAway` popover also closes on a bare Esc while another window has the keyboard, on a compositor offering `lys_escape_v1` (today only lys-wm). That Esc doesn't reach the window. Elsewhere nothing changes.
+- Closing a popup no longer leaks its input handler and per-surface hint objects for the life of the connection.
+
 ## v0.1.2
 
 - `PopoverConfig.Dismissal` replaces `NoAutohide`. The new
