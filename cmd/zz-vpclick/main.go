@@ -17,7 +17,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/headlesstest"
 )
 
-const usage = "usage: zz-vpclick X Y [click | dclick | scroll DY | key CODE | type TEXT]"
+const usage = "usage: zz-vpclick X Y [click | dclick | scroll DY | key CODE | combo CODE | type TEXT]"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -88,7 +88,7 @@ func parse(args []string) (func(*headlesstest.VirtualInput) error, error) {
 			return nil, fmt.Errorf("scroll delta %q: %w", op, err)
 		}
 		return func(in *headlesstest.VirtualInput) error { return in.ScrollAt(x, y, dy) }, nil
-	case "key":
+	case "key", "combo":
 		op, err := operand()
 		if err != nil {
 			return nil, err
@@ -97,6 +97,9 @@ func parse(args []string) (func(*headlesstest.VirtualInput) error, error) {
 		code, err := strconv.ParseUint(op, 10, 16)
 		if err != nil {
 			return nil, fmt.Errorf("key code %q: %w", op, err)
+		}
+		if action == "combo" {
+			return func(in *headlesstest.VirtualInput) error { return in.Combo(intconv.Clamp[uint32](code)) }, nil
 		}
 		return func(in *headlesstest.VirtualInput) error { return in.Tap(intconv.Clamp[uint32](code)) }, nil
 	case "type":

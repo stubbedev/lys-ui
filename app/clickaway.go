@@ -24,13 +24,15 @@ const clickAwayNamespace = "lys-ui-click-away"
 // stack above layer surfaces, and the surfaces take no keyboard, so the
 // focused window keeps its keys. The press goes no further, as under a
 // grab. The surface that heard it lives until the button comes back up,
-// so the window beneath never sees a release without its press.
+// so the window beneath never sees a release without its press. Where
+// the compositor offers it, an Escape arm closes it the same way.
 type clickAway struct {
 	wire     catcherWire
 	onPress  func()
 	catchers map[*wlsession.Output]catcher
 	held     catcher
 	closing  bool
+	disarm   func()
 }
 
 // catcher is one output's surface.
@@ -40,10 +42,19 @@ type catcher interface{ destroy() }
 // surface's input.
 type catcherWire func(out *wlsession.Output, press, release func()) (catcher, error)
 
-// newClickAway arms a catcher on every output.
-func newClickAway(wire catcherWire, outputs []*wlsession.Output, onPress func()) (*clickAway, error) {
+// escapeWire claims the next Escape press from the focused window.
+// disarm is nil on a compositor that cannot do that, whose Esc reaches
+// the popover only while it holds the keyboard.
+type escapeWire func(pressed func()) (disarm func(), err error)
+
+// newClickAway arms a catcher on every output, and the Escape press.
+func newClickAway(wire catcherWire, outputs []*wlsession.Output, escape escapeWire, onPress func()) (*clickAway, error) {
 	c := &clickAway{wire: wire, onPress: onPress, catchers: make(map[*wlsession.Output]catcher, len(outputs))}
-	if err := c.sync(outputs); err != nil {
+	err := c.sync(outputs)
+	if err == nil {
+		c.disarm, err = escape(onPress)
+	}
+	if err != nil {
 		c.close()
 		return nil, err
 	}
@@ -109,6 +120,9 @@ func (c *clickAway) close() {
 		return
 	}
 	c.closing = true
+	if c.disarm != nil {
+		c.disarm()
+	}
 	for _, ct := range c.catchers {
 		if ct != c.held {
 			ct.destroy()
@@ -121,6 +135,20 @@ func (c *clickAway) close() {
 func wireCatcher(sess *wlsession.Session) catcherWire {
 	return func(out *wlsession.Output, press, release func()) (catcher, error) {
 		return newLayerCatcher(sess, out, press, release)
+	}
+}
+
+// wireEscape is the session's escapeWire.
+func wireEscape(sess *wlsession.Session) escapeWire {
+	return func(pressed func()) (func(), error) {
+		arm, err := sess.ArmEscape(pressed)
+		if errors.Is(err, wlsession.ErrEscapeUnavailable) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("app: click-away escape: %w", err)
+		}
+		return arm.Disarm, nil
 	}
 }
 

@@ -86,7 +86,8 @@ const (
 	// PopoverClickAway closes on a click elsewhere with no seat grab:
 	// keys stay with the focused window until a press into the popover
 	// takes them, or from the start if Focus names a widget. Esc reaches
-	// it only while it holds them. It needs layer shell and wp_viewporter.
+	// it while it holds them, and beside them on a compositor offering
+	// lys_escape_v1 (lys-wm). It needs layer shell and wp_viewporter.
 	PopoverClickAway
 	// PopoverSticky is GTK's autohide=false: no seat grab, and only
 	// Dismiss closes it (a re-click on its button, a click in its own
@@ -558,7 +559,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		}
 	}
 	if parent == nil && cfg.Dismissal == PopoverClickAway {
-		p.away, err = newClickAway(wireCatcher(a.sess), a.outputs(), p.Dismiss)
+		p.away, err = newClickAway(wireCatcher(a.sess), a.outputs(), wireEscape(a.sess), p.Dismiss)
 		if err != nil {
 			pop.Close()
 			restoreKeys()

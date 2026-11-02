@@ -44,6 +44,7 @@ var optionalGlobals = []string{
 	"xdg_activation_v1",
 	"zwp_idle_inhibit_manager_v1",
 	"zwp_keyboard_shortcuts_inhibit_manager_v1",
+	"lys_escape_manager_v1",
 	"zxdg_output_manager_v1",
 	"xdg_wm_dialog_v1",
 	"zxdg_exporter_v2",

@@ -7,15 +7,14 @@ import (
 	"time"
 )
 
-// TestHeadlessClickAwayPopoverLeavesTheKeyboard drives a dropdown beside
-// a focused window of another client through a real compositor: keys
-// stay with the window until a click into the dropdown, which then has
-// them, Esc closes it, a click away closes it and goes no further, and
-// each close plays the exit before the surface goes.
-func TestHeadlessClickAwayPopoverLeavesTheKeyboard(t *testing.T) {
+// startDropdownBesideWindow runs lys-ui-popover beside a focused
+// showcase window: its input, its traces, and the centre of the button
+// opening the dropdown.
+func startDropdownBesideWindow(t *testing.T) (window *LogWatcher, in *VirtualInput, drop *LogWatcher, x, y int) {
+	t.Helper()
 	requireEnv(t)
-	_, window, _ := startShowcase(t)
-	in := newInput(t)
+	_, window, _ = startShowcase(t)
+	in = newInput(t)
 	waitKeyboard(t, window)
 	bin, err := BuildClient(testEnv.Dir, "./cmd/lys-ui-popover", "lys-ui-popover")
 	if err != nil {
@@ -26,18 +25,27 @@ func TestHeadlessClickAwayPopoverLeavesTheKeyboard(t *testing.T) {
 		t.Fatal(err)
 	}
 	stopAndReport(t, c)
-	drop, err := c.Watch()
-	if err != nil {
+	if drop, err = c.Watch(); err != nil {
 		t.Fatal(err)
 	}
 	tr, err := drop.Wait("demo", "control drop center ", traceTimeout)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var x, y, entryY, moreY int
 	if _, err := fmt.Sscanf(tr.Message, "control drop center (%d,%d)", &x, &y); err != nil {
 		t.Fatalf("bad trace %q: %v", tr.Message, err)
 	}
+	return window, in, drop, x, y
+}
+
+// TestHeadlessClickAwayPopoverLeavesTheKeyboard drives a dropdown beside
+// a focused window of another client through a real compositor: keys
+// stay with the window until a click into the dropdown, which then has
+// them, Esc closes it, a click away closes it and goes no further, and
+// each close plays the exit before the surface goes.
+func TestHeadlessClickAwayPopoverLeavesTheKeyboard(t *testing.T) {
+	window, in, drop, x, y := startDropdownBesideWindow(t)
+	var entryY, moreY int
 
 	requireExit := func(how string) {
 		t.Helper()
@@ -52,7 +60,7 @@ func TestHeadlessClickAwayPopoverLeavesTheKeyboard(t *testing.T) {
 	if err := clickUntil(drop, in, "demo", x, y, BTNLeft, "dropdown open"); err != nil {
 		t.Fatalf("the dropdown never opened: %v\n%s", err, tailTraces(drop, 25))
 	}
-	tr, err = drop.Wait("demo", "dropdown controls ", traceTimeout)
+	tr, err := drop.Wait("demo", "dropdown controls ", traceTimeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,5 +139,29 @@ func TestHeadlessClickAwayPopoverLeavesTheKeyboard(t *testing.T) {
 	}
 	if err := window.WaitSince(mark, "input", "route button", traceTimeout); err != nil {
 		t.Errorf("a click after the close never reached the window: %v\n%s", err, tailTraces(window, 15))
+	}
+}
+
+// TestHeadlessClickAwayEscapeBesideItWithoutTheProtocol pins the path of
+// a compositor without lys_escape_v1, as sway and Hyprland are: Esc
+// beside an open dropdown is the focused window's like any key, and the
+// dropdown stays open.
+func TestHeadlessClickAwayEscapeBesideItWithoutTheProtocol(t *testing.T) {
+	window, in, drop, x, y := startDropdownBesideWindow(t)
+	if err := clickUntil(drop, in, "demo", x, y, BTNLeft, "dropdown open"); err != nil {
+		t.Fatalf("the dropdown never opened: %v\n%s", err, tailTraces(drop, 25))
+	}
+	keys, dropMark := window.Mark(), drop.Mark()
+	if err := in.Tap(KeyEscape); err != nil {
+		t.Fatal(err)
+	}
+	if err := window.WaitSince(keys, "input", "wire key code=1 ", traceTimeout); err != nil {
+		t.Errorf("Esc beside the dropdown never reached the window: %v\n%s", err, tailTraces(window, 15))
+	}
+	time.Sleep(100 * time.Millisecond)
+	for _, tr := range drop.Since(dropMark) {
+		if strings.Contains(tr.Message, "dropdown exit") {
+			t.Errorf("Esc beside the dropdown closed it: %s", tr.Message)
+		}
 	}
 }

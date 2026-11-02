@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -219,6 +220,77 @@ func fakeCatcherWire(made map[*wlsession.Output]*fakeCatcher, presses map[*wlses
 	}
 }
 
+// noEscape is a compositor without lys_escape_v1.
+func noEscape(func()) (func(), error) { return nil, nil }
+
+// The Escape arm closes the popover like a press on a catcher, and goes
+// the moment the close starts: a press beside an open popover fires
+// once, and the wire is disarmed before any later one.
+func TestClickAwayEscapeClosesAndDisarmsOnce(t *testing.T) {
+	var pressed func()
+	disarmed, fired := 0, 0
+	escape := func(p func()) (func(), error) {
+		pressed = p
+		return func() { disarmed++ }, nil
+	}
+	made, presses, releases := map[*wlsession.Output]*fakeCatcher{}, map[*wlsession.Output]func(){}, map[*wlsession.Output]func(){}
+	out := &wlsession.Output{}
+	var c *clickAway
+	c, err := newClickAway(fakeCatcherWire(made, presses, releases), []*wlsession.Output{out}, escape, func() {
+		fired++
+		c.close()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disarmed != 0 {
+		t.Fatalf("disarmed %d times while open", disarmed)
+	}
+	pressed()
+	if fired != 1 || disarmed != 1 {
+		t.Fatalf("after Escape: fired %d, disarmed %d, want 1 and 1", fired, disarmed)
+	}
+	if made[out].destroyed != 1 {
+		t.Errorf("after Escape: catcher destroyed %d, want 1", made[out].destroyed)
+	}
+	c.close()
+	if disarmed != 1 {
+		t.Errorf("a second close disarmed again: %d", disarmed)
+	}
+}
+
+// A press on a catcher closes it through the same path, so the arm goes
+// with it.
+func TestClickAwayPressDisarmsEscape(t *testing.T) {
+	disarmed := 0
+	escape := func(func()) (func(), error) { return func() { disarmed++ }, nil }
+	made, presses, releases := map[*wlsession.Output]*fakeCatcher{}, map[*wlsession.Output]func(){}, map[*wlsession.Output]func(){}
+	out := &wlsession.Output{}
+	var c *clickAway
+	c, err := newClickAway(fakeCatcherWire(made, presses, releases), []*wlsession.Output{out}, escape, func() { c.close() })
+	if err != nil {
+		t.Fatal(err)
+	}
+	presses[out]()
+	if disarmed != 1 {
+		t.Errorf("disarmed %d times, want 1", disarmed)
+	}
+}
+
+// A failed arm fails the open and leaves no catcher behind.
+func TestClickAwayEscapeFailureDropsTheCatchers(t *testing.T) {
+	boom := errors.New("boom")
+	made, presses, releases := map[*wlsession.Output]*fakeCatcher{}, map[*wlsession.Output]func(){}, map[*wlsession.Output]func(){}
+	out := &wlsession.Output{}
+	_, err := newClickAway(fakeCatcherWire(made, presses, releases), []*wlsession.Output{out}, func(func()) (func(), error) { return nil, boom }, func() {})
+	if !errors.Is(err, boom) {
+		t.Fatalf("newClickAway = %v, want the arm's failure", err)
+	}
+	if made[out].destroyed != 1 {
+		t.Errorf("catcher destroyed %d, want 1", made[out].destroyed)
+	}
+}
+
 // A press on any output's catcher closes the popover once; the catcher
 // that heard it stays up until the button is released, so the window
 // beneath never sees a lone release; the others go at once.
@@ -227,7 +299,7 @@ func TestClickAwayHoldsTheCatcherUntilRelease(t *testing.T) {
 	made, presses, releases := map[*wlsession.Output]*fakeCatcher{}, map[*wlsession.Output]func(){}, map[*wlsession.Output]func(){}
 	fired := 0
 	var c *clickAway
-	c, err := newClickAway(fakeCatcherWire(made, presses, releases), []*wlsession.Output{a, b}, func() {
+	c, err := newClickAway(fakeCatcherWire(made, presses, releases), []*wlsession.Output{a, b}, noEscape, func() {
 		fired++
 		c.close()
 	})
@@ -257,7 +329,7 @@ func TestClickAwayHoldsTheCatcherUntilRelease(t *testing.T) {
 func TestClickAwayFollowsOutputs(t *testing.T) {
 	a, b := &wlsession.Output{}, &wlsession.Output{}
 	made, presses, releases := map[*wlsession.Output]*fakeCatcher{}, map[*wlsession.Output]func(){}, map[*wlsession.Output]func(){}
-	c, err := newClickAway(fakeCatcherWire(made, presses, releases), []*wlsession.Output{a}, func() {})
+	c, err := newClickAway(fakeCatcherWire(made, presses, releases), []*wlsession.Output{a}, noEscape, func() {})
 	if err != nil {
 		t.Fatal(err)
 	}
