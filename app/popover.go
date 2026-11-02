@@ -73,6 +73,13 @@ type PopoverConfig struct {
 	// shorter than the output; a wide one wrapping its text. Zero keeps
 	// the default.
 	MaxWidth, MaxHeight int
+	// BackgroundBlur asks the compositor to blur what is behind the
+	// popover's content, its translucent background showing the desktop
+	// behind it, which a backdrop-filter in the content cannot see. Where
+	// no blur is in effect Content carries the blur-unavailable class, so
+	// its style can turn opaque; the region and class are out by the
+	// popover's first paint.
+	BackgroundBlur bool
 }
 
 // PopoverDismissal is how a popover treats a click elsewhere, and with
@@ -366,6 +373,9 @@ func (r *popoverKeyRoot) Paint(cv *render.Canvas) { widget.PaintChild(cv, r.cont
 // shadow follow the content through a layout motion.
 func (r *popoverKeyRoot) ShownRect() render.Rect { return widget.ShownRect(r.content) }
 
+// BackdropRegion is the content's, the surface's blur shape at rest.
+func (r *popoverKeyRoot) BackdropRegion() []render.Rect { return widget.BackdropRegion(r.content) }
+
 // Children exposes the content to the tree walks (damage, focus).
 func (r *popoverKeyRoot) Children() []widget.Widget { return []widget.Widget{r.content} }
 
@@ -494,7 +504,9 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		NoGrab:  noGrab,
 		// The theme's plate yields to a stylesheet that styles the
 		// popover's background, as GTK leaves a popover's look to CSS.
-		NoPlate: widget.StylesBackground(cfg.Content),
+		NoPlate:        widget.StylesBackground(cfg.Content),
+		BackgroundBlur: cfg.BackgroundBlur,
+		BlurRoot:       cfg.Content,
 	}
 	switch {
 	case parent != nil:

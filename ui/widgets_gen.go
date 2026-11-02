@@ -5663,6 +5663,18 @@ func Morph(child Node) *MorphBuilder {
 	return b
 }
 
+// CompositorFade calls (*widget.Morph).SetCompositorFade.
+func (b *MorphBuilder) CompositorFade(on bool) *MorphBuilder {
+	b.do(func(s *Scope, w *widget.Morph) { w.SetCompositorFade(on) })
+	return b
+}
+
+// WatchCompositorFade re-applies SetCompositorFade with get's value after every update.
+func (b *MorphBuilder) WatchCompositorFade(get func() bool) *MorphBuilder {
+	b.watch(func(w *widget.Morph) { w.SetCompositorFade(get()) })
+	return b
+}
+
 // Origin calls (*widget.Morph).SetOrigin.
 func (b *MorphBuilder) Origin(fx float64, fy float64) *MorphBuilder {
 	b.do(func(s *Scope, w *widget.Morph) { w.SetOrigin(fx, fy) })

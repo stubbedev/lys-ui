@@ -156,6 +156,12 @@ type Config struct {
 	// NoEnter opens the popup at rest, without its enter tween: a
 	// shared-element morph into its content carries the opening.
 	NoEnter bool
+	// BackgroundBlur asks the compositor to blur what is behind the
+	// content, following the enter and exit motion. Where no blur is in
+	// effect the painted root (BlurRoot) carries css.BlurUnavailable.
+	BackgroundBlur bool
+	// BlurRoot is the widget carrying the style a missing blur changes.
+	BlurRoot widget.Widget
 }
 
 // New positions and maps a popup, then grabs the seat so clicks outside

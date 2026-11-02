@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 
+	"github.com/stubbedev/lys-ui/internal/blursync"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/repaint"
 	"github.com/stubbedev/lys-ui/internal/scale"
@@ -62,6 +63,26 @@ type Painter struct {
 	framePending bool
 	mapped       bool
 	dirty        atomic.Bool
+	// blur is the compositor blur behind the content; fade is the
+	// surface opacity last sent to go with it, fading set whether one
+	// went out.
+	blur   blursync.Sync
+	fade   float64
+	fading bool
+}
+
+// blurSurface is the popup surface's wire half for blursync.
+type blurSurface struct {
+	sess *wlsession.Session
+	surf *wl.Surface
+}
+
+// BlurAvailable implements blursync.Surface.
+func (b blurSurface) BlurAvailable() bool { return b.sess.BlurAvailable() }
+
+// SetBlurRegion implements blursync.Surface.
+func (b blurSurface) SetBlurRegion(rects []render.Rect) error {
+	return b.sess.SetBlurRegion(b.surf, rects)
 }
 
 // NewPainter wraps root in the tween view (seeded from the
@@ -219,6 +240,7 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	w, h := p.Size()
 	_ = p.sc.Apply(pc.frac120, w, h)
 	pc.visual.Arrange(render.Rect{W: w, H: h})
+	pc.syncBlur()
 	bounds := render.Rect{W: w, H: h}
 	pc.collect(bounds)
 	if !pc.mapped {
@@ -277,6 +299,34 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	pc.framePending = true
 	debug.Log("frame", "popup %d committed %dx%d: region %dx%d in %v", pc.surf.Id(), b.Width, b.Height, region.W, region.H, time.Since(start))
 	return true, true, nil
+}
+
+// syncBlur publishes the blur for this frame, on the commit that shows
+// it, so the first paint and every motion frame carry their own region.
+// While the blur is on the surface fades through the compositor, which
+// fades the blur along, where the compositor can; elsewhere the paint
+// fades and the blur shows from the frame the shape does.
+func (pc *Painter) syncBlur() {
+	if !pc.p.cfg.BackgroundBlur {
+		return
+	}
+	morph := pc.p.anim.morph
+	pc.blur.Update(blurSurface{pc.sess, pc.surf}, true, pc.p.cfg.BlurRoot, morph.BackdropRegion)
+	if !pc.sess.BlurAvailable() {
+		morph.SetCompositorFade(false)
+		return
+	}
+	fade := morph.Fade()
+	if pc.fading && fade == pc.fade {
+		return
+	}
+	if err := pc.sess.SetSurfaceAlpha(pc.surf, fade); err != nil {
+		debug.Log("frame", "popup fade: %v", err)
+		morph.SetCompositorFade(false)
+		return
+	}
+	morph.SetCompositorFade(true)
+	pc.fade, pc.fading = fade, true
 }
 
 // paint draws the visual into b within the device region: through the

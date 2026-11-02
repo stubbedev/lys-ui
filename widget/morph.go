@@ -35,6 +35,9 @@ type Morph struct {
 	plate func(cv *render.Canvas, content render.Rect)
 	layer *render.Layer
 	inner *render.Layer
+	// compositorFade leaves the fade to whoever applies Fade to the
+	// surface; see SetCompositorFade.
+	compositorFade bool
 }
 
 // NewMorph wraps child at rest, growing from its center.
@@ -53,6 +56,74 @@ func (m *Morph) SetReveal(reveal float64, morph bool) {
 	}
 	m.reveal, m.morph = reveal, morph
 	m.Invalidate()
+}
+
+// Fade is the opacity of the surface at the current reveal.
+func (m *Morph) Fade() float64 {
+	r := math.Max(0, m.reveal)
+	if m.morph {
+		r *= morphFade
+	}
+	return math.Min(1, r)
+}
+
+// SetCompositorFade makes the owner responsible for Fade, on the surface
+// through the compositor, so the paint itself stays fully opaque. The
+// compositor's blur behind the surface can then fade along with it,
+// which no opacity painted into the buffer can do.
+func (m *Morph) SetCompositorFade(on bool) {
+	if m.compositorFade == on {
+		return
+	}
+	m.compositorFade = on
+	m.Invalidate()
+}
+
+// paintedFade is the part of Fade the paint itself applies.
+func (m *Morph) paintedFade() float64 {
+	if m.compositorFade {
+		return 1
+	}
+	return m.Fade()
+}
+
+// BackdropRegion is the region behind the surface for the compositor to
+// blur at the current reveal: the content's (widget.BackdropRegion, or
+// the child's own report), cut by the unrolled clip and scaled as the
+// paint is, so the blur never leads the shape it backs. Empty while
+// hidden.
+func (m *Morph) BackdropRegion() []render.Rect {
+	if m.reveal <= 0 || m.child == nil {
+		return nil
+	}
+	var rest []render.Rect
+	if c, ok := m.child.(interface{ BackdropRegion() []render.Rect }); ok {
+		rest = c.BackdropRegion()
+	} else {
+		rest = BackdropRegion(m.child)
+	}
+	if !m.morph || m.reveal == 1 {
+		return rest
+	}
+	content := m.shownContent()
+	clip := m.clipAt(content, m.reveal)
+	s := morphScale + float64((1-morphScale)*m.reveal)
+	ox := float64(content.X) + float64(m.originX*float64(content.W))
+	oy := float64(content.Y) + float64(m.originY*float64(content.H))
+	at := func(v, o float64) int { return int(math.Round(o + float64((v-o)*s))) }
+	out := make([]render.Rect, 0, len(rest))
+	for _, r := range rest {
+		r = r.Intersect(clip)
+		if r.Empty() {
+			continue
+		}
+		x0, y0 := at(float64(r.X), ox), at(float64(r.Y), oy)
+		x1, y1 := at(float64(r.X+r.W), ox), at(float64(r.Y+r.H), oy)
+		if shown := (render.Rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}).Intersect(m.bounds); !shown.Empty() {
+			out = append(out, shown)
+		}
+	}
+	return out
 }
 
 // Reveal is the current reveal fraction.
@@ -150,7 +221,7 @@ func (m *Morph) Paint(cv *render.Canvas) {
 		m.paintAtRest(cv)
 		return
 	case !m.morph:
-		prev := cv.PushAlpha(r)
+		prev := cv.PushAlpha(m.paintedFade())
 		m.paintAtRest(cv)
 		cv.PopAlpha(prev)
 		return
@@ -185,7 +256,7 @@ func (m *Morph) Paint(cv *render.Canvas) {
 	ox := float64(devContent.X) + float64(m.originX*float64(devContent.W))
 	oy := float64(devContent.Y) + float64(m.originY*float64(devContent.H))
 	prev := cv.PushClip(b)
-	cv.Composite(l, dev, render.Scale(s, s).About(ox, oy), math.Min(1, r*morphFade))
+	cv.Composite(l, dev, render.Scale(s, s).About(ox, oy), m.paintedFade())
 	cv.PopClip(prev)
 }
 

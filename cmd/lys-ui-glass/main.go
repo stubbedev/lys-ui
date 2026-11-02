@@ -5,7 +5,8 @@
 // the backdrop blur re-samples every frame. w opens a translucent
 // window that asks the compositor to blur the desktop behind it
 // (ext_background_effect_v1; opaque where no compositor blur is in
-// effect; -blur-window opens it at startup), t toggles light and dark,
+// effect; -blur-window opens it at startup, -blur-popover also a blurred
+// popover over it), t toggles light and dark,
 // Escape closes.
 package main
 
@@ -27,8 +28,9 @@ import (
 
 func main() {
 	blurWindow := flag.Bool("blur-window", false, "open the compositor-blurred window at startup")
+	blurPopover := flag.Bool("blur-popover", false, "open the compositor-blurred popover over a compositor-blurred window at startup")
 	flag.Parse()
-	err := run(*blurWindow)
+	err := run(*blurWindow, *blurPopover)
 	switch {
 	case err == nil, errors.Is(err, app.ErrClosed):
 	case errors.Is(err, app.ErrDisconnected):
@@ -42,7 +44,7 @@ func main() {
 // advances, so the glass above has something moving to blur.
 const stripes = `.stripes { background-image: repeating-linear-gradient(%ddeg, #e05561 0px, #e05561 18px, #3fb68b 18px, #3fb68b 36px, #4f7cff 36px, #4f7cff 54px, #f0c040 54px, #f0c040 72px); }`
 
-func run(blurWindow bool) error {
+func run(blurWindow, blurPopover bool) error {
 	sess, err := app.Connect()
 	if err != nil {
 		return err
@@ -106,7 +108,7 @@ func run(blurWindow bool) error {
 			case xkb.KeyEscape:
 				application.Quit()
 			case xkb.Keysym('w'):
-				if err := openBlurred(application, face); err != nil {
+				if err := openBlurred(application, face, false); err != nil {
 					log.Printf("blurred window: %v", err)
 				}
 			case xkb.Keysym('t'):
@@ -121,8 +123,8 @@ func run(blurWindow bool) error {
 	if err != nil {
 		return err
 	}
-	if blurWindow {
-		if err := openBlurred(application, face); err != nil {
+	if blurWindow || blurPopover {
+		if err := openBlurred(application, face, blurPopover); err != nil {
 			return err
 		}
 	}
@@ -131,7 +133,7 @@ func run(blurWindow bool) error {
 
 // openBlurred opens a translucent .glass window that asks the
 // compositor to blur the desktop behind it, and says whether it does.
-func openBlurred(application *app.Application, face render.Font) error {
+func openBlurred(application *app.Application, face render.Font, popover bool) error {
 	root := widget.NewBox(widget.Column, 8, 24)
 	root.AddClass(css.Glass)
 	status := widget.NewLabel(face, 14, "", 0)
@@ -150,12 +152,33 @@ func openBlurred(application *app.Application, face render.Font) error {
 	if err != nil {
 		return err
 	}
+	var pop *app.Popover
 	stop = application.Every(500*time.Millisecond, func() {
 		if w.BackgroundBlurActive() {
 			status.SetText("the compositor blurs the desktop behind this window")
 		} else {
 			status.SetText("no compositor blur here: the window stays opaque")
 		}
+		if popover && pop == nil {
+			var err error
+			if pop, err = openBlurredPopover(application, w, face, status); err != nil {
+				log.Printf("blurred popover: %v", err)
+			}
+		}
 	})
 	return nil
+}
+
+// openBlurredPopover opens a translucent popover under anchor that asks
+// the compositor to blur what is behind it, its fallback opaque.
+func openBlurredPopover(application *app.Application, w *app.Window, face render.Font, anchor widget.Boundser) (*app.Popover, error) {
+	card := widget.NewBox(widget.Column, 8, 16)
+	card.AddClass(css.Glass)
+	card.Append(widget.NewLabel(face, 14, "A blurred popover", 0), false)
+	return application.OpenPopover(w, app.PopoverConfig{
+		Anchor:         anchor,
+		Content:        card,
+		Dismissal:      app.PopoverSticky,
+		BackgroundBlur: true,
+	})
 }

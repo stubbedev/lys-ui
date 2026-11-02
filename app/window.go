@@ -34,6 +34,7 @@ import (
 	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/internal/blursync"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
 	"github.com/stubbedev/lys-ui/internal/inspect"
@@ -44,7 +45,6 @@ import (
 	"github.com/stubbedev/lys-ui/internal/window"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
-	"github.com/stubbedev/lys-ui/widget/css"
 )
 
 // hostWindow couples a Host with everything the loop needs to drive it.
@@ -192,14 +192,8 @@ type hostWindow struct {
 	// gpu are the GPUArea surfaces under this window, in creation
 	// order; their bounds are the opaque region's holes.
 	gpu []*gpuSurface
-	// blurSent is the blur region last sent, blurSet whether one went
-	// out at all; like the opaque region it is surface state, re-sent
-	// only when the shape changes.
-	blurSent []render.Rect
-	blurSet  bool
-	// blurFallback is whether the style root carries
-	// css.BlurUnavailable, so the class flips only on a change.
-	blurFallback bool
+	// blur is the compositor blur behind the window's style root.
+	blur blursync.Sync
 }
 
 // windowHooks are the app-visible callbacks one window carries.
@@ -819,51 +813,19 @@ func (w *hostWindow) syncOpaque(bw, bh int) {
 
 // syncBlur publishes the compositor blur region (widget.BackdropRegion:
 // the glass widgets' rounded boxes, or the style root's) while the
-// window asks for blur and the compositor offers it; nothing
-// otherwise. It goes out only when the shape changes. While blur is
-// asked for but not in effect the root carries css.BlurUnavailable,
-// so its style can turn opaque rather than show the unblurred desktop.
-// It runs before the damage drain, so a class flip repaints this frame.
+// window asks for blur (blursync.Sync.Update). It runs before the
+// damage drain, so a class flip repaints this frame.
 func (w *hostWindow) syncBlur() {
-	if !w.cfg.blur && !w.blurSet && !w.blurFallback {
-		return
-	}
 	root := w.styleRoot
 	if root == nil {
 		root = w.router.Root
 	}
-	var shape []render.Rect
-	active := w.cfg.blur && w.surf.BlurAvailable()
-	if active {
-		shape = widget.BackdropRegion(root)
-	}
-	if fallback := w.cfg.blur && !active; fallback != w.blurFallback {
-		if c, ok := root.(interface {
-			AddClass(...string)
-			RemoveClass(...string)
-		}); ok {
-			if fallback {
-				c.AddClass(css.BlurUnavailable)
-			} else {
-				c.RemoveClass(css.BlurUnavailable)
-			}
-		}
-		w.blurFallback = fallback
-	}
-	if slices.Equal(shape, w.blurSent) && (w.blurSet || shape == nil) {
-		return
-	}
-	if err := w.surf.SetBlurRegion(shape); err != nil {
-		debug.Log("frame", "blur region: %v", err)
-		return
-	}
-	w.blurSent, w.blurSet = slices.Clone(shape), true
-	debug.Log("frame", "blur region: %d rects", len(shape))
+	w.blur.Update(w.surf, w.cfg.blur, root, func() []render.Rect { return widget.BackdropRegion(root) })
 }
 
 // blurActive reports whether the compositor blurs behind the window:
 // a region is out and non-empty.
-func (w *hostWindow) blurActive() bool { return w.blurSet && len(w.blurSent) > 0 }
+func (w *hostWindow) blurActive() bool { return w.blur.Active() }
 
 // draw paints one frame: resize check, acquire, cached measure, arrange,
 // damage collection, region-clipped paint, commit, and frame-callback

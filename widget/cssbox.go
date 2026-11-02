@@ -222,10 +222,7 @@ func BackdropRegion(root Widget) []render.Rect {
 	if shape != nil {
 		return shape
 	}
-	if bs, ok := root.(Boundser); ok {
-		return render.RoundedRectRegion(bs.Bounds(), CornerRadii(root))
-	}
-	return nil
+	return render.RoundedRectRegion(ShownRect(root), CornerRadii(root))
 }
 
 // PaintFocusRing draws the keyboard focus ring of a focused w around
