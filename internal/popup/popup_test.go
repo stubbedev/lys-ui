@@ -14,6 +14,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/surfx"
+	"github.com/stubbedev/lys-ui/internal/touchinput"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -331,5 +332,33 @@ func TestDismissingAGrabbingPopupReleasesTheGrabAtOnce(t *testing.T) {
 	drive()
 	if !done.Destroyed() {
 		t.Error("the exit landed but the teardown never ran")
+	}
+}
+
+// A press or touch landing in a live popup is heard before the widgets;
+// a dismissed popup hears nothing.
+func TestPopupInputHearsPresses(t *testing.T) {
+	presses := 0
+	dismissed := false
+	in := &popupInput{
+		onPress:   func() { presses++ },
+		dismissed: func() bool { return dismissed },
+		router:    &widget.Router{Root: widget.NewBox(widget.Row, 0, 0)},
+		pointer:   &struct{ x, y float64 }{},
+		mods:      func() widget.Mods { return 0 },
+		markDirty: func() {},
+	}
+	in.Input = touchinput.Input{Tracker: widget.TouchTracker{Router: in.router}, Blocked: in.dismissed}
+	in.HandlePointerButton(widget.BTNLeft, 1, 0)
+	in.HandlePointerButton(widget.BTNLeft, 0, 0)
+	in.HandleTouchDown(1, 0, 0, 1)
+	if presses != 2 {
+		t.Errorf("heard %d presses, want the button's and the touch's", presses)
+	}
+	dismissed = true
+	in.HandlePointerButton(widget.BTNLeft, 1, 0)
+	in.HandleTouchDown(2, 0, 0, 2)
+	if presses != 2 {
+		t.Errorf("a dismissed popup heard presses: %d", presses)
 	}
 }

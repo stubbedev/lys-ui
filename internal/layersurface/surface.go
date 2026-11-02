@@ -136,7 +136,14 @@ type Surface struct {
 	destroyed bool
 	width     uint32
 	height    uint32
+	// onConfigured runs after each configure is applied and acked.
+	onConfigured func()
 }
+
+// OnConfigured runs f after each configure is applied and acked, when
+// the surface may commit at its new Size. Wire handlers run in no fixed
+// order, so a listener on the wire could precede the ack.
+func (s *Surface) OnConfigured(f func()) { s.onConfigured = f }
 
 // New assigns the layer role and sends the initial state. The caller must
 // still commit the wl_surface; the compositor answers with the first
@@ -306,6 +313,9 @@ func (s *Surface) configure(serial, width, height uint32, ack func(uint32) error
 	}
 	s.applyConfigure(width, height)
 	_ = ack(serial)
+	if s.onConfigured != nil {
+		s.onConfigured()
+	}
 }
 
 // applyConfigure records the configure without touching the wire; tests

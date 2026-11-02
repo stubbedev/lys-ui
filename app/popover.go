@@ -60,13 +60,14 @@ type PopoverConfig struct {
 	// the popover closes with its parent. A parent holds one child at a
 	// time: opening another closes the one before.
 	Parent *Popover
-	// NoAutohide is GTK's autohide=false: the popover takes no seat
-	// grab, so a click elsewhere does not close it - only Dismiss (a
-	// re-click on its button, a click in its own empty area) does - and
-	// a bar-style host holds the keyboard on demand rather than
-	// exclusively, leaving other windows their keys. A nested popover
-	// always grabs.
-	NoAutohide bool
+	// Dismissal is how a click elsewhere treats the popover. A nested
+	// popover grabs exactly when its parent does.
+	Dismissal PopoverDismissal
+	// Exit, when set, plays the popover's way out whatever closes it
+	// (Esc, a click away, Dismiss): its input and keyboard go at once,
+	// and the surface stays up until Exit calls done. Nil closes through
+	// the popup's own exit tween.
+	Exit func(done func())
 	// MaxWidth and MaxHeight cap the content when measured, in place
 	// of the default ceiling, the largest output's size - a list held
 	// shorter than the output; a wide one wrapping its text. Zero keeps
@@ -74,13 +75,36 @@ type PopoverConfig struct {
 	MaxWidth, MaxHeight int
 }
 
-// popoverKeyboard is the keyboard mode a bar-style host holds while a
-// root popover is open: exclusive under a grabbing popover (its Esc,
-// menus and entries need the keys whatever was clicked), on demand
-// under a NoAutohide one, which must not take other windows' keys.
+// PopoverDismissal is how a popover treats a click elsewhere, and with
+// it who holds the keyboard while it is open.
+type PopoverDismissal uint8
+
+const (
+	// PopoverGrabs takes the seat grab: a click elsewhere closes the
+	// popover, which holds the keyboard until it closes. For menus.
+	PopoverGrabs PopoverDismissal = iota
+	// PopoverClickAway closes on a click elsewhere with no seat grab:
+	// keys stay with the focused window until a press into the popover
+	// takes them, or from the start if Focus names a widget. Esc reaches
+	// it only while it holds them. It needs layer shell and wp_viewporter.
+	PopoverClickAway
+	// PopoverSticky is GTK's autohide=false: no seat grab, and only
+	// Dismiss closes it (a re-click on its button, a click in its own
+	// empty area).
+	PopoverSticky
+)
+
+// popoverKeyboard is the keyboard mode a bar-style host holds as a root
+// popover opens: exclusive when the popover must have the keys from the
+// start (a grab's Esc and menus, a Focus widget), on demand when sticky,
+// and none for a click-away popover: a compositor may focus an on-demand
+// layer the moment it asks (sway does), so that one asks at the press.
 func popoverKeyboard(cfg PopoverConfig) KeyboardMode {
-	if cfg.NoAutohide {
+	switch {
+	case cfg.Dismissal == PopoverSticky:
 		return KeyboardOnDemand
+	case cfg.Dismissal == PopoverClickAway && cfg.Focus == nil:
+		return KeyboardNone
 	}
 	return KeyboardExclusive
 }
@@ -98,9 +122,8 @@ type rectAnchor render.Rect
 
 func (r rectAnchor) Bounds() render.Rect { return render.Rect(r) }
 
-// Popover is a widget-anchored transient popup. It closes on
-// click-away (the popup grab), Esc, or Dismiss; OnClosed fires exactly
-// once.
+// Popover is a widget-anchored transient popup. It closes on a click
+// away (PopoverDismissal), Esc, or Dismiss; OnClosed fires exactly once.
 type Popover struct {
 	mu      sync.Mutex
 	closed  bool
@@ -117,8 +140,17 @@ type Popover struct {
 	parent   *Popover
 	children []*Popover
 	// autohide closes the popover on a press anywhere else, the parent
-	// window included (PopoverConfig.NoAutohide off).
+	// window included (any PopoverDismissal but PopoverSticky).
 	autohide bool
+	// noGrab is a popover without the seat grab: keys reach it only
+	// while the compositor focuses its surfaces or its host's.
+	noGrab bool
+	// exiting is an Exit under way; away is the root's click catchers;
+	// takeKeys gives a click-away chain the keyboard at a press into it,
+	// nil where it has nothing to take (loop only).
+	exiting  bool
+	away     *clickAway
+	takeKeys func()
 }
 
 // Parent is the popover this one is nested under, nil for a root.
@@ -184,11 +216,48 @@ func (p *Popover) SetFocus(w widget.Widget) error {
 	return p.focus(w)
 }
 
-// Dismiss closes the popover programmatically; OnClosed still fires
-// exactly once.
+// Dismiss closes the popover programmatically, through its Exit if it
+// has one; OnClosed still fires exactly once.
 func (p *Popover) Dismiss() {
 	if p != nil && p.closeFn != nil {
 		p.closeFn()
+	}
+}
+
+// Close closes the popover at once, skipping any exit: its content is
+// needed elsewhere this instant. OnClosed still fires exactly once.
+func (p *Popover) Close() {
+	if p != nil && p.teardown != nil {
+		p.teardown()
+	}
+}
+
+// taking reports whether the popover still takes input: open, and not
+// on its way out.
+func (p *Popover) taking() bool { return !p.Closed() && !p.exiting }
+
+// holdsFocus reports whether s, the compositor's keyboard focus, is one
+// of the popover's surfaces or its chain's host. A compositor may focus
+// either after a click into a popup of an on-demand layer.
+func (p *Popover) holdsFocus(s *wl.Surface) bool {
+	if s == nil {
+		return false
+	}
+	for q := p; q != nil; q = q.parent {
+		if q.pop != nil && q.pop.HostSurface() == s {
+			return true
+		}
+		if q.parent == nil && q.host != nil && q.host.HostSurface() == s {
+			return true
+		}
+	}
+	return false
+}
+
+// dropCatchers ends the click-away catchers, if any.
+func (p *Popover) dropCatchers() {
+	if p.away != nil {
+		p.away.close()
 	}
 }
 
@@ -240,7 +309,7 @@ func (r *popoverRegistry) get(h Host) *Popover { return r.open[h.HostSurface()] 
 // press is the click away, and it goes nowhere else.
 func (a *Application) dismissAutohide(h Host) bool {
 	p := a.popovers.get(h)
-	if p == nil || !p.autohide || p.Closed() {
+	if p == nil || !p.autohide || !p.taking() {
 		return false
 	}
 	p.Dismiss()
@@ -396,7 +465,11 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	gutter := widget.Current().ShadowGutter()
 	debug.Log("input", "popover anchor %+v size %dx%d gravity %d gutter %d", anchor, size.W, size.H, cfg.Gravity, gutter)
 
-	p := &Popover{host: host, parent: parent, autohide: !cfg.NoAutohide}
+	noGrab := cfg.Dismissal != PopoverGrabs
+	if parent != nil {
+		noGrab = parent.noGrab
+	}
+	p := &Popover{host: host, parent: parent, autohide: cfg.Dismissal != PopoverSticky, noGrab: noGrab}
 	keyRoot := &popoverKeyRoot{
 		onDismiss: p.Dismiss,
 		content:   cfg.Content,
@@ -417,7 +490,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		Gutter:  gutter,
 		Gravity: cfg.Gravity,
 		Gap:     cfg.Gap,
-		NoGrab:  cfg.NoAutohide && parent == nil,
+		NoGrab:  noGrab,
 		// The theme's plate yields to a stylesheet that styles the
 		// popover's background, as GTK leaves a popover's look to CSS.
 		NoPlate: widget.StylesBackground(cfg.Content),
@@ -432,19 +505,32 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		}
 	}
 
-	// A bar-style layer declines the keyboard; the popover's grab needs
-	// it (Esc, menus, a form's Entry), so the layer holds the keyboard
-	// exclusively while the popover is open. Exclusive, not on-demand:
-	// on a v4 layer shell on-demand focuses only on a click into the
-	// layer, which a popover opened from a key or a hover never gets
-	// (before the shell was bound at v4, the on-demand value was read
-	// as the v1 boolean - exclusive in effect). A nested popover rides
-	// on its root's.
+	// A bar-style layer declines the keyboard; a popover needs it (Esc,
+	// menus, a form's Entry), so the layer holds it in popoverKeyboard's
+	// mode while the popover is open. On a v4 layer shell on-demand
+	// focuses only on a click into the layer, which a popover opened
+	// from a key or a hover never gets, so what must have the keys from
+	// the start holds them exclusively. A nested popover rides on its
+	// root's.
 	restoreKeys := func() {}
 	if km, ok := host.(keyboardModer); ok && parent == nil && km.KeyboardMode() == KeyboardNone {
-		if err := km.holdKeyboard(popoverKeyboard(cfg)); err == nil {
-			restoreKeys = func() { _ = km.holdKeyboard(KeyboardNone) }
+		hold := func(mode KeyboardMode) {
+			if err := km.holdKeyboard(mode); err != nil {
+				a.reportPopup(fmt.Errorf("app: popover keyboard: %w", err))
+			}
 		}
+		hold(popoverKeyboard(cfg))
+		restoreKeys = sync.OnceFunc(func() { hold(KeyboardNone) })
+		if cfg.Dismissal == PopoverClickAway {
+			p.takeKeys = func() {
+				if p.taking() {
+					hold(KeyboardExclusive)
+				}
+			}
+		}
+	}
+	if parent != nil {
+		p.takeKeys = parent.takeKeys
 	}
 	// A tagged widget in the content that last showed on a placed
 	// surface morphs out of it; that morph carries the opening, so the
@@ -471,14 +557,36 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 			return nil, fmt.Errorf("app: popover focus: %w", err)
 		}
 	}
+	if parent == nil && cfg.Dismissal == PopoverClickAway {
+		p.away, err = newClickAway(wireCatcher(a.sess), a.outputs(), p.Dismiss)
+		if err != nil {
+			pop.Close()
+			restoreKeys()
+			unanchor()
+			return nil, err
+		}
+	}
 	// Dismiss, not Close: the programmatic path takes the same two-
 	// phase route as outside-clicks and Esc — input seals, OnClosed
 	// fires, and the surface runs its exit tween before the wire
 	// teardown.
 	p.closeFn = pop.Dismiss
+	if cfg.Exit != nil {
+		p.closeFn = func() {
+			if !p.taking() {
+				return
+			}
+			p.exiting = true
+			p.dropCatchers()
+			restoreKeys()
+			pop.SealInput()
+			cfg.Exit(pop.Close)
+		}
+	}
 	p.teardown = pop.Close
 	p.pop = pop
 	fireClosed := func() {
+		p.dropCatchers()
 		// Whatever closed this popover (Esc, a click away, the
 		// compositor's popup_done, Dismiss) closes what nests under it.
 		if !p.settle() {
@@ -522,7 +630,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		op.pop.MarkFrame()
 		return nil
 	}
-	op.detach = pop.AttachInput(a.sess, router)
+	op.detach = pop.AttachInput(a.sess, router, p.takeKeys)
 	a.openPopovers = append(a.openPopovers, op)
 	return p, nil
 }
@@ -633,6 +741,9 @@ func (a *Application) surfaceOrigin(root widget.Widget) (widget.Point, bool) {
 // the painter, the input, the content's style anchor, and what its
 // tree held for being on screen (widget.Detach).
 func (op *openPopover) release() {
+	if op.popover != nil {
+		op.popover.dropCatchers()
+	}
 	op.painter.Close()
 	op.detach()
 	op.unanchor()
@@ -656,6 +767,11 @@ func (a *Application) drivePopovers() error {
 			}
 			op.fireClosed()
 			continue
+		}
+		if op.popover != nil && op.popover.away != nil {
+			if err := op.popover.away.sync(a.outputs()); err != nil {
+				a.reportPopup(err)
+			}
 		}
 		if op.painter.Collect() {
 			op.fitContent(a.outputs())
@@ -695,15 +811,28 @@ func (op *openPopover) fitContent(outputs []*wlsession.Output) {
 }
 
 // keyPopover is the popover holding the keyboard: the newest one still
-// taking input. An open popover grabs the seat, so keys never reach
-// the windows beneath it.
+// taking input that has it. A grabbing popover has it whatever the
+// seat says; one without the grab only while the compositor focuses it,
+// so a window of this client keeps its keys beside an open dropdown.
 func (a *Application) keyPopover() *openPopover {
 	for _, op := range slices.Backward(a.openPopovers) {
-		if !op.pop.Dismissed() {
+		if op.pop.Dismissed() || (op.popover != nil && op.popover.exiting) {
+			continue
+		}
+		if op.popover == nil || !op.popover.noGrab || op.popover.holdsFocus(a.keyboardFocus()) {
 			return op
 		}
 	}
 	return nil
+}
+
+// keyboardFocus is the surface holding the seat's keyboard; a wireless
+// application (tests) has none.
+func (a *Application) keyboardFocus() *wl.Surface {
+	if a.sess == nil {
+		return nil
+	}
+	return a.sess.KeyboardFocus()
 }
 
 // deliverPopoverKey routes one press inside a popover. Esc dismisses

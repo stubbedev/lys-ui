@@ -35,7 +35,7 @@ func (p surfaceHost) OpenMenu(anchor widget.Boundser, face render.Font, sizePx f
 func (p surfaceHost) OpenPopover(anchor widget.Boundser, content widget.Widget, opts widget.PopoverOptions) func() {
 	pop, err := p.a.OpenPopover(p.host, PopoverConfig{
 		Anchor: anchor, Content: content, Focus: opts.Focus, Parent: p.parent,
-		NoAutohide: opts.NoGrab, OnClosed: opts.OnClosed, Gap: opts.Gap, Gravity: GravityOf(opts.Side),
+		Dismissal: dismissalOf(opts), OnClosed: opts.OnClosed, Gap: opts.Gap, Gravity: GravityOf(opts.Side),
 	})
 	if err != nil {
 		p.a.reportPopup(fmt.Errorf("app: open a widget's popover: %w", err))
@@ -70,4 +70,12 @@ func (a *Application) reportPopup(err error) {
 	if a.onPopupError != nil {
 		a.onPopupError(err)
 	}
+}
+
+// dismissalOf is the dismissal a widget's popover asks for.
+func dismissalOf(opts widget.PopoverOptions) PopoverDismissal {
+	if opts.NoGrab {
+		return PopoverSticky
+	}
+	return PopoverGrabs
 }

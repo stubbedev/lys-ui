@@ -584,7 +584,7 @@ func Run(sess *wlsession.Session, p *Popup, frac120 uint32, root widget.Widget, 
 	defer frame.Close()
 
 	router := &widget.Router{Root: root}
-	defer p.AttachInput(sess, router)()
+	defer p.AttachInput(sess, router, nil)()
 
 	if keys != nil {
 		prevKey := sess.OnKey
@@ -638,9 +638,10 @@ func Run(sess *wlsession.Session, p *Popup, frac120 uint32, root widget.Widget, 
 // (press, release, motion, leave), each one marking the popup for a
 // repaint, until the returned detach. Run attaches its own; the
 // application loop attaches one for the popovers it drives.
-func (p *Popup) AttachInput(sess *wlsession.Session, router *widget.Router) (detach func()) {
+func (p *Popup) AttachInput(sess *wlsession.Session, router *widget.Router, onPress func()) (detach func()) {
 	var pointer struct{ x, y float64 }
 	input := &popupInput{
+		onPress:   onPress,
 		dismissed: p.Dismissed,
 		router:    router,
 		pointer:   &pointer,
@@ -665,6 +666,9 @@ func (p *Popup) AttachInput(sess *wlsession.Session, router *widget.Router) (det
 type popupInput struct {
 	// Input routes touch and touchpad gestures (internal/touchinput).
 	touchinput.Input
+	// onPress hears a press or touch landing in the popup, before the
+	// widgets do; nil without a listener.
+	onPress   func()
 	dismissed func() bool
 	router    *widget.Router
 	pointer   *struct{ x, y float64 }
@@ -696,11 +700,26 @@ func (in *popupInput) HandlePointerButton(button, state, _ uint32) {
 	pt := widget.Point{X: int(in.pointer.x), Y: int(in.pointer.y)}
 	debug.Log("input", "popup route button %d state=%d at (%d,%d)", button, state, pt.X, pt.Y)
 	if state == 1 {
+		in.pressed()
 		in.router.Press(button, pt, in.mods())
 	} else {
 		in.router.Release(button, pt)
 	}
 	in.markDirty()
+}
+
+func (in *popupInput) pressed() {
+	if in.onPress != nil {
+		in.onPress()
+	}
+}
+
+// HandleTouchDown implements wlsession.SurfaceTouchHandler.
+func (in *popupInput) HandleTouchDown(id int32, x, y float64, serial uint32) {
+	if !in.dismissed() {
+		in.pressed()
+	}
+	in.Input.HandleTouchDown(id, x, y, serial)
 }
 
 // HandlePointerAxis implements wlsession.SurfacePointerHandler: the

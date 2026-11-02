@@ -47,6 +47,8 @@ func run() error {
 	root := widget.NewBox(widget.Column, 8, 10)
 	root.Append(button, false)
 	root.Append(menuButton, false)
+	dropButton := widget.NewButton(widget.NewLabel(tf, 13, "drop", t.Text), 8, 6)
+	root.Append(dropButton, false)
 
 	// Popovers parent to layer surfaces (a bar's dropdowns): a top-left
 	// anchored layer keeps the traced coordinates compositor ones. It
@@ -115,6 +117,69 @@ func run() error {
 		app.Trace("demo", "popover open")
 	}
 
+	// The dropdown: a click-away popover with an exit that takes a while,
+	// so the suite sees the keyboard stay with the focused window, a
+	// click into it take the keys, and every way out play the exit.
+	dropEntry := widget.NewEntry(tf, 13, t.Text)
+	dropEntry.OnChanged = func(s string) { app.Trace("demo", "dropdown text %s", s) }
+	dropBox := widget.NewBox(widget.Column, 6, 8)
+	dropBox.Append(dropEntry, false)
+	dropSub := widget.NewButton(widget.NewLabel(tf, 13, "more", t.Text), 8, 6)
+	dropBox.Append(dropSub, false)
+	var drop *app.Popover
+	dropSub.OnClick = func() {
+		_, err := application.OpenMenuPopover(w, app.MenuPopoverConfig{
+			Anchor:   dropSub,
+			Parent:   drop,
+			Face:     tf,
+			SizePx:   13,
+			Items:    []widget.MenuItem{{Label: "leaf", OnClick: func() { app.Trace("demo", "dropdown menu leaf") }}},
+			OnClosed: func() { app.Trace("demo", "dropdown menu closed") },
+		})
+		if err != nil {
+			app.Trace("demo", "dropdown menu error %v", err)
+			return
+		}
+		app.Trace("demo", "dropdown menu open")
+	}
+	dropTraced := false
+	application.Every(20*time.Millisecond, func() {
+		if drop == nil || drop.Closed() || dropTraced {
+			return
+		}
+		e, s := dropEntry.Bounds(), dropSub.Bounds()
+		if s.H == 0 {
+			return
+		}
+		dropTraced = true
+		top := dropButton.Bounds().Y + dropButton.Bounds().H - widget.Current().ShadowGutter()
+		app.Trace("demo", "dropdown controls entry y %d more y %d", top+e.Y+e.H/2, top+s.Y+s.H/2)
+	})
+	dropButton.OnClick = func() {
+		var err error
+		dropTraced = false
+		drop, err = application.OpenPopover(w, app.PopoverConfig{
+			Anchor:    dropButton,
+			Content:   dropBox,
+			Dismissal: app.PopoverClickAway,
+			Exit: func(done func()) {
+				app.Trace("demo", "dropdown exit")
+				time.AfterFunc(150*time.Millisecond, func() {
+					application.Invoke(func() {
+						app.Trace("demo", "dropdown exit done")
+						done()
+					})
+				})
+			},
+			OnClosed: func() { app.Trace("demo", "dropdown closed") },
+		})
+		if err != nil {
+			app.Trace("demo", "dropdown error %v", err)
+			return
+		}
+		app.Trace("demo", "dropdown open")
+	}
+
 	// The nested menu: a submenu row and a leaf inside it, so the suite
 	// drives a popover nested under a popover from the keyboard.
 	var menu *app.MenuPopover
@@ -163,6 +228,8 @@ func run() error {
 		app.Trace("demo", "control open center (%d,%d)", b.X+b.W/2, b.Y+b.H/2)
 		mb := menuButton.Bounds()
 		app.Trace("demo", "control menu center (%d,%d)", mb.X+mb.W/2, mb.Y+mb.H/2)
+		db := dropButton.Bounds()
+		app.Trace("demo", "control drop center (%d,%d)", db.X+db.W/2, db.Y+db.H/2)
 	})
 	return application.Run()
 }

@@ -249,3 +249,24 @@ func TestNewWithoutLayerShellFailsAtTheCall(t *testing.T) {
 		t.Errorf("surface = %v, want nil", s)
 	}
 }
+
+// A configured listener runs after the ack, at the new size; a surface
+// the client destroyed hears nothing.
+func TestOnConfiguredRunsAfterTheAck(t *testing.T) {
+	s := &Surface{}
+	acked := false
+	var w, h int
+	s.OnConfigured(func() {
+		if !acked {
+			t.Error("listener ran before the ack")
+		}
+		w, h = s.Size()
+	})
+	s.configure(1, 100, 50, func(uint32) error { acked = true; return nil })
+	if w != 100 || h != 50 {
+		t.Errorf("listener saw %dx%d, want 100x50", w, h)
+	}
+	s.destroyed = true
+	s.OnConfigured(func() { t.Error("a destroyed surface's listener ran") })
+	s.configure(2, 1, 1, func(uint32) error { return nil })
+}

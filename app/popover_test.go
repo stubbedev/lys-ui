@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 
 	"github.com/stubbedev/lys-ui/internal/window"
+	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -102,14 +103,14 @@ func TestPopupParentOf(t *testing.T) {
 	}
 }
 
-// An autohide popover holds the bar's keyboard exclusively; a
-// NoAutohide one (GTK autohide=false) only on demand, leaving other
+// A grabbing popover holds the bar's keyboard exclusively; a sticky
+// one only on demand, leaving other
 // windows their keys.
-func TestPopoverKeyboardFollowsAutohide(t *testing.T) {
+func TestPopoverKeyboardFollowsDismissal(t *testing.T) {
 	if got := popoverKeyboard(PopoverConfig{}); got != KeyboardExclusive {
 		t.Errorf("autohide popover holds %v, want exclusive", got)
 	}
-	if got := popoverKeyboard(PopoverConfig{NoAutohide: true}); got != KeyboardOnDemand {
+	if got := popoverKeyboard(PopoverConfig{Dismissal: PopoverSticky}); got != KeyboardOnDemand {
 		t.Errorf("no-autohide popover holds %v, want on demand", got)
 	}
 }
@@ -146,11 +147,138 @@ func TestPressOnTheHostDismissesAnAutohidePopover(t *testing.T) {
 	}
 
 	sticky := &Popover{host: host}
-	sticky.closeFn = func() { t.Error("a NoAutohide popover closed on a press") }
+	sticky.closeFn = func() { t.Error("a sticky popover closed on a press") }
 	a.popovers.openOrReplace(host, sticky)
 	in.HandlePointerButton(widget.BTNLeft, 1, 0)
 	in.HandlePointerButton(widget.BTNLeft, 0, 0)
 	if clicked != 2 {
-		t.Errorf("a press beside a NoAutohide popover was swallowed")
+		t.Errorf("a press beside a sticky popover was swallowed")
+	}
+}
+
+// A click-away popover leaves the keys with the focused window unless a
+// Focus widget must have them as it opens.
+func TestPopoverClickAwayKeyboard(t *testing.T) {
+	if got := popoverKeyboard(PopoverConfig{Dismissal: PopoverClickAway}); got != KeyboardNone {
+		t.Errorf("click-away popover holds %v as it opens, want none", got)
+	}
+	focus := widget.NewBox(widget.Row, 0, 0)
+	if got := popoverKeyboard(PopoverConfig{Dismissal: PopoverClickAway, Focus: focus}); got != KeyboardExclusive {
+		t.Errorf("click-away popover with a Focus widget holds %v, want exclusive", got)
+	}
+}
+
+// A popover without the grab holds focus only on its own chain.
+func TestHoldsFocusIsTheChainsSurfaces(t *testing.T) {
+	var other wl.Surface
+	host := &fakeHost{}
+	hostSurf := host.HostSurface()
+	root := &Popover{host: host}
+	child := &Popover{host: host, parent: root}
+	if root.holdsFocus(nil) {
+		t.Error("no focus counted as held")
+	}
+	if !root.holdsFocus(hostSurf) || !child.holdsFocus(hostSurf) {
+		t.Error("the host's focus did not count")
+	}
+	if root.holdsFocus(&other) || child.holdsFocus(&other) {
+		t.Error("another surface's focus counted")
+	}
+}
+
+// keyPopover hands keys to a grabbing popover whatever the focus, and to
+// one without the grab only while it holds focus.
+func TestKeyPopoverSkipsAnUnfocusedNoGrabPopover(t *testing.T) {
+	a := &Application{}
+	noGrab := &openPopover{pop: &fakePopSurface{}, popover: &Popover{host: &fakeHost{}, noGrab: true}}
+	a.openPopovers = []*openPopover{noGrab}
+	if got := a.keyPopover(); got != nil {
+		t.Errorf("an unfocused no-grab popover took keys: %v", got)
+	}
+	grab := &openPopover{pop: &fakePopSurface{}, popover: &Popover{}}
+	a.openPopovers = append(a.openPopovers, grab)
+	if got := a.keyPopover(); got != grab {
+		t.Errorf("keyPopover = %v, want the grabbing popover", got)
+	}
+	grab.popover.exiting = true
+	if got := a.keyPopover(); got != nil {
+		t.Errorf("a popover on its way out took keys: %v", got)
+	}
+}
+
+// fakeCatcher counts its destruction.
+type fakeCatcher struct{ destroyed int }
+
+func (f *fakeCatcher) destroy() { f.destroyed++ }
+
+func fakeCatcherWire(made map[*wlsession.Output]*fakeCatcher, presses map[*wlsession.Output]func(), releases map[*wlsession.Output]func()) catcherWire {
+	return func(out *wlsession.Output, press, release func()) (catcher, error) {
+		c := &fakeCatcher{}
+		made[out], presses[out], releases[out] = c, press, release
+		return c, nil
+	}
+}
+
+// A press on any output's catcher closes the popover once; the catcher
+// that heard it stays up until the button is released, so the window
+// beneath never sees a lone release; the others go at once.
+func TestClickAwayHoldsTheCatcherUntilRelease(t *testing.T) {
+	a, b := &wlsession.Output{}, &wlsession.Output{}
+	made, presses, releases := map[*wlsession.Output]*fakeCatcher{}, map[*wlsession.Output]func(){}, map[*wlsession.Output]func(){}
+	fired := 0
+	var c *clickAway
+	c, err := newClickAway(fakeCatcherWire(made, presses, releases), []*wlsession.Output{a, b}, func() {
+		fired++
+		c.close()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	presses[a]()
+	if fired != 1 {
+		t.Fatalf("fired %d, want 1", fired)
+	}
+	if made[a].destroyed != 0 || made[b].destroyed != 1 {
+		t.Fatalf("mid-press: held destroyed %d, other %d", made[a].destroyed, made[b].destroyed)
+	}
+	presses[a]()
+	if fired != 1 {
+		t.Errorf("a second press fired again: %d", fired)
+	}
+	releases[a]()
+	releases[a]()
+	if made[a].destroyed != 1 {
+		t.Errorf("after release: held destroyed %d, want 1", made[a].destroyed)
+	}
+}
+
+// Closing with no press held drops every catcher, and outputs coming
+// and going while open gain and lose theirs.
+func TestClickAwayFollowsOutputs(t *testing.T) {
+	a, b := &wlsession.Output{}, &wlsession.Output{}
+	made, presses, releases := map[*wlsession.Output]*fakeCatcher{}, map[*wlsession.Output]func(){}, map[*wlsession.Output]func(){}
+	c, err := newClickAway(fakeCatcherWire(made, presses, releases), []*wlsession.Output{a}, func() {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.sync([]*wlsession.Output{a, b}); err != nil {
+		t.Fatal(err)
+	}
+	if made[b] == nil {
+		t.Fatal("the new output got no catcher")
+	}
+	if err := c.sync([]*wlsession.Output{b}); err != nil {
+		t.Fatal(err)
+	}
+	if made[a].destroyed != 1 {
+		t.Errorf("the gone output's catcher: destroyed %d, want 1", made[a].destroyed)
+	}
+	c.close()
+	c.close()
+	if made[b].destroyed != 1 {
+		t.Errorf("after close: destroyed %d, want 1", made[b].destroyed)
+	}
+	if err := c.sync([]*wlsession.Output{a}); err != nil || len(made) != 2 {
+		t.Errorf("sync after close armed a catcher: err=%v made=%d", err, len(made))
 	}
 }
