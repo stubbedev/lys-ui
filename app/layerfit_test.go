@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-ui/internal/layersurface"
+	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -62,5 +63,14 @@ func TestFitBounds(t *testing.T) {
 	}
 	if got := fitBounds(nil, nil); got != (widget.Size{W: unboundedFit, H: unboundedFit}) {
 		t.Errorf("no outputs bound %v", got)
+	}
+}
+
+func TestLayerMotionIsTheToolkitsUnlessTheSurfaceOwnsIt(t *testing.T) {
+	if got := layerMotion(LayerConfig{}); got != surfx.KindOverlay {
+		t.Errorf("default = %v, want the overlay profile", got)
+	}
+	if got := layerMotion(LayerConfig{OwnMotion: true}); got != surfx.KindMenu {
+		t.Errorf("own motion = %v, want no window-level animation", got)
 	}
 }

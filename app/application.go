@@ -480,8 +480,21 @@ type LayerConfig struct {
 	KeyCapture    func(Accel) bool
 	// OnPresented mirrors WindowConfig.OnPresented.
 	OnPresented func()
+	// OwnMotion is a surface that plays its own enter and exit, so the
+	// toolkit adds none: it would scale the whole buffer in software on
+	// every frame, far too dear for one that covers an output, and Close
+	// then closes at once.
+	OwnMotion bool
 	// OnClosed runs when the surface closed or its output went away.
 	OnClosed func()
+}
+
+// layerMotion is a layer surface's animation profile.
+func layerMotion(cfg LayerConfig) surfx.Kind {
+	if cfg.OwnMotion {
+		return surfx.KindMenu
+	}
+	return surfx.KindOverlay
 }
 
 // NewWindow creates a toplevel window from a declarative config and
@@ -610,7 +623,7 @@ func (a *Application) openLayer(l *LayerWindow, cfg LayerConfig) (*hostWindow, e
 		keyCapture:  cfg.KeyCapture,
 		blur:        cfg.BackgroundBlur,
 		onPresented: cfg.OnPresented,
-	}, cfg.OnClosed, surfx.KindOverlay)
+	}, cfg.OnClosed, layerMotion(cfg))
 	hw.layer = l
 	// A rotated output's transform must be published before the first
 	// commit so the compositor maps the buffers correctly.
