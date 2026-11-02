@@ -753,3 +753,4 @@ func TestLookupIndexesDirectories(t *testing.T) {
 		t.Errorf("installed icon after InvalidateTheme: %q, %v", path, err)
 	}
 }
+

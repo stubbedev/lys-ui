@@ -46,6 +46,9 @@ func (c *Cache) Lookup(name string, size int, frac120 uint32) (string, error) {
 // Results, misses included, are memoized in the theme index until a
 // reset drops it.
 func (c *Cache) resolveLocked(name string, size int, frac120 uint32) (string, error) {
+	if filepath.IsAbs(name) {
+		return name, nil
+	}
 	if path := c.namespaceFileLocked(name); path != "" {
 		return path, nil
 	}

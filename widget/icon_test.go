@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -474,5 +475,55 @@ func TestIconCoversItsDeviceBox(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestPreloadedIconPaintsWithoutTheDisk(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.svg")
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#f00"/></svg>`
+	if err := os.WriteFile(path, []byte(svg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const size = 24
+	if ThemeIconPreloaded(path, size, 1, 1) {
+		t.Fatal("nothing has loaded it yet")
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		PreloadThemeIcon(path, size, 1, 1)
+	}()
+	<-done
+	if !ThemeIconPreloaded(path, size, 1, 1) {
+		t.Fatal("preload did not take")
+	}
+	if ThemeIconPreloaded(path, size, 2, 1) {
+		t.Error("another device scale is another raster")
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	icon := NewThemeIconFallback(path, size)
+	icon.Arrange(render.Rect{W: size, H: size})
+	data := make([]byte, render.Stride(size)*size)
+	icon.Paint(render.New(data, render.Stride(size), size, size))
+	if slices.Max(data) == 0 {
+		t.Error("the paint went to the disk, and found the file gone")
+	}
+}
+
+func TestPreloadOfAMissingIconAnswersAndPaintsNothing(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "gone.svg")
+	PreloadThemeIcon(missing, 24, 1, 1)
+	if !ThemeIconPreloaded(missing, 24, 1, 1) {
+		t.Error("a failure is an answer too, or the caller would ask forever")
+	}
+	icon := NewThemeIconFallback(missing, 24)
+	icon.Arrange(render.Rect{W: 24, H: 24})
+	data := make([]byte, render.Stride(24)*24)
+	icon.Paint(render.New(data, render.Stride(24), 24, 24))
+	if slices.Max(data) != 0 {
+		t.Error("a missing icon paints nothing")
 	}
 }

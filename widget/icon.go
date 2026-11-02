@@ -389,3 +389,23 @@ func fracOf(num, denom int) uint32 {
 	}
 	return intconv.Clamp[uint32]((num*120 + denom/2) / denom)
 }
+
+// PreloadThemeIcon decodes the icon NewThemeIconFallback(name, size)
+// will paint at the device scale num/denom, so its first paint reads and
+// rasterizes nothing. It reads the disk, so it belongs off the UI loop,
+// and it is safe from any goroutine. name may also be an absolute path.
+func PreloadThemeIcon(name string, size, num, denom int) {
+	cache := icons.Default()
+	frac := fracOf(num, denom)
+	if fallback := cache.FallbackName(name); fallback != name {
+		cache.Preload(fallback, size, frac)
+	}
+	cache.Preload(name, size, frac)
+}
+
+// ThemeIconPreloaded reports whether PreloadThemeIcon's work is done for
+// this icon, which a paint also does. It never blocks, so the UI loop may
+// ask: while the cache is busy the answer is no.
+func ThemeIconPreloaded(name string, size, num, denom int) bool {
+	return icons.Default().Cached(name, size, fracOf(num, denom))
+}

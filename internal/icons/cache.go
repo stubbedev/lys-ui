@@ -264,13 +264,59 @@ func (c *Cache) entryLocked(name string, size int, frac120 uint32) (*cacheEntry,
 	} else {
 		e.err = err
 	}
+	c.insertLocked(key, e)
+	return e, e.err
+}
+
+// insertLocked remembers an entry, the least recently used going past
+// the bound.
+func (c *Cache) insertLocked(key cacheKey, e *cacheEntry) {
 	c.entries[key] = e
 	c.order = append(c.order, key)
 	if len(c.order) > maxEntries {
 		delete(c.entries, c.order[0])
 		c.order = slices.Delete(c.order, 0, 1)
 	}
-	return e, e.err
+}
+
+// Preload resolves and decodes an icon into the cache for a later
+// paint. It holds the lock only to look and to store, never across the
+// read and the decode, so a UI loop painting other icons meanwhile does
+// not wait for it. A failure is remembered as a paint's would be.
+func (c *Cache) Preload(name string, size int, frac120 uint32) {
+	key := cacheKey{name: name, size: size, frac: frac120}
+	c.mu.Lock()
+	if _, ok := c.entries[key]; ok {
+		c.mu.Unlock()
+		return
+	}
+	path, err := c.resolveLocked(name, size, frac120)
+	gen := c.gen
+	c.mu.Unlock()
+	e := &cacheEntry{}
+	if err == nil {
+		e.decode(path, size, frac120)
+	} else {
+		e.err = err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := c.entries[key]; ok || c.gen != gen {
+		return
+	}
+	c.insertLocked(key, e)
+}
+
+// Cached reports whether a paint of this icon would find it decoded. It
+// never waits: with the lock held elsewhere the answer is no, and the
+// caller asks again.
+func (c *Cache) Cached(name string, size int, frac120 uint32) bool {
+	if !c.mu.TryLock() {
+		return false
+	}
+	defer c.mu.Unlock()
+	_, ok := c.entries[cacheKey{name: name, size: size, frac: frac120}]
+	return ok
 }
 
 // decode reads and rasterizes the matched file at the key's device box.
