@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/jfreymuth/pulse v0.1.3
-	github.com/stubbedev/lys-lib v0.2.2-0.20261102161419-3b712d99de0e
+	github.com/stubbedev/lys-lib v0.2.2-0.20261102171729-2769a02af98a
 	github.com/stubbedev/memory-go v0.5.0
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0
