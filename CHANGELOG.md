@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.1.0
 
 The first release of lys-ui, a pure-Go Wayland widget toolkit and relm4
 counterpart. It contains:
