@@ -246,6 +246,15 @@ func (s *Stack) Show(name string) {
 	}).Easing(anim.EaseOutCubic))
 }
 
+// shownTransition is the transition drawn: under the desktop's
+// reduced-motion preference a slide becomes a cross-fade.
+func (s *Stack) shownTransition() StackTransition {
+	if s.transition == StackSlideLeftRight && anim.Reduced() {
+		return StackCrossfade
+	}
+	return s.transition
+}
+
 // Switching reports whether a page transition is running.
 func (s *Stack) Switching() bool { return s.prev != "" }
 
@@ -314,7 +323,7 @@ func (s *Stack) Paint(cv *render.Canvas) {
 	s.layers[1] = cv.Layer(s.layers[1], dev)
 	old.Paint(s.layers[0].Canvas())
 	w.Paint(s.layers[1].Canvas())
-	switch s.transition {
+	switch s.shownTransition() {
 	case StackSlideLeftRight:
 		// Moving to a later page pushes the old one out to the left.
 		dir := 1.0

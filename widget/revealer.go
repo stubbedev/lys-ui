@@ -114,6 +114,15 @@ func (r *Revealer) SetTransition(t RevealTransition) {
 // Transition returns the transition style.
 func (r *Revealer) Transition() RevealTransition { return r.transition }
 
+// shownTransition is the transition drawn: under the desktop's
+// reduced-motion preference everything that moves becomes a fade.
+func (r *Revealer) shownTransition() RevealTransition {
+	if r.transition != RevealNone && anim.Reduced() {
+		return RevealFade
+	}
+	return r.transition
+}
+
 // SetDuration sets the full transition length; zero snaps.
 func (r *Revealer) SetDuration(d time.Duration) { r.duration = max(0, d) }
 
@@ -149,7 +158,7 @@ func (r *Revealer) SetRevealed(reveal bool) {
 	if reveal {
 		target = 1
 	}
-	if r.transition == RevealNone {
+	if r.shownTransition() == RevealNone {
 		r.InvalidateLayout()
 	}
 	if r.duration == 0 {
@@ -187,7 +196,7 @@ func (r *Revealer) Collapse() bool { return r.collapse }
 
 // collapses reports whether the slot follows the progress.
 func (r *Revealer) collapses() bool {
-	switch r.transition {
+	switch r.shownTransition() {
 	case RevealSlideUp, RevealSlideDown, RevealSlideLeft, RevealSlideRight:
 		return r.collapse
 	}
@@ -196,7 +205,7 @@ func (r *Revealer) collapses() bool {
 
 // vertical reports a slide along y.
 func (r *Revealer) vertical() bool {
-	return r.transition == RevealSlideUp || r.transition == RevealSlideDown
+	return r.shownTransition() == RevealSlideUp || r.shownTransition() == RevealSlideDown
 }
 
 // Finish lands a running transition at once, reporting it as its end
@@ -247,7 +256,7 @@ func (r *Revealer) Measure(axis Axis, forSize int) Sizes {
 	if sz, ok := r.measureHit(axis, forSize); ok {
 		return sz
 	}
-	if r.child == nil || (r.transition == RevealNone && !r.reveal) {
+	if r.child == nil || (r.shownTransition() == RevealNone && !r.reveal) {
 		return r.measureStore(axis, forSize, Sizes{})
 	}
 	if !r.collapses() {
@@ -295,7 +304,7 @@ func (r *Revealer) Arrange(rect render.Rect) {
 // likewise across.
 func (r *Revealer) childRect(slot render.Rect) render.Rect {
 	c := slot
-	switch r.transition {
+	switch r.shownTransition() {
 	case RevealSlideDown:
 		c.H = max(r.full.H, slot.H)
 		c.Y = slot.Y + slot.H - c.H
@@ -312,7 +321,7 @@ func (r *Revealer) childRect(slot render.Rect) render.Rect {
 
 // shows reports whether any of the child is drawn.
 func (r *Revealer) shows() bool {
-	if r.transition == RevealNone {
+	if r.shownTransition() == RevealNone {
 		return r.reveal
 	}
 	return r.progress > 0
@@ -331,11 +340,11 @@ func (r *Revealer) Paint(cv *render.Canvas) {
 	}
 	p := r.progress
 	switch {
-	case r.transition == RevealNone || p >= 1:
+	case r.shownTransition() == RevealNone || p >= 1:
 		PaintChild(cv, r.child)
 		r.painted = r.bounds
 		return
-	case r.transition == RevealFade:
+	case r.shownTransition() == RevealFade:
 		prev := cv.PushAlpha(p)
 		PaintChild(cv, r.child)
 		cv.PopAlpha(prev)
@@ -375,7 +384,7 @@ func (r *Revealer) ink() render.Rect {
 	if r.bounds.Empty() || !r.shows() {
 		return render.Rect{}
 	}
-	switch r.transition {
+	switch r.shownTransition() {
 	case RevealNone, RevealFade, RevealSlideUp, RevealSlideDown, RevealSlideLeft, RevealSlideRight:
 		return r.bounds
 	}
@@ -390,11 +399,11 @@ func (r *Revealer) transform(b render.Rect, p float64) (m render.Affine, alpha f
 	x, y, w, h := float64(b.X), float64(b.Y), float64(b.W), float64(b.H)
 	cx, cy := x+float64(w/2), y+float64(h/2)
 	t := anim.EaseInOutCubic(p)
-	switch r.transition {
+	switch r.shownTransition() {
 	case RevealSlideUp, RevealSlideDown, RevealSlideLeft, RevealSlideRight:
 		d := 1 - t
 		var dx, dy float64
-		switch r.transition {
+		switch r.shownTransition() {
 		case RevealSlideUp:
 			dy = d * h
 		case RevealSlideDown:
@@ -418,7 +427,7 @@ func (r *Revealer) transform(b render.Rect, p float64) (m render.Affine, alpha f
 		return render.Scale(max(t, 0.001), 1).About(cx, cy), p, false
 	case RevealSwingUp, RevealSwingDown, RevealSwingLeft, RevealSwingRight:
 		angle := (1 - t) * 90
-		switch r.transition {
+		switch r.shownTransition() {
 		case RevealSwingUp:
 			return render.Rotate(-angle).About(cx, y+h), p, false
 		case RevealSwingDown:

@@ -53,3 +53,30 @@ func TestNoAnimCollapsesFadesToo(t *testing.T) {
 		t.Errorf("enter %+v under LYS_UI_NO_ANIM", plan.Enter)
 	}
 }
+
+func TestReducedMotionTurnsSlidesIntoFades(t *testing.T) {
+	t.Cleanup(func() { SetReducedMotion(false) })
+	r := NewRevealer(NewStack())
+	r.SetTransition(RevealSlideDown)
+	s := NewStack()
+	s.SetTransition(StackSlideLeftRight, time.Second)
+	if r.shownTransition() != RevealSlideDown || s.shownTransition() != StackSlideLeftRight {
+		t.Fatalf("before the preference: %v, %v", r.shownTransition(), s.shownTransition())
+	}
+	SetReducedMotion(true)
+	if r.shownTransition() != RevealFade || r.Transition() != RevealSlideDown {
+		t.Errorf("revealer draws %v, reports %v", r.shownTransition(), r.Transition())
+	}
+	if s.shownTransition() != StackCrossfade {
+		t.Errorf("stack draws %v", s.shownTransition())
+	}
+	none := NewRevealer(NewStack())
+	none.SetTransition(RevealNone)
+	if none.shownTransition() != RevealNone {
+		t.Errorf("RevealNone draws %v", none.shownTransition())
+	}
+	SetReducedMotion(false)
+	if r.shownTransition() != RevealSlideDown {
+		t.Errorf("after the preference: %v", r.shownTransition())
+	}
+}
