@@ -780,3 +780,25 @@ func TestHoverChainKeepsTheRootOverAGap(t *testing.T) {
 		t.Errorf("the pointer leaving restyled every tree, not the root's (styleGen %d -> %d)", gen, styleGen)
 	}
 }
+
+// regionRoot reports its own blur region.
+type regionRoot struct {
+	*Box
+	region []render.Rect
+}
+
+func (r regionRoot) BackdropRegion() []render.Rect { return r.region }
+
+func TestBackdropRegionAsksARootThatKnows(t *testing.T) {
+	want := []render.Rect{{X: 10, Y: 20, W: 30, H: 40}}
+	root := regionRoot{Box: NewBox(Column, 0, 0), region: want}
+	root.Arrange(render.Rect{W: 800, H: 600})
+	if got := BackdropRegion(root); !slices.Equal(got, want) {
+		t.Errorf("region = %v, want the root's own %v", got, want)
+	}
+	plain := NewBox(Column, 0, 0)
+	plain.Arrange(render.Rect{W: 800, H: 600})
+	if got := BackdropRegion(plain); len(got) != 1 || got[0] != (render.Rect{W: 800, H: 600}) {
+		t.Errorf("a root with no say is its own rect, got %v", got)
+	}
+}

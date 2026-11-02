@@ -201,12 +201,24 @@ func CornerRadii(w Widget) render.Corners {
 	return render.Corners{}
 }
 
+// BackdropRegioner is a root that says itself what the compositor blurs
+// behind it. A surface wider than its plate (a panel moving inside a
+// full-output layer) needs one: asking for a backdrop-filter just to mark
+// the plate would run a filter over its own transparent pixels every
+// repaint, when the blur is the compositor's.
+type BackdropRegioner interface {
+	BackdropRegion() []render.Rect
+}
+
 // BackdropRegion is the region behind root's tree a compositor blurs:
 // the rounded border boxes, at the rects they show at, of the shown
 // widgets whose style blurs their backdrop (backdrop-filter, the glass
 // family). A glass root is the whole region. A tree without any is the
 // root's own box, a window blurred behind as a whole.
 func BackdropRegion(root Widget) []render.Rect {
+	if r, ok := root.(BackdropRegioner); ok {
+		return r.BackdropRegion()
+	}
 	var shape []render.Rect
 	walkWidgets(root, func(w Widget) bool {
 		n := nodeOf(w)
