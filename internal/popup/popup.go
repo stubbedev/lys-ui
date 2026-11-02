@@ -638,7 +638,7 @@ func Run(sess *wlsession.Session, p *Popup, frac120 uint32, root widget.Widget, 
 // (press, release, motion, leave), each one marking the popup for a
 // repaint, until the returned detach. Run attaches its own; the
 // application loop attaches one for the popovers it drives.
-func (p *Popup) AttachInput(sess *wlsession.Session, router *widget.Router, onPress func()) (detach func()) {
+func (p *Popup) AttachInput(sess inputSession, router *widget.Router, onPress func()) (detach func()) {
 	var pointer struct{ x, y float64 }
 	input := &popupInput{
 		onPress:   onPress,
@@ -654,8 +654,15 @@ func (p *Popup) AttachInput(sess *wlsession.Session, router *widget.Router, onPr
 		Blocked: p.Dismissed,
 		Changed: input.markDirty,
 	}
-	sess.SetSurfaceInput(p.WLSurface, input)
-	return func() { sess.SetSurfaceInput(p.WLSurface, nil) }
+	surf := p.WLSurface
+	sess.SetSurfaceInput(surf, input)
+	return func() { sess.SetSurfaceInput(surf, nil) }
+}
+
+// inputSession is what a popup's input needs from its session.
+type inputSession interface {
+	Mods() wlsession.Mods
+	SetSurfaceInput(surf *wl.Surface, h wlsession.SurfacePointerHandler)
 }
 
 // popupInput routes one popup surface's pointer events into its widget

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
@@ -360,5 +361,33 @@ func TestPopupInputHearsPresses(t *testing.T) {
 	in.HandleTouchDown(2, 0, 0, 2)
 	if presses != 2 {
 		t.Errorf("a dismissed popup heard presses: %d", presses)
+	}
+}
+
+type recordedInput struct {
+	attached map[*wl.Surface]bool
+}
+
+func (*recordedInput) Mods() wlsession.Mods { return 0 }
+
+func (r *recordedInput) SetSurfaceInput(surf *wl.Surface, h wlsession.SurfacePointerHandler) {
+	r.attached[surf] = h != nil
+}
+
+// Detaching reaches the surface it attached to, though the popup's
+// Destroy cleared its field first: the session would otherwise keep the
+// dead surface's input handler and hint objects.
+func TestDetachReachesTheDestroyedSurface(t *testing.T) {
+	surf := &wl.Surface{}
+	p := &Popup{WLSurface: surf}
+	rec := &recordedInput{attached: map[*wl.Surface]bool{}}
+	detach := p.AttachInput(rec, &widget.Router{}, nil)
+	if !rec.attached[surf] {
+		t.Fatal("the input never attached")
+	}
+	p.WLSurface = nil
+	detach()
+	if rec.attached[surf] {
+		t.Error("the destroyed surface keeps its input handler")
 	}
 }
