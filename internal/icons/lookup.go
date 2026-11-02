@@ -343,7 +343,9 @@ func (ix *themeIndex) resolve(name string, size, scale int) string {
 // find runs the spec lookup over the slots holding name or, for a
 // -symbolic name, its unsuffixed base, which themes often ship alone:
 // each theme of the chain, then the unthemed base directories, then the
-// bundled set.
+// bundled set. A plain name nothing holds then tries its -symbolic form,
+// the only one newer themes ship of many names, as Adwaita does
+// audio-volume-medium; GTK falls back the same way.
 func (ix *themeIndex) find(name string, size, scale int) string {
 	alt, symbolic := strings.CutSuffix(name, symbolicSuffix)
 	st := stems{name: name, nameHits: ix.stems[name]}
@@ -365,7 +367,10 @@ func (ix *themeIndex) find(name string, size, scale int) string {
 			return path
 		}
 	}
-	return lookupBuiltin(name)
+	if path := lookupBuiltin(name); path != "" || symbolic || name == "" {
+		return path
+	}
+	return ix.find(name+symbolicSuffix, size, scale)
 }
 
 // lookupTheme runs both spec passes for one theme. A theme that has no

@@ -21,7 +21,10 @@ func refResolve(ix refDirIndex, chain []*Theme, paths []string, name string, siz
 	if path := refLookupUnthemed(ix, paths, name); path != "" {
 		return path
 	}
-	return lookupBuiltin(name)
+	if path := lookupBuiltin(name); path != "" || strings.HasSuffix(name, symbolicSuffix) || name == "" {
+		return path
+	}
+	return refResolve(ix, chain, paths, name+symbolicSuffix, size, frac120)
 }
 
 func refLookupTheme(ix refDirIndex, t *Theme, baseDirs []string, name string, size, scale int) string {

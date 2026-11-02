@@ -606,6 +606,36 @@ func TestDecodeImage(t *testing.T) {
 	})
 }
 
+func TestAPlainNameFindsAThemesSymbolicIcon(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "icons", "Only", "symbolic", "status")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	index := "[Icon Theme]\nName=Only\nDirectories=symbolic/status\n\n[symbolic/status]\nSize=16\nMinSize=8\nMaxSize=512\nType=Scalable\n"
+	if err := os.WriteFile(filepath.Join(root, "icons", "Only", "index.theme"), []byte(index), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	both := []string{"only-symbolic.svg", "both.svg", "both-symbolic.svg"}
+	for _, name := range both {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("<svg/>"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := New("Only")
+	c.SetSearchPaths([]string{filepath.Join(root, "icons")})
+	got, err := c.Lookup("only", 16, 120)
+	if err != nil || filepath.Base(got) != "only-symbolic.svg" {
+		t.Errorf("a plain name with only a symbolic icon = %q, %v", got, err)
+	}
+	if got, err := c.Lookup("both", 16, 120); err != nil || filepath.Base(got) != "both.svg" {
+		t.Errorf("a plain name with both = %q, %v, want the plain icon", got, err)
+	}
+	if _, err := c.Lookup("neither", 16, 120); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a name with neither: %v", err)
+	}
+}
+
 func TestIsSymbolic(t *testing.T) {
 	plain := []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"></svg>`)
 	sym := []byte(`<svg fill="currentColor" xmlns="http://www.w3.org/2000/svg"></svg>`)
@@ -753,4 +783,3 @@ func TestLookupIndexesDirectories(t *testing.T) {
 		t.Errorf("installed icon after InvalidateTheme: %q, %v", path, err)
 	}
 }
-
