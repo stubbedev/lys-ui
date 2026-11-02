@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.2
+
+- `PopoverConfig.Dismissal` replaces `NoAutohide`. The new
+  `PopoverClickAway` closes on a click elsewhere without a seat grab, so
+  keys stay with the focused window until a click into the popover.
+- `PopoverConfig.Exit` plays a popover's way out whatever closes it, and
+  `Popover.Close` skips it.
+- A menu nested in a popover without a grab no longer kills the client with a
+  protocol error.
+
 ## v0.1.1
 
 Dependencies only: lys-lib at the commit of its v0.2.1 and the latest modules.
