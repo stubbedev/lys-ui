@@ -101,12 +101,30 @@ func (d *SegmentDrop) snap(r render.Rect) {
 }
 
 func (d *SegmentDrop) head(r render.Rect) {
+	at := d.owner.bounds
+	d.pullInside(dropLeft, dropRight, float64(at.W))
+	d.pullInside(dropTop, dropBottom, float64(at.H))
 	to := dropEdges(r)
 	d.shape(dropLeft, dropRight, to)
 	d.shape(dropTop, dropBottom, to)
 	for i, v := range to {
 		d.edges[i].SetTarget(v)
 	}
+}
+
+func (d *SegmentDrop) pullInside(near, far int, size float64) {
+	lo, hi := d.edges[near].Position()[0], d.edges[far].Position()[0]
+	length := hi - lo
+	switch {
+	case lo >= size:
+		lo, hi = max(size-length, 0), size
+	case hi <= 0:
+		lo, hi = 0, min(length, size)
+	default:
+		return
+	}
+	d.edges[near].Snap(lo)
+	d.edges[far].Snap(hi)
 }
 
 func (d *SegmentDrop) shape(near, far int, to [4]float64) {

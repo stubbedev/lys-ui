@@ -433,14 +433,10 @@ func (s *SegmentIndicator) SetActive(i int) {
 }
 
 // ShiftActive is SetActive for the same item at a new index, after
-// segments before it came or went: an enabled drop does not travel for
-// it, it stays on the item.
-func (s *SegmentIndicator) ShiftActive(i int) {
-	s.markActive(i)
-	if s.drop != nil {
-		s.drop.travel = false
-	}
-}
+// segments before it came or went: it starts no travel for an enabled
+// drop, which stays on the item, and it leaves one already under way or
+// still owed to the next frame alone.
+func (s *SegmentIndicator) ShiftActive(i int) { s.markActive(i) }
 
 func (s *SegmentIndicator) markActive(i int) bool {
 	if i < 0 || i >= len(s.segs) {

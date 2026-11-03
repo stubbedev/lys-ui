@@ -414,3 +414,67 @@ func TestDropFollowsTheRowWhenTheBarMovesIt(t *testing.T) {
 	r.settled()
 	r.onSegment(1)
 }
+
+func TestDropTravelSurvivesARebuildBeforeTheNextFrame(t *testing.T) {
+	r := newDropRig(t, BarTop, 4)
+	r.activate(0)
+	r.segs.SetActive(3)
+	r.segs.ShiftActive(3)
+	r.frame()
+	if !r.drop.Moving() {
+		t.Fatal("a second rebuild of the same workspace cancelled the travel")
+	}
+	r.land()
+	r.onSegment(3)
+}
+
+func TestDropTravelSurvivesAnIndexShiftBeforeTheNextFrame(t *testing.T) {
+	r := newDropRig(t, BarTop, 4)
+	r.activate(0)
+	r.segs.SetActive(3)
+	r.segs.SetCount(3)
+	r.segs.SetActive(2)
+	r.segs.ShiftActive(2)
+	r.frame()
+	if !r.drop.Moving() {
+		t.Fatal("the shift cancelled the travel")
+	}
+	r.land()
+	r.onSegment(2)
+}
+
+func TestDropStaysVisibleWhenTheRowShrinksPastIt(t *testing.T) {
+	r := newDropRig(t, BarTop, 4)
+	r.activate(3)
+	r.segs.SetCount(2)
+	r.segs.SetActive(0)
+	r.frame()
+	row := r.segs.Bounds()
+	check := func() {
+		t.Helper()
+		if d := r.drop.Bounds(); d.Empty() || d.X < row.X || d.X+d.W > row.X+row.W {
+			t.Fatalf("the drop at %v in the row %v", d, row)
+		}
+	}
+	check()
+	for r.clock.step() {
+		r.frame()
+		check()
+	}
+	r.frame()
+	r.settled()
+	r.onSegment(0)
+}
+
+func TestDropWithOneSegmentLeftLandsOnIt(t *testing.T) {
+	r := newDropRig(t, BarTop, 2)
+	r.activate(1)
+	r.segs.SetCount(1)
+	r.segs.SetActive(0)
+	r.frame()
+	r.land()
+	r.onSegment(0)
+	if d := r.drop.Bounds(); d.Empty() {
+		t.Error("the drop vanished")
+	}
+}
