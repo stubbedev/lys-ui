@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.2.2
+
+- The latest `lys-lib` and modules: drawing icons allocates nothing.
+
 ## v0.2.1
 
 - `LayerConfig.OwnMotion`, `BackdropRegioner`, and a way to decode icons off the UI loop before they paint.
