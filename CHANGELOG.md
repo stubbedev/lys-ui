@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.1
+
+- `LayerConfig.OwnMotion`, `BackdropRegioner`, and a way to decode icons off the UI loop before they paint.
+- Reduced motion: the toolkit follows `org.freedesktop.appearance reduced-motion`, replacing motion with fades.
+- Spring and bezier maths come from lys-lib's `motion`.
+- Cursors load through lys-lib's `xcursor`. Red and blue are no longer swapped where the compositor lacks cursor-shape-v1, a size a file lacks takes the nearest size, `Inherits` lists are followed, and a truncated file is an error instead of a panic.
+- A plain icon name falls back to its `-symbolic` form after every theme, as GTK does.
+- After a bus restart, settings such as dark mode could stay wrong: a portal missing during the reconnect was read as "no preference" and never read again.
+- A `url()` cursor added itself to the shared memory pool on every apply, so the pool grew without limit.
+- A field closing while focused left its caret blinking for up to 10 s, waking the loop for nothing.
+
 ## v0.2.0
 
 - `PopoverConfig.BackgroundBlur` asks the compositor to blur behind a popover through `ext_background_effect_v1`, from its first frame.
