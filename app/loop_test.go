@@ -146,32 +146,31 @@ func TestKeyRepeatLatency(t *testing.T) {
 // surface commits at the configured size - gating it deadlocks the
 // resize. The frameOwed rules underneath are pinned in TestFrameOwed.
 func TestShouldDraw(t *testing.T) {
-	t0 := time.Now()
 	t.Run("an idle window never draws", func(t *testing.T) {
-		if shouldDraw(&hostWindow{}, false, t0, false) {
+		if shouldDraw(&hostWindow{}, false) {
 			t.Error("undirtied window drew")
 		}
 	})
 	t.Run("a dirty window waits for its frame callback", func(t *testing.T) {
-		w := &hostWindow{dirty: true, framePending: true, frameArmedAt: t0}
-		if shouldDraw(w, false, t0, false) {
+		w := &hostWindow{dirty: true, framePending: true}
+		if shouldDraw(w, false) {
 			t.Error("drew while the previous frame was pending")
 		}
 	})
 	t.Run("a returned callback lets the frame go out", func(t *testing.T) {
-		if !shouldDraw(&hostWindow{dirty: true}, false, t0, false) {
+		if !shouldDraw(&hostWindow{dirty: true}, false) {
 			t.Error("pacing blocked a ready frame")
 		}
 	})
-	t.Run("a stale animation frame goes out", func(t *testing.T) {
-		w := &hostWindow{dirty: true, framePending: true, frameArmedAt: t0}
-		if !shouldDraw(w, true, t0.Add(frameStaleAfter), false) {
-			t.Error("occluded animation stalled")
+	t.Run("a window the compositor stopped answering commits nothing", func(t *testing.T) {
+		w := &hostWindow{dirty: true, framePending: true}
+		if shouldDraw(w, false) {
+			t.Error("a frame went out with the last callback unheard")
 		}
 	})
 	t.Run("a configure resize bypasses pacing", func(t *testing.T) {
-		w := &hostWindow{dirty: true, framePending: true, frameArmedAt: t0}
-		if !shouldDraw(w, false, t0, true) {
+		w := &hostWindow{dirty: true, framePending: true}
+		if !shouldDraw(w, true) {
 			t.Error("resize repaint blocked by pacing; the resize would deadlock")
 		}
 	})
@@ -247,20 +246,11 @@ func TestAnimatingLoopWakesOnFrameDeadlines(t *testing.T) {
 // through only once its callback has gone unheard past the staleness
 // bound - the occluded case the animation timer covers.
 func TestFrameOwed(t *testing.T) {
-	t0 := time.Now()
-	w := &hostWindow{framePending: true, frameArmedAt: t0}
-
-	if !(&hostWindow{}).frameOwed(true, t0) {
+	if !(&hostWindow{}).frameOwed() {
 		t.Error("window without a pending frame was not owed one")
 	}
-	if w.frameOwed(false, t0.Add(time.Second)) {
+	if (&hostWindow{framePending: true}).frameOwed() {
 		t.Error("pending frame drawn past without the callback")
-	}
-	if w.frameOwed(true, t0.Add(animclock.FrameInterval)) {
-		t.Error("animation drew over a fresh pending frame")
-	}
-	if !w.frameOwed(true, t0.Add(frameStaleAfter)) {
-		t.Error("animation did not take over after the callback went stale")
 	}
 }
 

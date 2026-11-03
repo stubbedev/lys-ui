@@ -942,13 +942,9 @@ func (a *Application) tick(step func() error, now time.Time) error {
 		w.enterIfDue()
 		// Draw when something changed: a configure-driven resize
 		// repaint always goes out (a pacing-gated one deadlocks,
-		// see shouldDraw), otherwise the frameOwed pacing decides:
-		// either the previous frame's callback returned, or an
-		// animation's timer deadline passed with the callback
-		// still unheard - an occluded surface stops receiving
-		// callbacks, and the animation clock keeps it moving at
-		// the frame period.
-		if shouldDraw(w, animating, now, resized) {
+		// see shouldDraw), otherwise the previous frame's callback
+		// must have returned.
+		if shouldDraw(w, resized) {
 			w.dirty = false
 			if !w.draw() {
 				// A wire failure mid-frame (attach/commit on a dead

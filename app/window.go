@@ -33,7 +33,6 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 	"github.com/stubbedev/lys-lib/wlr"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/blursync"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
@@ -170,10 +169,6 @@ type hostWindow struct {
 	dirty        bool
 	frameReady   bool
 	framePending bool
-	// frameArmedAt is when the pending frame callback was armed; the
-	// animation clock judges a callback dead (occluded surface) once
-	// it stays unanswered past frameStaleAfter.
-	frameArmedAt time.Time
 	drawErr      error
 	// paintedPixels is the pixel count the last frame actually wrote
 	// on the CPU, and the area of the region it repainted on the GPU;
@@ -765,27 +760,16 @@ func (s wireSurface) SetOpaqueRegion(w, h int, holes []render.Rect) error {
 	return region.Destroy()
 }
 
-// frameStaleAfter is how long a committed frame may sit unanswered
-// before the loop treats the compositor as paused and lets the
-// animation timer pace the draw itself. One and a half frame periods:
-// safely past callback jitter at any refresh rate, tight enough to
-// keep an occluded tween moving.
-const frameStaleAfter = 3 * animclock.FrameInterval / 2
-
 // maxLayoutPasses bounds the re-layouts one draw runs while the tree
 // settles (each level of newly parented widgets can take one).
 const maxLayoutPasses = 4
 
-// frameOwed reports whether a dirty window may commit a frame now:
-// normally the previous frame's callback must have returned, but a
-// running animation whose callback went unheard past frameStaleAfter
-// draws on the animation clock's timer instead.
-func (w *hostWindow) frameOwed(animating bool, now time.Time) bool {
-	if !w.framePending {
-		return true
-	}
-	return animating && now.Sub(w.frameArmedAt) >= frameStaleAfter
-}
+// frameOwed reports whether a dirty window may commit a frame now: the
+// previous frame's callback has returned. A window the compositor stopped
+// answering (occluded, on another workspace) commits nothing until it answers
+// again; its animations keep their time on the animation clock, and the frame
+// it then draws shows them where they are.
+func (w *hostWindow) frameOwed() bool { return !w.framePending }
 
 // syncOpaque publishes the surface's opaque region when it can have
 // changed: the full surface rect, in the protocol's surface-local
@@ -988,7 +972,6 @@ func (w *hostWindow) draw() bool {
 
 	debug.Log("frame", "frame committed, waiting for callback")
 	w.framePending = true
-	w.frameArmedAt = time.Now()
 	return true
 }
 

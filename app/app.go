@@ -433,13 +433,10 @@ func nextWake(repeat, animFrame, tipNext, timers, now time.Time) (time.Time, boo
 // A configure-driven resize always repaints: compositors hold the
 // surface's frame callback until it commits at the configured size, so
 // a resize repaint gated on pacing would deadlock the resize - a
-// liveness requirement, not politeness. Otherwise frameOwed pacing
-// decides: the previous frame's callback returned, or an animation's
-// timer deadline passed with the callback still unheard (an occluded
-// surface stops getting callbacks and the animation clock keeps it
-// moving at the frame period).
-func shouldDraw(w *hostWindow, animating bool, now time.Time, resized bool) bool {
-	return w.dirty && (resized || w.frameOwed(animating, now))
+// liveness requirement, not politeness. Otherwise the previous frame's
+// callback must have returned (frameOwed).
+func shouldDraw(w *hostWindow, resized bool) bool {
+	return w.dirty && (resized || w.frameOwed())
 }
 
 // frameDone flips ready when the compositor reports the frame as taken
