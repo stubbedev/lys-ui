@@ -346,12 +346,14 @@ const (
 // and Segment reaches its button. A click on a segment reports it
 // through OnSelect. In a vertical bar the segments stack. It styles as the
 // segments element, each segment a button.segment with the active,
-// occupied and urgent classes.
+// occupied and urgent classes. EnableDrop adds one indicator that
+// travels between the segments behind them.
 type SegmentIndicator struct {
 	composite
 	box    *Box
 	segs   []*Button
 	active int
+	drop   *SegmentDrop
 	// OnSelect hears a clicked segment's index.
 	OnSelect func(i int)
 }
@@ -422,18 +424,55 @@ func (s *SegmentIndicator) SetSegmentContent(i int, w Widget) {
 	}
 }
 
-// SetActive makes segment i the active one; out of range, none is.
+// SetActive makes segment i the active one; out of range, none is. An
+// enabled drop travels there from where it is.
 func (s *SegmentIndicator) SetActive(i int) {
-	if s.active >= 0 && s.active < len(s.segs) {
+	if s.markActive(i) && s.drop != nil {
+		s.drop.travel = true
+	}
+}
+
+// ShiftActive is SetActive for the same item at a new index, after
+// segments before it came or went: an enabled drop does not travel for
+// it, it stays on the item.
+func (s *SegmentIndicator) ShiftActive(i int) {
+	s.markActive(i)
+	if s.drop != nil {
+		s.drop.travel = false
+	}
+}
+
+func (s *SegmentIndicator) markActive(i int) bool {
+	if i < 0 || i >= len(s.segs) {
+		i = -1
+	}
+	if i == s.active {
+		return false
+	}
+	if s.active >= 0 {
 		s.segs[s.active].RemoveClass(segmentActive)
 		s.segs[s.active].SetState(StateChecked, false)
 	}
-	s.active = -1
-	if i >= 0 && i < len(s.segs) {
-		s.active = i
+	s.active = i
+	if i >= 0 {
 		s.segs[i].AddClass(segmentActive)
 		s.segs[i].SetState(StateChecked, true)
 	}
+	s.Invalidate()
+	return true
+}
+
+// EnableDrop gives the row its one travelling indicator and returns it,
+// for its classes and inline style. The stylesheet draws it: the
+// indicator element takes any box the segments would, and without a
+// rule it paints nothing. A row that never calls this keeps no
+// animation state.
+func (s *SegmentIndicator) EnableDrop() *SegmentDrop {
+	if s.drop == nil {
+		s.drop = newSegmentDrop(s)
+		s.Invalidate()
+	}
+	return s.drop
 }
 
 // Active is the active segment, -1 for none.
@@ -465,4 +504,31 @@ func (s *SegmentIndicator) Measure(axis Axis, forSize int) Sizes {
 		s.box.SetAxis(along)
 	}
 	return s.composite.Measure(axis, forSize)
+}
+
+// Arrange lays the segments out, then settles an enabled drop on what
+// their boxes now are.
+func (s *SegmentIndicator) Arrange(r render.Rect) {
+	s.composite.Arrange(r)
+	if s.drop != nil {
+		s.drop.follow(s.Segment(s.active))
+	}
+}
+
+// Paint draws the row's box, an enabled drop on it, and the segments
+// over the drop.
+func (s *SegmentIndicator) Paint(cv *render.Canvas) {
+	s.paintSurface(cv, s.insets().margin.Shrink(s.bounds), 0)
+	if s.drop != nil {
+		s.drop.paint(cv)
+	}
+	PaintChild(cv, s.root)
+}
+
+func (s *SegmentIndicator) appendStyleKids(buf []Widget) []Widget {
+	buf = s.composite.appendStyleKids(buf)
+	if s.drop != nil {
+		buf = append(buf, s.drop)
+	}
+	return buf
 }

@@ -6898,6 +6898,11 @@ func (b *SearchEntryBuilder) MaxWidth(value int) *SearchEntryBuilder {
 	return b
 }
 
+// SegmentDropBuilder builds a widget.SegmentDrop.
+type SegmentDropBuilder struct {
+	base[*widget.SegmentDrop, *SegmentDropBuilder]
+}
+
 // SegmentIndicatorBuilder builds a widget.SegmentIndicator.
 type SegmentIndicatorBuilder struct {
 	base[*widget.SegmentIndicator, *SegmentIndicatorBuilder]
