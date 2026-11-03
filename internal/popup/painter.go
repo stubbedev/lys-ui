@@ -299,7 +299,13 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	}
 	pc.pool.Presented(b, changed)
 	pc.framePending = true
-	debug.Log("frame", "popup %d committed %dx%d: %d region(s) in %v", pc.surf.Id(), b.Width, b.Height, len(regions), time.Since(start))
+	if debug.Enabled {
+		painted := 0
+		for _, r := range regions {
+			painted += r.W * r.H
+		}
+		debug.Log("frame", "popup %d committed %dx%d: %d region(s), %d px in %v", pc.surf.Id(), b.Width, b.Height, len(regions), painted, time.Since(start))
+	}
 	return true, true, nil
 }
 

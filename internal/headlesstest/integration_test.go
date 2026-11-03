@@ -1131,11 +1131,11 @@ func TestHeadlessPopoverTakesTypingAndRepaints(t *testing.T) {
 		if err != nil {
 			t.Fatalf("popover frame %d after the timer change never painted: %v\n%s", i, err, tailTraces(w, 25))
 		}
-		var pid, pw, ph, rw, rh int
-		if _, err := fmt.Sscanf(tr.Message, "popup %d committed %dx%d: region %dx%d", &pid, &pw, &ph, &rw, &rh); err != nil {
+		var pid, pw, ph, regions, painted int
+		if _, err := fmt.Sscanf(tr.Message, "popup %d committed %dx%d: %d region(s), %d px", &pid, &pw, &ph, &regions, &painted); err != nil {
 			t.Fatalf("bad frame trace %q: %v", tr.Message, err)
 		}
-		partial = rw*rh < pw*ph/2
+		partial = painted < pw*ph/2
 	}
 	if !partial {
 		t.Errorf("every ticker frame repainted the whole popover\n%s", tailTraces(w, 25))
