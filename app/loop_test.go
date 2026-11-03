@@ -46,13 +46,15 @@ func TestNextWake(t *testing.T) {
 
 	t.Run("a held key wakes at its repeat deadline", func(t *testing.T) {
 		rep := newKeyRepeater(0, 0)
+		before := time.Now()
 		rep.press(30, 0)
+		after := time.Now()
 		wake, ok := nextWake(repNext(rep), animNext(), never, never, now)
 		if !ok {
 			t.Fatal("held key did not schedule a wakeup")
 		}
-		if d := time.Until(wake); d < 300*time.Millisecond || d > 500*time.Millisecond {
-			t.Errorf("wake in %v, want ~400ms repeat delay", d)
+		if wake.Before(before.Add(rep.delay)) || wake.After(after.Add(rep.delay)) {
+			t.Errorf("wake %v after the press began, want the repeat delay %v", wake.Sub(before), rep.delay)
 		}
 	})
 
@@ -275,8 +277,8 @@ func TestTooltipNext(t *testing.T) {
 		if !ok {
 			t.Fatal("pending tooltip did not schedule a wakeup")
 		}
-		if d := time.Until(wake); d < 300*time.Millisecond || d > 500*time.Millisecond {
-			t.Errorf("wake in %v, want ~500ms tooltip delay", d)
+		if got := wake.Sub(tip.since); got != tooltipDelay {
+			t.Errorf("wake %v after the hover began, want the tooltip delay %v", got, tooltipDelay)
 		}
 	})
 
