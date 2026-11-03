@@ -293,3 +293,42 @@ func TestBoxArrangesForItsAllocationNotAStaleMeasure(t *testing.T) {
 		t.Errorf("header %v, want 200x20 after the zero-height probe", b)
 	}
 }
+
+// countingLeaf counts its paints.
+type countingLeaf struct {
+	stub
+	paints int
+}
+
+func (c *countingLeaf) Paint(*render.Canvas) { c.paints++ }
+
+// A repaint elsewhere does not re-render a layered box: a filter's layer and
+// its subtree cost nothing when nothing of them would land. A box the repaint
+// touches still renders.
+func TestLayeredBoxOutsideTheClipSkipsItsLayer(t *testing.T) {
+	loadCSS(t, `.fx { opacity: 0.5; } .blurred { backdrop-filter: blur(4px); }`)
+	for _, class := range []string{"fx", "blurred"} {
+		leaf := &countingLeaf{nat: Size{W: 50, H: 50}}
+		b := NewBox(Column, 0, 0)
+		b.AddClass(class)
+		b.Append(leaf, true)
+		settle(t, b, 50, 50)
+		b.Arrange(render.Rect{W: 50, H: 50})
+		data := make([]byte, render.Stride(200)*200)
+		cv := render.NewScaled(data, render.Stride(200), 200, 200, 1, 1)
+
+		prev := cv.PushClipDevice(render.Rect{X: 100, Y: 100, W: 20, H: 20})
+		PaintChild(cv, b)
+		cv.PopClip(prev)
+		if leaf.paints != 0 {
+			t.Errorf("%s: a repaint elsewhere painted the subtree %d times", class, leaf.paints)
+		}
+
+		prev = cv.PushClipDevice(render.Rect{X: 10, Y: 10, W: 5, H: 5})
+		PaintChild(cv, b)
+		cv.PopClip(prev)
+		if leaf.paints != 1 {
+			t.Errorf("%s: a repaint inside painted the subtree %d times, want once", class, leaf.paints)
+		}
+	}
+}

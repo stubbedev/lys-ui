@@ -966,6 +966,7 @@ func PaintChild(cv *render.Canvas, w Widget) {
 		n.paintShared(cv, w)
 	case n != nil && n.moving(w):
 		n.paintMoving(cv, w)
+	case n != nil && effectsClippedOut(cv, n.style(w), n.bounds):
 	default:
 		w.Paint(cv)
 	}

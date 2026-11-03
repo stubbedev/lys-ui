@@ -61,6 +61,29 @@ func effectsHeavy(v *style.Values) bool {
 	return v.Has(style.PropIsolation) && v.Isolate
 }
 
+// effectsClippedOut reports whether v's offscreen work lands wholly outside
+// cv's clip: a layer the subtree renders into, or a backdrop it blurs, whose
+// result nothing would see. A repaint elsewhere in the window skips them. A
+// subtree without either paints by the clip as it goes, so it is not
+// clipped out here: what it costs is what it draws.
+func effectsClippedOut(cv *render.Canvas, v *style.Values, bounds render.Rect) bool {
+	if v.Has(style.PropTransform) {
+		return false
+	}
+	backdrop := v.Has(style.PropBackdropFilter) && !v.Backdrop.Empty()
+	if !backdrop && !effectsHeavy(v) {
+		return false
+	}
+	reach := bounds
+	if !backdrop || effectsHeavy(v) {
+		reach = v.Filter.Extent().Grow(bounds)
+	}
+	dev := cv.MapRect(reach)
+	clip := cv.PushClipDevice(dev)
+	cv.PopClip(clip)
+	return clip.Intersect(dev).Empty()
+}
+
 // pushEffects applies the subtree effects — opacity, brightness, and
 // the rendering effects of #159 — and returns the state pop
 // composites with. bounds and radii are the border box the effects
