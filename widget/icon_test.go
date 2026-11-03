@@ -527,3 +527,37 @@ func TestPreloadOfAMissingIconAnswersAndPaintsNothing(t *testing.T) {
 		t.Error("a missing icon paints nothing")
 	}
 }
+
+// An icon that has not painted has no raster to expire: however the theme
+// moves, the damage walk must not call it dirty, or a window with one out of
+// its repaint would repaint forever. One that has painted expires once.
+func TestThemeChangeExpiresOnlyAResolvedIcon(t *testing.T) {
+	root := t.TempDir()
+	SetIconSearchPaths([]string{root})
+	t.Cleanup(func() { SetIconSearchPaths(nil) })
+	unpainted := NewThemeIconFallback("no-such-icon", 16)
+	unpainted.takeDamage()
+	icons.Default().InvalidateTheme()
+	gen := DamageGeneration()
+	for range 3 {
+		if _, _, dirty := unpainted.takeDamage(); dirty {
+			t.Error("an icon that never painted owed a repaint on a later walk")
+		}
+	}
+	if got := DamageGeneration(); got != gen {
+		t.Errorf("the walks moved the damage generation %d -> %d", gen, got)
+	}
+
+	painted := NewThemeIconFallback("no-such-icon", 16)
+	data := make([]byte, render.Stride(32)*32)
+	painted.Arrange(render.Rect{W: 16, H: 16})
+	painted.Paint(render.New(data, render.Stride(32), 32, 32))
+	painted.takeDamage()
+	icons.Default().InvalidateTheme()
+	if _, _, dirty := painted.takeDamage(); !dirty {
+		t.Error("a theme change did not expire the icon that painted")
+	}
+	if _, _, dirty := painted.takeDamage(); dirty {
+		t.Error("an expired icon owed a second repaint before painting again")
+	}
+}

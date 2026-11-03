@@ -274,9 +274,10 @@ func (i *Icon) HitTest(p Point) Widget {
 // SetTheme or InvalidateTheme call - there is no live theme-change
 // signal by design; see icons.Cache), so the repaint this pass owes
 // draws the new theme. Without the check the damage collector would
-// see a clean widget and skip the switch.
+// see a clean widget and skip the switch. An icon that never resolved holds
+// nothing to expire: its first paint reads the current theme.
 func (i *Icon) takeDamage() (bounds render.Rect, extra []render.Rect, dirty bool) {
-	if i.kind == iconTheme && i.resolvedGen != icons.Default().Generation() {
+	if i.kind == iconTheme && i.resolvedFrac != 0 && i.resolvedGen != icons.Default().Generation() {
 		i.expire()
 	}
 	return i.node.takeDamage()
