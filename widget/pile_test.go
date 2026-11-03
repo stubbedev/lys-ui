@@ -158,3 +158,57 @@ func TestPileExpandAnimates(t *testing.T) {
 		t.Errorf("mid-flight the second card shows at %d, want between %d and %d", y, from, to)
 	}
 }
+
+// A card buried past the peek unfolds like the peeking ones: it sets
+// out from under the pile, neither snapping to its place nor growing
+// there from nothing.
+func TestPileBuriedCardsUnfoldFromUnderThePile(t *testing.T) {
+	c := pinAnimClock(t)
+	p := NewPile()
+	cards := []*stub{newStub(200, 40), newStub(200, 40), newStub(200, 40), newStub(200, 40), newStub(200, 40)}
+	for _, card := range cards {
+		p.Append(card)
+	}
+	settle(t, p, 200, 400)
+	paintTree(p, 200, 400)
+	paintTree(p, 200, 400)
+	buried := cards[4]
+	from := ShownRect(buried)
+	p.SetExpanded(true)
+	settle(t, p, 200, 400)
+	paintTree(p, 200, 400)
+	to := buried.Bounds()
+	first := ShownRect(buried)
+	if first.Y >= to.Y || first.H == 0 {
+		t.Errorf("the expanding frame shows it at %v, want on its way from %v to %v", first, from, to)
+	}
+	c.step()
+	c.step()
+	paintTree(p, 200, 400)
+	if mid := ShownRect(buried); mid.Y <= from.Y || mid.Y >= to.Y || mid.H == 0 {
+		t.Errorf("mid-flight it shows at %v, want between %v and %v", mid, from, to)
+	}
+}
+
+// At rest, a buried card shows nothing: the last peek keeps its depth's
+// opacity however many cards lie under it.
+func TestPileBuriedCardsPaintNothingAtRest(t *testing.T) {
+	loadCSS(t, `.card { background-color: #0000ff; }`)
+	t.Cleanup(anim.SetInstant(true))
+	shape := func(n int) render.Color {
+		p := NewPile()
+		for range n {
+			card := NewBox(Column, 0, 0)
+			card.AddClass("card")
+			card.Append(&solidLeaf{sz: Size{W: 200, H: 40}, col: render.RGB(255, 0, 0)}, false)
+			p.Append(card)
+		}
+		settle(t, p, 200, 80)
+		paintTree(p, 200, 80)
+		data := paintTree(p, 200, 80)
+		return render.ColorFromBytes(data[52*render.Stride(200)+100*4:])
+	}
+	if with, without := shape(5), shape(3); with != without {
+		t.Errorf("past the front, buried cards change the pile: %#08x, want %#08x", uint32(with), uint32(without))
+	}
+}

@@ -300,20 +300,24 @@ func (p *Pile) Paint(cv *render.Canvas) {
 		}
 		return
 	}
-	for i := p.shownPeeks(); i > 0; i-- {
+	peeks := p.shownPeeks()
+	for i := len(vis) - 1; i > 0; i-- {
 		w := vis[i]
 		n := nodeOf(w)
 		if n == nil {
 			continue
 		}
-		// The card's spring keeps moving while it peeks, so expanding
-		// sets out from where it shows.
-		n.moving(w)
+		// Every card's spring keeps moving, buried ones too, so expanding
+		// sets out from under the pile; a buried card shows only on its
+		// way down from an expanded column.
+		if flying := n.moving(w); i > peeks && !flying {
+			continue
+		}
 		shown := ShownRect(w)
 		if box, bn := peekBox(w); bn != nil {
 			r := ShownRect(box)
 			r.X, r.Y = r.X+shown.X-n.bounds.X, r.Y+shown.Y-n.bounds.Y
-			prev := cv.PushAlpha(float64(depthPow(p.opacity, i)))
+			prev := cv.PushAlpha(float64(depthPow(p.opacity, min(i, peeks))))
 			paintCSSBox(cv, bn.style(box), r)
 			cv.PopAlpha(prev)
 		}
