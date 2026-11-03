@@ -262,11 +262,13 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 		return false, false, err
 	}
 	start := time.Now()
-	if err := pc.pool.CopyForward(b, pc.copier()); err != nil {
-		return false, false, err
+	if !pc.damage.Covers(b.Stale, int(pc.frac120)) {
+		if err := pc.pool.CopyForward(b, pc.copier()); err != nil {
+			return false, false, err
+		}
 	}
-	rects, changed, region := pc.damage.Plan(b, int(pc.frac120))
-	drawn, err := pc.paint(b, region)
+	rects, changed, regions := pc.damage.Plan(b, int(pc.frac120))
+	drawn, err := pc.paint(b, regions)
 	if err != nil {
 		return false, false, err
 	}
@@ -297,7 +299,7 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	}
 	pc.pool.Presented(b, changed)
 	pc.framePending = true
-	debug.Log("frame", "popup %d committed %dx%d: region %dx%d in %v", pc.surf.Id(), b.Width, b.Height, region.W, region.H, time.Since(start))
+	debug.Log("frame", "popup %d committed %dx%d: %d region(s) in %v", pc.surf.Id(), b.Width, b.Height, len(regions), time.Since(start))
 	return true, true, nil
 }
 
@@ -334,17 +336,19 @@ func (pc *Painter) syncBlur() {
 // that failed never reaches the compositor: b goes back, the popup
 // turns to the CPU, and paint reports false for the next pass to
 // repaint.
-func (pc *Painter) paint(b *buffer.Buffer, region render.Rect) (bool, error) {
+func (pc *Painter) paint(b *buffer.Buffer, regions []render.Rect) (bool, error) {
 	// The region raw-clears to transparent: with a shadow gutter the
 	// falloff must blend over whatever the popup floats above, and a
 	// recycled buffer must not leak its last frame through. The morph
 	// paints shadow, plate and content together, so the motion carries
 	// the elevation with the popup.
 	draw := func(cv *render.Canvas) {
-		prev := cv.PushClipDevice(region)
-		cv.ClearDevice(region, render.Color(0))
-		pc.visual.Paint(cv)
-		cv.PopClip(prev)
+		for _, region := range regions {
+			prev := cv.PushClipDevice(region)
+			cv.ClearDevice(region, render.Color(0))
+			pc.visual.Paint(cv)
+			cv.PopClip(prev)
+		}
 	}
 	if b.Target == nil {
 		draw(render.NewScaled(b.Data, b.Stride, b.Width, b.Height, int(pc.frac120), scale.Denom))

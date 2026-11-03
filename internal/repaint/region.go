@@ -25,6 +25,8 @@ type Region struct {
 	seen uint64
 	// dev is the scratch the device rects of a frame are built in.
 	dev []render.Rect
+	// regions is the scratch the frame's paint regions are built in.
+	regions []render.Rect
 	// drained is the scratch a tree's damage drains into.
 	drained []render.Rect
 }
@@ -70,9 +72,9 @@ func (r *Region) Empty() bool { return len(r.pending) == 0 }
 // staleness: a fresh buffer's first paint covers the whole surface
 // but changes nothing the screen did not already show, so the pool
 // must not count it against the other buffers (buffer.Pool.Presented).
-// region bounds rects, the clip the frame paints in. rects is reused
-// by the next Plan.
-func (r *Region) Plan(b *buffer.Buffer, num int) (rects []render.Rect, changed, region render.Rect) {
+// regions covers rects, the clips the frame paints in. Both slices are
+// reused by the next Plan.
+func (r *Region) Plan(b *buffer.Buffer, num int) (rects []render.Rect, changed render.Rect, regions []render.Rect) {
 	bounds := render.Rect{W: b.Width, H: b.Height}
 	rects = r.dev[:0]
 	for _, d := range r.pending {
@@ -86,5 +88,73 @@ func (r *Region) Plan(b *buffer.Buffer, num int) (rects []render.Rect, changed, 
 	}
 	r.pending = r.pending[:0]
 	r.dev = rects
-	return rects, changed, render.UnionAll(rects)
+	r.regions = coalesce(r.regions[:0], rects)
+	return rects, changed, r.regions
+}
+
+// Covers reports whether one owed rect, at device scale num/scale.Denom,
+// holds all of stale: the frame repaints it anyway, so copying it forward
+// first is work thrown away.
+func (r *Region) Covers(stale render.Rect, num int) bool {
+	if stale.Empty() {
+		return false
+	}
+	for _, d := range r.pending {
+		if d = render.MapRect(d, num, scale.Denom); d.Intersect(stale) == stale {
+			return true
+		}
+	}
+	return false
+}
+
+// maxRegions bounds how many times a frame walks the tree.
+const maxRegions = 4
+
+// area is a rect's pixels.
+func area(r render.Rect) int { return r.W * r.H }
+
+// Area is the pixels of regions.
+func Area(regions []render.Rect) int {
+	total := 0
+	for _, r := range regions {
+		total += area(r)
+	}
+	return total
+}
+
+// worthMerging reports whether painting two rects' box beats painting them
+// apart: they touch, or the box is little more than they are. A walk of the
+// tree costs something too, so a box of up to twice their pixels wins.
+func worthMerging(a, b render.Rect) bool {
+	return !a.Intersect(b).Empty() || area(a.Union(b)) <= 2*(area(a)+area(b))
+}
+
+// coalesce appends to dst the regions covering rects: disjoint damage stays
+// apart unless its box is hardly bigger, and at most maxRegions come out.
+func coalesce(dst, rects []render.Rect) []render.Rect {
+	for _, r := range rects {
+		for i := 0; i < len(dst); {
+			if worthMerging(dst[i], r) {
+				r = r.Union(dst[i])
+				dst[i] = dst[len(dst)-1]
+				dst = dst[:len(dst)-1]
+				i = 0
+				continue
+			}
+			i++
+		}
+		if len(dst) == maxRegions {
+			at := 0
+			for i := 1; i < len(dst); i++ {
+				if area(dst[i].Union(r)) < area(dst[at].Union(r)) {
+					at = i
+				}
+			}
+			r = r.Union(dst[at])
+			dst[at] = dst[len(dst)-1]
+			dst = dst[:len(dst)-1]
+		}
+		dst = append(dst, r)
+	}
+	return dst
 }

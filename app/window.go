@@ -894,9 +894,11 @@ func (w *hostWindow) draw() bool {
 		w.drawErr = fmt.Errorf("app: acquire buffer: %w", err)
 		return false
 	}
-	if err := w.pool.CopyForward(b, w.copier()); err != nil {
-		w.drawErr = err
-		return false
+	if !w.damage.Covers(b.Stale, w.devNum()) {
+		if err := w.pool.CopyForward(b, w.copier()); err != nil {
+			w.drawErr = err
+			return false
+		}
 	}
 
 	// A buffer with stale content must repaint everything that changed
@@ -904,12 +906,12 @@ func (w *hostWindow) draw() bool {
 	// damage. Fresh buffers are fully stale: the full-repaint fallback
 	// for the first frame, after resizes, and after rescales.
 	// Everything past this point is in device pixels.
-	rects, changed, region := w.damage.Plan(b, w.devNum())
-	debug.Log("frame", "draw %dx%d at %d/120: %d damage rect(s), region %dx%d",
-		bw, bh, w.frac120, len(rects), region.W, region.H)
+	rects, changed, regions := w.damage.Plan(b, w.devNum())
+	debug.Log("frame", "draw %dx%d at %d/120: %d damage rect(s), %d region(s)",
+		bw, bh, w.frac120, len(rects), len(regions))
 
 	if b.Target != nil {
-		ok, err := w.renderer.Frame(b, w.devNum(), func(cv *render.Canvas) { w.paintTree(cv, region) })
+		ok, err := w.renderer.Frame(b, w.devNum(), func(cv *render.Canvas) { w.paintRegions(cv, regions) })
 		if err != nil {
 			w.drawErr = err
 			return false
@@ -924,10 +926,10 @@ func (w *hostWindow) draw() bool {
 			w.dirty = true
 			return true
 		}
-		w.paintedPixels = region.W * region.H
+		w.paintedPixels = repaint.Area(regions)
 	} else {
 		cv := w.canvas.Reset(b.Data, b.Stride, b.Width, b.Height, w.devNum(), scale.Denom)
-		w.paintTree(cv, region)
+		w.paintRegions(cv, regions)
 		w.paintedPixels = cv.Touched()
 	}
 	w.lastDamage = append(w.lastDamage[:0], rects...)
@@ -1046,6 +1048,14 @@ func (w *hostWindow) dropRenderer() {
 // the background, the tree with its overlays on top, and the focus
 // ring right after its widget, in tree order, so what paints later (a
 // card over the list) covers it.
+// paintRegions paints the tree once per region: disjoint damage repaints
+// what it owes, not the box around it.
+func (w *hostWindow) paintRegions(cv *render.Canvas, regions []render.Rect) {
+	for _, region := range regions {
+		w.paintTree(cv, region)
+	}
+}
+
 func (w *hostWindow) paintTree(cv *render.Canvas, region render.Rect) {
 	prev := cv.PushClipDevice(region)
 	cv.ClearDevice(region, w.cfg.background)
