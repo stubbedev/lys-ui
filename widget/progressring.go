@@ -66,7 +66,7 @@ func (r *ProgressRing) SetValue(v float64) {
 	_, medium, _ := Current().MotionDurations()
 	r.cancel = anim.Start(medium, func(t float64) {
 		r.shown = from + float64((v-from)*t)
-		r.Invalidate()
+		r.InvalidateRect(r.trough.bounds)
 	})
 }
 

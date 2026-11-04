@@ -40,7 +40,7 @@ func NewSpinner(size int) *Spinner {
 	s := &Spinner{size: size}
 	s.spin = loop{period: spinnerPeriod, owner: s, step: func(t float64) {
 		s.angle = 2 * math.Pi * t
-		s.Invalidate()
+		s.InvalidateRect(s.inkRect())
 	}}
 	return s
 }
@@ -66,6 +66,14 @@ func (s *Spinner) Measure(axis Axis, forSize int) Sizes {
 		return sz
 	}
 	return s.measureStore(axis, forSize, FixedSizes(s.size))
+}
+
+// inkRect is the square the ring paints in, centered in bounds a
+// container may have stretched.
+func (s *Spinner) inkRect() render.Rect {
+	b := s.bounds
+	side := min(b.W, b.H)
+	return alignRect(b, Size{W: side, H: side}, AlignCenter, AlignCenter)
 }
 
 // Paint draws the open ring at the current angle.

@@ -120,7 +120,7 @@ func (m *meter) paintMeter(cv *render.Canvas, from, to float64) {
 		return
 	}
 	fr := render.Rect{X: inner.X + x0, Y: inner.Y, W: x1 - x0, H: inner.H}
-	m.trough.fill.Arrange(fr)
+	m.trough.fill.place(fr)
 	fv := m.trough.fill.style(&m.trough.fill)
 	fxp := pushEffects(cv, fv, fr, radiusOr(fv, inner.H/2))
 	cv = fxp.cv

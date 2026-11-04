@@ -45,7 +45,7 @@ func NewProgressBar(value float64) *ProgressBar {
 	p.pulse = loop{period: pulsePeriod, owner: p, step: func(t float64) {
 		// A triangle wave: across and back once per period.
 		p.pos = (1 - pulseBlock) * (1 - math.Abs(float64(2*t)-1))
-		p.Invalidate()
+		p.InvalidateRect(p.trough.fill.ink.Grow(p.trough.bounds))
 	}}
 	return p
 }

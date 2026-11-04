@@ -729,6 +729,12 @@ func (n *node) Arrange(r render.Rect) {
 	if r != n.bounds && sensNow.containers && !n.unseen() && n.queryContainer() {
 		restyleSubtree(n.self)
 	}
+	n.place(r)
+}
+
+// place records r as the rect the widget shows at, with no damage: a
+// part its owner positions while painting, inside what it invalidated.
+func (n *node) place(r render.Rect) {
 	n.bounds = r
 	if n.anims != nil {
 		arrangeVolatility++
