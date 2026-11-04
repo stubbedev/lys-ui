@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/goregular"
@@ -54,7 +55,8 @@ func TestOpenButtonChoose(t *testing.T) {
 	if !slices.Equal(got, []string{path}) {
 		t.Fatalf("output = %v, want [%s]", got, path)
 	}
-	if rec := ob.Recents(); len(rec) != 1 || rec[0] != path {
+	pumpUntil(t, a, func() bool { return len(ob.Recents()) == 1 })
+	if rec := ob.Recents(); rec[0] != path {
 		t.Fatalf("recents = %v, want [%s]", rec, path)
 	}
 	m := recentfiles.New(recentfiles.DefaultPath())
@@ -78,12 +80,12 @@ func TestOpenButtonRecentsDropdown(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range paths {
-		if err := m.Add(p, "lys-ui"); err != nil {
+		if err := m.Add("lys-ui", p); err != nil {
 			t.Fatal(err)
 		}
 	}
 	missing := filepath.Join(t.TempDir(), "gone.txt")
-	if err := m.Add(missing, "lys-ui"); err != nil {
+	if err := m.Add("lys-ui", missing); err != nil {
 		t.Fatal(err)
 	}
 	a.recentFiles = m
@@ -92,6 +94,7 @@ func TestOpenButtonRecentsDropdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	pumpUntil(t, a, func() bool { return len(ob.Recents()) > 0 })
 	want := []string{filepath.Base(paths[2]), filepath.Base(paths[1])}
 	if items := ob.recents.Items(); !slices.Equal(items, want) {
 		t.Fatalf("dropdown = %v, want %v", items, want)
@@ -107,6 +110,7 @@ func TestOpenButtonRecentsDropdown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	pumpUntil(t, a, func() bool { return len(unbounded.Recents()) > 0 })
 	if got := len(unbounded.recents.Items()); got > openButtonDefaultRecents {
 		t.Fatalf("default size listed %d, want at most %d", got, openButtonDefaultRecents)
 	}
@@ -122,7 +126,7 @@ func TestOpenButtonDropdownPick(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, p := range paths {
-		if err := m.Add(p, "lys-ui"); err != nil {
+		if err := m.Add("lys-ui", p); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -132,6 +136,7 @@ func TestOpenButtonDropdownPick(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	pumpUntil(t, a, func() bool { return len(ob.Recents()) > 0 })
 	ob.recents.SetSelected(0)
 	if !slices.Equal(got, []string{paths[2]}) {
 		t.Fatalf("output = %v, want the newest [%s]", got, paths[2])
@@ -175,12 +180,66 @@ func TestOpenButtonDialogRouting(t *testing.T) {
 	if !slices.Equal(got, []string{paths[0]}) {
 		t.Fatalf("output = %v, want [%s]", got, paths[0])
 	}
-	if rec := ob.Recents(); len(rec) != 1 || rec[0] != paths[0] {
+	pumpUntil(t, a, func() bool { return len(ob.Recents()) == 1 })
+	if rec := ob.Recents(); rec[0] != paths[0] {
 		t.Fatalf("recents = %v, want the choice recorded", rec)
 	}
 	ob.cfg.Folder = false
 	ob.openDialog()
 	if mode != widget.FileModeOpen {
 		t.Fatalf("mode = %v, want the file mode", mode)
+	}
+}
+
+// The recents file sits behind the worker: with the worker stuck on a
+// dead disk, building a button and choosing a file return, the choice
+// still fires, and the list catches up once the disk answers.
+func TestOpenButtonWaitsOnNoDisk(t *testing.T) {
+	a := openButtonApp(t)
+	path := openButtonFiles(t, "one.txt")[0]
+	m := a.recentsManager()
+	hold := make(chan struct{})
+	if !m.Post(func() { <-hold }) {
+		t.Fatal("the worker refused the holding job")
+	}
+	var got []string
+	ob, err := a.NewOpenButton(nil, OpenButtonConfig{OnOpen: func(p string) { got = append(got, p) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ob.choose(path)
+	a.pump(time.Now())
+	if !slices.Equal(got, []string{path}) {
+		t.Fatalf("output = %v behind a stuck disk, want the choice", got)
+	}
+	if len(ob.Recents()) != 0 {
+		t.Fatalf("recents = %v behind a stuck disk", ob.Recents())
+	}
+	close(hold)
+	pumpUntil(t, a, func() bool { return len(ob.Recents()) == 1 })
+	if !m.Stop(5 * time.Second) {
+		t.Fatal("the worker never settled")
+	}
+	fresh := recentfiles.New(recentfiles.DefaultPath())
+	if err := fresh.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if l := fresh.List(); len(l) != 1 || l[0].Path != path {
+		t.Errorf("file holds %+v, want the choice", l)
+	}
+}
+
+// Run's exit lets queued recents reach the file and joins the worker.
+func TestRecentsReachTheFileAtRunExit(t *testing.T) {
+	a := openButtonApp(t)
+	path := openButtonFiles(t, "one.txt")[0]
+	a.addRecents([]string{path})
+	a.watchers.shutdown()
+	fresh := recentfiles.New(recentfiles.DefaultPath())
+	if err := fresh.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if l := fresh.List(); len(l) != 1 || l[0].Path != path {
+		t.Errorf("file holds %+v after the exit, want the choice", l)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
 
@@ -95,16 +96,8 @@ func (a *Application) fileDialog(parent *Window, mode widget.FileMode, defTitle,
 		chooser.SetSaveName(cfg.StartName)
 	}
 	if cfg.Recents {
-		manager := a.recentsManager()
-		chooser.SetRecentsSource(func() []string {
-			var paths []string
-			for _, e := range manager.List() {
-				if _, err := os.Stat(e.Path); err == nil {
-					paths = append(paths, e.Path)
-				}
-			}
-			return paths
-		})
+		m := a.recentsManager()
+		chooser.SetRecentsSource(func() []string { return existingRecents(m) })
 	}
 	var chosen []string
 	var d *Dialog
@@ -118,18 +111,13 @@ func (a *Application) fileDialog(parent *Window, mode widget.FileMode, defTitle,
 		}
 	}
 	record := func() {
-		if !cfg.Recents {
-			return
-		}
-		manager := a.recentsManager()
-		for _, p := range chosen {
-			if err := manager.Add(p, "lys-ui"); err != nil {
-				debug.Log("config", "recents add %s: %v", p, err)
-			}
+		if cfg.Recents {
+			a.addRecents(chosen)
 		}
 	}
 	var replaceQuestion *Dialog
 	replaceAccepted := false
+	askingDisk := false
 	askReplace := func() error {
 		var err error
 		replaceQuestion, err = a.NewDialog(d.win, DialogConfig{
@@ -153,6 +141,26 @@ func (a *Application) fileDialog(parent *Window, mode widget.FileMode, defTitle,
 		})
 		return err
 	}
+	checkOverwrite := func(path string) {
+		askingDisk = true
+		go func() {
+			_, statErr := os.Stat(path)
+			a.Invoke(func() {
+				askingDisk = false
+				if d.Closed() {
+					return
+				}
+				if statErr != nil {
+					replaceAccepted = true
+					d.Respond("ok")
+					return
+				}
+				if err := askReplace(); err != nil {
+					chooser.SetStatus(strings.ReplaceAll(widget.Tr("could not ask to replace the file: {error}"), "{error}", err.Error()))
+				}
+			})
+		}()
+	}
 	chooser.OnApply = func(paths []string) {
 		chosen = paths
 		d.Respond("ok")
@@ -172,7 +180,7 @@ func (a *Application) fileDialog(parent *Window, mode widget.FileMode, defTitle,
 			if resp != "ok" || replaceAccepted {
 				return true
 			}
-			if replaceQuestion != nil && !replaceQuestion.Closed() {
+			if askingDisk || replaceQuestion != nil && !replaceQuestion.Closed() {
 				return false
 			}
 			paths, ok := chooser.Apply()
@@ -183,12 +191,7 @@ func (a *Application) fileDialog(parent *Window, mode widget.FileMode, defTitle,
 			if save == nil || save.SkipOverwriteConfirm {
 				return true
 			}
-			if _, err := os.Stat(chosen[0]); err != nil {
-				return true
-			}
-			if err := askReplace(); err != nil {
-				chooser.SetStatus(strings.ReplaceAll(widget.Tr("could not ask to replace the file: {error}"), "{error}", err.Error()))
-			}
+			checkOverwrite(chosen[0])
 			return false
 		},
 		OnResponse: func(resp string) {
@@ -220,14 +223,70 @@ func (a *Application) confirmBody(name string) widget.Widget {
 		Append(widget.NewLabel(face, 13, widget.Tr("Replacing it overwrites its contents."), th.TextMuted), false)
 }
 
-// recentsManager lazily owns the desktop shared recents list.
+const recentsStopTimeout = 3 * time.Second
+
+// recentsManager lazily owns the desktop shared recents list. The list
+// lives on the manager's worker, its load first in line; touch it only
+// through Post.
 func (a *Application) recentsManager() *recentfiles.Manager {
-	if a.recentFiles == nil {
-		m := recentfiles.New(recentfiles.DefaultPath())
+	if a.recentFiles != nil {
+		return a.recentFiles
+	}
+	m := recentfiles.New(recentfiles.DefaultPath())
+	a.recentFiles = m
+	a.OnStop(func() {
+		if !m.Stop(recentsStopTimeout) {
+			debug.Log("config", "recents: the worker outlived the stop")
+		}
+	})
+	postRecents(m, func() {
 		if err := m.Load(); err != nil {
 			debug.Log("config", "recents: %v", err)
 		}
-		a.recentFiles = m
+	})
+	return m
+}
+
+func postRecents(m *recentfiles.Manager, work func()) bool {
+	if m.Post(work) {
+		return true
 	}
-	return a.recentFiles
+	debug.Log("config", "recents: dropped work, the worker is stuck or stopped")
+	return false
+}
+
+// addRecents records paths under lys-ui, off the loop.
+func (a *Application) addRecents(paths []string) {
+	m := a.recentsManager()
+	postRecents(m, func() {
+		if err := m.Add("lys-ui", paths...); err != nil {
+			debug.Log("config", "recents add %v: %v", paths, err)
+		}
+	})
+}
+
+// existingRecents is a FileChooser's recents source: it waits on the
+// worker, so it runs off the loop like every chooser source.
+func existingRecents(m *recentfiles.Manager) []string {
+	answer := make(chan []string, 1)
+	if !postRecents(m, func() { answer <- existingPaths(m.List(), 0) }) {
+		return nil
+	}
+	return <-answer
+}
+
+// existingPaths keeps the entries whose file is still there, at most
+// limit of them when limit is positive. It stats, so it runs on the
+// worker.
+func existingPaths(entries []recentfiles.Entry, limit int) []string {
+	var paths []string
+	for _, e := range entries {
+		if limit > 0 && len(paths) == limit {
+			break
+		}
+		if _, err := os.Stat(e.Path); err == nil {
+			paths = append(paths, e.Path)
+		}
+	}
+	return paths
 }

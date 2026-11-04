@@ -3,7 +3,12 @@ package widget
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/goregular"
@@ -277,4 +282,149 @@ func TestGoldenFileChooser(t *testing.T) {
 	save.SetSource(fixtureSource)
 	save.SetSaveName("report.pdf")
 	NewGolden(t, save, "filechooser-save", goldenTheme(th), goldenFrame(400, 320))
+}
+
+// chooserLoop stands in for the application's loop: the invoker queues what
+// the off-loop listing answers with, and the test runs it.
+type chooserLoop struct {
+	mu     sync.Mutex
+	queued []func()
+}
+
+func installChooserLoop(t *testing.T) *chooserLoop {
+	t.Helper()
+	l := &chooserLoop{}
+	SetInvoker(func(fn func()) {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.queued = append(l.queued, fn)
+	})
+	t.Cleanup(func() { SetInvoker(nil) })
+	return l
+}
+
+// pumpFor runs answers until n arrived, failing on a bounded wait.
+func (l *chooserLoop) pumpFor(t *testing.T, n int) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for ran := 0; ran < n; {
+		l.mu.Lock()
+		fns := l.queued
+		l.queued = nil
+		l.mu.Unlock()
+		for _, fn := range fns {
+			fn()
+			ran++
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d of %d listing answers arrived", ran, n)
+		}
+		runtime.Gosched()
+	}
+}
+
+// countedSource records where each read ran and holds it until released.
+func countedSource(release chan struct{}) (DirSource, *atomic.Int32, *atomic.Int32) {
+	loop := goroutineID()
+	var reads, onLoop atomic.Int32
+	return func(dir string) ([]FileEntry, error) {
+		reads.Add(1)
+		if goroutineID() == loop {
+			onLoop.Add(1)
+		}
+		<-release
+		return fixtureSource(dir)
+	}, &reads, &onLoop
+}
+
+// Listing waits on the disk, so none of it runs on the loop: a source that
+// never answers leaves every navigation returning at once over an empty
+// view, and an answer to a directory left since is dropped.
+func TestFileChooserReadsNothingOnTheLoop(t *testing.T) {
+	loop := installChooserLoop(t)
+	release := make(chan struct{})
+	src, reads, onLoop := countedSource(release)
+	c := NewFileChooser(chooserFace(t), 14, FileModeOpen, "/home", chooserFilters)
+	c.SetSource(src)
+	c.navigate("/home/Documents")
+	if got := c.Dir(); got != "/home/Documents" {
+		t.Errorf("Dir = %q right after navigating", got)
+	}
+	if len(c.listing) != 0 {
+		t.Errorf("listing = %v before any answer", c.listing)
+	}
+	close(release)
+	loop.pumpFor(t, 3)
+	if got := onLoop.Load(); got != 0 {
+		t.Errorf("%d of %d reads on the loop, want none", got, reads.Load())
+	}
+	if _, err := c.rowForErr("report.pdf"); err != nil {
+		t.Errorf("the last directory did not fill the view: %v, have %v", err, c.listing)
+	}
+	if _, err := c.rowForErr("Documents"); err == nil {
+		t.Error("the directory left since answered into the view")
+	}
+}
+
+// Switching filter reads nothing: it filters the listing in hand.
+func TestFileChooserFilterReadsNothing(t *testing.T) {
+	c := newChooser(t, FileModeOpen, chooserFilters)
+	c.navigate("/home/Documents")
+	reads := 0
+	src := c.source
+	c.source = func(dir string) ([]FileEntry, error) {
+		reads++
+		return src(dir)
+	}
+	before := len(c.listing)
+	c.setFilter(2)
+	if reads != 0 {
+		t.Errorf("%d reads on a filter change", reads)
+	}
+	if len(c.listing) <= before {
+		t.Errorf("all-files listing has %d rows, documents had %d", len(c.listing), before)
+	}
+}
+
+// A dead mount holds a bounded number of goroutines, and the view still
+// lands on the last directory asked for.
+func TestFileChooserBoundsListingsOut(t *testing.T) {
+	loop := installChooserLoop(t)
+	release := make(chan struct{})
+	c := NewFileChooser(chooserFace(t), 14, FileModeOpen, "/home", nil)
+	loop.pumpFor(t, 1)
+	src, reads, _ := countedSource(release)
+	c.SetSource(src)
+	for range 3 * maxChooserListings {
+		c.navigate("/home/Documents")
+	}
+	c.navigate("/home")
+	deadline := time.Now().Add(10 * time.Second)
+	for reads.Load() < maxChooserListings {
+		if time.Now().After(deadline) {
+			t.Fatalf("%d reads started", reads.Load())
+		}
+		runtime.Gosched()
+	}
+	if got := c.listings; got != maxChooserListings {
+		t.Errorf("%d listings out, want the bound %d", got, maxChooserListings)
+	}
+	close(release)
+	loop.pumpFor(t, maxChooserListings+1)
+	if _, err := c.rowForErr("Documents"); err != nil {
+		t.Errorf("the view did not land on the last directory: %v, have %v", err, c.listing)
+	}
+}
+
+// A listing's failure stays on the status line.
+func TestFileChooserShowsAListingFailure(t *testing.T) {
+	c := newChooser(t, FileModeOpen, nil)
+	c.SetSource(func(string) ([]FileEntry, error) { return nil, os.ErrPermission })
+	if got := c.status.Text(); !strings.Contains(got, "permission") {
+		t.Errorf("status = %q, want the failure", got)
+	}
+	c.SetSource(fixtureSource)
+	if got := c.status.Text(); got != "" {
+		t.Errorf("status = %q after a good listing", got)
+	}
 }

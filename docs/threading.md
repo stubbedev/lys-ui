@@ -101,6 +101,17 @@ peer that never answers costs a paste that stays pending, never a
 frame. A `transfer.Content` writer runs on such a goroutine. Transfers
 are bounded, and `Run` returning ends and joins them.
 
+The session keeps one background goroutine of its own, for what the
+compositor sends or the pointer asks for that would otherwise read files
+on the loop. A keymap compiles there; every keyboard event behind it on
+the wire (enter, leave, key, modifiers) waits in order until it is
+installed, so a key is late at worst, never lost or read through the
+keymap it came after, and synthesized repeats hold off meanwhile. Cursor
+files read there too: where the compositor leaves cursors to the client,
+the common shapes are read ahead when the pointer appears, and any other
+shape shows when its read lands, the shape last shown (a file cursor's
+CSS fallback) standing in.
+
 The desktop-settings monitor is the background-worker shape: it
 watches the portal on its own dbus goroutine, and `Application`
 bridges each change onto the loop through `Invoke`
@@ -127,6 +138,10 @@ no slow service can drop a frame:
   `SetBackgroundStatus`): each returns at once and answers through a
   `done` callback on the loop. They run in order on one worker, so a
   query-end answer follows any `Inhibit` the callback made.
+- **The file picker**: `FileChooser` lists on a goroutine and answers
+  through the invoker, dropping an answer to a view left since. The
+  recents file and the recents stats run on the `recentfiles.Manager`'s
+  worker, and a save dialog's overwrite check stats on a goroutine.
 
 ## The relm4 mapping
 

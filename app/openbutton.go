@@ -1,7 +1,6 @@
 package app
 
 import (
-	"os"
 	"path/filepath"
 
 	"github.com/stubbedev/lys-lib/debug"
@@ -67,17 +66,18 @@ func (ob *OpenButton) Recents() []string {
 
 // RefreshRecents rebuilds the recents dropdown from the recent-files
 // manager, keeping at most cfg.Recents entries that still exist on disk.
+// It looks at the disk off the loop, and the dropdown follows on the loop
+// once it knows.
 func (ob *OpenButton) RefreshRecents() {
+	m := ob.app.recentsManager()
 	size := ob.cfg.recentSize()
-	paths := ob.paths[:0]
-	for _, e := range ob.app.recentsManager().List() {
-		if len(paths) == size {
-			break
-		}
-		if _, err := os.Stat(e.Path); err == nil {
-			paths = append(paths, e.Path)
-		}
-	}
+	postRecents(m, func() {
+		paths := existingPaths(m.List(), size)
+		ob.app.Invoke(func() { ob.showRecents(paths) })
+	})
+}
+
+func (ob *OpenButton) showRecents(paths []string) {
 	ob.paths = paths
 	labels := make([]string, len(paths))
 	for i, p := range paths {
@@ -99,9 +99,7 @@ func (ob *OpenButton) openDialog() {
 }
 
 func (ob *OpenButton) choose(path string) {
-	if err := ob.app.recentsManager().Add(path, "lys-ui"); err != nil {
-		debug.Log("config", "recents add %s: %v", path, err)
-	}
+	ob.app.addRecents([]string{path})
 	if ob.cfg.OnOpen != nil {
 		ob.cfg.OnOpen(path)
 	}

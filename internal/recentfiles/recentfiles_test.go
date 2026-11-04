@@ -15,7 +15,7 @@ func TestRecentFilesRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "recently-used.xbel")
 	m := New(path)
 	for i := range 5 {
-		if err := m.Add(filepath.Join("/tmp", string(rune('a'+i))+".txt"), "lys-ui"); err != nil {
+		if err := m.Add("lys-ui", filepath.Join("/tmp", string(rune('a'+i))+".txt")); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -44,9 +44,9 @@ func TestRecentFilesRoundTrip(t *testing.T) {
 // existing path moves it, it does not duplicate.
 func TestRecentFilesReAddMovesToFront(t *testing.T) {
 	m := New(filepath.Join(t.TempDir(), "recently-used.xbel"))
-	_ = m.Add("/tmp/one", "lys-ui")
-	_ = m.Add("/tmp/two", "lys-ui")
-	_ = m.Add("/tmp/one", "lys-ui")
+	_ = m.Add("lys-ui", "/tmp/one")
+	_ = m.Add("lys-ui", "/tmp/two")
+	_ = m.Add("lys-ui", "/tmp/one")
 	list := m.List()
 	if len(list) != 2 || list[0].Path != "/tmp/one" {
 		t.Fatalf("list = %v, want one first without duplicates", list)
@@ -58,9 +58,9 @@ func TestRecentFilesReAddMovesToFront(t *testing.T) {
 func TestRecentFilesBounded(t *testing.T) {
 	m := New(filepath.Join(t.TempDir(), "recently-used.xbel"))
 	for i := range maxEntries + 5 {
-		_ = m.Add(fmt.Sprintf("/tmp/file-%03d", i), "lys-ui")
+		_ = m.Add("lys-ui", fmt.Sprintf("/tmp/file-%03d", i))
 	}
-	_ = m.Add("/tmp/newest", "lys-ui")
+	_ = m.Add("lys-ui", "/tmp/newest")
 	if got := len(m.List()); got != maxEntries {
 		t.Errorf("list grew to %d, want the bound %d", got, maxEntries)
 	}
@@ -93,7 +93,7 @@ func TestRecentFilesCorruptAndMissing(t *testing.T) {
 	if len(corrupt.List()) != 0 {
 		t.Error("corrupt file yielded entries")
 	}
-	if err := corrupt.Add("/tmp/x", "lys-ui"); err != nil {
+	if err := corrupt.Add("lys-ui", "/tmp/x"); err != nil {
 		t.Fatal(err)
 	}
 	if err := New(path).Load(); err != nil {
@@ -141,5 +141,22 @@ func TestSaveEmptyListWritesEmptyXbel(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "<xbel") {
 		t.Errorf("empty save wrote %q", data)
+	}
+}
+
+// One Add of many paths writes the file once, last path first.
+func TestAddManyPersistsTheBatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "recently-used.xbel")
+	m := New(path)
+	if err := m.Add("lys-ui", "/tmp/a", "/tmp/b", "/tmp/c"); err != nil {
+		t.Fatal(err)
+	}
+	fresh := New(path)
+	if err := fresh.Load(); err != nil {
+		t.Fatal(err)
+	}
+	got := fresh.List()
+	if len(got) != 3 || got[0].Path != "/tmp/c" || got[2].Path != "/tmp/a" {
+		t.Errorf("read back %+v, want the last path first", got)
 	}
 }

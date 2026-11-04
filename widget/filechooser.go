@@ -25,6 +25,11 @@ import (
 // enters a directory or applies a file. Apply validates: an empty
 // selection, an empty name, or a name carrying a path separator sets
 // the status line and applies nothing.
+//
+// Listing a directory waits on the disk, so it runs off the loop: the
+// view clears at once and fills when the answer comes, and an answer to a
+// view left since is dropped. Without an invoker (no loop to answer on,
+// the state before an Application exists) it runs inline.
 type FileChooser struct {
 	composite
 	face   render.Font
@@ -37,9 +42,16 @@ type FileChooser struct {
 	recents func() []string
 
 	dir       string
+	all       []FileEntry
 	listing   []FileEntry
-	paths     []string
+	recentAt  []string
 	inRecents bool
+	// viewGen names the view on screen, so a listing answering a view
+	// left since is dropped; listings counts the ones out, and
+	// listingOwed says the current view waits for room.
+	viewGen     uint64
+	listings    int
+	listingOwed bool
 
 	column     *Box
 	places     *Box
@@ -90,8 +102,13 @@ type FileEntry struct {
 }
 
 // DirSource lists one directory; the default walks the filesystem,
-// hiding dot files. Tests and portal backends substitute their own.
+// hiding dot files. Tests and portal backends substitute their own. It
+// runs off the loop goroutine and must touch no widget.
 type DirSource func(dir string) ([]FileEntry, error)
+
+// maxChooserListings bounds the listings out at once: a dead mount holds
+// one goroutine per directory tried, and past this the chooser waits.
+const maxChooserListings = 8
 
 // osDirSource is the default listing: os.ReadDir with dot files
 // hidden, directories first, names compared case-insensitively.
@@ -117,6 +134,20 @@ func osDirSource(dir string) ([]FileEntry, error) {
 		return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
 	return entries, nil
+}
+
+// runOffLoop runs load on a goroutine of its own and then done on the
+// loop, or both inline without an invoker. load touches no widget.
+func runOffLoop(load, done func()) {
+	if !hasInvoker() {
+		load()
+		done()
+		return
+	}
+	go func() {
+		load()
+		invoke(done)
+	}()
 }
 
 // NewFileChooser returns a chooser in mode starting at startDir (the
@@ -198,7 +229,8 @@ func (c *FileChooser) SetSource(src DirSource) {
 
 // SetRecentsSource wires the recents view: paths lists the recent
 // files (most recent first) and the Recent place appears; without it
-// the picker is a plain browser.
+// the picker is a plain browser. Like a DirSource, paths runs off the
+// loop goroutine and must touch no widget.
 func (c *FileChooser) SetRecentsSource(paths func() []string) {
 	c.recents = paths
 	c.buildPlaces()
@@ -231,7 +263,7 @@ func (c *FileChooser) Apply() ([]string, bool) {
 		c.SetStatus(Tr("choose at least one file"))
 	case FileModeOpenFolder:
 		if i := c.list.Selected(); i >= 0 && c.listing[i].Dir {
-			return []string{c.paths[i]}, true
+			return []string{c.rowPath(i)}, true
 		}
 		if c.dir != "" {
 			return []string{c.dir}, true
@@ -261,7 +293,7 @@ func (c *FileChooser) pickedFiles() []string {
 	var picked []string
 	for _, i := range c.list.Selection() {
 		if i >= 0 && i < len(c.listing) && !c.listing[i].Dir {
-			picked = append(picked, c.paths[i])
+			picked = append(picked, c.rowPath(i))
 		}
 	}
 	return picked
@@ -282,7 +314,7 @@ func (c *FileChooser) activate(i int) {
 	}
 	if c.listing[i].Dir {
 		if !c.inRecents {
-			c.navigate(c.paths[i])
+			c.navigate(c.rowPath(i))
 		}
 		return
 	}
@@ -305,7 +337,15 @@ func (c *FileChooser) applyOne(i int) ([]string, bool) {
 		c.SetStatus("\"" + c.listing[i].Name + "\" " + Tr("does not match") + " " + c.filters[c.filter].Name)
 		return nil, false
 	}
-	return []string{c.paths[i]}, true
+	return []string{c.rowPath(i)}, true
+}
+
+// rowPath is row i's absolute path.
+func (c *FileChooser) rowPath(i int) string {
+	if c.inRecents {
+		return c.recentAt[i]
+	}
+	return filepath.Join(c.dir, c.listing[i].Name)
 }
 
 // emitApply hands a valid result to the OnApply hook.
@@ -327,13 +367,13 @@ func (c *FileChooser) syncFromSelection() {
 	}
 }
 
-// setFilter switches the active filter and re-lists the directory.
+// setFilter switches the active filter over the listing in hand.
 func (c *FileChooser) setFilter(i int) {
 	if i < 0 || i >= len(c.filters) {
 		return
 	}
 	c.filter = i
-	c.refresh()
+	c.show()
 }
 
 // passes reports whether a file name matches the active filter.
@@ -358,37 +398,76 @@ func (c *FileChooser) navigate(dir string) {
 	c.refresh()
 }
 
-// refresh re-lists the current view into the model.
+// refresh clears the view and lists it anew off the loop.
 func (c *FileChooser) refresh() {
 	c.inRecents = c.dir == ""
-	c.listing = c.listing[:0]
-	c.paths = c.paths[:0]
 	c.path.SetText(c.dirLabel())
-	if c.inRecents {
-		if c.recents == nil {
-			c.SetStatus(Tr("no recent files"))
-		} else {
-			for _, p := range c.recents() {
-				c.listing = append(c.listing, FileEntry{Name: filepath.Base(p)})
-				c.paths = append(c.paths, p)
+	c.viewGen++
+	c.all, c.recentAt = nil, nil
+	c.show()
+	c.SetStatus("")
+	c.startListing()
+}
+
+// startListing starts the current view's listing, or leaves it owed when too
+// many are out.
+func (c *FileChooser) startListing() {
+	if c.listings == maxChooserListings {
+		c.listingOwed = true
+		return
+	}
+	c.listings++
+	gen, dir, inRecents, source, recents := c.viewGen, c.dir, c.inRecents, c.source, c.recents
+	var (
+		entries []FileEntry
+		paths   []string
+		err     error
+	)
+	runOffLoop(func() {
+		switch {
+		case !inRecents:
+			entries, err = source(dir)
+		case recents != nil:
+			paths = recents()
+			entries = make([]FileEntry, len(paths))
+			for i, p := range paths {
+				entries[i].Name = filepath.Base(p)
 			}
 		}
-	} else {
-		entries, err := c.source(c.dir)
-		if err != nil {
-			c.SetStatus(err.Error())
-		} else {
-			for _, e := range entries {
-				if e.Dir || c.passes(e.Name) {
-					c.listing = append(c.listing, e)
-					c.paths = append(c.paths, filepath.Join(c.dir, e.Name))
-				}
-			}
+	}, func() {
+		c.listings--
+		if gen == c.viewGen {
+			c.all, c.recentAt = entries, paths
+			c.show()
+			c.showListingStatus(err, inRecents && recents == nil)
+		}
+		if c.listingOwed {
+			c.listingOwed = false
+			c.startListing()
+		}
+	})
+}
+
+// showListingStatus reports what a listing's answer left to say.
+func (c *FileChooser) showListingStatus(err error, noRecents bool) {
+	switch {
+	case err != nil:
+		c.SetStatus(err.Error())
+	case noRecents:
+		c.SetStatus(Tr("no recent files"))
+	}
+}
+
+// show puts the listing in hand through the filter into the model.
+func (c *FileChooser) show() {
+	c.listing = c.listing[:0]
+	for _, e := range c.all {
+		if c.inRecents || e.Dir || c.passes(e.Name) {
+			c.listing = append(c.listing, e)
 		}
 	}
 	c.model.set(c.listing)
 	c.list.Reset()
-	c.SetStatus("")
 	c.InvalidateLayout()
 }
 

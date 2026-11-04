@@ -3,6 +3,9 @@
 // apps share the recents list with the desktop's other citizens. The
 // manager keeps the list bounded, most-recent first, and writes
 // atomically; a missing or corrupt file starts an empty list.
+//
+// Load, Save, Add and Remove wait on the disk. An application drives a
+// Manager through Post, which runs everything in order off the loop.
 package recentfiles
 
 import (
@@ -15,6 +18,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/atomicfile"
 
+	"github.com/stubbedev/lys-ui/internal/worker"
 	"github.com/stubbedev/lys-ui/transfer"
 )
 
@@ -31,11 +35,15 @@ type Entry struct {
 // an unbounded file grows forever.
 const maxEntries = 100
 
-// Manager reads and writes one recents list. The zero value is usable
-// and answers from an empty list until a Load or Add names a file.
+// queueDepth bounds what a stuck disk can pile up behind the worker.
+const queueDepth = 64
+
+// Manager reads and writes one recents list. It is not safe for
+// concurrent use: whoever posts to it touches it only through Post.
 type Manager struct {
 	path    string
 	entries []Entry
+	work    *worker.Queue
 }
 
 // DefaultPath is the spec's location under the user data directory,
@@ -55,8 +63,16 @@ func DefaultPath() string {
 // New returns the manager for the given xbel path (DefaultPath for the
 // desktop's shared list).
 func New(path string) *Manager {
-	return &Manager{path: path}
+	return &Manager{path: path, work: worker.New(queueDepth)}
 }
+
+// Post queues work to run off the caller's goroutine, in order, and
+// reports whether it was taken: a full or stopped queue refuses it.
+func (m *Manager) Post(work func()) bool { return m.work.Post(work) }
+
+// Stop refuses later posts, lets queued work finish within limit, and
+// reports whether it did.
+func (m *Manager) Stop(limit time.Duration) bool { return m.work.Stop(limit) }
 
 // List returns the entries, most recent first.
 func (m *Manager) List() []Entry {
@@ -65,19 +81,16 @@ func (m *Manager) List() []Entry {
 	return out
 }
 
-// Add moves path to the front of the list under app, stamps it now,
-// and persists. Errors persisting are reported once here; a failed
-// write never loses the in-memory list.
-func (m *Manager) Add(path, app string) error {
-	path = filepath.Clean(path)
-	entry := Entry{Path: path, App: app, When: time.Now()}
-	rest := make([]Entry, 0, len(m.entries))
-	for _, e := range m.entries {
-		if e.Path != path {
-			rest = append(rest, e)
-		}
+// Add moves paths to the front of the list under app, the last one
+// first, stamps them now, and persists once. Errors persisting are
+// reported once here; a failed write never loses the in-memory list.
+func (m *Manager) Add(app string, paths ...string) error {
+	now := time.Now()
+	for _, path := range paths {
+		path = filepath.Clean(path)
+		m.entries = slices.DeleteFunc(m.entries, func(e Entry) bool { return e.Path == path })
+		m.entries = slices.Insert(m.entries, 0, Entry{Path: path, App: app, When: now})
 	}
-	m.entries = append([]Entry{entry}, rest...)
 	if len(m.entries) > maxEntries {
 		m.entries = m.entries[:maxEntries]
 	}

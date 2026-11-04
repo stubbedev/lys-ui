@@ -61,13 +61,18 @@ func TestHeadlessSaveDialogAsksBeforeReplacing(t *testing.T) {
 	}
 	question := func(picker *app.Dialog) (q *app.Dialog) {
 		t.Helper()
-		onLoop(func() error {
-			open := slices.DeleteFunc(slices.Clone(a.OpenDialogs()), func(d *app.Dialog) bool { return d == picker || d.Closed() })
-			if len(open) != 1 {
-				return fmt.Errorf("%d open dialogs beside the picker, want the one question", len(open))
-			}
-			q = open[0]
-			return nil
+		wltest.Eventually(t, "the question", func() error {
+			var err error
+			onLoop(func() error {
+				open := slices.DeleteFunc(slices.Clone(a.OpenDialogs()), func(d *app.Dialog) bool { return d == picker || d.Closed() })
+				if len(open) != 1 {
+					err = fmt.Errorf("%d open dialogs beside the picker, want the one question", len(open))
+					return nil
+				}
+				q = open[0]
+				return nil
+			})
+			return err
 		})
 		return q
 	}
