@@ -15,12 +15,12 @@ func TestALabelFarFromTheClipPaintsNothing(t *testing.T) {
 	cv := render.New(make([]byte, render.Stride(400)*400), render.Stride(400), 400, 400)
 	prev := cv.PushClip(render.Rect{X: 300, Y: 300, W: 50, H: 50})
 	defer cv.PopClip(prev)
-	if !label.outsideClip(cv, label.style(label)) {
+	if !label.outsideClip(cv) {
 		t.Error("a label far outside the clip was not culled")
 	}
 	cv.PopClip(prev)
 	cv.PushClip(render.Rect{X: 201, Y: 0, W: 10, H: 10})
-	if label.outsideClip(cv, label.style(label)) {
+	if label.outsideClip(cv) {
 		t.Error("a clip within the label's ink reach culled it")
 	}
 }
@@ -71,7 +71,7 @@ func TestCombiningMarksKeepALabelFromBeingCulled(t *testing.T) {
 	cv := render.New(make([]byte, render.Stride(400)*400), render.Stride(400), 400, 400)
 	prev := cv.PushClip(render.Rect{X: 300, Y: 300, W: 50, H: 50})
 	defer cv.PopClip(prev)
-	if label.outsideClip(cv, label.style(label)) {
+	if label.outsideClip(cv) {
 		t.Error("a stack of combining marks can reach past any fixed margin, yet it was culled")
 	}
 }

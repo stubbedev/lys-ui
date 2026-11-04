@@ -590,6 +590,7 @@ func (b *Box) Spacing() int { return b.spacing }
 // the margin box; Bounds records the border box.
 func (b *Box) Arrange(r render.Rect) {
 	if !b.arrangeStale && b.arranged == (arrangeStamp{r, styleGen, themeGen, false}) {
+		b.bubbleInk()
 		return
 	}
 	volatility := arrangeVolatility

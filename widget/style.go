@@ -1876,6 +1876,7 @@ func (n *node) restyle(w Widget) *style.Values {
 	n.ink = inkOf(&n.cs)
 	n.transitionValues(&old, &n.cs, firstStyle)
 	n.syncAnimation(&n.cs)
+	n.settleInk()
 	if !old.Equal(&n.cs) {
 		if inv, ok := w.(interface{ Invalidate() }); ok {
 			inv.Invalidate()

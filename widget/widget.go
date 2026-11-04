@@ -244,7 +244,11 @@ type node struct {
 	trCancel anim.Cancel
 	// anims is the CSS animation state (animations.go), nil while the
 	// node runs no animation.
-	anims *nodeAnim
+	anims       *nodeAnim
+	inkBox      render.Rect
+	inkClosed   bool
+	inkClips    bool
+	inkNodeless bool
 	// backdrop is BackdropRegion's kept answer, on a tree's root.
 	backdrop *backdropCache
 	// self is the widget embedding this node, recorded by the first
@@ -740,6 +744,7 @@ func (n *node) Arrange(r render.Rect) {
 		restyleSubtree(n.self)
 	}
 	n.place(r)
+	n.settleInk()
 }
 
 // place records r as the rect the widget shows at, with no damage: a
@@ -791,6 +796,7 @@ func (n *node) setParent(p, self Widget) {
 	if n.parent != p {
 		n.markBranchStale()
 		defer n.markBranchStale()
+		defer n.bubbleInk()
 	}
 	if n.parent == nil && p != nil {
 		n.csGen = 0
@@ -876,6 +882,9 @@ func setParents(parent Widget, kids ...Widget) {
 		}
 		if s, ok := k.(interface{ setParent(p, self Widget) }); ok {
 			s.setParent(parent, k)
+		} else if pn := nodeOf(parent); pn != nil {
+			pn.inkNodeless, pn.inkClosed = true, false
+			pn.bubbleInk()
 		}
 	}
 }
@@ -973,6 +982,10 @@ func PaintChild(cv *render.Canvas, w Widget) {
 		}
 	}
 	n := nodeOf(w)
+	if n != nil && inkOutsideClip(cv, n) {
+		n.shownWalk = damageWalks.Load()
+		return
+	}
 	if n != nil && n.layout.maximum != (Size{}) {
 		prev := cv.PushClip(n.bounds)
 		defer cv.PopClip(prev)
