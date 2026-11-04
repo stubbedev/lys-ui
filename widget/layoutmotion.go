@@ -98,6 +98,7 @@ func (n *node) moving(w Widget) bool {
 		mo.spring = anim.NewSpring(motionSpring(m), rectComps(start), func(pos []float64) {
 			next := compsRect(pos)
 			n.InvalidateRect(mo.cur.Union(next))
+			shapeGen++
 			mo.cur = next
 		})
 		mo.spring.SetPrecision(layoutMotionPrecision)

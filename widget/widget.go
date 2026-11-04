@@ -245,6 +245,8 @@ type node struct {
 	// anims is the CSS animation state (animations.go), nil while the
 	// node runs no animation.
 	anims *nodeAnim
+	// backdrop is BackdropRegion's kept answer, on a tree's root.
+	backdrop *backdropCache
 	// self is the widget embedding this node, recorded by the first
 	// arranging container or, for a root no container holds, its first
 	// style, so a state flip can walk its own subtree.
@@ -583,6 +585,7 @@ func (n *node) markSubInvalid() {
 // schedules a repaint of the bounds (a size change usually alters the
 // painting too).
 func (n *node) InvalidateLayout() {
+	shapeGen++
 	n.measureDirty = true
 	n.dropMeasureCache()
 	n.layout.dropExpand()
@@ -719,6 +722,9 @@ func (n *node) takeDamage() (bounds render.Rect, extra []render.Rect, dirty bool
 // damage does not leave the widget's old paint behind.
 func (n *node) Arrange(r render.Rect) {
 	n.arranges++
+	if r != n.bounds {
+		shapeGen++
+	}
 	if !n.bounds.Empty() && r != n.bounds {
 		n.InvalidateRect(n.ink.Grow(n.bounds))
 		n.Invalidate()
