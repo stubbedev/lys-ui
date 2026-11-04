@@ -702,7 +702,7 @@ func (s *Scroll) fadeTo(to float64) {
 // the fade tweens invalidate the gutter strips as alpha moves.
 func (s *Scroll) SetHovered(on bool) {
 	s.hovered = on
-	s.invalidateStyle()
+	s.restyleState(style.Hover)
 	if on {
 		s.showBars()
 	}
@@ -1033,7 +1033,7 @@ func (s *Scroll) SetPressed(on bool) {
 		return       // the grab geometry arrives with the first DragMove
 	}
 	s.dragV, s.dragH = false, false
-	s.invalidateStyle()
+	s.restyleState(style.Active)
 	s.snapCurrent()
 }
 
