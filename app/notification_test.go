@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"runtime"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -25,9 +26,10 @@ func TestNotifyRoutesActionsOntoLoop(t *testing.T) {
 		OnAction: func(key string) { fired = key },
 		OnClosed: func(notify.CloseReason) { closed++ },
 	})
+	defer a.closeNotifier()
 	a.notifyMu.Lock()
 	var id string
-	for k := range a.notifyOpts {
+	for k := range a.notifyOpts.opts {
 		id = k
 	}
 	a.notifyMu.Unlock()
@@ -59,9 +61,10 @@ func TestNotifyRoutesActionsOntoLoop(t *testing.T) {
 // still registers so late callbacks (never fired) route harmlessly.
 func TestNotifyInertWithoutBus(t *testing.T) {
 	a := testApp(nil)
+	defer a.closeNotifier()
 	a.Notify("hello", "background daemon says hi", NotifyOptions{})
 	a.notifyMu.Lock()
-	n := len(a.notifyOpts)
+	n := len(a.notifyOpts.opts)
 	a.notifyMu.Unlock()
 	if n != 1 {
 		t.Errorf("registered %d notifications, want 1", n)
@@ -120,6 +123,8 @@ func (f *fakeNotifyBus) Call(ctx context.Context, _ string, _ dbus.ObjectPath, m
 
 func (f *fakeNotifyBus) Signal(chan<- *dbus.Signal) {}
 
+func (f *fakeNotifyBus) AddMatch(context.Context, string, dbus.ObjectPath) error { return nil }
+
 func (f *fakeNotifyBus) Close() error { return nil }
 
 // A notification daemon that never answers stalls no loop pass: Notify on
@@ -149,7 +154,7 @@ func TestNotifyOnLoopSurvivesAStuckDaemon(t *testing.T) {
 		t.Fatalf("the pass ran %d times", ran)
 	}
 	a.notifyMu.Lock()
-	registered := len(a.notifyOpts)
+	registered := len(a.notifyOpts.opts)
 	a.notifyMu.Unlock()
 	if registered != 2 {
 		t.Errorf("registered %d notifications with locally made ids, want 2", registered)
@@ -169,5 +174,44 @@ func TestNotifyOnLoopSurvivesAStuckDaemon(t *testing.T) {
 			t.Fatal("the worker never reached the daemon")
 		}
 		runtime.Gosched()
+	}
+}
+
+func TestNotifyLedgerDropsTheOldestPastItsCap(t *testing.T) {
+	var l notifyLedger
+	id := func(i int) string { return "n" + strconv.Itoa(i) }
+	total := 3 * maxTrackedNotifications
+	for i := range total {
+		l.put(id(i), NotifyOptions{})
+		if len(l.opts) > maxTrackedNotifications {
+			t.Fatalf("%d entries after %d puts, want at most %d", len(l.opts), i+1, maxTrackedNotifications)
+		}
+		if len(l.order) > 2*maxTrackedNotifications {
+			t.Fatalf("order holds %d after %d puts", len(l.order), i+1)
+		}
+	}
+	if _, ok := l.opts[id(total-maxTrackedNotifications-1)]; ok {
+		t.Error("the entry just past the cap survived")
+	}
+	if _, ok := l.opts[id(total-maxTrackedNotifications)]; !ok {
+		t.Error("the oldest entry inside the cap went")
+	}
+	if _, ok := l.opts[id(total-1)]; !ok {
+		t.Error("the newest entry went")
+	}
+}
+
+func TestNotifyLedgerStaysBoundedAcrossCloses(t *testing.T) {
+	var l notifyLedger
+	for i := range 10 * maxTrackedNotifications {
+		id := strconv.Itoa(i)
+		l.put(id, NotifyOptions{})
+		l.take(id)
+		if len(l.order) > 2*maxTrackedNotifications {
+			t.Fatalf("order holds %d closed ids after %d puts", len(l.order), i+1)
+		}
+	}
+	if len(l.opts) != 0 {
+		t.Errorf("%d entries after every one closed", len(l.opts))
 	}
 }

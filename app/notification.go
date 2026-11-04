@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"time"
 
 	"github.com/stubbedev/lys-ui/internal/notify"
@@ -53,11 +54,39 @@ func (a *Application) Notify(title, body string, opts NotifyOptions) {
 	n := a.notifier()
 	id := n.Notify(notification(title, body, opts))
 	a.notifyMu.Lock()
-	if a.notifyOpts == nil {
-		a.notifyOpts = map[string]NotifyOptions{}
-	}
-	a.notifyOpts[id] = opts
+	a.notifyOpts.put(id, opts)
 	a.notifyMu.Unlock()
+}
+
+const maxTrackedNotifications = 256
+
+type notifyLedger struct {
+	opts  map[string]NotifyOptions
+	order []string
+}
+
+func (l *notifyLedger) put(id string, opts NotifyOptions) {
+	if l.opts == nil {
+		l.opts = map[string]NotifyOptions{}
+	}
+	if len(l.order) >= 2*maxTrackedNotifications {
+		l.order = slices.DeleteFunc(l.order, func(k string) bool {
+			_, live := l.opts[k]
+			return !live
+		})
+	}
+	l.opts[id] = opts
+	l.order = append(l.order, id)
+	for len(l.opts) > maxTrackedNotifications {
+		delete(l.opts, l.order[0])
+		l.order = l.order[1:]
+	}
+}
+
+func (l *notifyLedger) take(id string) (NotifyOptions, bool) {
+	opts, ok := l.opts[id]
+	delete(l.opts, id)
+	return opts, ok
 }
 
 // notification is the transport's form of a Notify call, the action
@@ -104,7 +133,7 @@ func (a *Application) adoptNotifier(n *notify.Notifier) {
 // (post-Reset notifications, portal string drift) are dropped.
 func (a *Application) notifyAction(id, action string) {
 	a.notifyMu.Lock()
-	opts, ok := a.notifyOpts[id]
+	opts, ok := a.notifyOpts.opts[id]
 	a.notifyMu.Unlock()
 	if ok && opts.OnAction != nil {
 		opts.OnAction(action)
@@ -114,8 +143,7 @@ func (a *Application) notifyAction(id, action string) {
 // notifyClosed dispatches a close on the loop and forgets the id.
 func (a *Application) notifyClosed(id string, reason notify.CloseReason) {
 	a.notifyMu.Lock()
-	opts, ok := a.notifyOpts[id]
-	delete(a.notifyOpts, id)
+	opts, ok := a.notifyOpts.take(id)
 	a.notifyMu.Unlock()
 	if ok && opts.OnClosed != nil {
 		opts.OnClosed(reason)

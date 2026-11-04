@@ -149,7 +149,7 @@ type Application struct {
 	notifyOnce  sync.Once
 	notifyMu    sync.Mutex
 	notifyStore *notify.Notifier
-	notifyOpts  map[string]NotifyOptions
+	notifyOpts  notifyLedger
 	// launcher (launcher.go): the OpenURL/OpenPath transport state.
 	launchState launcher
 	// shortcuts (globalshortcuts_portal.go): the lazily created portal
