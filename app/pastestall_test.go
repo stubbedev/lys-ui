@@ -167,8 +167,7 @@ func awaitOffer(t *testing.T, a *app.Application, clip *app.Clipboard) {
 // lands when the peer finally answers.
 func TestPasteFromASilentPeerLeavesTheLoopRunning(t *testing.T) {
 	p, a, clip := newSelectionPeer(t)
-	release := a.Hold()
-	defer release()
+	a.Hold()
 	watch := watchLoop(a)
 	runUntilCleanup(t, a)
 	p.announce()
@@ -211,8 +210,7 @@ func TestPasteFromASilentPeerLeavesTheLoopRunning(t *testing.T) {
 // through is lost.
 func TestPendingPasteLandsWhereItWasAsked(t *testing.T) {
 	p, a, clip := newSelectionPeer(t)
-	release := a.Hold()
-	defer release()
+	a.Hold()
 	watch := watchLoop(a)
 	runUntilCleanup(t, a)
 	p.announce()
@@ -277,8 +275,7 @@ func TestPendingPasteLandsWhereItWasAsked(t *testing.T) {
 // than at its deadline, which would report a stalled peer.
 func TestPasteClosesItsWriteEnd(t *testing.T) {
 	p, a, clip := newSelectionPeer(t)
-	release := a.Hold()
-	defer release()
+	a.Hold()
 	runUntilCleanup(t, a)
 	p.announce()
 	awaitOffer(t, a, clip)
