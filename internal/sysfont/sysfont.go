@@ -322,15 +322,60 @@ func Serif() (*render.Typeface, error) {
 	return lookup(fontscan.Serif, regAspect)
 }
 
-// FaceFile loads a font file's first face — the @font-face loader's
-// entry point for app fonts declared in stylesheets. The path is the
-// stylesheet's own src, app input like every stylesheet path.
+// The typefaces FaceFile loaded, by path. A file's mapping lasts as long
+// as its typeface, the process, so each path is mapped once.
+var (
+	faceFilesMu sync.Mutex
+	faceFiles   = map[string]*render.Typeface{}
+	// faceFileLoad holds one load at a time, with faceFilesMu released.
+	faceFileLoad sync.Mutex
+)
+
+// FaceFile loads a font file's first face once per path — the @font-face
+// loader's entry point for app fonts declared in stylesheets. A file that
+// fails to load is tried again by the next call. The path is the
+// stylesheet's own src, app input like every stylesheet path. It maps and
+// parses the file, so a first load belongs off the UI loop.
 func FaceFile(path string) (*render.Typeface, error) {
+	if tf, ok := PeekFaceFile(path); ok {
+		return tf, nil
+	}
+	faceFileLoad.Lock()
+	defer faceFileLoad.Unlock()
+	if tf, ok := PeekFaceFile(path); ok {
+		return tf, nil
+	}
 	face, err := faceFromFile(path, 0)
 	if err != nil {
 		return nil, err
 	}
-	return render.NewTypeface(face)
+	tf, err := render.NewTypeface(face)
+	if err != nil {
+		return nil, fmt.Errorf("sysfont: typeface of %s: %w", path, err)
+	}
+	faceFilesMu.Lock()
+	defer faceFilesMu.Unlock()
+	faceFiles[path] = tf
+	return tf, nil
+}
+
+// PeekFaceFile returns the typeface FaceFile loaded for path, reading
+// nothing.
+func PeekFaceFile(path string) (*render.Typeface, bool) {
+	faceFilesMu.Lock()
+	defer faceFilesMu.Unlock()
+	tf, ok := faceFiles[path]
+	return tf, ok
+}
+
+// Warm scans the system font store and parses the embedded faces, so the
+// UI loop's first look at a font finds them ready. It belongs off the
+// loop; a scan cannot be interrupted, and the goroutine running it ends
+// with the scan. An error sticks for whoever asks next, who reports it.
+func Warm() {
+	_, _ = fontmap()
+	_, _ = UI()
+	_, _ = UIMono()
 }
 
 // Best resolves the family a widget asks for: any installed family

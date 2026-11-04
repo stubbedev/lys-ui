@@ -34,6 +34,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/portalsettings"
 	"github.com/stubbedev/lys-ui/internal/recentfiles"
 	"github.com/stubbedev/lys-ui/internal/surfx"
+	"github.com/stubbedev/lys-ui/internal/sysfont"
 	"github.com/stubbedev/lys-ui/internal/window"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
@@ -226,6 +227,7 @@ func NewApplication(sess *wlsession.Session) *Application {
 	// one stat per watched file per second once a file is loaded,
 	// nothing before.
 	widget.SetStylesheetPoller(func(fn func()) { a.Every(time.Second, fn) })
+	go sysfont.Warm()
 	// Tree mutations (Box.Remove/RemoveAt/Clear/InsertAt, Stack.Remove,
 	// Scroll.SetChild, ...) must not leave a window's router pointing at
 	// a detached widget: the hook drops hover, press, focus, and

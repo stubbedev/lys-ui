@@ -786,19 +786,21 @@ type fontFaceEntry struct {
 // relayer. Loop-goroutine state, like sheets.
 var fontFaceList []fontFaceEntry
 
-// loadFontFaces loads every loaded sheet's @font-face src files and
-// rebuilds the family registry the font-family resolver consults
-// first. A src that cannot be read or parsed reports through the
-// parse-warning sink naming the family and path, and that face alone
-// drops — the same policy a failing hot reload follows.
+// loadFontFaces rebuilds the family registry the font-family resolver
+// consults first from the @font-face src files already loaded, and asks
+// for the others off the loop. A src that cannot be read or parsed reports
+// through the parse-warning sink naming the family and path, and that
+// face alone drops — the same policy a failing hot reload follows.
 func loadFontFaces() {
 	fontFaceList = fontFaceList[:0]
 	for _, s := range append(slices.Clone(sheets), scopedSheets...) {
 		for _, f := range s.sheet.FontFaces() {
-			tf, err := sysfont.FaceFile(f.Src)
-			if err != nil {
-				style.Warn(fmt.Sprintf("@font-face %s: load %s: %v", f.Family, f.Src, err))
-				continue
+			tf, ok := sysfont.PeekFaceFile(f.Src)
+			if !ok {
+				requestFontFace(f.Family, f.Src)
+				if tf, ok = sysfont.PeekFaceFile(f.Src); !ok {
+					continue
+				}
 			}
 			fontFaceList = append(fontFaceList, fontFaceEntry{
 				family: f.Family, weightLo: f.WeightLo, weightHi: f.WeightHi,
@@ -874,6 +876,26 @@ const (
 	// StateTarget matches :target — the widget an in-app navigation
 	// points at, the role a URL fragment's element plays on the web.
 	StateTarget
+// requestFontFace maps a font file off the loop. The file goes into
+// sysfont's cache, and the relayer that follows finds it there.
+func requestFontFace(family, src string) {
+	var failed error
+	loadAsset(fontFaceKey(src), func() {
+		_, failed = sysfont.FaceFile(src)
+	}, func() {
+		if failed != nil {
+			style.Warn(fmt.Sprintf("@font-face %s: load %s: %v", family, src, failed))
+			return
+		}
+		if hasInvoker() {
+			relayer()
+		}
+	})
+}
+
+// fontFaceKey names a font file's load in the asset queue.
+type fontFaceKey string
+
 )
 
 // styleBits maps flags onto the matcher's state bits.
