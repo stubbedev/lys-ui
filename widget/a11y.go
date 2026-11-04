@@ -5,6 +5,8 @@
 package widget
 
 import (
+	"sync/atomic"
+
 	"github.com/stubbedev/lys-lib/render"
 )
 
@@ -99,7 +101,25 @@ func (r Role) String() string {
 // SetAccessibleName names the widget for assistive technology, over
 // its tooltip and the name its content gives it: an icon button's
 // "Close", a page link's "Go to page 3". Empty restores those.
-func (n *node) SetAccessibleName(name string) { n.accName = name }
+func (n *node) SetAccessibleName(name string) {
+	if n.accName == name {
+		return
+	}
+	n.accName = name
+	MarkA11yChanged()
+}
+
+// a11yGen counts the accessible changes that owe the screen nothing.
+var a11yGen atomic.Uint64
+
+// A11yGeneration moves whenever what an assistive technology reads may
+// have changed: on any damage, and on the changes that paint nothing.
+// Safe from any goroutine.
+func A11yGeneration() uint64 { return DamageGeneration() + a11yGen.Load() }
+
+// MarkA11yChanged moves A11yGeneration without owing a frame: an
+// accessible name, or a window coming or going.
+func MarkA11yChanged() { a11yGen.Add(1) }
 
 // AccessibleName returns the name SetAccessibleName set.
 func (n *node) AccessibleName() string { return n.accName }
