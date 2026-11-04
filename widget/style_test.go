@@ -555,8 +555,6 @@ func fakeStylesheetWatcher(t *testing.T) *[]func() {
 
 func TestStylesheetFileHotReload(t *testing.T) {
 	resetWatches(t)
-	// File loads arm the app-installed watch, once for every file in a
-	// directory.
 	sched := fakeStylesheetWatcher(t)
 
 	dir := t.TempDir()

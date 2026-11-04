@@ -61,8 +61,7 @@ type TextArea struct {
 	peLine []rune
 
 	// hist is the undo/redo history; every mutation records into it.
-	hist undoStack[areaState]
-	// textRev counts the changes to lines, for IMERevision.
+	hist    undoStack[areaState]
 	textRev uint64
 
 	// readOnly freezes user edits the same way Entry.readOnly does:

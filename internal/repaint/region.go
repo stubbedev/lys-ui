@@ -35,14 +35,11 @@ type Region struct {
 	// what they change on screen.
 	regions, changed buffer.Region
 	// drained is the scratch a tree's damage drains into.
-	drained []render.Rect
-	moves   []widget.ScrollMove
-	blits   []blit
-	moved   []render.Rect
-	// blitted is the logical views the last frame moved, owed again if the
-	// GPU refuses that frame.
-	blitted []render.Rect
-	// carries and carryRects are a GPU frame's copies, built by Blit.
+	drained    []render.Rect
+	moves      []widget.ScrollMove
+	blits      []blit
+	moved      []render.Rect
+	blitted    []render.Rect
 	carries    []gpu.Carry
 	carryRects []image.Rectangle
 	cutScratch []image.Rectangle
@@ -144,8 +141,6 @@ func (r *Region) Blit(b, front, carryFrom *buffer.Buffer) []gpu.Carry {
 
 func deviceRect(r render.Rect) image.Rectangle { return image.Rect(r.X, r.Y, r.X+r.W, r.Y+r.H) }
 
-// cutOut is rs without cut: a stale rect a move then overwrites is not worth
-// copying.
 func cutOut(rs []image.Rectangle, cut image.Rectangle, scratch *[]image.Rectangle) []image.Rectangle {
 	out := (*scratch)[:0]
 	for _, r := range rs {

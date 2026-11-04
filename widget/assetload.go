@@ -8,11 +8,8 @@ import (
 	"github.com/stubbedev/lys-ui/internal/assetfile"
 )
 
-// maxAssetQueue bounds the decodes waiting: only what a frame painted
-// asks, so a long queue means what it asked first is off screen by now.
 const maxAssetQueue = 1024
 
-// assetJob is one decode off the loop and whom it answers on the loop.
 type assetJob struct {
 	key     any
 	load    func()
@@ -22,10 +19,6 @@ type assetJob struct {
 
 const maxAssetWorkers = 8
 
-// assets runs the decodes paints ask for, in the order asked, on up to
-// maxAssetWorkers goroutines that exist only while there is work, so one
-// read that never returns holds up only its own. Its load functions touch
-// no widget; answers come back through the invoker.
 var assets = newAssetQueue()
 
 var readAssetFile = assetfile.Read
@@ -44,9 +37,6 @@ func newAssetQueue() *assetQueue {
 	return q
 }
 
-// loadAsset runs load off the loop, once per key however many ask, then
-// done on the loop for each asker. Without an invoker there is no loop
-// to answer on, and both run inline.
 func loadAsset(key any, load, done func()) {
 	deliver, ok := loopInvoker()
 	if !ok {
@@ -59,8 +49,6 @@ func loadAsset(key any, load, done func()) {
 	}
 }
 
-// add queues the job, or joins the one already there, and returns the
-// job the bound dropped.
 func (q *assetQueue) add(key any, load, done func(), deliver func(func())) (dropped *assetJob) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -104,8 +92,6 @@ func (q *assetQueue) run() {
 	}
 }
 
-// answer runs the waiters on the loop. A dropped job answers too: whoever
-// still paints the asset asks again.
 func answer(j *assetJob) {
 	j.deliver(func() {
 		for _, w := range j.waiters {
@@ -114,8 +100,6 @@ func answer(j *assetJob) {
 	})
 }
 
-// stop drops what has not started; the running decodes finish and end
-// their goroutines, and their answers go nowhere once the loop has ended.
 func (q *assetQueue) stop() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -125,7 +109,6 @@ func (q *assetQueue) stop() {
 	q.queue = nil
 }
 
-// wait blocks until every goroutine has run out of work.
 func (q *assetQueue) wait() {
 	q.mu.Lock()
 	defer q.mu.Unlock()

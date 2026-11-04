@@ -254,8 +254,7 @@ type node struct {
 	inkClosed   bool
 	inkClips    bool
 	inkNodeless bool
-	// backdrop is BackdropRegion's kept answer, on a tree's root.
-	backdrop *backdropCache
+	backdrop    *backdropCache
 	// self is the widget embedding this node, recorded by the first
 	// arranging container or, for a root no container holds, its first
 	// style, so a state flip can walk its own subtree.
@@ -756,8 +755,6 @@ func (n *node) Arrange(r render.Rect) {
 	n.settleInk()
 }
 
-// place records r as the rect the widget shows at, with no damage: a
-// part its owner positions while painting, inside what it invalidated.
 func (n *node) place(r render.Rect) {
 	n.bounds = r
 	if n.anims != nil {

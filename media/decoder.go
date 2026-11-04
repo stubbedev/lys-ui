@@ -38,17 +38,15 @@ type decoder struct {
 	// pixels holds the frame buffers off the Go heap: a stream's frames
 	// cost the GC nothing, and the pages go back to the system when the
 	// stream closes rather than when a collection gets to them.
-	pixels memory.Shared
-	src    Source
-	seeker Seeker
-	size   image.Rectangle
-	out    chan decoded
-	free   chan *frameBuf
-	seek   chan seekRequest
-	quit   chan struct{}
-	done   chan struct{}
-	// closed closes once the source closed and the goroutine ended;
-	// closeErr is the source's answer, read after that.
+	pixels   memory.Shared
+	src      Source
+	seeker   Seeker
+	size     image.Rectangle
+	out      chan decoded
+	free     chan *frameBuf
+	seek     chan seekRequest
+	quit     chan struct{}
+	done     chan struct{}
 	closed   chan struct{}
 	closeErr error
 }

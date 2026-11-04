@@ -26,9 +26,6 @@ const (
 	pendingTicks               = 50
 )
 
-// selectionPeer plays the foreign client holding the selection, through
-// the fake compositor: it announces one offer and keeps the write end a
-// paste hands over, writing only when the test says.
 type selectionPeer struct {
 	f       *fakeCompositor
 	device  atomic.Uint32
@@ -81,7 +78,6 @@ func (p *selectionPeer) closeFds() {
 	p.writeTo = nil
 }
 
-// announce makes a text offer the selection.
 func (p *selectionPeer) announce() {
 	device := p.device.Load()
 	p.f.send(device, dataDeviceEventDataOffer, serverOfferID)
@@ -89,7 +85,6 @@ func (p *selectionPeer) announce() {
 	p.f.send(device, dataDeviceEventSelection, serverOfferID)
 }
 
-// write delivers payload to every held write end and closes them.
 func (p *selectionPeer) write(t *testing.T, payload string) {
 	t.Helper()
 	p.mu.Lock()
@@ -112,8 +107,6 @@ func (p *selectionPeer) awaitFd(t *testing.T) {
 	}
 }
 
-// loopWatch runs on the loop through Every: it counts passes and starts
-// fn once ready holds.
 type loopWatch struct {
 	ticks   atomic.Int64
 	reached chan struct{}
@@ -133,8 +126,6 @@ func watchLoop(a *app.Application) *loopWatch {
 	return w
 }
 
-// await bounds the wait for n more loop passes; a loop blocked on the
-// peer fails it rather than the test's timeout.
 func (w *loopWatch) await(t *testing.T, n int64) {
 	t.Helper()
 	w.want.Store(w.ticks.Load() + n)
@@ -162,9 +153,6 @@ func awaitOffer(t *testing.T, a *app.Application, clip *app.Clipboard) {
 	}
 }
 
-// A paste from a peer that never writes costs the loop no roundtrip and
-// no wait: it keeps making passes with the paste pending, and the payload
-// lands when the peer finally answers.
 func TestPasteFromASilentPeerLeavesTheLoopRunning(t *testing.T) {
 	p, a, clip := newSelectionPeer(t)
 	a.Hold()
@@ -205,9 +193,6 @@ func TestPasteFromASilentPeerLeavesTheLoopRunning(t *testing.T) {
 	}
 }
 
-// A pending ctrl+v lands in the widget that held focus at the press, even
-// after focus moved and the user typed on, and nothing the wait let
-// through is lost.
 func TestPendingPasteLandsWhereItWasAsked(t *testing.T) {
 	p, a, clip := newSelectionPeer(t)
 	a.Hold()
@@ -270,9 +255,6 @@ func TestPendingPasteLandsWhereItWasAsked(t *testing.T) {
 	}
 }
 
-// The client's own copy of the write end is closed once the request is
-// out: with the compositor's copy gone too, the read ends at EOF rather
-// than at its deadline, which would report a stalled peer.
 func TestPasteClosesItsWriteEnd(t *testing.T) {
 	p, a, clip := newSelectionPeer(t)
 	a.Hold()

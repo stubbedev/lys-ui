@@ -43,8 +43,6 @@ type Buffer struct {
 	// buffer.
 	Data []byte
 
-	// Timeline is a dmabuf buffer's explicit synchronization, nil where the
-	// compositor syncs implicitly.
 	Timeline *Timeline
 
 	// Target is a dmabuf buffer's GPU target (NewDmabuf), which a frame
@@ -170,9 +168,7 @@ type Pool struct {
 	// retires them. The list is capped; overflow drops the oldest.
 	retired []*Buffer
 
-	// copied counts the pixels CopyForward copied.
-	copied int
-	// deferrals counts the Acquires that reported ErrBusy.
+	copied    int
 	deferrals int
 }
 

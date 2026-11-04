@@ -237,9 +237,6 @@ func TestDeadlineWriterRejectsANilDescriptor(t *testing.T) {
 	}
 }
 
-// Running transfers are bounded, refused past the bound with ErrBusy, and
-// Stop joins them at once whatever their peers do: nothing outlives it,
-// and nothing starts after it.
 func TestTransfersBoundAndStop(t *testing.T) {
 	var tr Transfers
 	silent := make([]*os.File, 0, MaxTransfers)
@@ -278,8 +275,6 @@ func TestTransfersBoundAndStop(t *testing.T) {
 	}
 }
 
-// A refused send still closes what it took over, so the consumer sees
-// EOF instead of waiting on a descriptor nobody holds.
 func TestRefusedSendClosesTheDescriptor(t *testing.T) {
 	var tr Transfers
 	tr.Stop()
@@ -300,8 +295,6 @@ func TestRefusedSendClosesTheDescriptor(t *testing.T) {
 	}
 }
 
-// A send runs off its caller: a provider still writing leaves the caller
-// free.
 func TestSendRunsOffTheCaller(t *testing.T) {
 	var tr Transfers
 	r, w := rawPipe(t)

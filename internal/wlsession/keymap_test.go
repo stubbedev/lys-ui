@@ -102,8 +102,6 @@ xkb_symbols "(unnamed)" {
 };
 `
 
-// settleBackground plays the loop: it waits out the background goroutine
-// and takes what it posted.
 func settleBackground(t *testing.T, s *Session) {
 	t.Helper()
 	if !s.background().Settle(10 * time.Second) {

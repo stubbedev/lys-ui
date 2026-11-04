@@ -726,9 +726,6 @@ func unwatch(s *Stylesheet) {
 	rearmWatchLocked()
 }
 
-// rearmWatchLocked points the one watch at the directories of every
-// loaded file: an editor replaces a file by renaming over it, which only
-// its directory sees.
 func rearmWatchLocked() {
 	var dirs []string
 	for _, s := range watches {
@@ -796,7 +793,6 @@ func (s *Stylesheet) reloadIfChanged() {
 	})
 }
 
-// applyReload installs a reload's outcome, unless Remove came first.
 func (s *Stylesheet) applyReload(sheet *style.Sheet, now []styleFile, err error) {
 	watchMu.Lock()
 	removed := len(s.files) == 0
@@ -906,8 +902,6 @@ func loadFontFaces() {
 	}
 }
 
-// requestFontFace maps a font file off the loop. The file goes into
-// sysfont's cache, and the relayer that follows finds it there.
 func requestFontFace(family, src string) {
 	var failed error
 	loadAsset(fontFaceKey(src), func() {
@@ -923,7 +917,6 @@ func requestFontFace(family, src string) {
 	})
 }
 
-// fontFaceKey names a font file's load in the asset queue.
 type fontFaceKey string
 
 // fontFaceOf resolves a family and weight through the @font-face

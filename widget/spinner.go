@@ -68,8 +68,6 @@ func (s *Spinner) Measure(axis Axis, forSize int) Sizes {
 	return s.measureStore(axis, forSize, FixedSizes(s.size))
 }
 
-// inkRect is the square the ring paints in, centered in bounds a
-// container may have stretched.
 func (s *Spinner) inkRect() render.Rect {
 	b := s.bounds
 	side := min(b.W, b.H)

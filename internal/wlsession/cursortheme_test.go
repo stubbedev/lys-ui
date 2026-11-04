@@ -53,8 +53,6 @@ func writeCursor(t *testing.T, base, theme, name string, data []byte) {
 	}
 }
 
-// loadedCursors plays the session's two halves in one goroutine: what the
-// background goroutine reads goes straight into the pool.
 type loadedCursors struct {
 	*cursorTheme
 	reader *cursorReader
@@ -267,8 +265,6 @@ func TestCursorSearchPathAddsTheLegacyDirectories(t *testing.T) {
 	}
 }
 
-// cursorRig is a session whose reads the test holds: the wire push is
-// recorded, the pool is real, and the reads say where they ran.
 type cursorRig struct {
 	s       *Session
 	pushed  []*cursorImage
@@ -319,9 +315,6 @@ func (r *cursorRig) readsOnLoop(t *testing.T) {
 	}
 }
 
-// A shape not yet read costs the pointer path no file read: SetCursor
-// returns with the read held, keeps the shape it has, and the shape shows
-// when the read comes back. A second hover reads nothing at all.
 func TestCursorShapeReadsStayOffTheLoop(t *testing.T) {
 	r := newCursorRig(t)
 	if err := r.s.SetCursor("text"); err != nil {
@@ -356,8 +349,6 @@ func TestCursorShapeReadsStayOffTheLoop(t *testing.T) {
 	}
 }
 
-// A shape replaced while it was being read does not flash: only the shape
-// still asked for shows.
 func TestCursorReadForAnOldShapeShowsTheNewOne(t *testing.T) {
 	r := newCursorRig(t)
 	r.s.crs.readFrames = func(name string) ([]xcursor.Image, error) {
@@ -377,8 +368,6 @@ func TestCursorReadForAnOldShapeShowsTheNewOne(t *testing.T) {
 	}
 }
 
-// A file cursor reads off the loop too: its CSS fallback stands in while
-// the file travels, and the file shows when it lands, once per file.
 func TestFileCursorReadsStayOffTheLoop(t *testing.T) {
 	r := newCursorRig(t)
 	const cursor = fileCursorPrefix + "/x/c.cur#1,2,text"
@@ -403,8 +392,6 @@ func TestFileCursorReadsStayOffTheLoop(t *testing.T) {
 	}
 }
 
-// The preload reads the shapes hover reaches for ahead of any hover, and
-// a compositor drawing cursors itself is left alone.
 func TestCursorPreloadFillsThePool(t *testing.T) {
 	r := newCursorRig(t)
 	r.s.shm = &wl.Shm{}

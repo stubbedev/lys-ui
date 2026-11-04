@@ -33,8 +33,6 @@ func bgImageFor(path string) *render.Icon {
 	return nil
 }
 
-// requestCSSImage asks for path's decode, whose answer repaints w: what a
-// restyle calls for every url() its values name.
 func requestCSSImage(path string, w Widget) {
 	if path == "" {
 		return
@@ -53,8 +51,6 @@ func requestCSSImage(path string, w Widget) {
 	}
 }
 
-// load runs the decode. A restyle asks only once, so a job the queue's
-// bound dropped goes back in.
 func (img *cssImage) load(path string) {
 	var decoded *render.Icon
 	var failed error
@@ -71,7 +67,6 @@ func (img *cssImage) load(path string) {
 	})
 }
 
-// settle records the decode and repaints whoever waits on it.
 func (img *cssImage) settle(decoded *render.Icon, failed error, path string) {
 	img.icon, img.settled = decoded, true
 	if failed != nil {
@@ -105,7 +100,6 @@ func decodeCSSImage(path string) (*render.Icon, error) {
 
 const cssImageLimit = 64 << 20
 
-// requestStyleImages asks for every url() file v's paint reads.
 func requestStyleImages(v *style.Values, w Widget) {
 	for _, src := range v.Bg.Images {
 		requestCSSImage(src.URL, w)
@@ -114,8 +108,6 @@ func requestStyleImages(v *style.Values, w Widget) {
 	requestCSSImage(v.BorderImage.Source.URL, w)
 }
 
-// requestPseudoImages is requestStyleImages for n's pseudo-elements, and
-// their url() content.
 func (n *node) requestPseudoImages(w Widget) {
 	if n.pseudo == nil {
 		return

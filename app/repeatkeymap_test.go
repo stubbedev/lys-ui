@@ -12,8 +12,6 @@ import (
 	"github.com/stubbedev/lys-ui/widget"
 )
 
-// A synthesized repeat is a key like any other: with a later keymap still
-// compiling it would read through the keymap it replaces, so it holds off.
 func TestKeyRepeatHoldsOffWhileAKeymapCompiles(t *testing.T) {
 	a := idleBudgetApp(t)
 	repeats := 0

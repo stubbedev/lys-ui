@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// serveResult is ServeAccessibility's answer, pumped onto the test's loop.
 func serveResult(t *testing.T, app *Application, opts A11YOptions) error {
 	t.Helper()
 	var (
@@ -38,9 +37,6 @@ func TestServeAccessibilityTakesExportedOptions(t *testing.T) {
 	}
 }
 
-// Serving, and following the desktop's switch, runs on the worker: a bus
-// that never answers leaves ServeAccessibility and the switch's callback
-// returning at once on the loop.
 func TestServeAccessibilityWaitsOnNoBus(t *testing.T) {
 	app := testApp(nil)
 	release := make(chan struct{})

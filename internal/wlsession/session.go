@@ -159,25 +159,24 @@ type Session struct {
 	// blurMgr is ext_background_effect_manager_v1; blurCapable is its
 	// last capabilities event's blur bit, and blurSurfaces the
 	// per-surface effect objects.
-	blurMgr           *wlr.ExtBackgroundEffectManagerV1
-	blurCapable       bool
-	blurSurfaces      map[*wl.Surface]*wlr.ExtBackgroundEffectSurfaceV1
-	alphaSurfaces     map[*wl.Surface]*wlr.WpAlphaModifierSurfaceV1
-	bell              *wlr.XdgSystemBellV1
-	wmBase            *xdg.WmBase
-	wmBaseVersion     uint32
-	layerShellVersion uint32
-	compositorVersion uint32
-	outputs           []*Output
-	hasArgb           bool
-	globals           map[string]bool
-	globalVersions    map[string]uint32
-	ifaceNames        map[uint32]string
-	mods              uint32
-	locks             Locks
-	repeatRate        uint32
-	repeatDelay       uint32
-	// xkbContext belongs to the background goroutine.
+	blurMgr             *wlr.ExtBackgroundEffectManagerV1
+	blurCapable         bool
+	blurSurfaces        map[*wl.Surface]*wlr.ExtBackgroundEffectSurfaceV1
+	alphaSurfaces       map[*wl.Surface]*wlr.WpAlphaModifierSurfaceV1
+	bell                *wlr.XdgSystemBellV1
+	wmBase              *xdg.WmBase
+	wmBaseVersion       uint32
+	layerShellVersion   uint32
+	compositorVersion   uint32
+	outputs             []*Output
+	hasArgb             bool
+	globals             map[string]bool
+	globalVersions      map[string]uint32
+	ifaceNames          map[uint32]string
+	mods                uint32
+	locks               Locks
+	repeatRate          uint32
+	repeatDelay         uint32
 	xkbContext          *xkb.Context
 	xkbKeymap           *xkb.Keymap
 	xkbState            *xkb.State
@@ -295,10 +294,6 @@ type Session struct {
 	// OnKeyUp fires on key releases with the evdev keycode.
 	OnKeyUp func(keycode uint32)
 
-	// keyQueue is the keyboard's wire order while a keymap compiles;
-	// empty otherwise. bg is the background goroutine (background.go);
-	// posted carries its results back, hasPosted saying so without the
-	// lock. compileKeymap stands in for the compile in tests.
 	keyQueue      []queuedKeyEvent
 	bg            *worker.Queue
 	postedMu      sync.Mutex

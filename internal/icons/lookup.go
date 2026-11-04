@@ -64,9 +64,6 @@ func (c *Cache) resolve(name string, size int, frac120 uint32) (string, error) {
 	return path, nil
 }
 
-// built returns the index in slot, building it with the lock released,
-// one build at a time. A build a reset overtook starts over on the new
-// state.
 func (c *Cache) built(slot **themeIndex, build func(themeFS, string, iconNamespace, []string) *themeIndex) *themeIndex {
 	c.mu.Lock()
 	ix := *slot
@@ -235,8 +232,6 @@ const maxResolved = 4096
 // every base directory. A cache reset drops it, so icons installed
 // since are found.
 type themeIndex struct {
-	// mu guards resolved and the followed links, and is held across the
-	// stat that follows one; a paint never takes it.
 	mu    sync.Mutex
 	fsys  themeFS
 	chain []*Theme

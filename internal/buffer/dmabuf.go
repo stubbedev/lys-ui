@@ -51,8 +51,6 @@ func NewDmabuf(allocate Allocate, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, r
 	return b, nil
 }
 
-// allocated imports the target allocate made, unless the buffer was dropped
-// meanwhile, which closes it.
 func (imp *dmabufImport) allocated(mgr *wlr.ZwpDmabufV1, t *gpu.Target, w, h int32, err error) {
 	b := imp.b
 	if err != nil && b.freed && errors.Is(err, gpu.ErrDeviceClosed) {

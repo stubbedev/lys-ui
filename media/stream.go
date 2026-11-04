@@ -313,8 +313,6 @@ func (s *Stream) startAudio() {
 	})
 }
 
-// onAudio runs fn on the worker against the current opening, after
-// everything queued before it; a failure surfaces on the next advance.
 func (s *Stream) onAudio(fn func(out audioOut) error) {
 	link := s.audio
 	if link == nil {
@@ -341,8 +339,6 @@ func (s *Stream) stopAudio() {
 	})
 }
 
-// postAudio queues work for the audio worker. A queue full behind a sound
-// server that stopped answering fails the stream.
 func (s *Stream) postAudio(work func()) {
 	if !s.audioWork.Post(work) {
 		s.fail(fmt.Errorf("media: %s: the sound server stopped answering", s.name))

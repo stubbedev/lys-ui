@@ -200,15 +200,11 @@ func TestSettingsBindingBridgesToWidgets(t *testing.T) {
 	}
 }
 
-// callerGoroutine names the calling goroutine, for gates that prove where
-// a seam ran.
 func callerGoroutine() string {
 	buf := make([]byte, 64)
 	return strings.Fields(string(buf[:runtime.Stack(buf, false)]))[1]
 }
 
-// settingsSeams replaces the timer and the file write of a Settings: the
-// armed function waits for the test, and every write is recorded.
 type settingsSeams struct {
 	mu      sync.Mutex
 	armed   []func()
@@ -242,8 +238,6 @@ func newSettingsSeams(s *Settings) *settingsSeams {
 	return seams
 }
 
-// A burst of Sets on the loop touches no file there: one write is
-// scheduled, and it happens elsewhere with the burst's last values.
 func TestSettingsBurstWritesOnceOffTheCaller(t *testing.T) {
 	settingsEnv(t)
 	s := testSettings(t, testApp(nil), "dev.stubbe.test.burst")
@@ -271,7 +265,6 @@ func TestSettingsBurstWritesOnceOffTheCaller(t *testing.T) {
 	}
 }
 
-// A write stuck on a slow disk holds up neither Set nor Get.
 func TestSettingsStuckWriteBlocksNoSet(t *testing.T) {
 	settingsEnv(t)
 	s := testSettings(t, testApp(nil), "dev.stubbe.test.stuck")
@@ -303,8 +296,6 @@ func TestSettingsStuckWriteBlocksNoSet(t *testing.T) {
 	}
 }
 
-// Run's exit writes what the delay had not yet, and a Set after it has no
-// exit left to wait for, so it writes at once.
 func TestSettingsFlushAtRunExit(t *testing.T) {
 	cfg := settingsEnv(t)
 	a := testApp(nil)
@@ -325,7 +316,6 @@ func TestSettingsFlushAtRunExit(t *testing.T) {
 	}
 }
 
-// A failed write stays owed and the next Flush retries it.
 func TestSettingsFailedWriteStaysOwed(t *testing.T) {
 	settingsEnv(t)
 	s := testSettings(t, testApp(nil), "dev.stubbe.test.fail")

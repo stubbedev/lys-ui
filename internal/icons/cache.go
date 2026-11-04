@@ -65,8 +65,7 @@ type Cache struct {
 
 	entries map[cacheKey]*cacheEntry
 	// order lists the keys from least to most recently used.
-	order []cacheKey
-	// fallbacks memoizes FallbackName until a reset.
+	order     []cacheKey
 	fallbacks map[string]string
 
 	// fsys is the file system lookups read.
@@ -79,8 +78,7 @@ type Cache struct {
 	// lookup of one of its names after a reset.
 	namespace      iconNamespace
 	namespaceIndex *themeIndex
-	// buildMu holds one index build at a time, with mu released.
-	buildMu sync.Mutex
+	buildMu        sync.Mutex
 }
 
 // DefaultTheme is GTK's default icon theme, the one lookups start on
@@ -244,9 +242,6 @@ func (c *Cache) load(name string, size int, frac120 uint32, tint render.Color, m
 	return c.tintOf(e, tint), nil
 }
 
-// tintOf is e's natural raster recolored to tint, derived once per tint
-// color (one slot per entry: switching tints re-derives, it does not
-// re-decode).
 func (c *Cache) tintOf(e *cacheEntry, tint render.Color) *render.Icon {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -317,10 +312,6 @@ func (c *Cache) touchLocked(key cacheKey) {
 	c.order = append(slices.Delete(c.order, i, i+1), key)
 }
 
-// ensure returns the entry for the key, resolving and decoding on first
-// use with the lock released. Failures stick in the entry until a reset
-// drops it, so a missing icon costs one lookup rather than one per
-// frame. An entry decoded across a reset is returned but not kept.
 func (c *Cache) ensure(key cacheKey) *cacheEntry {
 	c.mu.Lock()
 	if e, ok := c.entries[key]; ok {

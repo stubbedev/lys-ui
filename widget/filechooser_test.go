@@ -284,8 +284,6 @@ func TestGoldenFileChooser(t *testing.T) {
 	NewGolden(t, save, "filechooser-save", goldenTheme(th), goldenFrame(400, 320))
 }
 
-// chooserLoop stands in for the application's loop: the invoker queues what
-// the off-loop listing answers with, and the test runs it.
 type chooserLoop struct {
 	mu     sync.Mutex
 	queued []func()
@@ -303,7 +301,6 @@ func installChooserLoop(t *testing.T) *chooserLoop {
 	return l
 }
 
-// pumpFor runs answers until n arrived, failing on a bounded wait.
 func (l *chooserLoop) pumpFor(t *testing.T, n int) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -323,7 +320,6 @@ func (l *chooserLoop) pumpFor(t *testing.T, n int) {
 	}
 }
 
-// countedSource records where each read ran and holds it until released.
 func countedSource(release chan struct{}) (DirSource, *atomic.Int32, *atomic.Int32) {
 	loop := goroutineID()
 	var reads, onLoop atomic.Int32
@@ -337,9 +333,6 @@ func countedSource(release chan struct{}) (DirSource, *atomic.Int32, *atomic.Int
 	}, &reads, &onLoop
 }
 
-// Listing waits on the disk, so none of it runs on the loop: a source that
-// never answers leaves every navigation returning at once over an empty
-// view, and an answer to a directory left since is dropped.
 func TestFileChooserReadsNothingOnTheLoop(t *testing.T) {
 	loop := installChooserLoop(t)
 	release := make(chan struct{})
@@ -366,7 +359,6 @@ func TestFileChooserReadsNothingOnTheLoop(t *testing.T) {
 	}
 }
 
-// Switching filter reads nothing: it filters the listing in hand.
 func TestFileChooserFilterReadsNothing(t *testing.T) {
 	c := newChooser(t, FileModeOpen, chooserFilters)
 	c.navigate("/home/Documents")
@@ -386,8 +378,6 @@ func TestFileChooserFilterReadsNothing(t *testing.T) {
 	}
 }
 
-// A dead mount holds a bounded number of goroutines, and the view still
-// lands on the last directory asked for.
 func TestFileChooserBoundsListingsOut(t *testing.T) {
 	loop := installChooserLoop(t)
 	release := make(chan struct{})
@@ -416,7 +406,6 @@ func TestFileChooserBoundsListingsOut(t *testing.T) {
 	}
 }
 
-// A listing's failure stays on the status line.
 func TestFileChooserShowsAListingFailure(t *testing.T) {
 	c := newChooser(t, FileModeOpen, nil)
 	c.SetSource(func(string) ([]FileEntry, error) { return nil, os.ErrPermission })

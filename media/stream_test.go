@@ -387,8 +387,6 @@ func TestStreamFramesAreFreedOnClose(t *testing.T) {
 	})
 }
 
-// stuckSource is a decoder that never exits until the test lets it: its
-// ReadFrame and its Close hold until release closes.
 type stuckSource struct {
 	release chan struct{}
 	entered chan struct{}
@@ -409,9 +407,6 @@ func (f *stuckSource) Close() error {
 	return errors.New("the decoder died hard")
 }
 
-// Close returns while a decoder that will not exit holds both its read and
-// its close, and Wait reports what the close met once it does exit. Under
-// synctest a Close that waited would deadlock the bubble.
 func TestCloseWaitsOnNoDecoder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		defer animclock.Reset()
@@ -433,9 +428,6 @@ func TestCloseWaitsOnNoDecoder(t *testing.T) {
 	})
 }
 
-// A sound server or decoder fork that hangs holds up the audio worker
-// alone: Play, the volume, Pause and Close all return, and the settings
-// reach the output once it opens.
 func TestAudioWaitsOnNothingOnTheLoop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		defer animclock.Reset()
@@ -475,7 +467,6 @@ func TestAudioWaitsOnNothingOnTheLoop(t *testing.T) {
 	})
 }
 
-// A failed open fails the stream on the loop.
 func TestAudioOpenFailureReachesTheLoop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		defer animclock.Reset()

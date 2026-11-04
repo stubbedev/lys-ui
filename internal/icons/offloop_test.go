@@ -9,8 +9,6 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 )
 
-// heldFS parks the first ReadDir until released, closing entered once it
-// is inside.
 type heldFS struct {
 	countingFS
 	once             sync.Once

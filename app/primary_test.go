@@ -48,7 +48,6 @@ func newPrimaryEntry(t *testing.T) (*widget.Router, *widget.Entry) {
 	return r, e
 }
 
-// noReport is a paste with nobody to tell of a failure.
 func noReport(error) {}
 
 // newPrimaryInput builds a surface input routing into r, carrying the

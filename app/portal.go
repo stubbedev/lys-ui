@@ -56,8 +56,6 @@ type portalResponseData struct {
 // the Request/Response handshake every interactive portal call uses,
 // and the routing of other portal signals to onSignal.
 type portalClient struct {
-	// connectMu serializes dialing, so nothing waiting on mu ever waits
-	// on the bus.
 	connectMu sync.Mutex
 	mu        sync.Mutex
 	conn      *dbus.Conn

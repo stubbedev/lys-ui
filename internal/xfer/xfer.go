@@ -47,8 +47,6 @@ var (
 	ErrTimeout = errors.New("xfer: peer stalled and the deadline cut the transfer off")
 )
 
-// chunks are the buffers Copy reads through: a paste costs its payload,
-// not a chunk per transfer.
 var chunks = sync.Pool{New: func() any {
 	chunk := make([]byte, 32<<10)
 	return &chunk
@@ -234,8 +232,6 @@ func (t *Transfers) release() {
 	t.wg.Done()
 }
 
-// track registers f for Stop to close, and reports false when Stop has
-// already run, which leaves closing f to the caller.
 func (t *Transfers) track(f *os.File) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()

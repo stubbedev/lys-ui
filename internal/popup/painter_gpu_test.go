@@ -16,9 +16,8 @@ import (
 
 // gpuFrames is a Renderer over a real device, or one whose frames fail.
 type gpuFrames struct {
-	dev  *gpu.Device
-	lost bool
-	// refused makes every frame a device-busy refusal.
+	dev        *gpu.Device
+	lost       bool
 	refused    bool
 	incomplete bool
 	failed     bool

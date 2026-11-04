@@ -255,7 +255,6 @@ func postRecents(m *recentfiles.Manager, work func()) bool {
 	return false
 }
 
-// addRecents records paths under lys-ui, off the loop.
 func (a *Application) addRecents(paths []string) {
 	m := a.recentsManager()
 	postRecents(m, func() {
@@ -265,8 +264,6 @@ func (a *Application) addRecents(paths []string) {
 	})
 }
 
-// existingRecents is a FileChooser's recents source: it waits on the
-// worker, so it runs off the loop like every chooser source.
 func existingRecents(m *recentfiles.Manager) []string {
 	answer := make(chan []string, 1)
 	if !postRecents(m, func() { answer <- existingPaths(m.List(), 0) }) {
@@ -275,9 +272,6 @@ func existingRecents(m *recentfiles.Manager) []string {
 	return <-answer
 }
 
-// existingPaths keeps the entries whose file is still there, at most
-// limit of them when limit is positive. It stats, so it runs on the
-// worker.
 func existingPaths(entries []recentfiles.Entry, limit int) []string {
 	var paths []string
 	for _, e := range entries {

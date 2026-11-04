@@ -392,9 +392,6 @@ func TestDetachReachesTheDestroyedSurface(t *testing.T) {
 	}
 }
 
-// A popup waits on its first configure with nothing painted and its enter
-// tween unstarted, so the tween's first frame is the first on screen. The
-// configure starts it, once; a later configure leaves it be.
 func TestFirstConfigureStartsTheEnter(t *testing.T) {
 	base := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return base }))
@@ -438,8 +435,6 @@ func TestFirstConfigureStartsTheEnter(t *testing.T) {
 	}
 }
 
-// Dismissed while still waiting: the popup closes without ever having
-// shown, and a configure landing after that is harmless.
 func TestPopupDismissedBeforeItsConfigure(t *testing.T) {
 	base := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return base }))

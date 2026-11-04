@@ -53,17 +53,14 @@ var (
 // it answers what a client needs to map a surface and reports each commit
 // that carries a buffer on mapped.
 type fakeCompositor struct {
-	conn     *net.UnixConn
-	globals  []fakeGlobal
-	objects  map[uint32]string
-	roles    map[uint32]func()
-	pending  map[uint32]bool
-	toplevel map[uint32]uint32
-	serial   uint32
-	mapped   chan struct{}
-	// syncs counts wl_display.sync; onRequest and onFds, set before the
-	// client connects, see every request and may keep what arrived by
-	// descriptor.
+	conn      *net.UnixConn
+	globals   []fakeGlobal
+	objects   map[uint32]string
+	roles     map[uint32]func()
+	pending   map[uint32]bool
+	toplevel  map[uint32]uint32
+	serial    uint32
+	mapped    chan struct{}
 	syncs     atomic.Int64
 	onRequest func(iface string, obj, opcode uint32, body []byte)
 	onFds     func(fds []int) bool

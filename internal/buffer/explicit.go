@@ -14,16 +14,11 @@ import (
 // wl_buffer.release means nothing for such a buffer: Release, through the
 // renderer's watch, frees it.
 type Timeline struct {
-	// WL is the timeline imported into the compositor.
-	WL *wlr.WpDrmSyncobjTimelineV1
-	// Syncobj is the timeline on the device.
-	Syncobj drm.Syncobj
-	// Released frees the buffer once the compositor signals Release.
-	Released func()
-	// Acquire and Release are the points of the frame last drawn.
+	WL               *wlr.WpDrmSyncobjTimelineV1
+	Syncobj          drm.Syncobj
+	Released         func()
 	Acquire, Release uint64
-	// close drops the timeline, on the device and on the wire.
-	close func()
+	close            func()
 }
 
 // NewTimeline is a timeline over wl, dropped by close when its buffer goes.
@@ -69,7 +64,6 @@ func (s *SurfaceSync) Points(mgr *wlr.WpDrmSyncobjManagerV1, surf *wl.Surface, b
 	return nil
 }
 
-// split is a point as the wire carries it, its high and low 32 bits.
 func split(point uint64) (hi, lo uint32) {
 	return uint32(point >> 32), uint32(point & 0xffffffff)
 }

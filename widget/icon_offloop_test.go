@@ -14,8 +14,6 @@ import (
 	"github.com/stubbedev/lys-ui/internal/icons"
 )
 
-// settleAssets finishes the off-loop decodes and runs their answers: the
-// counted wait a test takes before it reads a settled frame.
 func settleAssets(t *testing.T, f *fakeInvoker) {
 	t.Helper()
 	finished := make(chan struct{})
@@ -40,8 +38,6 @@ func settleAssets(t *testing.T, f *fakeInvoker) {
 	}
 }
 
-// onTime runs fn, a paint, failing rather than hanging when it blocks on
-// a read only a writer the test holds back can finish.
 func onTime(t *testing.T, what string, fn func()) {
 	t.Helper()
 	done := make(chan struct{})
@@ -56,7 +52,6 @@ func onTime(t *testing.T, what string, fn func()) {
 	}
 }
 
-// fifoPath makes a named pipe: reading it blocks until the test writes.
 func fifoPath(t *testing.T, path string) {
 	t.Helper()
 	if err := syscall.Mkfifo(path, 0o600); err != nil {
@@ -64,8 +59,6 @@ func fifoPath(t *testing.T, path string) {
 	}
 }
 
-// holdRead makes the asset read of path wait until the returned feed hands
-// it data, as a slow disk would.
 func holdRead(t *testing.T, path string) (feed func(data string)) {
 	t.Helper()
 	read := readAssetFile
@@ -162,9 +155,6 @@ func TestFileIconFailureSurfacesAfterItsDecode(t *testing.T) {
 	}
 }
 
-// The launcher's pattern: its own goroutine preloads, it asks without
-// waiting, then shows the icon, which paints on its first paint with
-// nothing queued.
 func TestPreloadPatternPaintsFirstTimeWithoutAsking(t *testing.T) {
 	newFakeInvoker(t)
 	iconTree(t)
@@ -209,7 +199,6 @@ func TestIconKeepsItsRasterUntilTheNextIsDecoded(t *testing.T) {
 	}
 }
 
-// collectingInvoker holds answers until the test runs them.
 func collectingInvoker(t *testing.T) (run func()) {
 	t.Helper()
 	var mu sync.Mutex
@@ -270,8 +259,6 @@ func TestStopDropsWhatHasNotStarted(t *testing.T) {
 	}
 }
 
-// A tint moving each frame reads no file and decodes nothing: the file is
-// gone by the time it starts, and each step costs one boxed image.
 func TestRetintReadsNothingAndAllocatesLittle(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "glyph.svg")
 	if err := os.WriteFile(path, []byte(testSymbolicSVG), 0o600); err != nil {

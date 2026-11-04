@@ -97,14 +97,11 @@ func rawWriteEnd(t *testing.T) (*os.File, uintptr) {
 	return os.NewFile(uintptr(fds[0]), "dragdrop-test-raw-r"), uintptr(fds[1])
 }
 
-// receiveResult is one delivered drop payload.
 type receiveResult struct {
 	data []byte
 	err  error
 }
 
-// awaitReceive reads through the controller's receive path and bounds
-// the wait for its delivery.
 func awaitReceive(t *testing.T, c *Controller, offer offerAPI, mime string) receiveResult {
 	t.Helper()
 	ch := make(chan receiveResult, 1)
@@ -175,9 +172,6 @@ func TestReceivePayloadCutsOffASilentSource(t *testing.T) {
 	}
 }
 
-// A drop's read returns with the transfer running, whatever the source
-// does, and the offer finishes only once the bytes are in. Stop ends it
-// without its deadline.
 func TestDropReturnsBeforeASilentSource(t *testing.T) {
 	c := newTestController()
 	offer := &capturingOffer{onReceive: func(fd uintptr) { holdSilentPeer(t, fd) }}

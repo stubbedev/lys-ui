@@ -79,9 +79,6 @@ func rawWriteEnd(t *testing.T) (*os.File, uintptr) {
 	return os.NewFile(uintptr(fds[0]), "clipboard-test-raw-r"), uintptr(fds[1])
 }
 
-// testClipboard is a clipboard whose invoke stands in for the event
-// loop: it runs what comes back on the transfer goroutine, where the
-// test's channels pick it up.
 func testClipboard(t *testing.T) *Clipboard {
 	t.Helper()
 	c := &Clipboard{invoke: func(fn func()) { fn() }}
@@ -89,7 +86,6 @@ func testClipboard(t *testing.T) *Clipboard {
 	return c
 }
 
-// awaitRead bounds the wait for one read's delivery.
 func awaitRead[T any](t *testing.T, ch <-chan T) T {
 	t.Helper()
 	select {
@@ -181,8 +177,6 @@ func TestReadOfferTextCutsOffASilentPeer(t *testing.T) {
 	}
 }
 
-// The caller returns before a silent peer has answered, and stopping the
-// clipboard ends the transfer long before its deadline.
 func TestReadReturnsBeforeASilentPeerAndStopEndsIt(t *testing.T) {
 	c := testClipboard(t)
 	receives := 0
@@ -227,8 +221,6 @@ func TestReadsPastTheBoundAreRefused(t *testing.T) {
 	}
 }
 
-// A clipboard no loop owns refuses a read at the call instead of leaving
-// the reader waiting for a delivery nothing will run.
 func TestReadWithoutASchedulerFailsLoudly(t *testing.T) {
 	var got error
 	(&Clipboard{}).ReadText(func(_ string, err error) { got = err })
@@ -237,8 +229,6 @@ func TestReadWithoutASchedulerFailsLoudly(t *testing.T) {
 	}
 }
 
-// A consumer that never reads holds a transfer goroutine, never the
-// handler: it returns with the send running, and Stop ends the write.
 func TestSendToAStuckConsumerIsBounded(t *testing.T) {
 	c := testClipboard(t)
 	c.content = transfer.Text(string(bytes.Repeat([]byte("p"), 1<<20)))
@@ -257,8 +247,6 @@ func TestPrimarySendToAStuckConsumerIsBounded(t *testing.T) {
 	c.Stop()
 }
 
-// The deadline also ends a stuck send with nobody stopping it: the
-// consumer sees EOF after the bytes the pipe took.
 func TestSendDeadlineEndsAStuckConsumer(t *testing.T) {
 	shortTransferTimeout(t)
 	c := testClipboard(t)

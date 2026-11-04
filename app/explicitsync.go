@@ -13,25 +13,14 @@ import (
 	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
-// syncTimelines is what explicit synchronization asks of the device's timeline
-// syncobjs, a seam for tests: none of it waits.
 type syncTimelines interface {
-	// create makes a timeline and its fd for the compositor, the caller's to
-	// close once sent.
 	create() (drm.Syncobj, int, error)
-	// acquire attaches syncFile's fence to point, or signals point where
-	// syncFile is -1, a frame already done.
 	acquire(s drm.Syncobj, point uint64, syncFile int) error
-	// watch runs released on the loop once point signals.
 	watch(s drm.Syncobj, point uint64, released func()) error
-	// destroy drops s and any watch on it.
 	destroy(s drm.Syncobj)
-	// close ends the watching and closes the device.
 	close()
 }
 
-// openTimelines opens the timelines on node, which must have timeline
-// syncobjs, with the worker that watches release points.
 func openTimelines(node string) (*drmTimelines, error) {
 	d, err := drm.Open(node)
 	if err != nil {
@@ -56,9 +45,6 @@ func openTimelines(node string) (*drmTimelines, error) {
 	return t, nil
 }
 
-// drmTimelines are timeline syncobjs on a DRM node. Each has an eventfd the
-// kernel signals at the point a watch names; one worker waits on them all in
-// epoll and hands the release to the loop.
 type drmTimelines struct {
 	dev     *drm.Device
 	epfd    int
@@ -66,13 +52,9 @@ type drmTimelines struct {
 	invoke  func(func())
 	watcher sync.WaitGroup
 
-	// fds is each timeline's eventfd, and closed marks the device gone, after
-	// which a buffer dropping its timeline has nothing to drop.
-	fds    map[drm.Syncobj]int
-	closed bool
-	mu     sync.Mutex
-	// released is the pending watch of each eventfd, invoke how it reaches
-	// the loop.
+	fds      map[drm.Syncobj]int
+	closed   bool
+	mu       sync.Mutex
 	released map[int]func()
 }
 
@@ -188,9 +170,6 @@ func (t *drmTimelines) close() {
 	}
 }
 
-// explicitTimelines are dev's timelines for a compositor that takes explicit
-// synchronization, on dev's own render node; nil, syncing implicitly, for a
-// device the driver names no node for or one without sync_files.
 func explicitTimelines(dev *gpu.Device) syncTimelines {
 	node, ok := dev.RenderNode()
 	if !ok {

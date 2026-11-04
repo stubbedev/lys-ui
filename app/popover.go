@@ -770,8 +770,6 @@ func (op *openPopover) release() {
 // its close; a live one refits and repaints when its content drained
 // damage, as a window draws only what changed, and paints at most one
 // frame.
-// placePopovers records where the compositor put each popover its first
-// configure placed, parents first, ahead of the paint that needs it.
 func (a *Application) placePopovers() {
 	for _, op := range a.openPopovers {
 		if op.placed {

@@ -878,7 +878,6 @@ func TestCacheGetItems(t *testing.T) {
 	}
 }
 
-// countingScene counts what the bridge asks of the loop.
 type countingScene struct {
 	testScene
 	invokes int
@@ -894,8 +893,6 @@ func goroutineName() string {
 	return strings.Fields(string(buf[:runtime.Stack(buf, false)]))[1]
 }
 
-// serveLabel serves one label over a private bus, with no poller: the test
-// drives the checks itself.
 func serveLabel(t *testing.T, scene *countingScene, emit func(event) error) (*Bridge, *widget.Label) {
 	t.Helper()
 	a11y := dbustest.Start(t)
@@ -913,8 +910,6 @@ func serveLabel(t *testing.T, scene *countingScene, emit func(event) error) (*Br
 	return br, lbl
 }
 
-// An undamaged scene costs the loop nothing: a check builds no tree and
-// queues no pass, however many times the poller comes around.
 func TestUndamagedSceneBuildsNothing(t *testing.T) {
 	scene := &countingScene{}
 	br, lbl := serveLabel(t, scene, nil)
@@ -943,8 +938,6 @@ func TestUndamagedSceneBuildsNothing(t *testing.T) {
 	}
 }
 
-// What an assistive technology reads can change without a pixel moving: an
-// accessible name, or a tooltip, which is the name of an unnamed widget.
 func TestUnpaintedChangesStillSample(t *testing.T) {
 	scene := &countingScene{}
 	br, lbl := serveLabel(t, scene, nil)
@@ -976,9 +969,6 @@ func idOf(t *testing.T, br *Bridge, w widget.Widget) int32 {
 	return id
 }
 
-// Every event goes out on the emitter, none on the loop, and a bus that
-// stopped reading holds up the emitter alone: the pass returns, and while
-// the emitter is behind no further tree is built.
 func TestStuckBusHoldsUpNoLoopPass(t *testing.T) {
 	loop := goroutineName()
 	var (
@@ -1040,7 +1030,6 @@ func TestStuckBusHoldsUpNoLoopPass(t *testing.T) {
 	}
 }
 
-// A pass over an unchanged shape reuses the retired tree's nodes.
 func TestPassReusesRetiredNodes(t *testing.T) {
 	scene := &countingScene{}
 	br, _ := serveLabel(t, scene, nil)
@@ -1056,7 +1045,6 @@ func TestPassReusesRetiredNodes(t *testing.T) {
 	}
 }
 
-// Stop returns on a stuck emitter, within its bound.
 func TestStopDoesNotWaitOnAStuckBus(t *testing.T) {
 	release := make(chan struct{})
 	var hold atomic.Bool

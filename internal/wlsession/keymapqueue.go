@@ -14,27 +14,19 @@ import (
 	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
-// maxQueuedKeyEvents bounds the keyboard events waiting on a keymap. A
-// compile is finite, so a queue this long means a client flooded with
-// events it could not have typed.
 const maxQueuedKeyEvents = 4096
 
-// compiledKeymap is what one wl_keyboard.keymap event becomes on the
-// background goroutine.
 type compiledKeymap struct {
 	keymap *xkb.Keymap
 	state  *xkb.State
 	err    error
 }
 
-// pendingKeymap is one keymap event on its way to being installed.
 type pendingKeymap struct {
 	ready    bool
 	compiled compiledKeymap
 }
 
-// queuedKeyEvent is one entry of the keyboard's wire order while a keymap
-// compiles: a keymap to install at this point, or an event to deliver.
 type queuedKeyEvent struct {
 	keymap  *pendingKeymap
 	deliver func()
@@ -76,8 +68,6 @@ func (s *Session) HandleKeyboardKeymap(ev wl.KeyboardKeymapEvent) {
 	}
 }
 
-// compileKeymapFd reads and compiles a keymap on the background goroutine,
-// the only user of xkbContext, and closes its fd.
 func (s *Session) compileKeymapFd(fd uintptr, size, format uint32) compiledKeymap {
 	data, err := keymapfd.Read(fd, size)
 	keymapfd.Close(fd)
@@ -96,16 +86,11 @@ func (s *Session) compileKeymapFd(fd uintptr, size, format uint32) compiledKeyma
 	return compiledKeymap{keymap: km, state: state}
 }
 
-// settleKeymap records a keymap's outcome and delivers what no longer has
-// to wait.
 func (s *Session) settleKeymap(pending *pendingKeymap, compiled compiledKeymap) {
 	pending.ready, pending.compiled = true, compiled
 	s.drainKeyQueue()
 }
 
-// drainKeyQueue walks the keyboard's wire order up to the first keymap
-// still compiling. A delivery may dispatch and append behind itself, so
-// the head comes off before it runs.
 func (s *Session) drainKeyQueue() {
 	for len(s.keyQueue) > 0 {
 		head := s.keyQueue[0]
@@ -135,12 +120,8 @@ func (s *Session) installKeymap(compiled compiledKeymap) {
 // its way: keys read now would go through the one it replaces.
 func (s *Session) KeymapPending() bool { return s.keyboardQueued() }
 
-// keyboardQueued reports whether a keyboard event must wait in keyQueue:
-// the handlers ask first, so a key with nothing compiling builds no
-// closure.
 func (s *Session) keyboardQueued() bool { return len(s.keyQueue) > 0 }
 
-// queueKeyEvent puts deliver behind what already waits.
 func (s *Session) queueKeyEvent(deliver func()) {
 	if len(s.keyQueue) >= maxQueuedKeyEvents {
 		logutil.L().Error("wlsession: dropped a keyboard event behind a keymap still compiling", slog.Int("queued", len(s.keyQueue)))

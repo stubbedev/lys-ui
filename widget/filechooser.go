@@ -41,14 +41,11 @@ type FileChooser struct {
 	source  DirSource
 	recents func() []string
 
-	dir       string
-	all       []FileEntry
-	listing   []FileEntry
-	recentAt  []string
-	inRecents bool
-	// viewGen names the view on screen, so a listing answering a view
-	// left since is dropped; listings counts the ones out, and
-	// listingOwed says the current view waits for room.
+	dir         string
+	all         []FileEntry
+	listing     []FileEntry
+	recentAt    []string
+	inRecents   bool
 	viewGen     uint64
 	listings    int
 	listingOwed bool
@@ -106,8 +103,6 @@ type FileEntry struct {
 // runs off the loop goroutine and must touch no widget.
 type DirSource func(dir string) ([]FileEntry, error)
 
-// maxChooserListings bounds the listings out at once: a dead mount holds
-// one goroutine per directory tried, and past this the chooser waits.
 const maxChooserListings = 8
 
 // osDirSource is the default listing: os.ReadDir with dot files
@@ -136,8 +131,6 @@ func osDirSource(dir string) ([]FileEntry, error) {
 	return entries, nil
 }
 
-// runOffLoop runs load on a goroutine of its own and then done on the
-// loop, or both inline without an invoker. load touches no widget.
 func runOffLoop(load, done func()) {
 	deliver, ok := loopInvoker()
 	if !ok {
@@ -341,7 +334,6 @@ func (c *FileChooser) applyOne(i int) ([]string, bool) {
 	return []string{c.rowPath(i)}, true
 }
 
-// rowPath is row i's absolute path.
 func (c *FileChooser) rowPath(i int) string {
 	if c.inRecents {
 		return c.recentAt[i]
@@ -410,8 +402,6 @@ func (c *FileChooser) refresh() {
 	c.startListing()
 }
 
-// startListing starts the current view's listing, or leaves it owed when too
-// many are out.
 func (c *FileChooser) startListing() {
 	if c.listings == maxChooserListings {
 		c.listingOwed = true
@@ -449,7 +439,6 @@ func (c *FileChooser) startListing() {
 	})
 }
 
-// showListingStatus reports what a listing's answer left to say.
 func (c *FileChooser) showListingStatus(err error, noRecents bool) {
 	switch {
 	case err != nil:
@@ -459,7 +448,6 @@ func (c *FileChooser) showListingStatus(err error, noRecents bool) {
 	}
 }
 
-// show puts the listing in hand through the filter into the model.
 func (c *FileChooser) show() {
 	c.listing = c.listing[:0]
 	for _, e := range c.all {

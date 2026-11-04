@@ -47,8 +47,6 @@ func TestFontFaceMapsOnceAcrossRelayers(t *testing.T) {
 	}
 }
 
-// A pipe at the src is refused off the loop, and the failure reports once
-// its answer comes back.
 func TestFontFaceNeverOpensOnTheLoop(t *testing.T) {
 	f := newFakeInvoker(t)
 	path := filepath.Join(t.TempDir(), "held.ttf")

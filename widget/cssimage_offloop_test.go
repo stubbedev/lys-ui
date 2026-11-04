@@ -12,7 +12,6 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 )
 
-// boxLayersLeaf is a custom widget whose chrome is the cascade's.
 type boxLayersLeaf struct{ node }
 
 func (l *boxLayersLeaf) Measure(Axis, int) Sizes { return FixedSizes(30) }
@@ -34,8 +33,6 @@ func redPNG(t *testing.T) string {
 	return buf.String()
 }
 
-// Every property a stylesheet names a file in: a pipe holds the read, a
-// paint must not wait for it, and the file's pixels arrive with damage.
 func TestStylesheetImageNeverReadsOnTheLoop(t *testing.T) {
 	for _, tc := range []struct {
 		name, css string

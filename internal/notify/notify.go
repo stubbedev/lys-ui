@@ -85,17 +85,12 @@ const (
 
 // Bus is the session-bus connection a Notifier sends through.
 type Bus interface {
-	// Call invokes method and stores the reply into ret when ret is not
-	// nil, returning once ctx ends at the latest.
 	Call(ctx context.Context, dest string, path dbus.ObjectPath, method string, flags dbus.Flags, ret any, args ...any) error
-	// Signal routes the signals the bus delivers to ch.
 	Signal(ch chan<- *dbus.Signal)
-	// AddMatch asks the bus for the broadcast signals of iface at path.
 	AddMatch(ctx context.Context, iface string, path dbus.ObjectPath) error
 	Close() error
 }
 
-// connBus is the real Bus.
 type connBus struct{ conn *dbus.Conn }
 
 func (b connBus) Call(ctx context.Context, dest string, path dbus.ObjectPath, method string, flags dbus.Flags, ret any, args ...any) error {
@@ -182,8 +177,6 @@ const (
 	// goroutine per signal.
 	signalBuffer = 16
 
-	// queueDepth bounds what a stuck daemon can pile up: past it,
-	// notifications drop.
 	queueDepth = 64
 )
 
@@ -201,8 +194,6 @@ func NewWithDial(dial func() (Bus, error)) *Notifier {
 	return &Notifier{dial: dial, queue: worker.New(queueDepth), base: base, cancel: cancel}
 }
 
-// dialSession is New's connection source, the appearance package's
-// hygiene rule: a private connection the notifier owns and closes.
 func dialSession() (Bus, error) {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
@@ -211,9 +202,6 @@ func dialSession() (Bus, error) {
 	return connBus{conn: conn}, nil
 }
 
-// connect runs on the worker: the first send dials and probes, and
-// every later one finds the verdict. It returns the bus and transport
-// to send through, a nil bus when the notifier is inert.
 func (n *Notifier) connect() (Bus, transport) {
 	if !n.probed {
 		n.probed = true
@@ -322,7 +310,6 @@ func (n *Notifier) Notify(nf Notification) string {
 	return id
 }
 
-// send delivers one notification on the worker.
 func (n *Notifier) send(id string, nf Notification) {
 	bus, mode := n.connect()
 	if bus == nil {
@@ -354,8 +341,6 @@ func (n *Notifier) Close(id string) {
 	}
 }
 
-// withdraw runs on the worker, after the send it follows, so a classic
-// id the send learned is known here.
 func (n *Notifier) withdraw(id string) {
 	bus, mode := n.connect()
 	if bus == nil {

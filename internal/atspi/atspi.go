@@ -144,9 +144,6 @@ type Scene interface {
 	Focused() widget.Widget
 	// Invoke runs fn on the application's loop goroutine, asynchronously.
 	Invoke(fn func())
-	// A11yGeneration moves whenever an accessible state or the set of
-	// roots may have changed. Safe from any goroutine: the poller reads
-	// it to leave an unchanged scene alone without waking the loop.
 	A11yGeneration() uint64
 	// SetFocus moves keyboard focus to w through its window's router
 	// (AT-driven focus), failing as widget.Router.SetFocus does; called
@@ -168,7 +165,6 @@ type Options struct {
 	// negative means no ticker — the embedder drives Refresh itself.
 	Poll time.Duration
 
-	// emit replaces the bus send (tests).
 	emit func(ev event) error
 }
 
@@ -179,10 +175,7 @@ type Options struct {
 const DefaultPoll = 100 * time.Millisecond
 
 const (
-	// busTimeout bounds every call the bridge waits on.
-	busTimeout = 5 * time.Second
-	// stopTimeout bounds how long Stop waits on an emitter stuck in a
-	// write to a bus that stopped reading.
+	busTimeout  = 5 * time.Second
 	stopTimeout = 3 * time.Second
 )
 
@@ -243,8 +236,7 @@ type tree struct {
 	root  *anode
 	nodes map[int32]*anode
 	focus int32
-	// free holds the retired nodes while the tree waits to be rebuilt.
-	free []*anode
+	free  []*anode
 }
 
 // anode is one accessible object: the stable id (its object path),
@@ -439,7 +431,6 @@ func (b *Bridge) Refresh() {
 	b.settle()
 }
 
-// settle waits until the emitter has nothing left to do.
 func (b *Bridge) settle() {
 	b.handoff.Lock()
 	defer b.handoff.Unlock()
@@ -472,7 +463,6 @@ func (b *Bridge) sample() {
 	}
 }
 
-// emitter applies finished trees until Stop.
 func (b *Bridge) emitter() {
 	defer func() {
 		b.handoff.Lock()
@@ -503,9 +493,6 @@ func (b *Bridge) emitter() {
 	}
 }
 
-// apply publishes nt, sends what changed since the last one, and retires
-// the last one. Handlers reach a tree only under the bridge mutex, so once
-// the swap is done nothing but this function reads the old tree.
 func (b *Bridge) apply(nt *tree) {
 	b.mu.Lock()
 	old := b.cur
@@ -535,10 +522,6 @@ func (b *Bridge) apply(nt *tree) {
 	b.retire(old)
 }
 
-// retire resets old, outside the lock since it is the emitter's alone by
-// now, and hands it back for the next pass with its nodes on its free
-// list. One spare is enough: a second tree only retires while the first
-// waits unused, and goes to the collector.
 func (b *Bridge) retire(old *tree) {
 	for _, n := range old.nodes {
 		kids := n.children
@@ -555,7 +538,6 @@ func (b *Bridge) retire(old *tree) {
 	}
 }
 
-// newNode returns a node off tr's free list, or a new one.
 func (tr *tree) newNode() *anode {
 	last := len(tr.free) - 1
 	if last < 0 {

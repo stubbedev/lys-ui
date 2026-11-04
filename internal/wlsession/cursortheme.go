@@ -87,16 +87,12 @@ func newCursorTheme(shm *wl.Shm) (*cursorTheme, error) {
 	}, nil
 }
 
-// cursorReader reads shapes from the themes: disk work, for the background
-// goroutine alone.
 type cursorReader struct {
 	size    uint32
 	lookup  []*xcursor.Theme
 	openErr error
 }
 
-// cursorThemeFromEnv is the theme XCURSOR_THEME names at the size
-// XCURSOR_SIZE names, or the fallback theme at defaultSize.
 func cursorThemeFromEnv(defaultSize uint32) (string, uint32) {
 	name := os.Getenv("XCURSOR_THEME")
 	if name == "" {
@@ -109,14 +105,12 @@ func cursorThemeFromEnv(defaultSize uint32) (string, uint32) {
 	return name, size
 }
 
-// newCursorReaderFromEnv opens the theme from the environment.
 func newCursorReaderFromEnv(defaultSize uint32) *cursorReader {
 	name, size := cursorThemeFromEnv(defaultSize)
 	lookup, openErr := openCursorThemes(name, cursorSearchPath(os.Getenv))
 	return &cursorReader{size: size, lookup: lookup, openErr: openErr}
 }
 
-// frames reads a shape, its error naming a theme that did not open.
 func (r *cursorReader) frames(name string) ([]xcursor.Image, error) {
 	frames, err := cursorFrames(r.lookup, intconv.Clamp[int](r.size), name)
 	if err != nil {
@@ -190,9 +184,6 @@ func (t *cursorTheme) lookup(name string) (cur *themedCursor, known bool, err er
 	return nil, false, nil
 }
 
-// resolve picks the shape desired shows, the first of its candidates that
-// exists, degrading to the arrow when none does. settled is false while
-// a shape that could change the answer has not been read.
 func (t *cursorTheme) resolve(desired string) (name string, settled bool) {
 	for _, candidate := range cursorCandidates(desired) {
 		cur, known, _ := t.lookup(candidate)
@@ -207,8 +198,6 @@ func (t *cursorTheme) resolve(desired string) (name string, settled bool) {
 	return defaultCursor, known
 }
 
-// unread lists what must be read to resolve desired, in the order resolve
-// asks: its candidates, then the arrow.
 func (t *cursorTheme) unread(desired string) []string {
 	candidates := cursorCandidates(desired)
 	names := make([]string, 0, len(candidates)+1)
@@ -220,9 +209,6 @@ func (t *cursorTheme) unread(desired string) []string {
 	return names
 }
 
-// addCursor records one read of a shape, into the pool when it has
-// frames. A shape that failed is not read again: resolve walks a shape's
-// candidates on every apply.
 func (t *cursorTheme) addCursor(name string, frames []xcursor.Image, err error) {
 	if _, known, _ := t.lookup(name); known {
 		return
@@ -251,8 +237,6 @@ func (t *cursorTheme) fileCursor(path string) (img *cursorImage, known bool, err
 	return nil, false, nil
 }
 
-// addFile records one read of a file cursor, into the pool when it has an
-// image.
 func (t *cursorTheme) addFile(path string, img xcursor.Image, err error) {
 	if _, known, _ := t.fileCursor(path); known {
 		return

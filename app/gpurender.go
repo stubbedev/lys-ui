@@ -79,8 +79,6 @@ type gpuRenderer struct {
 	drawn, trimmed bool
 }
 
-// gpuFrame is what a drawn frame reports beyond its error: an explicit
-// frame's sync_file, -1 for one done already or not explicit.
 type gpuFrame struct {
 	incomplete bool
 	syncFile   int
@@ -189,8 +187,6 @@ func (a *Application) renderer() (*gpuRenderer, error) {
 	return r, nil
 }
 
-// rendererPlan is what opening a renderer needs from the session, read on the
-// loop: the compositor's main device and the layouts it imports.
 type rendererPlan struct {
 	node    uint64
 	hasNode bool
@@ -206,9 +202,6 @@ func (a *Application) rendererPlan() (rendererPlan, error) {
 	return rendererPlan{node: node, hasNode: hasNode, imports: a.sess.DmabufModifiers(fourcc.ARGB8888), syncobj: a.sess.SyncobjManager()}, nil
 }
 
-// startRenderer opens the renderer on a worker, which waits on the driver and
-// the disk, and hands it to the loop. One that lands after the loop ended is
-// closed by closeRenderer.
 func (a *Application) startRenderer(plan rendererPlan, open func(rendererPlan) (*gpuRenderer, error)) {
 	sess := a.sess
 	a.gpuOpening.Go(func() {
@@ -224,10 +217,6 @@ func (a *Application) startRenderer(plan rendererPlan, open func(rendererPlan) (
 	})
 }
 
-// adoptRenderer installs the renderer the worker opened, at a frame boundary:
-// each window drawing on the CPU moves to it and repaints whole, as one that
-// fails moves back (dropRenderer). A renderer opened for a session since
-// replaced is closed and opened again for the new one.
 func (a *Application) adoptRenderer(sess *wlsession.Session) {
 	r := a.gpuLanding.Swap(nil)
 	if r == nil {
@@ -246,7 +235,6 @@ func (a *Application) adoptRenderer(sess *wlsession.Session) {
 	}
 }
 
-// installRenderer makes r the application's renderer.
 func (a *Application) installRenderer(r *gpuRenderer) {
 	r.wake, r.invoke = func(d time.Duration) { a.wake(d) }, a.Invoke
 	if t, ok := r.timelines.(*drmTimelines); ok {
@@ -357,7 +345,6 @@ func (r *gpuRenderer) NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) 
 	return b, nil
 }
 
-// newTimeline makes a buffer's timeline and imports it into the compositor.
 func (r *gpuRenderer) newTimeline() (*buffer.Timeline, error) {
 	s, fd, err := r.timelines.create()
 	if err != nil {
@@ -378,9 +365,6 @@ func (r *gpuRenderer) newTimeline() (*buffer.Timeline, error) {
 	}), nil
 }
 
-// syncFrame puts the frame b was drawn with on its timeline: the acquire
-// point takes the frame's sync_file, signalled now for a frame done already,
-// and b is busy until the compositor signals the release point.
 func (r *gpuRenderer) syncFrame(b *buffer.Buffer, syncFile int) error {
 	t := b.Timeline
 	acquire, release := t.Next()
@@ -399,9 +383,6 @@ func (r *gpuRenderer) syncFrame(b *buffer.Buffer, syncFile int) error {
 	return nil
 }
 
-// allocate makes a target on a worker, so a new buffer waits on no driver on
-// the loop, and hands it back through the loop. A target that lands after the
-// renderer closed is closed with it.
 func (r *gpuRenderer) allocate(w, h int, done func(*gpu.Target, error)) {
 	mods := r.modifiers
 	r.workers.Go(func() {
@@ -416,9 +397,6 @@ func (r *gpuRenderer) allocate(w, h int, done func(*gpu.Target, error)) {
 	})
 }
 
-// gpuBusyRetry is how soon a surface tries a frame again after the
-// device refused it for being too far behind: well inside a refresh, and
-// each retry costs one recording, not a wait.
 const gpuBusyRetry = 4 * time.Millisecond
 
 // Frame renders paint into b's target at device scale num over

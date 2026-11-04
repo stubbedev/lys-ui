@@ -48,7 +48,6 @@ func (f *fakeTimelines) watch(s drm.Syncobj, point uint64, released func()) erro
 func (f *fakeTimelines) destroy(drm.Syncobj) {}
 func (f *fakeTimelines) close()              {}
 
-// signal is the compositor signalling every release point watched.
 func (f *fakeTimelines) signal() {
 	for s, released := range f.watched {
 		delete(f.watched, s)

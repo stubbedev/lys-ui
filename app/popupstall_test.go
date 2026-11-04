@@ -15,8 +15,6 @@ const (
 	popupConfigureEvent = 0
 )
 
-// popupPeer watches the wire for one popup and holds its configure back
-// until the test says, as a compositor busy elsewhere does.
 type popupPeer struct {
 	f          *fakeCompositor
 	surfaces   map[uint32]uint32
@@ -58,10 +56,6 @@ func await(t *testing.T, ch <-chan struct{}, what string) {
 	}
 }
 
-// Opening a popover asks the compositor nothing and waits for nothing:
-// no wl_display.sync, the loop keeps making passes with the configure
-// outstanding, and no buffer reaches the surface before the configure
-// does. The configure then maps it.
 func TestPopoverOpensWithoutWaitingForItsConfigure(t *testing.T) {
 	p := &popupPeer{surfaces: map[uint32]uint32{}, created: make(chan struct{}), buffered: make(chan struct{}, 1)}
 	f, a := connectFakeWith(t, kioskGlobals, func(f *fakeCompositor) {

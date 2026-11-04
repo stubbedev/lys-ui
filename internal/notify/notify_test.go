@@ -20,8 +20,6 @@ func goroutine() string {
 	return strings.Fields(string(buf[:runtime.Stack(buf, false)]))[1]
 }
 
-// fakeBus is a daemon that answers NameHasOwner for owned, and holds every
-// other call until released.
 type fakeBus struct {
 	owned   string
 	caller  string
@@ -92,8 +90,6 @@ func awaitMethod(t *testing.T, f *fakeBus, method string) {
 	t.Fatalf("%s never reached the bus; saw %v", method, f.seen())
 }
 
-// A daemon that never answers holds up nothing but the worker: Notify and
-// Close return on the caller with no bus call there, the dial included.
 func TestNotifyMakesNoBusCallOnTheCaller(t *testing.T) {
 	f := &fakeBus{owned: classicName, caller: goroutine(), release: make(chan struct{}), classic: 7}
 	dials := 0
@@ -125,8 +121,6 @@ func TestNotifyMakesNoBusCallOnTheCaller(t *testing.T) {
 	}
 }
 
-// The classic daemon's numeric id maps back to the id Notify returned, and
-// a Close queued right behind its Notify finds it.
 func TestCloseFollowsItsNotify(t *testing.T) {
 	f := &fakeBus{owned: classicName, classic: 42}
 	n := NewWithDial(func() (Bus, error) { return f, nil })
@@ -139,7 +133,6 @@ func TestCloseFollowsItsNotify(t *testing.T) {
 	}
 }
 
-// The worker's queue is bounded: a stuck daemon drops what does not fit.
 func TestStuckDaemonDropsPastTheQueue(t *testing.T) {
 	f := &fakeBus{owned: portalDesktopName, release: make(chan struct{})}
 	n := NewWithDial(func() (Bus, error) { return f, nil })
@@ -159,8 +152,6 @@ func TestStuckDaemonDropsPastTheQueue(t *testing.T) {
 	}
 }
 
-// Shutdown ends the worker and closes the connection; queued notifications
-// went out first, and later ones are refused.
 func TestShutdownSendsWhatIsQueued(t *testing.T) {
 	f := &fakeBus{owned: portalDesktopName}
 	n := NewWithDial(func() (Bus, error) { return f, nil })
@@ -182,7 +173,6 @@ func TestShutdownSendsWhatIsQueued(t *testing.T) {
 	}
 }
 
-// No session bus leaves an inert notifier: ids still come back.
 func TestNoBusIsInert(t *testing.T) {
 	dials := 0
 	n := NewWithDial(func() (Bus, error) {
@@ -199,7 +189,6 @@ func TestNoBusIsInert(t *testing.T) {
 	}
 }
 
-// A bus owning neither name closes again and leaves the notifier inert.
 func TestNeitherNameOwnedIsInert(t *testing.T) {
 	f := &fakeBus{}
 	n := NewWithDial(func() (Bus, error) { return f, nil })

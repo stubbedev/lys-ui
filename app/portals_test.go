@@ -261,8 +261,6 @@ func TestSessionStateChangesReachTheLoopAndQueryEndIsAnswered(t *testing.T) {
 	}
 }
 
-// stuckPortals is a desktopPortals whose worker is held by a job, the state
-// a portal that stopped answering leaves it in.
 func stuckPortals(t *testing.T, a *Application) (release func()) {
 	t.Helper()
 	held, entered := make(chan struct{}), make(chan struct{})
@@ -276,9 +274,6 @@ func stuckPortals(t *testing.T, a *Application) (release func()) {
 	return sync.OnceFunc(func() { close(held) })
 }
 
-// A portal that stopped answering stalls no loop pass: every session call
-// returns while the bus call waits on the worker, and the worker's queue
-// is the only thing that grows.
 func TestPortalCallsReturnWhileThePortalIsStuck(t *testing.T) {
 	d := startMockDesktop(t)
 	a := testApp(nil)
@@ -320,8 +315,6 @@ func TestPortalCallsReturnWhileThePortalIsStuck(t *testing.T) {
 	}
 }
 
-// The query-end answer waits for an Inhibit the callback made: the portal
-// must see the objection before it hears the application is done.
 func TestQueryEndAnswerFollowsTheInhibitMadeForIt(t *testing.T) {
 	d := startMockDesktop(t)
 	a := testApp(nil)
@@ -366,7 +359,6 @@ func TestQueryEndAnswerFollowsTheInhibitMadeForIt(t *testing.T) {
 	}
 }
 
-// A queue full behind a stuck portal refuses with the error, on the loop.
 func TestPortalBusyWhenTheQueueIsFull(t *testing.T) {
 	a := testApp(nil)
 	d := a.desktop()
@@ -383,8 +375,6 @@ func TestPortalBusyWhenTheQueueIsFull(t *testing.T) {
 	}
 }
 
-// Stopping ends a request stuck on an answer that never comes, without
-// waiting out its timeout.
 func TestPortalCloseEndsAStuckRequest(t *testing.T) {
 	startMockDesktop(t)
 	a := testApp(nil)

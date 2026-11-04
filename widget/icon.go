@@ -70,19 +70,13 @@ type Icon struct {
 	resolvedGen  uint64
 	err          error
 
-	// base is the natural raster ic or retint was derived from.
-	base *render.Icon
-	// retint is the raster a mask recolor writes to, in place of ic.
-	retint iconRetint
-	// decoded is a file or SVG source's natural raster and the box it
-	// was decoded for; a theme icon's lives in the icons.Cache.
+	base        *render.Icon
+	retint      iconRetint
 	decoded     iconDecoded
 	prepared    iconBox
 	preparedGen uint64
 }
 
-// iconBox is what a decode rasterizes for: the source's name when it has
-// one, size logical pixels, and a 120-based device scale.
 type iconBox struct {
 	name string
 	size int
@@ -94,21 +88,16 @@ type iconDecoded struct {
 	raster icons.Raster
 }
 
-// iconSelfKey names the decode of one widget's own source.
 type iconSelfKey struct {
 	icon *Icon
 	box  iconBox
 }
 
-// iconThemeKey names the decode of a theme icon.
 type iconThemeKey struct {
 	box       iconBox
 	fallbacks bool
 }
 
-// iconRetint is a raster the widget recolors in place, so a tint moving
-// each frame reads no file and makes no raster. The version tells a GPU
-// renderer to upload it again.
 type iconRetint struct {
 	img     *image.RGBA
 	id      render.ImageID
@@ -117,7 +106,6 @@ type iconRetint struct {
 	active  bool
 }
 
-// fill makes the raster base recolored to tint.
 func (r *iconRetint) fill(base *render.Icon, tint Color) {
 	src := base.Image()
 	if r.img == nil || r.img.Rect != src.Rect {
@@ -130,8 +118,6 @@ func (r *iconRetint) fill(base *render.Icon, tint Color) {
 	r.active = true
 }
 
-// draw blends the raster, made for frac and covering base's logical size,
-// as render.Icon.Draw places one.
 func (r *iconRetint) draw(cv *render.Canvas, base *render.Icon, frac uint32, x, y int) {
 	num, denom := cv.DeviceScale()
 	if int(frac)*denom == num*iconScaleDenom {
@@ -142,7 +128,6 @@ func (r *iconRetint) draw(cv *render.Canvas, base *render.Icon, frac uint32, x, 
 	cv.DrawImageRect(r.drawn, render.Rect{X: x, Y: y, W: w, H: h})
 }
 
-// iconScaleDenom is the denominator of the 120-based device scale.
 const iconScaleDenom = 120
 
 func floorDiv(a, b int) int {
@@ -496,8 +481,6 @@ func (i *Icon) peek(box iconBox) (icons.Raster, bool) {
 	return icons.Default().Peek(name, box.size, box.frac)
 }
 
-// request asks for box's decode off the loop; its answer repaints the
-// widget, which then peeks again.
 func (i *Icon) request(box iconBox) {
 	answered := func() {
 		if hasInvoker() {
@@ -522,7 +505,6 @@ func (i *Icon) request(box iconBox) {
 	})
 }
 
-// preloadThemeBox decodes a theme icon for box into the cache.
 func preloadThemeBox(box iconBox, fallbacks bool) {
 	cache := icons.Default()
 	name := box.name
@@ -534,8 +516,6 @@ func preloadThemeBox(box iconBox, fallbacks bool) {
 
 var decodeIcon = icons.DecodeIcon
 
-// decodeIconSource reads and decodes a file or SVG source; it reads only
-// its arguments, so it may run off the loop.
 func decodeIconSource(kind iconKind, path string, svg []byte, box iconBox) icons.Raster {
 	data, name := svg, "icon.svg"
 	if kind == iconFile {

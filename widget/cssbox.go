@@ -240,31 +240,22 @@ func BackdropRegion(root Widget) []render.Rect {
 	return c.rects
 }
 
-// backdropCache is BackdropRegion's answer on its root.
 type backdropCache struct {
 	rects []render.Rect
 	at    backdropStamp
 	ok    bool
 }
 
-// backdropStamp is what a backdrop region reads: every widget's place
-// and computed style.
 type backdropStamp struct{ shape, style, theme uint64 }
 
-// shapeGen moves whenever a widget's bounds, computed style, or place in
-// the tree moved: what a region derived from the whole tree depends on.
-// A paint-only invalidation leaves it, so a spinning spinner does not
-// make every frame walk the tree. Loop-goroutine state, like the tree.
 var shapeGen uint64
 
-// backdropWalks counts the tree walks BackdropRegion made.
 var backdropWalks int
 
 // BackdropWalks counts the tree walks BackdropRegion made; tests use it
 // to pin that a frame changing no shape walks nothing.
 func BackdropWalks() int { return backdropWalks }
 
-// backdropShape walks root's tree for its backdrop region.
 func backdropShape(root Widget) []render.Rect {
 	backdropWalks++
 	var shape []render.Rect

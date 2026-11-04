@@ -65,9 +65,7 @@ const (
 
 type desktopPortals struct {
 	portalClient
-	app *Application
-	// queue runs the portal calls that do not wait on a user, in order,
-	// so a query-end answer always follows the Inhibit made for it.
+	app           *Application
 	queue         *worker.Queue
 	monitor       dbus.ObjectPath
 	onState       func(state SessionState, screensaver bool)
@@ -83,8 +81,6 @@ func (a *Application) desktop() *desktopPortals {
 	return a.portals
 }
 
-// reportDone hands a worker's result to done on the loop, or logs a
-// failure when there is no done to hear it.
 func (a *Application) reportDone(what string, done func(error), err error) {
 	switch {
 	case done != nil:
@@ -94,9 +90,6 @@ func (a *Application) reportDone(what string, done func(error), err error) {
 	}
 }
 
-// post runs work on the portal worker and reports its error to done on
-// the loop; a nil done logs a failure instead. A request the queue
-// refuses fails with ErrPortalBusy.
 func (d *desktopPortals) post(what string, work func() error, done func(error)) {
 	if !d.queue.Post(func() { d.app.reportDone(what, done, work()) }) {
 		d.app.reportDone(what, done, fmt.Errorf("app: %s: %w", what, ErrPortalBusy))
@@ -150,8 +143,6 @@ func (a *Application) OnSessionStateChange(fn func(state SessionState, screensav
 	d.post("session monitor", d.ensureMonitor, done)
 }
 
-// ensureMonitor runs on the portal worker, so a second call finds the
-// first one's monitor.
 func (d *desktopPortals) ensureMonitor() error {
 	d.mu.Lock()
 	has := d.monitor != ""

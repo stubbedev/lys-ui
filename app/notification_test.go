@@ -90,8 +90,6 @@ func TestNotifyCarriesItsActions(t *testing.T) {
 	}
 }
 
-// fakeNotifyBus is a notification daemon that holds every send until
-// released and records whether any bus call ran on the marked goroutine.
 type fakeNotifyBus struct {
 	loop    string
 	release chan struct{}
@@ -127,9 +125,6 @@ func (f *fakeNotifyBus) AddMatch(context.Context, string, dbus.ObjectPath) error
 
 func (f *fakeNotifyBus) Close() error { return nil }
 
-// A notification daemon that never answers stalls no loop pass: Notify on
-// the loop returns while the bus call is stuck, and no bus call, dial
-// included, ran on the loop.
 func TestNotifyOnLoopSurvivesAStuckDaemon(t *testing.T) {
 	f := &fakeNotifyBus{loop: callerGoroutine(), release: make(chan struct{})}
 	a := testApp(nil)

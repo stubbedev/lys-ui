@@ -34,7 +34,6 @@ var ErrUnavailable = errors.New("clipboard: no selection available")
 // consumer that stops reading frees its transfer slot.
 var transferTimeout = xfer.DefaultTimeout
 
-// errNoScheduler reports a read on a clipboard no event loop owns.
 var errNoScheduler = errors.New("clipboard: reads deliver on an event loop (Application.SetClipboard)")
 
 // Clipboard tracks the seat's selections and claims them on behalf of
@@ -214,14 +213,6 @@ func (c *Clipboard) primaryView() selectionView {
 	return selectionView{receive: c.primary.Receive, mimes: c.primaryMimes}
 }
 
-// fetch reads the best of prefs from view off the loop. finish turns the
-// result into what the reader hears, and may be costly: it runs on the
-// transfer goroutine, and the closure it returns runs on the loop.
-//
-// A foreign offer reads through a pipe. wl_data_offer.receive and its
-// primary twin leave the client before Receive returns (neither is
-// wl.CommitDeferred), so the compositor already holds its own copy of
-// the write end when xfer closes ours, and no roundtrip is owed.
 func (c *Clipboard) fetch(view selectionView, prefs []string, finish func(data []byte, mime string, err error) func()) {
 	if c.invoke == nil {
 		finish(nil, "", errNoScheduler)()

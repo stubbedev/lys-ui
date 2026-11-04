@@ -29,10 +29,8 @@ import (
 // height, stride) is independent of the slot: any buffer that fits in a
 // slot's bytes can live at its offset.
 type slot struct {
-	offset int
-	bytes  int
-	// resident marks free bytes a buffer drew in, still holding pages
-	// until the next Trim.
+	offset   int
+	bytes    int
 	resident bool
 }
 
@@ -49,9 +47,8 @@ type Arena struct {
 	size int         // bytes the file, pool, and mapping agree on
 	gen  int         // bumped every remap: outstanding Data windows re-point
 
-	free []slot // free slots sorted by offset, adjacent ones merged
-	live int    // sub-allocations handed out and not yet retired
-	// punches counts the fallocate calls Trim made.
+	free    []slot // free slots sorted by offset, adjacent ones merged
+	live    int    // sub-allocations handed out and not yet retired
 	punches int
 
 	// lastFormat is the shm format the most recent wire buffer creation
@@ -291,7 +288,6 @@ func (a *Arena) put(s slot) {
 	}
 }
 
-// reclaimable reports whether a free slot still holds pages.
 func (a *Arena) reclaimable() bool {
 	return slices.ContainsFunc(a.free, func(s slot) bool { return s.resident })
 }

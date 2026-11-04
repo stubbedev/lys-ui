@@ -53,8 +53,7 @@ type Entry struct {
 	// frame, and re-converting the runes per read was the entry's
 	// largest steady allocation. Every mutation of runes goes through
 	// setRunes, so disp cannot drift.
-	disp string
-	// textRev counts the replacements of runes, for IMERevision.
+	disp    string
 	textRev uint64
 	cursor  int
 	anchor  int // selection anchor; equals cursor when nothing is selected

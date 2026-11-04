@@ -25,8 +25,6 @@ const CursorHidden = "none"
 // overrides it.
 const cursorThemeSize = 24
 
-// errCursorPending reports a shape the background goroutine is still
-// reading: the shape last shown stays until it arrives.
 var errCursorPending = errors.New("cursor still being read")
 
 // cursorState is everything the cursor path owns. The mutex
@@ -269,9 +267,6 @@ func (s *Session) themeCursor(desired string) (*themedCursor, string, error) {
 	return cur, name, nil
 }
 
-// cursorPoolLocked is the session's cursor pool, made the first time. It
-// is a memfd and a wl_shm_pool: no file a read could stall on. Called
-// with cursorState.mu held.
 func (s *Session) cursorPoolLocked() (*cursorTheme, error) {
 	if s.crs.pool != nil {
 		return s.crs.pool, nil
@@ -284,9 +279,6 @@ func (s *Session) cursorPoolLocked() (*cursorTheme, error) {
 	return pool, nil
 }
 
-// requestCursorLocked has the background goroutine read what desired can
-// resolve to, once per shape. Shapes arrive one by one, in candidate
-// order, until one exists. Called with cursorState.mu held.
 func (s *Session) requestCursorLocked(theme *cursorTheme, desired string) {
 	c := &s.crs
 	if c.requested[desired] {
@@ -312,7 +304,6 @@ func (s *Session) requestCursorLocked(theme *cursorTheme, desired string) {
 	}
 }
 
-// requestFileCursorLocked is requestCursorLocked for a file cursor.
 func (s *Session) requestFileCursorLocked(path string) {
 	c := &s.crs
 	key := fileCursorPrefix + path
@@ -333,8 +324,6 @@ func (s *Session) requestFileCursorLocked(path string) {
 	}
 }
 
-// cursorRead puts what the background goroutine read in the pool, on the
-// loop, and shows it if an apply was waiting.
 func (s *Session) cursorRead(add func(*cursorTheme)) {
 	c := &s.crs
 	c.mu.Lock()
@@ -353,7 +342,6 @@ func (s *Session) cursorRead(add func(*cursorTheme)) {
 	}
 }
 
-// readCursorFrames reads one theme shape, on the background goroutine.
 func (s *Session) readCursorFrames(name string) ([]xcursor.Image, error) {
 	if s.crs.readFrames != nil {
 		return s.crs.readFrames(name)
@@ -364,7 +352,6 @@ func (s *Session) readCursorFrames(name string) ([]xcursor.Image, error) {
 	return s.crs.reader.frames(name)
 }
 
-// readCursorFile reads one file cursor, on the background goroutine.
 func (s *Session) readCursorFile(path string) (xcursor.Image, error) {
 	if s.crs.readFile != nil {
 		return s.crs.readFile(path)
@@ -372,12 +359,8 @@ func (s *Session) readCursorFile(path string) (xcursor.Image, error) {
 	return xcursor.ReadWidest(path)
 }
 
-// preloadedCursors are the shapes a pointer crossing a window reaches
-// for: read ahead when the compositor leaves cursors to the client, so
-// the first hover over a link or a window edge has its shape in the pool.
 var preloadedCursors = []string{"", "pointer", "text", "resize_n", "resize_s", "resize_e", "resize_w", "resize_nw", "resize_ne", "resize_sw", "resize_se"}
 
-// preloadCursors asks for preloadedCursors where the theme draws them.
 func (s *Session) preloadCursors() {
 	if s.shapeDevice != nil || s.shm == nil {
 		return
@@ -395,7 +378,6 @@ func (s *Session) preloadCursors() {
 	}
 }
 
-// closeCursorPool releases the pool's file with the session.
 func (s *Session) closeCursorPool() {
 	c := &s.crs
 	c.mu.Lock()

@@ -109,7 +109,6 @@ func (n *node) SetAccessibleName(name string) {
 	MarkA11yChanged()
 }
 
-// a11yGen counts the accessible changes that owe the screen nothing.
 var a11yGen atomic.Uint64
 
 // A11yGeneration moves whenever what an assistive technology reads may

@@ -248,9 +248,6 @@ func skipAllocBudget(t *testing.T) {
 	}
 }
 
-// TestAllocBudgetFocusedTextAreaTick pins the loop's steady pass with a
-// 5000-line editable focused and the input method live: nothing changed,
-// so no text is rebuilt and nothing is pushed.
 func TestAllocBudgetFocusedTextAreaTick(t *testing.T) {
 	skipAllocBudget(t)
 	a := idleBudgetApp(t)

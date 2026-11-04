@@ -530,7 +530,6 @@ func TestReadPayloadShortCircuitsSelfDrops(t *testing.T) {
 	}
 }
 
-// readPayload bounds the wait for one ReadPayload delivery.
 func readPayload(t *testing.T, c *Controller, mime string) receiveResult {
 	t.Helper()
 	ch := make(chan receiveResult, 1)

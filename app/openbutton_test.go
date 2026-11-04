@@ -197,9 +197,6 @@ func TestOpenButtonDialogRouting(t *testing.T) {
 	}
 }
 
-// The recents file sits behind the worker: with the worker stuck on a
-// dead disk, building a button and choosing a file return, the choice
-// still fires, and the list catches up once the disk answers.
 func TestOpenButtonWaitsOnNoDisk(t *testing.T) {
 	a := openButtonApp(t)
 	path := openButtonFiles(t, "one.txt")[0]
@@ -235,7 +232,6 @@ func TestOpenButtonWaitsOnNoDisk(t *testing.T) {
 	}
 }
 
-// Run's exit lets queued recents reach the file and joins the worker.
 func TestRecentsReachTheFileAtRunExit(t *testing.T) {
 	a := openButtonApp(t)
 	path := openButtonFiles(t, "one.txt")[0]

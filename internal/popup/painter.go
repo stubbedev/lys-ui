@@ -42,12 +42,10 @@ type Painter struct {
 	p      *Popup
 	unhost func()
 
-	sess *wlsession.Session
-	gpu  Renderer // nil draws on the CPU
-	pool *buffer.Pool
-	surf *wl.Surface
-	// sync is the surface's explicit synchronization object, while its
-	// buffers have timelines.
+	sess    *wlsession.Session
+	gpu     Renderer // nil draws on the CPU
+	pool    *buffer.Pool
+	surf    *wl.Surface
 	sync    buffer.SurfaceSync
 	frac120 uint32
 	bg      render.Color
@@ -303,8 +301,6 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	return true, true, nil
 }
 
-// presented records the frame b just committed. An incomplete one owes again
-// what it painted, for the frame its callback brings.
 func (pc *Painter) presented(b *buffer.Buffer, changed *buffer.Region, outcome buffer.FrameOutcome) error {
 	pc.pool.Presented(b, changed)
 	if outcome == buffer.FrameIncomplete {

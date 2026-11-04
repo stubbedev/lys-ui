@@ -126,8 +126,6 @@ type Controller struct {
 	// the negotiated action.
 	feedback transfer.Feedback
 
-	// invoke runs a closure on the event loop, from any goroutine; xf runs
-	// the transfers off it.
 	invoke func(func())
 	xf     xfer.Transfers
 }
@@ -513,11 +511,6 @@ func (c *Controller) ReadPayload(mime string, done func([]byte, error)) {
 	c.receive(c.dragOffer, mime, done)
 }
 
-// readOwn serves a drop of this process's own drag. No
-// wl_data_offer.receive will ever arrive for it - both ends are us - so
-// the source concludes locally once the bytes are out, instead of
-// waiting for a dnd_finished that will not come. A drag that ended and
-// was replaced meanwhile keeps its own conclusion.
 func (c *Controller) readOwn(mime string, done func([]byte, error)) {
 	src, content, action := c.src, c.srcData.Content, c.finishedAction()
 	conclude := func() {

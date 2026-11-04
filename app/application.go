@@ -46,11 +46,9 @@ type Application struct {
 	// gpu is the windows' GPU renderer (renderer), nil drawing on the
 	// CPU; gpuTried marks the one attempt to open it, gpuErr its
 	// failure under LYS_UI_RENDERER=gpu.
-	gpu      *gpuRenderer
-	gpuTried bool
-	gpuErr   error
-	// gpuOpening is the worker opening the renderer, and gpuLanding the
-	// renderer it opened, until the loop adopts it.
+	gpu         *gpuRenderer
+	gpuTried    bool
+	gpuErr      error
 	gpuOpening  sync.WaitGroup
 	gpuLanding  atomic.Pointer[gpuRenderer]
 	tooltipFace *render.Typeface
@@ -75,9 +73,7 @@ type Application struct {
 	// clip enables ctrl+c/x/v via routeKey; primary carries the
 	// primary-selection behavior (middle-click paste, copy-on-select).
 	// SetClipboard fills both from one clipboard.
-	clip *clipboard.Clipboard
-	// keyClip is clip as the key path sees it, nil without one; stopClip
-	// cancels clip's stop hook.
+	clip     *clipboard.Clipboard
 	keyClip  *keyClipboard
 	stopClip func()
 	primary  *primarySelection

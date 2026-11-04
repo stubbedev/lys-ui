@@ -93,11 +93,8 @@ type hostWindow struct {
 	// (possibly on another goroutine) into the loop pass.
 	kick atomic.Bool
 
-	pool *buffer.Pool
-	// surfSync is the surface's explicit synchronization object, while its
-	// buffers have timelines.
-	surfSync buffer.SurfaceSync
-	// animatedAt is when a frame last went out with an animation running.
+	pool       *buffer.Pool
+	surfSync   buffer.SurfaceSync
 	animatedAt time.Time
 	// footprint is the pool's buffer count and bytes as last logged
 	// (LYS_DEBUG=frame).
@@ -328,14 +325,8 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 	return w
 }
 
-// spareKeep is how long after its last animated frame a window keeps its
-// spare buffers: an animation restarting that soon, a hover flicking on
-// and off, finds them, where a dmabuf made for it would hold its first
-// frames back until the compositor imported it.
 const spareKeep = 30 * time.Second
 
-// trimPool frees the spares no frame used since the last trim, unless an
-// animation ran recently (spareKeep).
 func (w *hostWindow) trimPool() {
 	if animclock.Now().Sub(w.animatedAt) < spareKeep {
 		return
@@ -963,9 +954,6 @@ func (w *hostWindow) draw() bool {
 		}
 		switch outcome {
 		case buffer.FrameRefused:
-			// The GPU is behind and nothing happened: the buffer goes
-			// back, and everything the frame owed stays owed for the
-			// retry the renderer armed.
 			debug.Log("frame", "draw deferred: GPU busy")
 			b.Release()
 			w.damage.Refuse()

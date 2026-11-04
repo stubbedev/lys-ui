@@ -25,10 +25,6 @@ const (
 	a11yStopTimeout = 3 * time.Second
 )
 
-// a11yRunner starts and stops the bridge off the loop: everything that
-// waits on a bus runs on its worker, in order, so a switch flipping back
-// and forth ends in the state it ended in. The worker alone touches
-// bridge and stopWatch.
 type a11yRunner struct {
 	once      sync.Once
 	queue     *worker.Queue
@@ -97,8 +93,6 @@ func (a *Application) startAccessibility() {
 	}
 }
 
-// postA11y runs work on the worker and reports its error to done on the
-// loop; a nil done logs a failure instead.
 func (a *Application) postA11y(what string, work func() error, done func(error)) {
 	if !a.a11yQueue().Post(func() { a.reportDone(what, done, work()) }) {
 		a.reportDone(what, done, errors.New("app: the accessibility worker is stuck or stopped"))

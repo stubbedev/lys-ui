@@ -11,7 +11,6 @@ import (
 	"github.com/stubbedev/lys-lib/xkb"
 )
 
-// goroutineID names the calling goroutine, for gates on where work ran.
 func goroutineID() string {
 	var buf [64]byte
 	n := runtime.Stack(buf[:], false)
@@ -19,8 +18,6 @@ func goroutineID() string {
 	return id
 }
 
-// blockedCompile stands in for the compile: it records where it ran,
-// and holds the background goroutine until released.
 type blockedCompile struct {
 	release chan compiledKeymap
 	ran     chan string
@@ -60,8 +57,6 @@ const (
 	evdevZ = 44
 )
 
-// The compile runs off the loop: the handler returns with the compile
-// still held, on another goroutine, and reads nothing itself.
 func TestKeymapCompilesOffTheLoop(t *testing.T) {
 	s := usKeymap(t)
 	held := holdCompiles(s)
@@ -79,9 +74,6 @@ func TestKeymapCompilesOffTheLoop(t *testing.T) {
 	}
 }
 
-// A key after a later keymap on the wire is read through that keymap,
-// never the one it replaces, and comes in wire order with the modifiers
-// around it. y and z swap between us and de, which tells them apart.
 func TestKeysBehindACompilingKeymapTranslateThroughIt(t *testing.T) {
 	s := usKeymap(t)
 	var typed []string
@@ -114,8 +106,6 @@ func TestKeysBehindACompilingKeymapTranslateThroughIt(t *testing.T) {
 	}
 }
 
-// Keymaps in a row install in turn, each with the events between it and
-// the next.
 func TestKeymapsInARowEachKeepTheirKeys(t *testing.T) {
 	s := usKeymap(t)
 	var typed []string
@@ -138,8 +128,6 @@ func TestKeymapsInARowEachKeepTheirKeys(t *testing.T) {
 	}
 }
 
-// Focus moves stay in order with the keys that waited: a key belongs to
-// the surface that had the keyboard when it was pressed.
 func TestFocusWaitsWithTheKeys(t *testing.T) {
 	s := usKeymap(t)
 	held := holdCompiles(s)
@@ -164,8 +152,6 @@ func TestFocusWaitsWithTheKeys(t *testing.T) {
 	}
 }
 
-// A keymap that fails leaves the keys behind it untranslated, the rule
-// for any keymap that fails, not lost and not read through the old one.
 func TestKeysBehindAFailedKeymapStayUntranslated(t *testing.T) {
 	s := usKeymap(t)
 	var typed []string
@@ -181,8 +167,6 @@ func TestKeysBehindAFailedKeymapStayUntranslated(t *testing.T) {
 	}
 }
 
-// The wait is bounded: a queue at its bound drops and logs instead of
-// growing, and what it held still arrives.
 func TestKeyQueueIsBounded(t *testing.T) {
 	s := usKeymap(t)
 	delivered := 0
@@ -203,8 +187,6 @@ func TestKeyQueueIsBounded(t *testing.T) {
 	}
 }
 
-// With nothing compiling a key is delivered straight through and queues
-// nothing, at no allocation of its own.
 func TestKeyWithNoKeymapPendingAllocatesNothing(t *testing.T) {
 	s := &Session{}
 	s.OnKey = func(uint32, Mods) {}

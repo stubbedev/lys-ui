@@ -2,8 +2,6 @@ package buffer
 
 import "github.com/stubbedev/lys-lib/render"
 
-// maxRegionRects bounds a Region: how many separate rects a frame walks
-// the tree for, and a buffer copies forward, before their boxes merge.
 const maxRegionRects = 4
 
 // Region is a bounded set of rects covering what was added, possibly
@@ -84,10 +82,6 @@ func (g *Region) Remove(i int) {
 
 func rectArea(r render.Rect) int { return r.W * r.H }
 
-// worthMerging reports whether painting two rects' box beats painting
-// them apart: they touch, or the box is little more than they are. A
-// walk of the tree costs something too, so a box of up to twice their
-// pixels wins.
 func worthMerging(a, b render.Rect) bool {
 	return !a.Intersect(b).Empty() || rectArea(a.Union(b)) <= 2*(rectArea(a)+rectArea(b))
 }

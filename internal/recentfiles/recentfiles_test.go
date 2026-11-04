@@ -144,7 +144,6 @@ func TestSaveEmptyListWritesEmptyXbel(t *testing.T) {
 	}
 }
 
-// One Add of many paths writes the file once, last path first.
 func TestAddManyPersistsTheBatch(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "recently-used.xbel")
 	m := New(path)
