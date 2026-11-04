@@ -64,6 +64,7 @@ type Label struct {
 	// (GTK lines); 0 is uncapped.
 	maxLines int
 	shaped   *render.ShapedText
+	epoch    uint64
 	rows     wrapMemo
 }
 
@@ -509,7 +510,17 @@ func (l *Label) indentOf(v *style.Values) float64 {
 // direction and refreshes the cached natural size.
 func (l *Label) retext() {
 	face, px := l.effStyle()
-	l.shaped = face.ShapeDir(l.shown(), px, l.effDirection(l.style(l)))
+	shown := l.shown()
+	settleFaces(face, shown)
+	l.epoch = faceEpoch.Load()
+	l.rows = wrapMemo{}
+	l.shaped = face.ShapeDir(shown, px, l.effDirection(l.style(l)))
+}
+
+func (l *Label) freshFaces() {
+	if l.epoch != faceEpoch.Load() {
+		l.retext()
+	}
 }
 
 // lineBox is the line height the label lays text out at: the CSS
@@ -543,6 +554,7 @@ func (l *Label) Measure(axis Axis, forSize int) Sizes {
 	if s, ok := l.measureHit(axis, forSize); ok {
 		return s
 	}
+	l.freshFaces()
 	v := l.style(l)
 	return l.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, l.textRequest))
 }
@@ -640,6 +652,7 @@ func (l *Label) Arrange(r render.Rect) {
 // any), then the text inside the content box: the rows when the label
 // is multiline, the single line ellipsized as configured otherwise.
 func (l *Label) Paint(cv *render.Canvas) {
+	l.freshFaces()
 	v := l.style(l)
 	if l.outsideClip(cv) {
 		return

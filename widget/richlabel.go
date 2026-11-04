@@ -44,6 +44,7 @@ type RichLabel struct {
 	// shapedPx is the font size the runs were shaped at: the cascade's,
 	// else sizePx. Measure re-shapes when the cascade moved it.
 	shapedPx float64
+	epoch    uint64
 	color    render.Color
 	align    render.Alignment
 	dir      Direction
@@ -263,6 +264,7 @@ func (l *RichLabel) retext() {
 	l.runes = runes
 	l.shapeSpans(spans)
 	l.natural = Size{W: int(math.Ceil(l.advance)), H: int(math.Ceil(l.lineAsc + l.lineDesc))}
+	l.epoch = faceEpoch.Load()
 }
 
 // spansText is the spans' joined text and its rune count.
@@ -314,7 +316,9 @@ func (l *RichLabel) shapeOne(spans []MarkupRun) (*richLine, float64, float64) {
 			}
 			face := l.faceFor(spans[k].Style)
 			px := l.runPx(spans[k].Style)
-			sh := face.ShapeDir(string(rs[lo:hi]), px, dir)
+			piece := string(rs[lo:hi])
+			settleFaces(face, piece)
+			sh := face.ShapeDir(piece, px, dir)
 			rise := float64(spans[k].Style.Shift * px)
 			asc = math.Max(asc, sh.Ascent()+rise)
 			desc = math.Max(desc, sh.Descent()-rise)
@@ -402,6 +406,9 @@ func (l *RichLabel) MaxWidthChars() int { return l.maxChars }
 // Arrange records the border box inside r, the margin box, and fits
 // the line to the content box's width.
 func (l *RichLabel) Arrange(r render.Rect) {
+	if l.epoch != faceEpoch.Load() {
+		l.retext()
+	}
 	border, content := boxRects(boxOf(l.style(l), render.Insets{}), r)
 	l.node.Arrange(border)
 	l.content = content
@@ -642,7 +649,7 @@ func (l *RichLabel) Measure(axis Axis, forSize int) Sizes {
 	if s, ok := l.measureHit(axis, forSize); ok {
 		return s
 	}
-	if l.px() != l.shapedPx {
+	if l.px() != l.shapedPx || l.epoch != faceEpoch.Load() {
 		l.retext()
 	}
 	v := l.style(l)

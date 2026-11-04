@@ -160,7 +160,7 @@ func TestFallbackChain(t *testing.T) {
 		t.Fatal("fixture font unexpectedly covers the mixed-script test runes")
 	}
 
-	ch := Fallback(primary)
+	ch := Fallback(primary, nil)
 
 	t.Run("fully covered text never consults the store", func(t *testing.T) {
 		s := ch.Shape("lys-ui", 14)
@@ -413,7 +413,7 @@ func TestFallbackLoadsFacesOnlyOnDemand(t *testing.T) {
 	storeMu.Lock()
 	loaded := len(typefaces)
 	storeMu.Unlock()
-	ch := Fallback(sans)
+	ch := Fallback(sans, nil)
 	ch.Shape("plain latin text", 14)
 	storeMu.Lock()
 	defer storeMu.Unlock()

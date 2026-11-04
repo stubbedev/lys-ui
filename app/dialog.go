@@ -494,7 +494,7 @@ func (a *Application) FontChooserDialog(parent *Window, cfg FontChooserConfig) (
 			fam = model.fams[i]
 		}
 		if tf, err := sysfont.Best(fam, 13); err == nil {
-			preview.SetFace(sysfont.Fallback(tf))
+			preview.SetFace(FontFallback(tf))
 		}
 		preview.SetSizePx(chosenSize())
 	}

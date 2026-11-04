@@ -86,7 +86,7 @@ func FontVariantsOf(face render.Font) widget.VariantFunc {
 // FontFallback wraps a face in the glyph fallback chain, so glyphs the
 // primary family lacks still render.
 func FontFallback(face *render.Typeface) *render.Chain {
-	return sysfont.Fallback(face)
+	return sysfont.Fallback(face, widget.FontFaceResolved)
 }
 
 // FontFamilies lists the installed font families by display name (the

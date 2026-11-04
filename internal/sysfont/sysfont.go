@@ -475,16 +475,22 @@ var fallbackFamilies = []string{"Noto Sans CJK JP", "Noto Color Emoji"}
 // an emoji font. Pass the chain anywhere a render.Font is expected; a
 // base with full coverage never consults the store. Runes nothing
 // covers render .notdef, as before.
-func Fallback(base *render.Typeface) *render.Chain {
+//
+// The store answers on the chain's own goroutine, so a paint never reads a
+// font file; until then the rune shapes with base. onResolved, nil for none,
+// runs on that goroutine when an answer changes the shaping.
+func Fallback(base *render.Typeface, onResolved func()) *render.Chain {
 	families := append([]string{base.Family()}, fallbackFamilies...)
 	return render.NewChain(base).WithResolver(func(r rune) *render.Typeface {
-		tf, err := fallbackFace(families, r)
+		tf, err := storeFallback(families, r)
 		if err != nil {
 			return nil
 		}
 		return tf
-	}, nil)
+	}, onResolved)
 }
+
+var storeFallback = fallbackFace
 
 // fallbackFace resolves the store's face for r under families, with
 // r's script as the matcher's hint. The face need not cover r: the

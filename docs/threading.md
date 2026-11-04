@@ -42,6 +42,12 @@ a paint reads the disk. Without an `Application` the load runs inline, and
 a test that paints under one waits with `widget.WaitAssetLoads`, then lets
 the loop take a pass.
 
+A fallback chain (`app.FontFallback`) resolves a rune its faces lack on a
+goroutine of its own, and shapes it with the primary face meanwhile. The
+answer comes back through `Invoke`: text shaped before it shapes again, and
+the windows lay out and paint once however many answers landed. Without an
+`Application` a label resolves its runes inline, before it shapes them.
+
 A tree may be built before `Run` starts, on the goroutine that will
 call `Run`. After `Run` returns, the guard disarms and teardown may
 touch widgets from any goroutine.
