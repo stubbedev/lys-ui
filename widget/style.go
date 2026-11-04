@@ -1862,6 +1862,9 @@ func prevCountersOf(n *node, w Widget) (prev, src *style.CounterScope) {
 	return prev, src
 }
 
+	if sensNow.pseudo {
+		n.requestPseudoImages(w)
+	}
 // lastStyleKid is w's last visible styled child, nil for none.
 func lastStyleKid(w Widget) Widget {
 	for _, k := range slices.Backward(appendStyleKids(w, nil)) {
@@ -1869,6 +1872,7 @@ func lastStyleKid(w Widget) Widget {
 			return k
 		}
 	}
+	requestStyleImages(&n.cs, w)
 	return nil
 }
 

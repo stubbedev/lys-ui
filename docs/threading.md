@@ -33,13 +33,14 @@ runs on the loop. A `widget.GPUArea`'s `OnFrame` runs on the loop too.
 An application that renders on its own thread hands the finished
 buffer back through `Invoke` and presents it there.
 
-Icons decode the same way. A paint draws what is decoded and otherwise
-asks `widget/assetload.go`'s one bounded queue, whose goroutine exists
-only while there is work and whose answers come back through `Invoke`
-to invalidate the widget; nothing below a paint reads the disk. Without
-an `Application` the decode runs inline at the paint, and a test that
-paints under one waits with `widget.WaitAssetLoads`, then lets the loop
-take a pass.
+Icons, stylesheet images, `@font-face` files and stylesheet hot reload
+work the same way. A paint draws what is decoded, and a paint or a restyle
+otherwise asks `widget/assetload.go`'s one bounded queue, whose goroutine
+exists only while there is work, which stops at `Run`'s exit, and whose
+answers come back through `Invoke` to invalidate the widget; nothing below
+a paint reads the disk. Without an `Application` the load runs inline, and
+a test that paints under one waits with `widget.WaitAssetLoads`, then lets
+the loop take a pass.
 
 A tree may be built before `Run` starts, on the goroutine that will
 call `Run`. After `Run` returns, the guard disarms and teardown may

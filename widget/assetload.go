@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"maps"
 	"slices"
 	"sync"
 )
@@ -123,11 +124,15 @@ func (q *assetQueue) wait() {
 	}
 }
 
-// StopAssetLoads drops the icon and stylesheet image decodes that have
-// not started. Application calls it when its loop ends.
-func StopAssetLoads() { assets.stop() }
+// StopAssetLoads drops the icon, stylesheet image and font loads that
+// have not started. Application calls it when its loop ends; answers from
+// here on go nowhere, so nothing stays asked for.
+func StopAssetLoads() {
+	assets.stop()
+	maps.DeleteFunc(cssImages, func(_ string, img *cssImage) bool { return !img.settled })
+}
 
-// WaitAssetLoads blocks until every icon and stylesheet image decode
+// WaitAssetLoads blocks until every icon, stylesheet image and font load
 // asked for so far has finished and queued its answer on the loop, whose
 // next pass then applies it. It is what a test that needs a settled frame
 // waits on; a UI loop must never call it.

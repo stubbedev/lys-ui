@@ -2,44 +2,127 @@ package widget
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	"os"
-	"sync"
 
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/icons"
+	"github.com/stubbedev/lys-ui/internal/style"
 )
 
-// bgImages caches background-image files decoded at their natural
-// size: a paint-time lookup is a map hit, and a changed file re-reads
-// through the icon cache's generation like any theme asset.
-var bgImages sync.Map // path -> *render.Icon
+// cssImage is one stylesheet url() file: decoded at its natural size off
+// the loop, nil once settled if it does not load. Loop-goroutine state,
+// like the cascade.
+type cssImage struct {
+	icon    *render.Icon
+	settled bool
+	waiters []Widget
+}
 
-// bgImageFor decodes path once and caches it; a failed read returns
-// nil, and the box paints its background color alone.
+var cssImages = map[string]*cssImage{}
+
+// bgImageFor is the decoded image of a url() file, nil while it decodes
+// and for one that does not load: the box then paints its background
+// color alone. It reads nothing; the restyle that saw the url asked for
+// the file.
 func bgImageFor(path string) *render.Icon {
+	if img, ok := cssImages[path]; ok {
+		return img.icon
+	}
+	return nil
+}
+
+// requestCSSImage asks for path's decode, whose answer repaints w: what a
+// restyle calls for every url() its values name.
+func requestCSSImage(path string, w Widget) {
 	if path == "" {
-		return nil
+		return
 	}
-	if ic, ok := bgImages.Load(path); ok {
-		typed, _ := ic.(*render.Icon)
-		return typed
+	img, ok := cssImages[path]
+	if !ok {
+		img = &cssImage{}
+		cssImages[path] = img
 	}
-	// #nosec G304 -- the path is the stylesheet's own background-image declaration.
-	data, readErr := os.ReadFile(path)
-	if readErr != nil {
-		bgImages.Store(path, (*render.Icon)(nil))
-		return nil
+	if img.settled {
+		return
+	}
+	img.waiters = append(img.waiters, w)
+	if !ok {
+		img.load(path)
+	}
+}
+
+// load runs the decode. A restyle asks only once, so a job the queue's
+// bound dropped goes back in.
+func (img *cssImage) load(path string) {
+	var decoded *render.Icon
+	var failed error
+	loaded := false
+	loadAsset(path, func() {
+		decoded, failed = decodeCSSImage(path)
+		loaded = true
+	}, func() {
+		if !loaded {
+			img.load(path)
+			return
+		}
+		img.settle(decoded, failed, path)
+	})
+}
+
+// settle records the decode and repaints whoever waits on it.
+func (img *cssImage) settle(decoded *render.Icon, failed error, path string) {
+	img.icon, img.settled = decoded, true
+	if failed != nil {
+		style.Warn(fmt.Sprintf("url(%s): %v", path, failed))
+	}
+	waiters := img.waiters
+	img.waiters = nil
+	if !hasInvoker() {
+		return
+	}
+	for _, w := range waiters {
+		if inv, ok := w.(interface{ Invalidate() }); ok {
+			inv.Invalidate()
+		}
+	}
+}
+
+// decodeCSSImage reads and decodes a url() file at its natural size,
+// capped; it reads only its argument, so it may run off the loop.
+func decodeCSSImage(path string) (*render.Icon, error) {
+	// #nosec G304 -- the path is the stylesheet's own url() declaration.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
 	}
 	w, h := 256, 256
 	if cfg, _, err := image.DecodeConfig(bytes.NewReader(data)); err == nil && cfg.Width > 0 {
 		w, h = min(cfg.Width, 2048), min(cfg.Height, 2048)
 	}
-	ic, err := icons.DecodeImage(data, path, w, h)
-	if err != nil {
-		ic = nil
+	return icons.DecodeImage(data, path, w, h)
+}
+
+// requestStyleImages asks for every url() file v's paint reads.
+func requestStyleImages(v *style.Values, w Widget) {
+	for _, src := range v.Bg.Images {
+		requestCSSImage(src.URL, w)
 	}
-	bgImages.Store(path, ic)
-	return ic
+	requestCSSImage(v.Mask.Image.URL, w)
+	requestCSSImage(v.BorderImage.Source.URL, w)
+}
+
+// requestPseudoImages is requestStyleImages for n's pseudo-elements, and
+// their url() content.
+func (n *node) requestPseudoImages(w Widget) {
+	if n.pseudo == nil {
+		return
+	}
+	for i := range n.pseudo {
+		pv := &n.pseudo[i]
+		requestStyleImages(pv, w)
+		requestCSSImage(pv.ContentURL, w)
+	}
 }
