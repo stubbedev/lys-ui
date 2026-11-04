@@ -83,7 +83,7 @@ func TestGPUFrameFailureFallsBackToCPU(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			b := &buffer.Buffer{Width: 40, Height: 30, Scale: 1, Stale: render.Rect{W: 40, H: 30}, Target: tg}
+			b := &buffer.Buffer{Width: 40, Height: 30, Scale: 1, Stale: buffer.RegionOf(render.Rect{W: 40, H: 30}), Target: tg}
 			gpuBufs = append(gpuBufs, b)
 			return b, nil
 		}
@@ -255,7 +255,7 @@ func TestGPUReusedBufferCopiesForward(t *testing.T) {
 		if err != nil {
 			return nil, err
 		}
-		b := &buffer.Buffer{Width: 400, Height: 600, Scale: 1, Stale: render.Rect{W: 400, H: 600}, Target: tg}
+		b := &buffer.Buffer{Width: 400, Height: 600, Scale: 1, Stale: buffer.RegionOf(render.Rect{W: 400, H: 600}), Target: tg}
 		bufs = append(bufs, b)
 		return b, nil
 	}

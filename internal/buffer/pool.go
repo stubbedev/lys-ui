@@ -54,10 +54,10 @@ type Buffer struct {
 	Scale         int
 
 	// Stale is the region where this buffer's content lags what is on
-	// screen: the union of damage painted into other buffers since this
-	// one was last presented. A frame drawn here must repaint Stale plus
-	// the frame's own damage; a fresh buffer starts fully stale.
-	Stale render.Rect
+	// screen: the damage painted into other buffers since this one was
+	// last presented. A frame drawn here must repaint Stale plus the
+	// frame's own damage; a fresh buffer starts fully stale.
+	Stale Region
 
 	busy bool
 	// used marks a buffer Acquire handed out since the pool's last
@@ -164,6 +164,9 @@ type Pool struct {
 	// the compositor reads - so they survive until the release event
 	// retires them. The list is capped; overflow drops the oldest.
 	retired []*Buffer
+
+	// copied counts the pixels CopyForward copied.
+	copied int
 }
 
 // New returns a pool holding at most capacity buffers, allocated on demand
@@ -230,16 +233,13 @@ func (p *Pool) dropRetired(b *Buffer) {
 // comes back next carries the accumulated damage of every frame missed
 // since its content was on screen. Retired buffers are skipped: they
 // were replaced by a resize and will never be shown again.
-func (p *Pool) Presented(b *Buffer, changed render.Rect) {
+func (p *Pool) Presented(b *Buffer, changed *Region) {
 	// b was just repainted to match the screen, whatever it owed before.
-	b.Stale = render.Rect{}
+	b.Stale.Clear()
 	p.front = b
-	if changed.Empty() {
-		return
-	}
 	for _, o := range p.buffers {
 		if o != b {
-			o.Stale = o.Stale.Union(changed)
+			o.Stale.AddRegion(changed)
 		}
 	}
 }
@@ -271,7 +271,7 @@ func CopyRect(dst, src *Buffer, r render.Rect) {
 // GPU renderer. A copy it cannot make reports false, with the error
 // when the GPU failed.
 type Copier interface {
-	Copy(dst, src *Buffer, r render.Rect) (bool, error)
+	Copy(dst, src *Buffer, rects []render.Rect) (bool, error)
 }
 
 // CopyForward brings b up to the screen where it is stale by copying
@@ -283,23 +283,28 @@ type Copier interface {
 // b stale, for the frame to paint; the GPU's error comes back.
 func (p *Pool) CopyForward(b *Buffer, gpu Copier) error {
 	front := p.front
-	stale := b.Stale.Intersect(render.Rect{W: b.Width, H: b.Height})
-	if stale.Empty() || front == nil || front == b || front.Width != b.Width || front.Height != b.Height {
+	if b.Stale.Empty() || front == nil || front == b || front.Width != b.Width || front.Height != b.Height {
 		return nil
 	}
 	switch {
 	case b.Target != nil && front.Target != nil && gpu != nil:
-		if ok, err := gpu.Copy(b, front, stale); !ok {
+		if ok, err := gpu.Copy(b, front, b.Stale.Rects()); !ok {
 			return err
 		}
 	case b.Data != nil && front.Data != nil:
-		CopyRect(b, front, stale)
+		for _, r := range b.Stale.Rects() {
+			CopyRect(b, front, r)
+		}
 	default:
 		return nil
 	}
-	b.Stale = render.Rect{}
+	p.copied += b.Stale.Area()
+	b.Stale.Clear()
 	return nil
 }
+
+// CopiedPixels counts the pixels CopyForward copied so far.
+func (p *Pool) CopiedPixels() int { return p.copied }
 
 // Resize swaps the pool to a new buffer size. Free buffers are disposed
 // on the spot; buffers the compositor still holds are preserved - their

@@ -58,6 +58,8 @@ type gpuRenderer struct {
 	// drawn marks a frame since the buffer trim last looked, and
 	// trimmed a device trimmed since its last frame (trimIdle).
 	drawn, trimmed bool
+	// copyRects is Copy's scratch.
+	copyRects []image.Rectangle
 }
 
 // trimIdle trims the device once it has drawn nothing for a whole trim
@@ -256,11 +258,15 @@ func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, paint func(cv *render.Can
 	return true, nil
 }
 
-// Copy copies r, in buffer pixels, from src's target into dst's. A
+// Copy copies rects, in buffer pixels, from src's target into dst's. A
 // failed copy turns every surface to the CPU and reports false, or,
 // with the GPU required, is the error.
-func (r *gpuRenderer) Copy(dst, src *buffer.Buffer, rect render.Rect) (bool, error) {
-	err := r.dev.CopyRects(dst.Target, src.Target, []image.Rectangle{image.Rect(rect.X, rect.Y, rect.X+rect.W, rect.Y+rect.H)})
+func (r *gpuRenderer) Copy(dst, src *buffer.Buffer, rects []render.Rect) (bool, error) {
+	r.copyRects = r.copyRects[:0]
+	for _, c := range rects {
+		r.copyRects = append(r.copyRects, image.Rect(c.X, c.Y, c.X+c.W, c.Y+c.H))
+	}
+	err := r.dev.CopyRects(dst.Target, src.Target, r.copyRects)
 	if err == nil {
 		return true, nil
 	}

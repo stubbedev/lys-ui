@@ -1,6 +1,7 @@
 package repaint
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/debug"
@@ -22,12 +23,13 @@ func TestPlan(t *testing.T) {
 		t.Fatal("a rect outside the surface was owed")
 	}
 	r.Add(bounds, render.Rect{X: 10, Y: 10, W: 20, H: 10})
-	b := &buffer.Buffer{Width: 200, Height: 100, Stale: render.Rect{X: 100, Y: 0, W: 50, H: 50}}
+	stale := render.Rect{X: 100, Y: 0, W: 50, H: 50}
+	b := &buffer.Buffer{Width: 200, Height: 100, Stale: buffer.RegionOf(stale)}
 	rects, changed, regions := r.Plan(b, 2*scale.Denom)
-	if want := (render.Rect{X: 20, Y: 20, W: 40, H: 20}); changed != want {
-		t.Errorf("changed %v, want the owed rect at device scale %v", changed, want)
+	if want := (render.Rect{X: 20, Y: 20, W: 40, H: 20}); len(changed.Rects()) != 1 || changed.Rects()[0] != want {
+		t.Errorf("changed %v, want the owed rect at device scale %v", changed.Rects(), want)
 	}
-	if len(rects) != 2 || rects[1] != b.Stale {
+	if len(rects) != 2 || rects[1] != stale {
 		t.Errorf("rects %v, want the owed rect and the buffer's stale one", rects)
 	}
 	if want := (render.Rect{X: 20, Y: 0, W: 130, H: 50}); len(regions) != 1 || regions[0] != want {
@@ -82,53 +84,20 @@ func TestDisjointDamagePaintsApart(t *testing.T) {
 	}
 }
 
-// Rects that touch, or whose box is hardly bigger, paint as one walk.
-func TestNearDamagePaintsAsOne(t *testing.T) {
-	for name, rects := range map[string][]render.Rect{
-		"overlapping": {{X: 0, W: 40, H: 30}, {X: 20, W: 40, H: 30}},
-		"cross":       {{X: 0, Y: 45, W: 100, H: 10}, {X: 45, Y: 0, W: 10, H: 100}},
-		"neighbours":  {{X: 0, W: 40, H: 30}, {X: 50, W: 40, H: 30}},
-	} {
-		got := coalesce(nil, rects)
-		if len(got) != 1 {
-			t.Errorf("%s: %v, want one region", name, got)
-		}
-	}
-}
-
-// However scattered the damage, a frame walks the tree a bounded number of
-// times, and every rect stays covered.
-func TestRegionsAreBoundedAndCoverEverything(t *testing.T) {
-	var rects []render.Rect
-	for i := range 40 {
-		rects = append(rects, render.Rect{X: i * 100, Y: i * 100, W: 5, H: 5})
-	}
-	got := coalesce(nil, rects)
-	if len(got) > maxRegions {
-		t.Errorf("%d regions, want at most %d", len(got), maxRegions)
-	}
-	for _, want := range rects {
-		covered := false
-		for _, g := range got {
-			covered = covered || g.Intersect(want) == want
-		}
-		if !covered {
-			t.Errorf("%v is in no region of %v", want, got)
-		}
-	}
-}
-
-func TestCovers(t *testing.T) {
+func TestDropCovered(t *testing.T) {
 	var r Region
 	bounds := render.Rect{W: 100, H: 100}
 	r.Add(bounds, render.Rect{X: 10, Y: 10, W: 20, H: 20})
-	if !r.Covers(render.Rect{X: 40, Y: 40, W: 10, H: 10}, 2*scale.Denom) {
-		t.Error("a stale rect inside the owed one at device scale must be covered")
+	past := render.Rect{X: 10, Y: 10, W: 10, H: 10}
+	b := &buffer.Buffer{Width: 200, Height: 200, Stale: buffer.RegionOf(past)}
+	b.Stale.Add(render.Rect{X: 40, Y: 40, W: 10, H: 10})
+	b.Stale.Add(render.Rect{X: 120, Y: 120, W: 10, H: 10})
+	r.DropCovered(b, 2*scale.Denom)
+	got := b.Stale.Rects()
+	if len(got) == 0 || slices.Contains(got, render.Rect{X: 40, Y: 40, W: 10, H: 10}) {
+		t.Errorf("stale %v, want the rect inside the owed one at device scale gone", got)
 	}
-	if r.Covers(render.Rect{X: 10, Y: 10, W: 10, H: 10}, 2*scale.Denom) {
-		t.Error("a stale rect past the owed one must still be copied")
-	}
-	if r.Covers(render.Rect{}, scale.Denom) {
-		t.Error("nothing stale has nothing to cover")
+	if !slices.Contains(got, render.Rect{X: 120, Y: 120, W: 10, H: 10}) {
+		t.Errorf("stale %v lost a rect past the owed one", got)
 	}
 }

@@ -47,7 +47,7 @@ func NewDmabuf(dev *gpu.Device, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, mod
 		t.Close()
 		return nil, fmt.Errorf("buffer: dmabuf %dx%d: %w", bufW, bufH, err)
 	}
-	b := &Buffer{Width: bufW, Height: bufH, Scale: scale, Stale: render.Rect{W: bufW, H: bufH}, Target: t, pending: true}
+	b := &Buffer{Width: bufW, Height: bufH, Scale: scale, Stale: RegionOf(render.Rect{W: bufW, H: bufH}), Target: t, pending: true}
 	imp := &dmabufImport{b: b, done: func() { _ = params.Destroy() }, rejected: rejected, allocate: allocated.Sub(start), sent: time.Now()}
 	params.AddCreatedHandler(imp)
 	params.AddFailedHandler(imp)

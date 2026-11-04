@@ -37,7 +37,7 @@ func (g *gpuFrames) Frame(b *buffer.Buffer, num int, paint func(cv *render.Canva
 
 func (g *gpuFrames) Failed() bool { return g.failed }
 
-func (g *gpuFrames) Copy(*buffer.Buffer, *buffer.Buffer, render.Rect) (bool, error) {
+func (g *gpuFrames) Copy(*buffer.Buffer, *buffer.Buffer, []render.Rect) (bool, error) {
 	return false, nil
 }
 

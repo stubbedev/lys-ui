@@ -16,7 +16,7 @@ func newTestBuffer(w, h int) *Buffer {
 		Height: h,
 		Stride: stride,
 		Scale:  1,
-		Stale:  render.Rect{W: w, H: h},
+		Stale:  RegionOf(render.Rect{W: w, H: h}),
 	}
 }
 
@@ -404,8 +404,8 @@ func TestStride(t *testing.T) {
 
 func TestFreshBufferIsFullyStale(t *testing.T) {
 	b := newTestBuffer(100, 40)
-	if b.Stale != (render.Rect{W: 100, H: 40}) {
-		t.Errorf("fresh buffer stale = %+v, want the full buffer", b.Stale)
+	if got := b.Stale.Rects(); len(got) != 1 || got[0] != (render.Rect{W: 100, H: 40}) {
+		t.Errorf("fresh buffer stale = %+v, want the full buffer", got)
 	}
 }
 
@@ -417,13 +417,14 @@ func TestPresentedMovesDamageToOtherBuffers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.Stale != (render.Rect{W: 100, H: 40}) {
-		t.Fatalf("fresh buffer stale = %+v, want full", a.Stale)
+	if got := a.Stale.Rects(); len(got) != 1 || got[0] != (render.Rect{W: 100, H: 40}) {
+		t.Fatalf("fresh buffer stale = %+v, want full", got)
 	}
 	// Committing a frame through a fully stale buffer changes only the
 	// changed region; the initialization paint must not leak into other
 	// buffers' staleness.
-	p.Presented(a, render.Rect{X: 10, Y: 0, W: 20, H: 40})
+	first := RegionOf(render.Rect{X: 10, Y: 0, W: 20, H: 40})
+	p.Presented(a, &first)
 	if !a.Stale.Empty() {
 		t.Errorf("presented buffer stale = %+v, want empty", a.Stale)
 	}
@@ -432,7 +433,8 @@ func TestPresentedMovesDamageToOtherBuffers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.Presented(b, render.Rect{X: 60, Y: 0, W: 10, H: 40})
+	missed := RegionOf(render.Rect{X: 60, Y: 0, W: 10, H: 40})
+	p.Presented(b, &missed)
 
 	// Re-acquiring a now carries the change missed while b was on
 	// screen; the first region does not apply, a was the screen then.
@@ -445,17 +447,97 @@ func TestPresentedMovesDamageToOtherBuffers(t *testing.T) {
 		t.Fatal("released buffer was not reused")
 	}
 	want := render.Rect{X: 60, Y: 0, W: 10, H: 40}
-	if a2.Stale != want {
-		t.Errorf("rotated buffer stale = %+v, want the missed region %+v", a2.Stale, want)
+	if got := a2.Stale.Rects(); len(got) != 1 || got[0] != want {
+		t.Errorf("rotated buffer stale = %+v, want the missed region %+v", got, want)
 	}
 
 	// Re-presenting clears only the presented buffer.
-	p.Presented(a2, want)
+	p.Presented(a2, &missed)
 	if !a2.Stale.Empty() {
 		t.Errorf("presented buffer stale = %+v, want empty", a2.Stale)
 	}
-	if b.Stale != want {
-		t.Errorf("other buffer stale = %+v, want %+v", b.Stale, want)
+	if got := b.Stale.Rects(); len(got) != 1 || got[0] != want {
+		t.Errorf("other buffer stale = %+v, want %+v", got, want)
+	}
+}
+
+func TestCopyForwardCopiesOnlyTheStaleRects(t *testing.T) {
+	created := 0
+	p := New(countingCreate(&created, 100, 200), 3)
+	a, _ := p.Acquire()
+	b, _ := p.Acquire()
+	for i := range a.Data {
+		a.Data[i] = 7
+	}
+	var changed Region
+	top, bottom := render.Rect{W: 100, H: 8}, render.Rect{Y: 192, W: 100, H: 8}
+	changed.Add(top)
+	changed.Add(bottom)
+	p.Presented(a, &changed)
+	b.Stale = changed
+	if err := p.CopyForward(b, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := p.CopiedPixels(), 2*100*8; got != want {
+		t.Errorf("copied %d pixels, want the two strips' %d", got, want)
+	}
+	if !b.Stale.Empty() {
+		t.Errorf("stale %+v after the copy", b.Stale.Rects())
+	}
+	if b.Data[0] != 7 || b.Data[191*b.Stride] != 0 || b.Data[192*b.Stride] != 7 {
+		t.Error("the copy did not land in the strips alone")
+	}
+}
+
+func TestRegionKeepsThinFarStripsApart(t *testing.T) {
+	var g Region
+	top, bottom := render.Rect{W: 1000, H: 8}, render.Rect{Y: 992, W: 1000, H: 8}
+	g.Add(top)
+	g.Add(bottom)
+	if got := g.Rects(); len(got) != 2 {
+		t.Errorf("rects %+v, want the strips apart", got)
+	}
+	if got := g.Area(); got != 16000 {
+		t.Errorf("area %d, want 16000", got)
+	}
+}
+
+func TestRegionMergesNearRects(t *testing.T) {
+	for name, rects := range map[string][]render.Rect{
+		"overlapping": {{X: 0, W: 40, H: 30}, {X: 20, W: 40, H: 30}},
+		"cross":       {{X: 0, Y: 45, W: 100, H: 10}, {X: 45, Y: 0, W: 10, H: 100}},
+		"neighbours":  {{X: 0, W: 40, H: 30}, {X: 50, W: 40, H: 30}},
+	} {
+		var g Region
+		for _, r := range rects {
+			g.Add(r)
+		}
+		if got := g.Rects(); len(got) != 1 {
+			t.Errorf("%s: %v, want one rect", name, got)
+		}
+	}
+}
+
+func TestRegionIsBoundedAndCoversEverything(t *testing.T) {
+	var g Region
+	var rects []render.Rect
+	for i := range 40 {
+		r := render.Rect{X: i * 100, Y: i * 100, W: 5, H: 5}
+		rects = append(rects, r)
+		g.Add(r)
+	}
+	got := g.Rects()
+	if len(got) > maxRegionRects {
+		t.Errorf("%d rects, want at most %d", len(got), maxRegionRects)
+	}
+	for _, want := range rects {
+		covered := false
+		for _, r := range got {
+			covered = covered || r.Intersect(want) == want
+		}
+		if !covered {
+			t.Errorf("%v is in no rect of %v", want, got)
+		}
 	}
 }
 
@@ -466,8 +548,8 @@ func TestPresentedEmptyRegionIsNoop(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.Stale = render.Rect{}
-	p.Presented(a, render.Rect{})
+	a.Stale.Clear()
+	p.Presented(a, &Region{})
 	if !a.Stale.Empty() {
 		t.Error("empty present must not touch staleness")
 	}
@@ -506,7 +588,8 @@ func TestFrontAndCopyRect(t *testing.T) {
 	for i := range a.Data {
 		a.Data[i] = 7
 	}
-	p.Presented(a, render.Rect{W: 4, H: 3})
+	all := RegionOf(render.Rect{W: 4, H: 3})
+	p.Presented(a, &all)
 	if p.Front() != a {
 		t.Fatal("the presented buffer is not the front")
 	}
@@ -544,7 +627,8 @@ func TestTrimFreesSparesNoFrameUsed(t *testing.T) {
 		bufs = append(bufs, b)
 	}
 	front, spare, held := bufs[0], bufs[1], bufs[2]
-	p.Presented(front, render.Rect{W: 100, H: 20})
+	all := RegionOf(render.Rect{W: 100, H: 20})
+	p.Presented(front, &all)
 	front.Release()
 	spare.Release()
 

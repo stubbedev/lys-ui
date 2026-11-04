@@ -190,9 +190,13 @@ func (pc *Painter) Owes() bool { return pc.dirty.Load() }
 // whole wire sequence holds p.mu, serialized against the dismissal
 // state machine's SealInput and Destroy. It returns false when the
 // popup is destroyed and the painter is spent.
+// false when the popup is destroyed and the painter is spent.
 func (pc *Painter) Pass() (bool, error) {
 	if pc.p.Destroyed() {
 		return false, nil
+	}
+	if !pc.p.configured {
+		return true, nil
 	}
 	if pc.p.dirty.CompareAndSwap(true, false) {
 		pc.dirty.Store(true)
@@ -262,10 +266,9 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 		return false, false, err
 	}
 	start := time.Now()
-	if !pc.damage.Covers(b.Stale, int(pc.frac120)) {
-		if err := pc.pool.CopyForward(b, pc.copier()); err != nil {
-			return false, false, err
-		}
+	pc.damage.DropCovered(b, int(pc.frac120))
+	if err := pc.pool.CopyForward(b, pc.copier()); err != nil {
+		return false, false, err
 	}
 	rects, changed, regions := pc.damage.Plan(b, int(pc.frac120))
 	drawn, err := pc.paint(b, regions)

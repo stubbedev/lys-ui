@@ -104,7 +104,7 @@ func fakeBuffer(w, h int) *buffer.Buffer {
 	return &buffer.Buffer{
 		Data:  make([]byte, stride*h),
 		Width: w, Height: h, Stride: stride, Scale: 1,
-		Stale: render.Rect{W: w, H: h},
+		Stale: buffer.RegionOf(render.Rect{W: w, H: h}),
 	}
 }
 
@@ -458,5 +458,37 @@ func TestIdleWindowFreesItsSpareBuffers(t *testing.T) {
 	bar.SetValue(0.9)
 	if px, _ := h.frame(); px == 0 {
 		t.Error("the trimmed window painted nothing on its next frame")
+	}
+}
+
+func TestFarApartBarsCopyForwardOnlyTheirStrips(t *testing.T) {
+	root := widget.NewBox(widget.Column, 0, 0)
+	top, bottom := widget.NewProgressBar(0), widget.NewProgressBar(0)
+	root.Append(top, false)
+	root.Append(widget.NewBox(widget.Column, 0, 0), true)
+	root.Append(bottom, false)
+	h := newPaintHarness(root, 1000, 800)
+	v := 0.0
+	turn := false
+	nudge := func() {
+		v += 0.01
+		turn = !turn
+		if turn {
+			top.SetValue(v)
+			return
+		}
+		bottom.SetValue(v)
+	}
+	h.warm(nudge, 4)
+	strips := top.Bounds().W*top.Bounds().H + bottom.Bounds().W*bottom.Bounds().H
+	before := h.wnd.pool.CopiedPixels()
+	const frames = 20
+	for range frames {
+		nudge()
+		h.frame()
+	}
+	got := (h.wnd.pool.CopiedPixels() - before) / frames
+	if got == 0 || got > strips {
+		t.Errorf("copied %d px per frame forward, want the bars' %d px at most, and some", got, strips)
 	}
 }

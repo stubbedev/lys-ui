@@ -161,7 +161,7 @@ func (a *Arena) Acquire(bufW, bufH, scale int) (*Buffer, error) {
 		WL:    wlBuf,
 		Data:  a.data[s.offset : s.offset+need],
 		Width: bufW, Height: bufH, Stride: stride, Scale: scale,
-		Stale: render.Rect{W: bufW, H: bufH},
+		Stale: RegionOf(render.Rect{W: bufW, H: bufH}),
 		arena: a,
 		slot:  s,
 		gen:   a.gen,
@@ -266,9 +266,9 @@ func (a *Arena) ensure(size int) error {
 
 // put returns a slot to the free list, keeping it sorted by offset and
 // merging adjacent slots so fragmentation cannot accumulate.
-func (a *Arena) put(s slot) slot {
+func (a *Arena) put(s slot) {
 	if s.bytes <= 0 {
-		return s
+		return
 	}
 	i := 0
 	for i < len(a.free) && a.free[i].offset < s.offset {
@@ -289,7 +289,6 @@ func (a *Arena) put(s slot) slot {
 		a.free[i].resident = a.free[i].resident || a.free[i+1].resident
 		a.free = append(a.free[:i+1], a.free[i+2:]...)
 	}
-	return a.free[i]
 }
 
 // reclaimable reports whether a free slot still holds pages.

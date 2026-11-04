@@ -894,11 +894,10 @@ func (w *hostWindow) draw() bool {
 		w.drawErr = fmt.Errorf("app: acquire buffer: %w", err)
 		return false
 	}
-	if !w.damage.Covers(b.Stale, w.devNum()) {
-		if err := w.pool.CopyForward(b, w.copier()); err != nil {
-			w.drawErr = err
-			return false
-		}
+	w.damage.DropCovered(b, w.devNum())
+	if err := w.pool.CopyForward(b, w.copier()); err != nil {
+		w.drawErr = err
+		return false
 	}
 
 	// A buffer with stale content must repaint everything that changed
