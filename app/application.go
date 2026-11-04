@@ -708,10 +708,10 @@ func (a *Application) newWindow(host surfaceOwner, scale int, root widget.Widget
 		w.input.dismissPopover = func() bool { return a.dismissAutohide(host) }
 	}
 	ov.SetRouter(w.router)
-	widget.MarkA11yChanged()
 	widget.SetSurfaceHost(ov, surfaceHost{a: a, host: host, router: w.router})
 	w.inspector = ov
 	a.windows = append(a.windows, w)
+	widget.MarkA11yChanged()
 	// Wake the parked loop so a new window paints promptly.
 	a.sess.WakeAfter(0)
 	return w
@@ -920,12 +920,12 @@ func (a *Application) tick(step func() error, now time.Time) error {
 			return false
 		}
 		closed = append(closed, w)
-	if len(closed) > 0 {
-		widget.MarkA11yChanged()
-	}
 		return true
 	})
 	var moved []movedToasts
+	if len(closed) > 0 {
+		widget.MarkA11yChanged()
+	}
 	for _, w := range closed {
 		// Its live toasts move to the next toast window once the list
 		// is settled; the surface they painted on goes.
