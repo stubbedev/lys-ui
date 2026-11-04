@@ -70,7 +70,7 @@ func (r *dropRig) settled() {
 	if animclock.Active() {
 		r.t.Error("the settled drop keeps the clock running")
 	}
-	if _, ok := animclock.Next(); ok {
+	if _, ok := animclock.Next(animclock.Timer); ok {
 		r.t.Error("the settled drop schedules a frame")
 	}
 }

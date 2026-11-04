@@ -76,7 +76,7 @@ func redAt(data shot, x, y int) uint8 {
 func advance(c *animClock, d time.Duration) {
 	until := c.now().Add(d)
 	for {
-		wake, ok := animclock.Next()
+		wake, ok := animclock.Next(animclock.Timer)
 		if !ok || wake.After(until) {
 			return
 		}

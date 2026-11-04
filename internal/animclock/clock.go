@@ -10,10 +10,32 @@ import (
 	"time"
 )
 
-// FrameInterval is the frame period: the fallback pacing when the
-// compositor's frame callbacks stop arriving, and the deadline
-// granularity of Next while a piece is mid-flight.
+// FrameInterval is the period the timer paces a running piece at while no
+// surface waits on a frame callback.
 const FrameInterval = time.Second / 60
+
+// FallbackInterval is the period a running piece ticks at while a surface
+// waits on a frame callback, or no surface can show it: the callback paces it
+// when the compositor answers, and an occluded window's animations still land.
+const FallbackInterval = time.Second / 4
+
+// Pace says what paces the clock.
+type Pace uint8
+
+const (
+	// Timer paces the clock at FrameInterval: a surface could draw now.
+	Timer Pace = iota
+	// Fallback leaves pacing to frame callbacks, with FallbackInterval
+	// under them: every surface that could draw waits on one.
+	Fallback
+)
+
+func (p Pace) interval() time.Duration {
+	if p == Fallback {
+		return FallbackInterval
+	}
+	return FrameInterval
+}
 
 // Piece is one flattened step of a timeline: fn runs with Easing of
 // linear progress over [At, At+Dur) from the launch instant.
@@ -44,14 +66,21 @@ type driver struct {
 }
 
 var (
-	mu      sync.Mutex
-	clock   = time.Now
-	active  []*step
-	drivers []*driver
-	// running is Tick's reused snapshot of the drivers it steps.
+	mu       sync.Mutex
+	clock    = time.Now
+	active   []*step
+	drivers  []*driver
 	running  []*driver
+	firings  []firing
 	lastTick time.Time
+	launched time.Time
 )
+
+type firing struct {
+	fn    func(float64)
+	eased float64
+	grp   *group
+}
 
 // Now is the scheduler's current instant: the pinned one under
 // SetClock.
@@ -84,6 +113,7 @@ func Launch(pieces []Piece) (cancel func()) {
 	if len(launch) > 0 {
 		mu.Lock()
 		active = append(active, launch...)
+		launched = now
 		mu.Unlock()
 	}
 	return cancel
@@ -120,11 +150,12 @@ func Active() bool {
 	return false
 }
 
-// Next returns the earliest instant the loop must wake to keep the
-// clock running: one frame past the last tick while a piece is
-// mid-flight, or a later piece's start while a timeline holds in a
-// delay. False means nothing runs and the loop may park.
-func Next() (time.Time, bool) {
+// Next returns the earliest instant the loop must wake to keep the clock
+// running at pace: one interval past the last tick while a piece is
+// mid-flight, or a later piece's start while a timeline holds in a delay. At
+// Timer a piece's end counts too, so its last frame lands on time. False means
+// nothing runs and the loop may park.
+func Next(pace Pace) (time.Time, bool) {
 	mu.Lock()
 	defer mu.Unlock()
 	now := clock()
@@ -134,15 +165,30 @@ func Next() (time.Time, bool) {
 	if lastTick.IsZero() {
 		lastTick = now
 	}
-	nextFrame := lastTick.Add(FrameInterval)
-	if nextFrame.Before(now) {
-		nextFrame = now
+	next, found := nextDeadline(now, pace)
+	if found && next.Before(now) {
+		next = now
 	}
+	return next, found
+}
+
+// Due reports whether the clock's deadline at pace has come by now, so a
+// pass that was not woken by a frame callback ticks it; a pass woken by
+// anything else leaves running pieces where they are.
+func Due(now time.Time, pace Pace) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	next, found := nextDeadline(now, pace)
+	return found && !next.After(now)
+}
+
+func nextDeadline(now time.Time, pace Pace) (time.Time, bool) {
+	frame := lastTick.Add(pace.interval())
 	var next time.Time
 	found := false
 	for _, d := range drivers {
 		if !d.dead {
-			next, found = nextFrame, true
+			next, found = frame, true
 			break
 		}
 	}
@@ -150,12 +196,14 @@ func Next() (time.Time, bool) {
 		if s.done || s.grp.dead {
 			continue
 		}
-		at := s.start
-		if !now.Before(s.start) {
+		at := frame
+		switch {
+		case now.Before(s.start) && s.start.After(at):
+			at = s.start
+		case now.Before(s.start) && pace == Timer:
+			at = s.start
+		case pace == Timer && s.end.Before(at):
 			at = s.end
-			if nextFrame.Before(at) {
-				at = nextFrame
-			}
 		}
 		if !found || at.Before(next) {
 			next, found = at, true
@@ -165,18 +213,22 @@ func Next() (time.Time, bool) {
 }
 
 // Tick advances every running piece to now and drops finished or
-// cancelled ones. Callbacks run after the pass settles with the lock
+// cancelled ones. Time never runs back: a now older than the last tick, or
+// than the last launch (a compositor timestamp lags the local clock), counts
+// as that instant. Callbacks run after the pass settles with the lock
 // released, so they may launch or cancel freely; a callback cancelling
 // its own timeline still stops that timeline's later pieces in the
 // same tick. It reports whether any callback ran.
 func Tick(now time.Time) bool {
-	type firing struct {
-		fn    func(float64)
-		eased float64
-		grp   *group
-	}
 	mu.Lock()
-	var due []firing
+	if now.Before(lastTick) {
+		now = lastTick
+	}
+	if now.Before(launched) {
+		now = launched
+	}
+	due := firings
+	firings = nil
 	keep := active[:0]
 	for _, s := range active {
 		if s.done || s.grp.dead {
@@ -199,7 +251,8 @@ func Tick(now time.Time) bool {
 	clear(active[len(keep):])
 	active = keep
 	lastTick = now
-	running = append(running[:0], drivers...)
+	stepped := append(running[:0], drivers...)
+	running = nil
 	mu.Unlock()
 	ran := false
 	for _, f := range due {
@@ -212,7 +265,8 @@ func Tick(now time.Time) bool {
 		f.fn(f.eased)
 		ran = true
 	}
-	for _, d := range running {
+	clear(due)
+	for _, d := range stepped {
 		mu.Lock()
 		dead := d.dead
 		mu.Unlock()
@@ -226,8 +280,9 @@ func Tick(now time.Time) bool {
 			mu.Unlock()
 		}
 	}
-	clear(running)
+	clear(stepped)
 	mu.Lock()
+	firings, running = due[:0], stepped[:0]
 	drivers = slices.DeleteFunc(drivers, func(d *driver) bool { return d.dead })
 	mu.Unlock()
 	return ran
@@ -242,10 +297,12 @@ func SetClock(fn func() time.Time) (restore func()) {
 	mu.Lock()
 	old := clock
 	clock = fn
+	lastTick, launched = time.Time{}, time.Time{}
 	mu.Unlock()
 	return func() {
 		mu.Lock()
 		clock = old
+		lastTick, launched = time.Time{}, time.Time{}
 		mu.Unlock()
 	}
 }
@@ -257,4 +314,5 @@ func Reset() {
 	active = nil
 	drivers = nil
 	lastTick = clock()
+	launched = time.Time{}
 }

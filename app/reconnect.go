@@ -18,6 +18,7 @@ import (
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/xkb"
 
+	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
 	"github.com/stubbedev/lys-ui/internal/window"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
@@ -152,12 +153,12 @@ func (a *Application) redial() (*wlsession.Session, error) {
 // repeat, the clipboard handle, and the session hooks.
 func (a *Application) adoptSession(sess *wlsession.Session) {
 	a.sess = sess
-	a.step, a.wake = sess.Step, sess.WakeAfter
+	a.step, a.wake, a.arm = sess.Step, sess.WakeAfter, sess.SetDeadline
 	a.dnd.Stop()
 	a.dnd = dragdrop.New(sess, a.Invoke)
 	a.ime = newIMEController(sess)
 	a.rep = newKeyRepeater(sess.RepeatInfo())
-	a.kicker = &loopKicker{}
+	a.frameClock = animclock.FrameClock{}
 	if a.clip != nil {
 		a.clip.Reset(sess)
 	}

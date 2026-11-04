@@ -46,7 +46,7 @@ func TestToastAutoDismiss(t *testing.T) {
 		if !animActiveNow(t) {
 			t.Fatal("visible toast scheduled nothing")
 		}
-		wake, ok := animclock.Next()
+		wake, ok := animclock.Next(animclock.Timer)
 		if !ok {
 			t.Fatal("no wake scheduled")
 		}
@@ -86,7 +86,7 @@ func animActiveNow(tb testing.TB) bool {
 	if animclock.Active() {
 		return true
 	}
-	_, ok := animclock.Next()
+	_, ok := animclock.Next(animclock.Timer)
 	return ok
 }
 
@@ -123,7 +123,7 @@ func TestToastHoverCancelsDismissal(t *testing.T) {
 
 	// Leaving arms a fresh full timeout from now.
 	toast.SetHovered(false)
-	wake, ok := animclock.Next()
+	wake, ok := animclock.Next(animclock.Timer)
 	if !ok {
 		t.Fatal("unhovered toast armed no dismissal")
 	}

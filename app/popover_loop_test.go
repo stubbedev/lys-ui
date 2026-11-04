@@ -47,8 +47,9 @@ func (f *fakePopPainter) Collect() bool {
 	_, damaged := widget.CollectDamage(f.root)
 	return damaged
 }
-func (f *fakePopPainter) Pass() (bool, error) { f.passes++; return true, f.err }
-func (f *fakePopPainter) Close()              { f.closes++ }
+func (f *fakePopPainter) Pass() (bool, error)             { f.passes++; return true, f.err }
+func (f *fakePopPainter) TakeFrame() (uint32, bool, bool) { return 0, false, false }
+func (f *fakePopPainter) Close()                          { f.closes++ }
 
 func newLoopPopover(content widget.Widget) (*openPopover, *fakePopSurface, *fakePopPainter, *int) {
 	surf := &fakePopSurface{}

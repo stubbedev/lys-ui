@@ -35,7 +35,7 @@ func TestInstantKeepsDelayedLandings(t *testing.T) {
 		t.Fatalf("fired %d times mid-delay, want 0", fired)
 	}
 	step := func() bool {
-		wake, ok := animclock.Next()
+		wake, ok := animclock.Next(animclock.Timer)
 		if !ok {
 			return false
 		}
@@ -50,7 +50,7 @@ func TestInstantKeepsDelayedLandings(t *testing.T) {
 	if fired != 1 {
 		t.Errorf("fired %d times after the delay, want exactly 1", fired)
 	}
-	if _, ok := animclock.Next(); ok {
+	if _, ok := animclock.Next(animclock.Timer); ok {
 		t.Error("the landed step kept scheduling")
 	}
 }

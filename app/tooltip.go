@@ -92,6 +92,7 @@ type tooltipWindow interface {
 type tooltipPainter interface {
 	Owes() bool
 	Pass() (bool, error)
+	TakeFrame() (ms uint32, arrived, pending bool)
 }
 
 // tooltipCtl tracks the hover dwell and the one open tooltip. The

@@ -25,14 +25,14 @@ func TestClosedWindowStopsItsAnimations(t *testing.T) {
 	}
 	h.wnd.release()
 	for range 3 {
-		wake, ok := animclock.Next()
+		wake, ok := animclock.Next(animclock.Timer)
 		if !ok {
 			break
 		}
 		now = wake
 		animclock.Tick(wake)
 	}
-	if _, ok := animclock.Next(); ok || animclock.Active() {
+	if _, ok := animclock.Next(animclock.Timer); ok || animclock.Active() {
 		t.Error("a closed window's spinner still schedules frames")
 	}
 }

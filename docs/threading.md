@@ -49,7 +49,14 @@ touch widgets from any goroutine.
 ## How `Invoke` wakes the park
 
 The loop parks in `Session.Step`. It wakes for compositor events, frame
-callbacks, and the timer deadlines `nextWake` computes (app/app.go).
+callbacks, and the one timer deadline `nextWake` computes (app/app.go), which
+each pass replaces through `Session.SetDeadline`.
+
+Animations tick when a frame callback comes back, once per commit, at the
+compositor's timestamp. Otherwise they wait for their deadline: `FrameInterval`
+while no surface awaits a callback, `FallbackInterval` while one does, or no
+surface can show them, so an occluded window's tween still lands, at low
+cost. Any other wake, such as pointer motion, leaves them where they are.
 Enqueueing an `Invoke` arms a single pending wake with one
 `Session.WakeAfter(0)`. The armed flag lives under the queue mutex, so
 a storm of Invokes arms one wake, and the loop drains the whole queue

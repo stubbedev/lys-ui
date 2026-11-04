@@ -34,7 +34,7 @@ func pinAnimClock(t *testing.T) *animClock {
 // step advances one animation wake — one frame deadline — and ticks
 // there. False when nothing is scheduled: the loop may park.
 func (c *animClock) step() bool {
-	wake, ok := animclock.Next()
+	wake, ok := animclock.Next(animclock.Timer)
 	if !ok {
 		return false
 	}
@@ -159,7 +159,7 @@ func TestLayerOverlayExitKeepsLoopParkedBetweenFrames(t *testing.T) {
 	if !h.host.closed {
 		t.Error("raw close did not flip the host's closed flag")
 	}
-	if _, ok := animclock.Next(); ok {
+	if _, ok := animclock.Next(animclock.Timer); ok {
 		t.Error("tween schedule not empty after the exit landed")
 	}
 }
@@ -205,7 +205,7 @@ func TestDismissedWindowSealsInputAndIgnoresDoubleClose(t *testing.T) {
 	if h.destroyed != 1 {
 		t.Errorf("destroyed %d times, want exactly 1", h.destroyed)
 	}
-	if _, ok := animclock.Next(); ok {
+	if _, ok := animclock.Next(animclock.Timer); ok {
 		t.Error("schedule not drained")
 	}
 }

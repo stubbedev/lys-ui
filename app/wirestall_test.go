@@ -264,7 +264,7 @@ func TestWireFrameSendmsgPerPass(t *testing.T) {
 			}
 			frame := func() {
 				for _, h := range hs {
-					h.wnd.dirty, h.wnd.framePending, h.wnd.frameReady = true, false, false
+					h.wnd.dirty, h.wnd.framePending, h.wnd.frame.Ready = true, false, false
 					for _, b := range h.bufs {
 						if b.Busy() {
 							b.Release()

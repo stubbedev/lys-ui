@@ -375,34 +375,6 @@ func (in *surfaceInput) pinCursor(shape string) {
 	in.applyCursorShape()
 }
 
-// loopKicker coalesces timer wakeups: one outstanding WakeAfter per
-// deadline, skipped while an earlier kick still covers the requested
-// time.
-type loopKicker struct {
-	until time.Time
-}
-
-// schedule arms a wakeup for at unless one is already pending that
-// covers it. While a tween runs the loop passes here once per frame:
-// re-arming a covered deadline would queue another sync per pass and
-// the parked loop would stop parking at all. wake is the loop's wake
-// seam (Application.wake), so tests drive ticks without a session.
-func (k *loopKicker) schedule(wake func(time.Duration), at time.Time) {
-	now := time.Now()
-	if k.covers(at, now) {
-		return
-	}
-	k.until = at
-	wake(at.Sub(now))
-}
-
-// covers reports whether the pending kick still satisfies at: it has
-// not fired yet, and fires no more than 2ms before at. A pending kick
-// that already fired (or lands earlier than that) does not cover.
-func (k *loopKicker) covers(at, now time.Time) bool {
-	return k.until.After(now) && !at.Add(-2*time.Millisecond).After(k.until)
-}
-
 // nextWake computes the earliest timer deadline the parked loop must
 // wake for; false means nothing is pending and the loop may sleep until
 // the next compositor event. animFrame is the animation clock's next
@@ -436,21 +408,6 @@ func nextWake(repeat, animFrame, tipNext, timers, now time.Time) (time.Time, boo
 // callback must have returned (frameOwed).
 func shouldDraw(w *hostWindow, resized bool) bool {
 	return w.dirty && (resized || w.frameOwed())
-}
-
-// frameDone flips ready when the compositor reports the frame as taken
-// and unregisters the callback: done is a destructor event, so the
-// object is dead on both sides and its id must rejoin the client's
-// pool. A frame loop that skips this leaks a proxy per frame.
-type frameDone struct {
-	ready *bool
-}
-
-// HandleCallbackDone implements wl.CallbackDoneHandler.
-func (f frameDone) HandleCallbackDone(ev wl.CallbackDoneEvent) {
-	debug.Log("frame", "frame callback done")
-	ev.C.Unregister()
-	*f.ready = true
 }
 
 // buttonStateName renders a wl_pointer.button state for traces.

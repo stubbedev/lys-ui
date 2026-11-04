@@ -86,7 +86,7 @@ func TestDismissFiresOnceAndDestroysAfterLastFrame(t *testing.T) {
 	framesBefore := d.frames
 	now := time.Unix(1750000000, 0)
 	for steps := 0; ; steps++ {
-		if _, ok := animclock.Next(); !ok {
+		if _, ok := animclock.Next(animclock.Timer); !ok {
 			break
 		}
 		steps++
@@ -134,7 +134,7 @@ func TestTeardownInterruptsTweenWithoutLeaks(t *testing.T) {
 		t.Errorf("destroyed %d times after teardown, want exactly 1", d.destroyed)
 	}
 	// A tick after teardown runs nothing: the surface is gone.
-	if _, ok := animclock.Next(); ok {
+	if _, ok := animclock.Next(animclock.Timer); ok {
 		t.Error("canceled tween still holds a wake deadline")
 	}
 	// Teardown is idempotent.
@@ -179,7 +179,7 @@ func TestEnterFirstFrameAtZeroAndRestAtCompletion(t *testing.T) {
 	// Drive to rest.
 	now := time.Unix(1750000000, 0)
 	for steps := 0; ; steps++ {
-		if _, ok := animclock.Next(); !ok {
+		if _, ok := animclock.Next(animclock.Timer); !ok {
 			break
 		}
 		now = now.Add(animclock.FrameInterval)
@@ -239,7 +239,7 @@ func TestInstantPathsRunTheSameMachine(t *testing.T) {
 			}
 			// The instant surface holds no wake deadlines: the loop
 			// parks immediately after.
-			if _, ok := animclock.Next(); ok {
+			if _, ok := animclock.Next(animclock.Timer); ok {
 				t.Error("instant path left a tween scheduled")
 			}
 		})
@@ -275,7 +275,7 @@ func driveClock(t *testing.T, onFrame func()) {
 	t.Helper()
 	now := time.Unix(1750000000, 0)
 	for steps := 0; ; steps++ {
-		if _, ok := animclock.Next(); !ok {
+		if _, ok := animclock.Next(animclock.Timer); !ok {
 			return
 		}
 		now = now.Add(animclock.FrameInterval)

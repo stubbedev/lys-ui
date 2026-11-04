@@ -123,7 +123,7 @@ func TestTickDeterminism(t *testing.T) {
 	Start(100*time.Millisecond, func(p float64) { got = append(got, p) })
 
 	for i := 0; animclock.Active(); i++ {
-		wake, ok := animclock.Next()
+		wake, ok := animclock.Next(animclock.Timer)
 		if !ok {
 			t.Fatal("active tween scheduled no wake")
 		}
@@ -148,7 +148,7 @@ func TestTickDeterminism(t *testing.T) {
 	if got[0] != mid {
 		t.Errorf("first progress = %v, want eased %v for one frame in", got[0], mid)
 	}
-	if _, ok := animclock.Next(); ok {
+	if _, ok := animclock.Next(animclock.Timer); ok {
 		t.Error("finished tween still scheduled a wake")
 	}
 }
@@ -183,7 +183,7 @@ func TestCancelMidFlight(t *testing.T) {
 	if animclock.Active() {
 		t.Error("canceled tween still counts as active")
 	}
-	if _, ok := animclock.Next(); ok {
+	if _, ok := animclock.Next(animclock.Timer); ok {
 		t.Error("canceled tween still scheduled a wake")
 	}
 	cancel() // repeated cancels do nothing
@@ -275,7 +275,7 @@ func TestParallel(t *testing.T) {
 	if !animclock.Active() {
 		t.Fatal("long parallel tween dropped with the short one")
 	}
-	if wake, ok := animclock.Next(); !ok || wake != t0.Add(50*time.Millisecond).Add(animclock.FrameInterval) {
+	if wake, ok := animclock.Next(animclock.Timer); !ok || wake != t0.Add(50*time.Millisecond).Add(animclock.FrameInterval) {
 		t.Errorf("wake = %v, %v; want the frame period past the last tick", wake, ok)
 	}
 	animclock.Tick(t0.Add(150 * time.Millisecond))
@@ -296,12 +296,12 @@ func TestNextWakesForStepStarts(t *testing.T) {
 	animclock.Reset()
 
 	Play(Sequence(Delay(100*time.Millisecond), Animate(50*time.Millisecond, func(float64) {})))
-	wake, ok := animclock.Next()
+	wake, ok := animclock.Next(animclock.Timer)
 	if !ok || wake != t0.Add(100*time.Millisecond) {
 		t.Fatalf("wake = %v, %v; want the next step's start", wake, ok)
 	}
 	animclock.Tick(wake) // the tween starts (progress 0)
-	wake, ok = animclock.Next()
+	wake, ok = animclock.Next(animclock.Timer)
 	want := t0.Add(100 * time.Millisecond).Add(animclock.FrameInterval)
 	if !ok || wake != want {
 		t.Errorf("wake after the step started = %v, %v; want the frame deadline %v", wake, ok, want)
@@ -376,7 +376,7 @@ func TestCallbackReentrancy(t *testing.T) {
 		}).Easing(Linear)
 		Play(spin)
 		for animclock.Active() {
-			wake, ok := animclock.Next()
+			wake, ok := animclock.Next(animclock.Timer)
 			if !ok {
 				t.Fatal("relaunched tween scheduled no wake")
 			}

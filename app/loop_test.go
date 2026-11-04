@@ -23,7 +23,7 @@ func repNext(rep *keyRepeater) time.Time {
 
 // animNext adapts animclock.Next the same way.
 func animNext() time.Time {
-	t, ok := animclock.Next()
+	t, ok := animclock.Next(animclock.Timer)
 	if !ok {
 		return time.Time{}
 	}
@@ -176,32 +176,6 @@ func TestShouldDraw(t *testing.T) {
 	})
 }
 
-// TestLoopKickerCoalesces pins the wakeup budget: one outstanding kick
-// covers every deadline it spans, and a fired kick rearms. The
-// animation loop passes here once per frame - a kicker that re-armed on
-// covered deadlines would queue a sync per pass and never park.
-func TestLoopKickerCoalesces(t *testing.T) {
-	k := &loopKicker{}
-	now := time.Now()
-	deadline := now.Add(16 * time.Millisecond)
-
-	if k.covers(deadline, now) {
-		t.Error("a fresh kicker claims a pending kick")
-	}
-	k.until = deadline
-	if !k.covers(deadline, now) {
-		t.Error("the pending kick does not cover its own deadline")
-	}
-	if !k.covers(deadline.Add(-time.Millisecond), now) {
-		t.Error("a deadline 1ms before the pending kick is treated as uncovered")
-	}
-	if k.covers(deadline.Add(3*time.Millisecond), now) {
-		t.Error("a deadline 3ms past the pending kick counts as covered")
-	}
-	if k.covers(deadline, deadline.Add(time.Millisecond)) {
-		t.Error("a fired kick still counts as pending")
-	}
-}
 
 // TestAnimatingLoopWakesOnFrameDeadlines drives the loop's wake
 // decision across a tween's lifetime: an animating tree wakes once per

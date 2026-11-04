@@ -201,8 +201,9 @@ type fakeTipPainter struct {
 	passes int
 }
 
-func (f *fakeTipPainter) Owes() bool          { return f.owes }
-func (f *fakeTipPainter) Pass() (bool, error) { f.passes++; return true, nil }
+func (f *fakeTipPainter) Owes() bool                      { return f.owes }
+func (f *fakeTipPainter) Pass() (bool, error)             { f.passes++; return true, nil }
+func (f *fakeTipPainter) TakeFrame() (uint32, bool, bool) { return 0, false, false }
 
 // TestAllocBudgetTooltipPainterPass pins the open-tooltip painter
 // gate: a settled tooltip runs no Pass, an owed frame runs exactly

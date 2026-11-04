@@ -113,7 +113,7 @@ func wireFreePopup(t *testing.T, kind surfx.Kind) (*Popup, func()) {
 	now := base
 	drive := func() {
 		for i := 0; ; i++ {
-			wake, ok := animclock.Next()
+			wake, ok := animclock.Next(animclock.Timer)
 			if !ok {
 				return
 			}

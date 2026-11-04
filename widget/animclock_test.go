@@ -37,7 +37,7 @@ func (c *animClock) set(tm time.Time) { c.cur = tm }
 // the last tick for an in-flight tween, a later step's start across a
 // delay — and ticks the clock there. False when nothing is scheduled.
 func (c *animClock) step() bool {
-	wake, ok := animclock.Next()
+	wake, ok := animclock.Next(animclock.Timer)
 	if !ok {
 		return false
 	}

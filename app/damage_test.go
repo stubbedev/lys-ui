@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/scale"
+	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -38,6 +39,7 @@ func (f *fakeHost) resizeTo(w, h int) { f.w, f.h = w, h }
 
 // fakeSurface records the wire traffic draw produces.
 type fakeSurface struct {
+	withholdFrames            bool
 	attaches, commits, frames int
 	// calls is the request order ("frame", "commit").
 	calls  []string
@@ -76,10 +78,10 @@ func (f *fakeSurface) Commit() error {
 	return nil
 }
 
-func (f *fakeSurface) Frame(ready *bool) error {
+func (f *fakeSurface) Frame(done *wlsession.FrameDone) error {
 	f.frames++
 	f.calls = append(f.calls, "frame")
-	*ready = true
+	done.Ready = !f.withholdFrames
 	return nil
 }
 

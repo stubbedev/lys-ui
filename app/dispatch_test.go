@@ -109,7 +109,7 @@ func TestEventBurstCostsOneTickAndOneDraw(t *testing.T) {
 		t.Fatalf("one tick dispatched %d of a %d-event burst, want all of it", handled, burst)
 	}
 	commits := h.surf.commits
-	wnd.frameReady = true
+	wnd.frame.Ready = true
 	wake.AddDoneHandler(burstEvent{handled: new(int), wnd: wnd, target: target})
 	if _, err := srv.Write(callbackDones([]uint32{wakeID})); err != nil {
 		t.Fatal(err)

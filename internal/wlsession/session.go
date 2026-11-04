@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"maps"
 	"os"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -270,8 +269,10 @@ type Session struct {
 	closed atomic.Bool
 	// wakeMu guards wakes, the deadlines WakeAfter has armed, and makes
 	// arming one atomic with respect to Close.
-	wakes  []time.Time
-	wakeMu sync.Mutex
+	wakes    []time.Time
+	deadline time.Time
+	armed    time.Time
+	wakeMu   sync.Mutex
 
 	stalled       bool
 	watchingWrite atomic.Bool
@@ -1649,11 +1650,21 @@ func (s *Session) WakeAfter(d time.Duration) {
 	if s.closed.Load() || s.Display == nil {
 		return
 	}
-	next := len(s.wakes) == 0 || at.Before(slices.MinFunc(s.wakes, time.Time.Compare))
 	s.wakes = append(s.wakes, at)
-	if next {
-		s.setWakeDeadline(s.Display.Context(), at)
+	s.armEarliest(s.Display.Context())
+}
+
+// SetDeadline is the loop's one timer: a loop parked in Step returns at at,
+// replacing whatever at the last call named, and a zero at means none. Setting
+// the same instant again costs nothing.
+func (s *Session) SetDeadline(at time.Time) {
+	s.wakeMu.Lock()
+	defer s.wakeMu.Unlock()
+	if at.Equal(s.deadline) || s.closed.Load() || s.Display == nil {
+		return
 	}
+	s.deadline = at
+	s.armEarliest(s.Display.Context())
 }
 
 // wakeDue drops the wakes a read deadline just answered and arms the
@@ -1665,19 +1676,51 @@ func (s *Session) wakeDue(ctx *wl.Context) error {
 	if s.closed.Load() {
 		return nil
 	}
-	s.wakes = slices.DeleteFunc(s.wakes, func(at time.Time) bool { return !at.After(now) })
-	var next time.Time
-	if len(s.wakes) > 0 {
-		next = slices.MinFunc(s.wakes, time.Time.Compare)
+	kept := s.wakes[:0]
+	for _, at := range s.wakes {
+		if at.After(now) {
+			kept = append(kept, at)
+		}
 	}
-	s.setWakeDeadline(ctx, next)
+	s.wakes = kept
+	if !s.deadline.After(now) {
+		s.deadline = time.Time{}
+	}
+	s.armed = now
+	s.armEarliest(ctx)
 	return nil
 }
 
-func (s *Session) setWakeDeadline(ctx *wl.Context, at time.Time) {
-	if err := ctx.SetReadDeadline(at); err != nil {
+func (s *Session) armEarliest(ctx *wl.Context) {
+	next := s.deadline
+	for _, at := range s.wakes {
+		if next.IsZero() || at.Before(next) {
+			next = at
+		}
+	}
+	if next.Equal(s.armed) {
+		return
+	}
+	s.armed = next
+	if err := ctx.SetReadDeadline(next); err != nil {
 		logutil.L().Error("wlsession: arm a loop wake", slog.Any("err", err))
 	}
+}
+
+// FrameDone receives a frame callback's answer: a listener that takes no
+// allocation per frame, and the compositor's timestamp for the animation clock.
+type FrameDone struct {
+	Ready bool
+	MS    uint32
+}
+
+// HandleCallbackDone implements wl.CallbackDoneHandler. Done is a destructor
+// event, so the object is dead on both sides and its id must rejoin the
+// client's pool.
+func (f *FrameDone) HandleCallbackDone(ev wl.CallbackDoneEvent) {
+	debug.Log("frame", "frame callback done")
+	ev.C.Unregister()
+	f.Ready, f.MS = true, ev.CallbackData
 }
 
 // displaySyncOpcode is wl_display.sync's request opcode.

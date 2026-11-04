@@ -24,8 +24,7 @@ Change the code and this document together.
 There is a single event source: the session owns the connection and
 every pointer event is routed to the handler registered for the surface
 it belongs to (`Session.SetSurfaceInput`). Surfaces never swap global
-hooks; nested loops (popup.Run) stay safe because routing, not hook
-replacement, decides who receives an event.
+hooks: routing, not hook replacement, decides who receives an event.
 
 ## The parked loop
 

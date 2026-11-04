@@ -1,9 +1,6 @@
-// The per-frame paint pipeline for a popup surface, factored out of
-// Run so two kinds of host loops can drive it without a second
-// wayland dispatcher: Run (a nested loop on the caller's goroutine,
-// for grabbed menus) and the application loop (for tooltips, which
-// must never dispatch — see docs/threading.md: one event-loop
-// goroutine owns the connection).
+// The per-frame paint pipeline for a popup surface, driven by the
+// application loop: a surface never dispatches itself (see
+// docs/threading.md: one event-loop goroutine owns the connection).
 package popup
 
 import (
@@ -59,7 +56,7 @@ type Painter struct {
 	// damage is what the visual owes the next frame.
 	damage repaint.Region
 
-	frameReady   bool
+	frameDone    wlsession.FrameDone
 	framePending bool
 	mapped       bool
 	dirty        atomic.Bool
@@ -159,20 +156,21 @@ func (pc *Painter) collect(bounds render.Rect) bool {
 // and unregisters the callback: done is a destructor event, so the
 // object is dead on both sides and its id must rejoin the client's
 // pool. A frame loop that skips this leaks a proxy per frame.
-type frameDone struct {
-	ready *bool
-}
-
-// HandleCallbackDone implements wl.CallbackDoneHandler.
-func (f frameDone) HandleCallbackDone(ev wl.CallbackDoneEvent) {
-	ev.C.Unregister()
-	*f.ready = true
-}
-
 // Owes reports whether the painter has a frame to paint: a tween
 // callback or content change marked it. Owners skip the Pass call
 // while it reads false, the popover-style gate.
 func (pc *Painter) Owes() bool { return pc.dirty.Load() }
+
+// TakeFrame reports the frame callback that came back since the last call, by
+// the compositor's timestamp, and whether one is still awaited.
+func (pc *Painter) TakeFrame() (ms uint32, arrived, pending bool) {
+	if pc.frameDone.Ready {
+		pc.frameDone.Ready = false
+		pc.framePending = false
+		return pc.frameDone.MS, true, false
+	}
+	return 0, false, pc.framePending
+}
 
 // Pass paints at most one frame: when a repaint is owed and the
 // compositor has taken the previous one, measure, arrange, paint what
@@ -192,10 +190,7 @@ func (pc *Painter) Pass() (bool, error) {
 	if pc.p.dirty.CompareAndSwap(true, false) {
 		pc.dirty.Store(true)
 	}
-	if pc.frameReady {
-		pc.frameReady = false
-		pc.framePending = false
-	}
+	pc.TakeFrame()
 	if !pc.dirty.Load() || pc.framePending {
 		return true, nil
 	}
@@ -285,7 +280,7 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	if err != nil {
 		return false, false, err
 	}
-	wlclient.CallbackAddListener(cb, frameDone{ready: &pc.frameReady})
+	wlclient.CallbackAddListener(cb, &pc.frameDone)
 	if err := pc.surf.Commit(); err != nil {
 		return false, false, err
 	}

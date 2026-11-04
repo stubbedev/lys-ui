@@ -19,7 +19,7 @@ import (
 func drainAnim(t *testing.T, now *time.Time) {
 	t.Helper()
 	for i := 0; ; i++ {
-		wake, ok := animclock.Next()
+		wake, ok := animclock.Next(animclock.Timer)
 		if !ok {
 			return
 		}

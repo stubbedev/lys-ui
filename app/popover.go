@@ -696,6 +696,7 @@ type popSurface interface {
 type popPainter interface {
 	Collect() bool
 	Pass() (bool, error)
+	TakeFrame() (ms uint32, arrived, pending bool)
 	Close()
 }
 

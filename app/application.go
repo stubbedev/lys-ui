@@ -64,9 +64,10 @@ type Application struct {
 	step           func() error
 	// accels is the accelerator table: named actions plus keysym+mods
 	// bindings, consulted by routeKey before text routing.
-	accels  *accelTable
-	ime     *imeController
-	stalled bool
+	accels     *accelTable
+	ime        *imeController
+	stalled    bool
+	frameClock animclock.FrameClock
 	// clip enables ctrl+c/x/v via routeKey; primary carries the
 	// primary-selection behavior (middle-click paste, copy-on-select).
 	// SetClipboard fills both from one clipboard.
@@ -166,9 +167,9 @@ type Application struct {
 	sessionLock *SessionLock
 	// holds counts unreleased Holds; while any is held the loop runs on
 	// with no window mapped.
-	holds  int
-	rep    *keyRepeater
-	kicker *loopKicker
+	holds int
+	rep   *keyRepeater
+	arm   func(time.Time)
 	// queues is the Invoke/Every plumbing and wake the loop-kick call;
 	// wake is a field so tests can drive Invoke without a session.
 	queues loopQueues
@@ -207,9 +208,9 @@ func NewApplication(sess *wlsession.Session) *Application {
 		accels:       newAccelTable(),
 		primary:      &primarySelection{},
 		rep:          newKeyRepeater(sess.RepeatInfo()),
-		kicker:       &loopKicker{},
 		ime:          newIMEController(sess),
 		wake:         sess.WakeAfter,
+		arm:          sess.SetDeadline,
 		step:         sess.Step,
 		windowIcons:  make(map[*Window]*postedIcon),
 		appliedIcons: make(map[*hostWindow]*postedIcon),
@@ -897,29 +898,17 @@ func (a *Application) tick(step func() error, now time.Time) error {
 	if r := a.keyboardRouter(); r != nil {
 		a.ime.sync(r, true)
 	}
-	animating := animclock.Active()
-	if animating {
-		// The animation clock ticks on loop wakes: frame callbacks
-		// pace it when the compositor answers, the timer Next()
-		// schedules pace it when they stop (occlusion). A tick that
-		// ran callbacks invalidated widgets, so only then is a
-		// frame owed.
-		gen := widget.DamageGeneration()
-		if animclock.Tick(now) {
-			a.markDirtyIfDamaged(gen)
-		}
-	}
 	stalled, err := a.sess.Stalled()
 	if err != nil {
 		return a.loopError(err)
 	}
 	a.stalled = stalled
+	a.tickAnimations(now)
 	a.updateTips(now)
 
 	var closed []*hostWindow
 	a.windows = slices.DeleteFunc(a.windows, func(w *hostWindow) bool {
-		// A tween-frame kick from another loop's tick (a popup's
-		// nested Run) marks the window for repaint.
+		// A tween frame's kick marks the window for repaint.
 		if w.kick.Swap(false) {
 			w.dirty = true
 		}
@@ -996,13 +985,12 @@ func (a *Application) tick(step func() error, now time.Time) error {
 	if t, ok := a.rep.nextDeadline(); ok {
 		repNext = t
 	}
-	if t, ok := animclock.Next(); ok {
+	pace, _, _ := a.framePacing()
+	if t, ok := animclock.Next(pace); ok {
 		animFrame = t
 	}
-	wakeAt, ok := nextWake(repNext, animFrame, tipNext, a.queues.nextDeadline(), now)
-	if ok {
-		a.kicker.schedule(a.wake, wakeAt)
-	}
+	wakeAt, _ := nextWake(repNext, animFrame, tipNext, a.queues.nextDeadline(), now)
+	a.arm(wakeAt)
 	if err := step(); err != nil {
 		// A dead connection (compositor restart, protocol verdict)
 		// runs the disconnect policy here; other dispatch failures
@@ -1010,6 +998,52 @@ func (a *Application) tick(step func() error, now time.Time) error {
 		return a.loopError(fmt.Errorf("app: dispatch: %w", err))
 	}
 	return nil
+}
+
+func (a *Application) tickAnimations(now time.Time) {
+	if !animclock.Active() {
+		return
+	}
+	pace, arrived, ms := a.framePacing()
+	switch {
+	case arrived && !a.stalled:
+		now = a.frameClock.Instant(ms, now)
+	case !animclock.Due(now, pace):
+		return
+	}
+	gen := widget.DamageGeneration()
+	if animclock.Tick(now) {
+		a.markDirtyIfDamaged(gen)
+	}
+}
+
+func (a *Application) framePacing() (pace animclock.Pace, arrived bool, ms uint32) {
+	if a.stalled || len(a.windows) == 0 {
+		pace = animclock.Fallback
+	}
+	for _, w := range a.windows {
+		switch {
+		case w.frame.Ready:
+			arrived, ms = true, w.frame.MS
+		case w.framePending:
+			pace = animclock.Fallback
+		}
+		if w.tip.painter != nil {
+			if got, ok, pending := w.tip.painter.TakeFrame(); ok {
+				arrived, ms = true, got
+			} else if pending {
+				pace = animclock.Fallback
+			}
+		}
+	}
+	for _, op := range a.openPopovers {
+		if got, ok, pending := op.painter.TakeFrame(); ok {
+			arrived, ms = true, got
+		} else if pending {
+			pace = animclock.Fallback
+		}
+	}
+	return pace, arrived, ms
 }
 
 // bufferTrimInterval is how long a spare buffer may sit unused before

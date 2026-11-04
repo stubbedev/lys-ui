@@ -196,3 +196,30 @@ func TestWakeAfterCloseIsSilent(t *testing.T) {
 		t.Errorf("a wake after Close stayed pending: %v", s.wakes)
 	}
 }
+
+func TestSetDeadlineReplacesTheLast(t *testing.T) {
+	s, _, _ := newSyncSession(t)
+	s.SetDeadline(time.Now().Add(time.Hour))
+	s.SetDeadline(time.Now().Add(5 * time.Millisecond))
+	stepWithin(t, s, 5*time.Second)
+	if !s.deadline.IsZero() {
+		t.Errorf("a fired deadline stayed set: %v", s.deadline)
+	}
+	s.SetDeadline(time.Now().Add(5 * time.Millisecond))
+	s.SetDeadline(time.Now().Add(time.Hour))
+	done := make(chan error, 1)
+	go func() { done <- s.Step() }()
+	select {
+	case err := <-done:
+		t.Fatalf("a replaced deadline still fired: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	s.SetDeadline(time.Time{})
+	s.WakeAfter(0)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if !s.armed.IsZero() {
+		t.Errorf("a cleared timer left %v armed", s.armed)
+	}
+}

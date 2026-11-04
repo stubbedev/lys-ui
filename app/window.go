@@ -170,7 +170,7 @@ type hostWindow struct {
 	// instead of a fresh NewScaled struct each time.
 	canvas       render.Canvas
 	dirty        bool
-	frameReady   bool
+	frame        wlsession.FrameDone
 	framePending bool
 	drawErr      error
 	// paintedPixels is the pixel count the last frame actually wrote
@@ -437,9 +437,7 @@ func (w *hostWindow) ApplyVisual(reveal float64, morph bool) {
 }
 
 // MarkFrame implements surfx.Driver: request a repaint through the
-// loop's kick flag. The app loop's animclock.Tick already marks every
-// window dirty when a callback runs there; the kick covers ticks that
-// ran on another goroutine (a popup's nested loop).
+// loop's kick flag.
 func (w *hostWindow) MarkFrame() { w.kick.Store(true) }
 
 // applyInputRegion takes the input region of the app's root
@@ -663,7 +661,7 @@ type surfaceHandle interface {
 	Commit() error
 	// Frame arms the compositor callback that fires ready once the
 	// frame may be followed by another.
-	Frame(ready *bool) error
+	Frame(done *wlsession.FrameDone) error
 	Feedback(done func(shown bool)) error
 	// BlurAvailable reports whether the compositor blurs behind
 	// surfaces now (its offer can come and go).
@@ -713,12 +711,12 @@ func (s wireSurface) Damage(rects []render.Rect) error {
 func (s wireSurface) Commit() error { return s.wl.Commit() }
 
 // Frame implements surfaceHandle.
-func (s wireSurface) Frame(ready *bool) error {
+func (s wireSurface) Frame(done *wlsession.FrameDone) error {
 	cb, err := s.wl.Frame()
 	if err != nil {
 		return err
 	}
-	wlclient.CallbackAddListener(cb, frameDone{ready: ready})
+	wlclient.CallbackAddListener(cb, done)
 	return nil
 }
 
@@ -974,7 +972,7 @@ func (w *hostWindow) draw() bool {
 	// commit it rides on this frame. Requested after, it waited on a
 	// next commit that the pending callback itself held back, so a
 	// window with no animation running painted once and never again.
-	if err := w.surf.Frame(&w.frameReady); err != nil {
+	if err := w.surf.Frame(&w.frame); err != nil {
 		w.drawErr = fmt.Errorf("app: frame callback: %w", err)
 		return false
 	}
@@ -1012,10 +1010,10 @@ func (w *hostWindow) draw() bool {
 var errNoPresentation = errors.New("app: compositor has no wp_presentation")
 
 func (w *hostWindow) takeFrame() {
-	if !w.frameReady {
+	if !w.frame.Ready {
 		return
 	}
-	w.frameReady = false
+	w.frame.Ready = false
 	w.framePending = false
 	if batch := w.presentOnFrame; len(batch) > 0 {
 		w.presentOnFrame = nil

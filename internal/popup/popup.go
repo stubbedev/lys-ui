@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/intconv"
@@ -22,7 +21,6 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 	"github.com/stubbedev/lys-lib/wlr"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/touchinput"
@@ -41,8 +39,7 @@ const (
 	GravityLeft
 )
 
-// ErrClosed reports that the popup was dismissed; Run returns it when
-// the loop exits.
+// ErrClosed reports that the popup was dismissed.
 var ErrClosed = errors.New("popup: dismissed")
 
 // Popup is one open transient surface.
@@ -553,87 +550,15 @@ func (p *Popup) ApplyVisual(reveal float64, morph bool) {
 }
 
 // MarkFrame implements surfx.Driver: schedule a repaint of this
-// surface. The owning loop's pacing does the waking — Run arms the
-// animation clock's next frame deadline itself, and the application
-// loop is already woken by the same deadlines through its kicker.
-// (Deliberately no WakeAfter(0) here: pacing every tween callback as
-// an immediate wake turns a tween into a busy spin.)
+// surface. The owning loop's pacing does the waking: it arms the animation
+// clock's next frame deadline itself. (Deliberately no WakeAfter(0) here:
+// pacing every tween callback as an immediate wake turns a tween into a busy
+// spin.)
 func (p *Popup) MarkFrame() {
 	p.dirty.Store(true)
 	if pc := p.painter; pc != nil {
 		pc.dirty.Store(true)
 	}
-}
-
-// Run drives the popup's own render loop until it is destroyed: paint
-// through the Painter each frame, dispatch input through the session,
-// and advance the enter/exit tweens. This nested loop is for grabbed
-// menus: it dispatches, so the caller must already own the loop
-// goroutine. The popup surface registers its own pointer handler, so
-// events land here only while the compositor routes focus (or the
-// popup grab) to it - the host surface keeps receiving nothing and no
-// hooks are swapped. A non-nil keys handler receives seat keyboard
-// events translated to KeyActions, which menus need for arrow and
-// Enter navigation. It is the handler itself, not a Router: a fresh
-// menu has no focused widget, so a Router would swallow every action
-// before the menu saw it. frac120 is the parent window's 120-based
-// device scale; the popup's buffers are built at that device scale
-// while its widget tree stays logical. Surfaces that must not run a
-// second dispatcher (tooltips) use NewPainter from the application
-// loop instead.
-func Run(sess *wlsession.Session, p *Popup, frac120 uint32, root widget.Widget, bg render.Color, keys widget.KeyActionHandler) error {
-	frame := p.NewPainter(sess, nil, frac120, root, bg)
-	defer frame.Close()
-
-	router := &widget.Router{Root: root}
-	defer p.AttachInput(sess, router, nil)()
-
-	if keys != nil {
-		prevKey := sess.OnKey
-		sess.OnKey = func(code uint32, mods wlsession.Mods) {
-			sym := sess.KeySym(code)
-			if a, ok := widget.KeyActionForSym(sym); ok {
-				keys.KeyAction(a, widget.Mods(mods))
-				return
-			}
-			// Keys the action translation does not cover (letters, and
-			// anything riding modifiers) reach the root raw: mnemonics and
-			// accelerators live there. A decline swallows the press, as
-			// before — text never leaks through an open popup into the
-			// window behind it.
-			if rk, ok := keys.(widget.RawKeyHandler); ok {
-				_ = rk.RawKey(code, widget.Mods(mods), sym)
-			}
-		}
-		defer func() { sess.OnKey = prevKey }()
-	}
-
-	for !p.Destroyed() {
-		// Advance the animation clock for this surface's tweens. The app
-		// loop ticks it too when both run; Tick is absolute-time based
-		// and fires each callback exactly once, so the duplication only
-		// decides which loop notices first. A tween callback flips dirty
-		// and wakes the park, so an exit keeps this loop event-driven:
-		// paint, park, wake on the next frame.
-		if animclock.Tick(time.Now()) {
-			p.dirty.Store(true)
-		}
-		if _, err := frame.Pass(); err != nil {
-			return fmt.Errorf("popup: paint: %w", err)
-		}
-		// Park: dismissal, tween frames, pointer events, and buffer
-		// releases are all events; nothing here polls. While a tween
-		// runs, arm the animation clock's next frame deadline as the
-		// wake — frame-callback pacing is the Pass gate, the timer is
-		// the fallback, and both park when nothing runs.
-		if wake, ok := animclock.Next(); ok {
-			sess.WakeAfter(time.Until(wake))
-		}
-		if err := sess.Step(); err != nil {
-			return fmt.Errorf("popup: dispatch: %w", err)
-		}
-	}
-	return ErrClosed
 }
 
 // AttachInput routes the popup surface's pointer events into router
