@@ -26,10 +26,20 @@ Who may touch a widget, when, and how everything else gets in.
 Library code follows the same rule. `media.Stream` decodes on its own
 goroutine a few frames ahead and hands frames over through channels
 that the Stream drains on the loop's frame clock. Its sound plays on
-the audio client's goroutine, which shares only atomics: frames played, closed and drained. Every Stream method, and every subscriber it calls,
+the audio client's goroutine, which shares only atomics: frames played, closed and drained. Opening, pausing and closing the sound, and setting its
+volume, run in order on the stream's audio worker. `Stream.Close` returns at once: the decoder and the source go on goroutines of their own, and
+`Stream.Wait` joins them at the end of a program. Every Stream method, and every subscriber it calls,
 runs on the loop. A `widget.GPUArea`'s `OnFrame` runs on the loop too.
 An application that renders on its own thread hands the finished
 buffer back through `Invoke` and presents it there.
+
+Icons decode the same way. A paint draws what is decoded and otherwise
+asks `widget/assetload.go`'s one bounded queue, whose goroutine exists
+only while there is work and whose answers come back through `Invoke`
+to invalidate the widget; nothing below a paint reads the disk. Without
+an `Application` the decode runs inline at the paint, and a test that
+paints under one waits with `widget.WaitAssetLoads`, then lets the loop
+take a pass.
 
 A tree may be built before `Run` starts, on the goroutine that will
 call `Run`. After `Run` returns, the guard disarms and teardown may

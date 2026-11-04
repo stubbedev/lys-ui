@@ -38,7 +38,10 @@ func play(path string, loop bool) (err error) {
 		return err
 	}
 	stream := media.NewStream(src, "lys-ui video")
-	defer func() { err = errors.Join(err, stream.Close()) }()
+	defer func() {
+		stream.Close()
+		err = errors.Join(err, stream.Wait())
+	}()
 	stream.SetLoop(loop)
 	return run(stream)
 }

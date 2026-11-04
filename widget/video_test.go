@@ -44,7 +44,8 @@ func testStream(t *testing.T, frames int) *media.Stream {
 	}
 	s := media.NewStream(src, "test")
 	t.Cleanup(func() {
-		if err := s.Close(); err != nil {
+		s.Close()
+		if err := s.Wait(); err != nil {
 			t.Error(err)
 		}
 		animclock.Reset()
@@ -147,9 +148,7 @@ func TestMediaControlsDriveTheStream(t *testing.T) {
 		t.Errorf("seek bar moved to 1.5 left the stream at %v", s.Position())
 	}
 	pumpUntil(t, func() bool { return m.seek.Value() == 1.5 && m.clock.Text() == "0:01 / 0:02" })
-	if err := s.Close(); err != nil {
-		t.Fatal(err)
-	}
+	s.Close()
 	if IsEnabled(m.play) {
 		t.Error("controls of a closed stream stay live")
 	}

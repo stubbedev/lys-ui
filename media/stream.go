@@ -11,6 +11,12 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/internal/worker"
+)
+
+const (
+	audioQueueDepth = 64
+	audioStopLimit  = 5 * time.Second
 )
 
 // ErrNotSeekable reports a Seek on a Stream whose source cannot seek.
@@ -30,8 +36,9 @@ type subscription struct {
 // playback position on the loop's frame clock, and, when the source
 // is Audible, plays the sound through PulseAudio and follows its clock
 // so picture and sound stay together. Every method runs on the loop
-// goroutine. Subscribers hear every change: the frame, the position
-// while playing, and the state.
+// goroutine and waits on nothing: the decoder, the sound server and
+// every subprocess are behind goroutines of their own. Subscribers hear
+// every change: the frame, the position while playing, and the state.
 type Stream struct {
 	name    string
 	src     Source
@@ -53,8 +60,8 @@ type Stream struct {
 	queue               []decoded
 	lastPTS, prevPTS    time.Duration
 
-	audio     audioOut
-	pcm       io.ReadCloser
+	audio     *audioLink
+	audioWork *worker.Queue
 	audioPos  time.Duration
 	volume    float64
 	volumeSet bool
@@ -74,7 +81,7 @@ func NewStream(src Source, name string) *Stream {
 }
 
 func newStream(src Source, name string, openOut openAudioFunc) *Stream {
-	s := &Stream{name: name, src: src, info: src.Info(), openOut: openOut, curGen: -1, eofGen: -1, volume: 1}
+	s := &Stream{name: name, src: src, info: src.Info(), openOut: openOut, curGen: -1, eofGen: -1, volume: 1, audioWork: worker.New(audioQueueDepth)}
 	s.seeker, _ = src.(Seeker)
 	s.audible, _ = src.(Audible)
 	s.dec = startDecoder(src, s.seeker, s.info)
@@ -120,9 +127,8 @@ func (s *Stream) Volume() float64 { return s.volume }
 // called the desktop picks the stream's volume.
 func (s *Stream) SetVolume(v float64) {
 	s.volume, s.volumeSet = min(max(v, 0), 1), true
-	if s.audio != nil {
-		s.check(s.audio.SetVolume(s.volume))
-	}
+	volume := s.volume
+	s.onAudio(func(out audioOut) error { return out.SetVolume(volume) })
 	s.notify()
 }
 
@@ -132,9 +138,7 @@ func (s *Stream) Muted() bool { return s.muted }
 // SetMuted mutes or unmutes the sound.
 func (s *Stream) SetMuted(on bool) {
 	s.muted = on
-	if s.audio != nil {
-		s.check(s.audio.SetMuted(on))
-	}
+	s.onAudio(func(out audioOut) error { return out.SetMuted(on) })
 	s.notify()
 }
 
@@ -191,9 +195,10 @@ func (s *Stream) Pause() {
 	}
 	s.advanceClock(animclock.Now())
 	s.playing = false
-	if s.audio != nil {
-		s.audio.Pause()
-	}
+	s.onAudio(func(out audioOut) error {
+		out.Pause()
+		return nil
+	})
 	if debug.Enabled {
 		debug.Log("media", "paused at frame %d", s.frameSeq)
 	}
@@ -219,10 +224,12 @@ func (s *Stream) Seek(t time.Duration) error {
 	return nil
 }
 
-// Close stops playback and releases the source and decoders.
-func (s *Stream) Close() error {
+// Close stops playback and releases the source and decoders. It returns
+// at once: a decoder or sound server that takes its time to go, or never
+// goes, holds up its own goroutine and not the caller's. Wait joins it.
+func (s *Stream) Close() {
 	if s.closed {
-		return nil
+		return
 	}
 	s.closed, s.playing = true, false
 	s.stopAudio()
@@ -230,9 +237,20 @@ func (s *Stream) Close() error {
 	// The frames go with the decoder's buffers: nothing reads one
 	// after Close.
 	s.cur, s.queue = nil, nil
-	err := s.dec.close()
+	s.dec.close()
 	s.notify()
-	if err != nil {
+}
+
+// Wait blocks until a closed Stream let go of everything it held and
+// returns the failure closing its source met. It is for the end of a
+// program, off the loop goroutine: a source that never exits holds it
+// up.
+func (s *Stream) Wait() error {
+	if !s.audioWork.Settle(audioStopLimit) {
+		return fmt.Errorf("media: close %s: the sound server did not let go", s.name)
+	}
+	<-s.dec.closed
+	if err := s.dec.closeErr; err != nil {
 		return fmt.Errorf("media: close %s: %w", s.name, err)
 	}
 	return nil
@@ -264,36 +282,71 @@ func (s *Stream) startAudio() {
 		return
 	}
 	if s.audio != nil {
-		s.audio.Resume()
+		s.onAudio(func(out audioOut) error {
+			out.Resume()
+			return nil
+		})
 		return
 	}
-	pcm, err := s.audible.OpenAudio(s.pos)
-	if err != nil {
-		s.fail(err)
+	link := &audioLink{}
+	s.audio, s.audioPos = link, s.pos
+	pos, volume, volumeSet, muted := s.pos, s.volume, s.volumeSet, s.muted
+	s.postAudio(func() {
+		pcm, err := s.audible.OpenAudio(pos)
+		if err != nil {
+			link.fail(err)
+			return
+		}
+		out, err := s.openOut(pcm, s.name)
+		if err != nil {
+			_ = pcm.Close()
+			link.fail(err)
+			return
+		}
+		link.ready.Store(&openedAudio{out: out, pcm: pcm})
+		if volumeSet {
+			link.fail(out.SetVolume(volume))
+		}
+		if muted {
+			link.fail(out.SetMuted(true))
+		}
+	})
+}
+
+// onAudio runs fn on the worker against the current opening, after
+// everything queued before it; a failure surfaces on the next advance.
+func (s *Stream) onAudio(fn func(out audioOut) error) {
+	link := s.audio
+	if link == nil {
 		return
 	}
-	out, err := s.openOut(pcm, s.name)
-	if err != nil {
-		_ = pcm.Close()
-		s.fail(err)
-		return
-	}
-	s.pcm, s.audio, s.audioPos = pcm, out, s.pos
-	if s.volumeSet {
-		s.check(out.SetVolume(s.volume))
-	}
-	if s.muted {
-		s.check(out.SetMuted(true))
-	}
+	s.postAudio(func() {
+		if o := link.ready.Load(); o != nil {
+			link.fail(fn(o.out))
+		}
+	})
 }
 
 func (s *Stream) stopAudio() {
-	if s.audio == nil {
+	link := s.audio
+	if link == nil {
 		return
 	}
-	s.audio.Close()
-	_ = s.pcm.Close()
-	s.audio, s.pcm = nil, nil
+	s.audio = nil
+	s.postAudio(func() {
+		if o := link.ready.Load(); o != nil {
+			o.out.Close()
+			_ = o.pcm.Close()
+		}
+	})
+}
+
+// postAudio queues work for the audio worker. A queue full behind a sound
+// server that stopped answering fails the stream.
+func (s *Stream) postAudio(work func()) {
+	if !s.audioWork.Post(work) {
+		s.fail(fmt.Errorf("media: %s: the sound server stopped answering", s.name))
+	}
 }
 
 func (s *Stream) check(err error) {
@@ -342,13 +395,13 @@ func (s *Stream) advanceClock(now time.Time) {
 	if !s.playing {
 		return
 	}
-	if s.audio != nil && s.audio.Drained() {
-		s.pos = s.audioPos + s.audio.Played()
+	if s.audio != nil && s.audio.drained() {
+		s.pos = s.audioPos + s.audio.played()
 		s.stopAudio()
 		s.anchorAt, s.anchorPos = now, s.pos
 	}
 	if s.audio != nil {
-		s.pos = s.audioPos + s.audio.Played()
+		s.pos = s.audioPos + s.audio.played()
 		return
 	}
 	if s.anchorAt.IsZero() {
@@ -379,7 +432,7 @@ func (s *Stream) advance(now time.Time) {
 	}
 	s.collect()
 	if s.audio != nil {
-		s.check(s.audio.Err())
+		s.check(s.audio.err())
 	}
 	wasPlaying := s.playing
 	s.advanceClock(now)

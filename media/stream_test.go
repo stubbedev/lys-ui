@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -125,7 +126,8 @@ func play(t *testing.T, src Source, open openAudioFunc, body func(h *harness)) {
 		h.s.Subscribe(func() { h.notices++ })
 		h.step(0)
 		body(h)
-		if err := h.s.Close(); err != nil {
+		h.s.Close()
+		if err := h.s.Wait(); err != nil {
 			t.Error(err)
 		}
 	})
@@ -269,6 +271,7 @@ func TestStreamFollowsTheAudioClock(t *testing.T) {
 			t.Fatal("an audible source is silent")
 		}
 		s.Play()
+		synctest.Wait()
 		out := o.last()
 		out.played = 300 * time.Millisecond
 		h.step(5 * time.Second)
@@ -277,6 +280,7 @@ func TestStreamFollowsTheAudioClock(t *testing.T) {
 
 		s.Pause()
 		s.Play()
+		synctest.Wait()
 		if out.paused || out.resumed != 1 || len(opened) != 1 {
 			t.Errorf("pause and play: paused %v resumed %d opened %v", out.paused, out.resumed, opened)
 		}
@@ -286,6 +290,7 @@ func TestStreamFollowsTheAudioClock(t *testing.T) {
 		if err := s.Seek(100 * time.Millisecond); err != nil {
 			t.Fatal(err)
 		}
+		synctest.Wait()
 		next := o.last()
 		if !out.closed || next == out || len(opened) != 2 || opened[1] != 100*time.Millisecond {
 			t.Fatalf("seek while playing did not restart the audio at 100ms: %v", opened)
@@ -299,6 +304,7 @@ func TestStreamFollowsTheAudioClock(t *testing.T) {
 
 		next.played, next.drained = 200*time.Millisecond, true
 		h.step(0)
+		synctest.Wait()
 		if !next.closed || s.Position() != 300*time.Millisecond {
 			t.Errorf("drained audio: closed %v at %v, want 300ms", next.closed, s.Position())
 		}
@@ -312,8 +318,10 @@ func TestStreamFollowsTheAudioClock(t *testing.T) {
 			t.Fatal(err)
 		}
 		s.Play()
+		synctest.Wait()
 		o.last().err = errors.New("server gone")
 		h.step(0)
+		synctest.Wait()
 		if err := s.Err(); err == nil || s.Playing() || !o.last().closed {
 			t.Errorf("an audio failure: err %v playing %v", err, s.Playing())
 		}
@@ -338,9 +346,7 @@ func TestClosedStreamRefusesWork(t *testing.T) {
 	play(t, seekableFake{&fakeSource{frames: 3, failAt: -1}}, noAudio, func(h *harness) {
 		cancel := h.s.Subscribe(func() { t.Error("a cancelled subscriber heard a change") })
 		cancel()
-		if err := h.s.Close(); err != nil {
-			t.Fatal(err)
-		}
+		h.s.Close()
 		if err := h.s.Seek(0); !errors.Is(err, errStreamClosed) {
 			t.Errorf("Seek after Close: %v", err)
 		}
@@ -368,7 +374,8 @@ func TestStreamFramesAreFreedOnClose(t *testing.T) {
 		if st := s.dec.pixels.Stats(); st.Live == 0 || st.Bytes < len(frame.Pix) {
 			t.Errorf("frame buffers %+v off the heap, want at least the %d-byte frame", st, len(frame.Pix))
 		}
-		if err := s.Close(); err != nil {
+		s.Close()
+		if err := s.Wait(); err != nil {
 			t.Fatal(err)
 		}
 		if st := s.dec.pixels.Stats(); st.Live != 0 {
@@ -376,6 +383,114 @@ func TestStreamFramesAreFreedOnClose(t *testing.T) {
 		}
 		if s.Frame().RGBA != nil {
 			t.Error("a closed stream still hands out a frame")
+		}
+	})
+}
+
+// stuckSource is a decoder that never exits until the test lets it: its
+// ReadFrame and its Close hold until release closes.
+type stuckSource struct {
+	release chan struct{}
+	entered chan struct{}
+	closes  atomic.Int32
+}
+
+func (f *stuckSource) Info() Info { return Info{Width: 2, Height: 2} }
+
+func (f *stuckSource) ReadFrame(*image.RGBA) (time.Duration, error) {
+	close(f.entered)
+	<-f.release
+	return 0, errClosed
+}
+
+func (f *stuckSource) Close() error {
+	f.closes.Add(1)
+	<-f.release
+	return errors.New("the decoder died hard")
+}
+
+// Close returns while a decoder that will not exit holds both its read and
+// its close, and Wait reports what the close met once it does exit. Under
+// synctest a Close that waited would deadlock the bubble.
+func TestCloseWaitsOnNoDecoder(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		defer animclock.Reset()
+		src := &stuckSource{release: make(chan struct{}), entered: make(chan struct{})}
+		s := newStream(src, "test", noAudio)
+		<-src.entered
+		s.Close()
+		synctest.Wait()
+		if got := src.closes.Load(); got != 1 {
+			t.Errorf("%d closes reached the source, want one", got)
+		}
+		if !s.Closed() {
+			t.Error("the stream does not know it closed")
+		}
+		close(src.release)
+		if err := s.Wait(); err == nil || !strings.Contains(err.Error(), "died hard") {
+			t.Errorf("Wait = %v, want the close's failure with the stream's name", err)
+		}
+	})
+}
+
+// A sound server or decoder fork that hangs holds up the audio worker
+// alone: Play, the volume, Pause and Close all return, and the settings
+// reach the output once it opens.
+func TestAudioWaitsOnNothingOnTheLoop(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		defer animclock.Reset()
+		var opened []time.Duration
+		o := &outs{}
+		hold := make(chan struct{})
+		slow := func(pcm io.Reader, name string) (audioOut, error) {
+			<-hold
+			return o.open(pcm, name)
+		}
+		src := audibleFake{seekableFake{&fakeSource{frames: 5, failAt: -1}}, &opened}
+		s := newStream(src, "test", slow)
+		s.SetVolume(0.25)
+		s.Play()
+		s.SetMuted(true)
+		s.Pause()
+		s.Play()
+		s.Close()
+		synctest.Wait()
+		if len(o.all) != 0 {
+			t.Fatalf("%d outputs opened behind the hold", len(o.all))
+		}
+		close(hold)
+		if err := s.Wait(); err != nil {
+			t.Fatal(err)
+		}
+		out := o.last()
+		if len(out.volumes) != 1 || out.volumes[0] != 0.25 {
+			t.Errorf("volumes %v, want the one set before Play", out.volumes)
+		}
+		if len(out.muted) != 1 || !out.muted[0] {
+			t.Errorf("muted %v, want the one set while opening", out.muted)
+		}
+		if !out.closed {
+			t.Error("the output outlived Close")
+		}
+	})
+}
+
+// A failed open fails the stream on the loop.
+func TestAudioOpenFailureReachesTheLoop(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		defer animclock.Reset()
+		var opened []time.Duration
+		src := audibleFake{seekableFake{&fakeSource{frames: 5, failAt: -1}}, &opened}
+		s := newStream(src, "test", func(io.Reader, string) (audioOut, error) { return nil, errors.New("no server") })
+		s.Play()
+		synctest.Wait()
+		s.advance(time.Now())
+		if err := s.Err(); err == nil || !strings.Contains(err.Error(), "no server") {
+			t.Errorf("Err = %v, want the open's failure", err)
+		}
+		s.Close()
+		if err := s.Wait(); err != nil {
+			t.Error(err)
 		}
 	})
 }

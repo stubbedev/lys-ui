@@ -47,6 +47,10 @@ type decoder struct {
 	seek   chan seekRequest
 	quit   chan struct{}
 	done   chan struct{}
+	// closed closes once the source closed and the goroutine ended;
+	// closeErr is the source's answer, read after that.
+	closed   chan struct{}
+	closeErr error
 }
 
 func startDecoder(src Source, seeker Seeker, info Info) *decoder {
@@ -57,6 +61,8 @@ func startDecoder(src Source, seeker Seeker, info Info) *decoder {
 		seek: make(chan seekRequest, 1),
 		quit: make(chan struct{}),
 		done: make(chan struct{}),
+
+		closed: make(chan struct{}),
 	}
 	go d.run()
 	return d
@@ -168,18 +174,21 @@ func (d *decoder) newFrameBuf() (*frameBuf, error) {
 	return &frameBuf{img: &image.RGBA{Pix: pix.Elems(), Stride: stride, Rect: d.size}, id: render.NewImageID()}, nil
 }
 
-// close stops the decoder and frees its frame buffers once nothing can
-// read them: the decoding goroutine has stopped, the stream has
-// dropped its frames, and every recording that may draw one has ended
-// (render.Retire).
-func (d *decoder) close() error {
+// close stops the decoder and returns at once: closing the source and
+// joining the goroutine may wait on a subprocess, so they run on their
+// own goroutine. The frame buffers go once nothing can read them: the
+// decoding goroutine has stopped, the stream has dropped its frames,
+// and every recording that may draw one has ended (render.Retire).
+func (d *decoder) close() {
 	close(d.quit)
-	err := d.src.Close()
-	<-d.done
-	render.Retire(func() {
-		if err := d.pixels.Close(); err != nil {
-			panic(fmt.Sprintf("media: free the frame buffers: %v", err))
-		}
-	})
-	return err
+	go func() {
+		defer close(d.closed)
+		d.closeErr = d.src.Close()
+		<-d.done
+		render.Retire(func() {
+			if err := d.pixels.Close(); err != nil {
+				panic(fmt.Sprintf("media: free the frame buffers: %v", err))
+			}
+		})
+	}()
 }

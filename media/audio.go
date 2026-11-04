@@ -120,3 +120,46 @@ func (o *pulseOut) Close() {
 	o.stream.Close()
 	o.client.Close()
 }
+
+// audioLink is one opening of the sound, driven from the stream's audio
+// worker and read from the loop. Everything that talks to the sound
+// server or forks the decoder runs on the worker; the loop reads only
+// the atomics behind these methods.
+type audioLink struct {
+	ready   atomic.Pointer[openedAudio]
+	failure atomic.Pointer[error]
+}
+
+type openedAudio struct {
+	out audioOut
+	pcm io.ReadCloser
+}
+
+func (l *audioLink) fail(err error) {
+	if err != nil {
+		l.failure.CompareAndSwap(nil, &err)
+	}
+}
+
+// played is how far the sound got, zero until it opened.
+func (l *audioLink) played() time.Duration {
+	if o := l.ready.Load(); o != nil {
+		return o.out.Played()
+	}
+	return 0
+}
+
+func (l *audioLink) drained() bool {
+	o := l.ready.Load()
+	return o != nil && o.out.Drained()
+}
+
+func (l *audioLink) err() error {
+	if err := l.failure.Load(); err != nil {
+		return *err
+	}
+	if o := l.ready.Load(); o != nil {
+		return o.out.Err()
+	}
+	return nil
+}
