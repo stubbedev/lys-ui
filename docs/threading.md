@@ -93,6 +93,16 @@ Components ([components.md](components.md)) ride the same mailbox: a
 component's input and output queues coalesce their wakes exactly like
 `Invoke`.
 
+## What never runs on the loop
+
+No file, bus or subprocess the loop would wait on runs on the loop, so
+no slow service can drop a frame:
+
+- **Settings** (`app.Settings`): `Key.Set` changes memory and encodes
+  the one value. The file follows 250 ms later on a timer goroutine, a
+  burst of Sets coalesced into one write. Run's exit flushes, and
+  `Settings.Flush` does it on demand.
+
 ## The relm4 mapping
 
 | relm4 | lys-ui |

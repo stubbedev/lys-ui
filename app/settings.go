@@ -2,11 +2,13 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
 	"sync"
+	"time"
 
 	"github.com/stubbedev/lys-lib/atomicfile"
 	"github.com/stubbedev/lys-lib/debug"
@@ -23,8 +25,12 @@ import (
 // file, or a value whose type drifted all fall back to the key's
 // default, and the next write replaces the file with a clean one.
 //
-// Reads snapshot from any goroutine; Set mutates, persists, and
-// notifies from any goroutine (notification crosses onto the loop).
+// Reads snapshot from any goroutine; Set mutates memory and notifies
+// from any goroutine (notification crosses onto the loop). The file
+// follows off the caller's goroutine, a burst of Sets coalesced into
+// one write, and Run's exit flushes whatever is still unwritten; Flush
+// does it on demand.
+//
 // A key has one type for the life of the application - two Key values
 // with the same Name and different types are a programming error and
 // fail loudly at the type assert.
@@ -35,7 +41,15 @@ type Settings struct {
 	raw     map[string]json.RawMessage
 	values  map[string]any
 	streams map[string]any
+	dirty   bool
+	stopped bool
+	cancel  func() bool
+	arm     func(fn func()) (cancel func() bool)
+	write   func(path string, data []byte) error
+	ioMu    sync.Mutex
 }
+
+const settingsWriteDelay = 250 * time.Millisecond
 
 // Key declares one typed settings entry: a name in the persisted file
 // and the default used before anything was ever written. Keys are
@@ -49,7 +63,8 @@ type Key[T any] struct {
 
 // NewSettings loads the settings file for appID, falling back to
 // defaults per key. The application wires the notifications onto its
-// loop; settings outlive it harmlessly (later Sets stop notifying).
+// loop; settings outlive it harmlessly (later Sets stop notifying and
+// write at once, there being no loop left to stall or exit to flush).
 func NewSettings(a *Application, appID string) *Settings {
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -62,7 +77,12 @@ func NewSettings(a *Application, appID string) *Settings {
 		raw:     map[string]json.RawMessage{},
 		values:  map[string]any{},
 		streams: map[string]any{},
+		arm: func(fn func()) func() bool {
+			return time.AfterFunc(settingsWriteDelay, fn).Stop
+		},
+		write: writeSettingsFile,
 	}
+	a.OnStop(s.stop)
 	data, err := os.ReadFile(s.path)
 	if err != nil {
 		return s
@@ -71,6 +91,9 @@ func NewSettings(a *Application, appID string) *Settings {
 		// Corrupt file: the documented fallback is defaults per key;
 		// the next Set rewrites the file clean, dropping the damage.
 		debug.Log("config", "settings %s: corrupt file, using defaults: %v", s.path, err)
+		s.raw = nil
+	}
+	if s.raw == nil {
 		s.raw = map[string]json.RawMessage{}
 	}
 	return s
@@ -84,9 +107,9 @@ func (k Key[T]) Get(s *Settings) T {
 	return k.load(s)
 }
 
-// Set stores v for the key, persists the file atomically (temp file +
-// rename, same directory), and notifies the subscribers on the loop
-// goroutine. An equal value is a full no-op - nothing written, nobody
+// Set stores v for the key, schedules the file's atomic rewrite, and
+// notifies the subscribers on the loop goroutine. An equal value is a
+// full no-op - nothing written, nobody
 // notified - which is what makes settings-to-widget bridges echo-free.
 func (k Key[T]) Set(s *Settings, v T) {
 	s.mu.Lock()
@@ -96,9 +119,17 @@ func (k Key[T]) Set(s *Settings, v T) {
 		return
 	}
 	s.values[k.Name] = v
-	s.persist()
+	s.encode(k.Name, v)
+	s.dirty = true
+	writeNow := s.stopped
+	if !writeNow && s.cancel == nil {
+		s.cancel = s.arm(s.flushLogged)
+	}
 	st := s.streams[k.Name]
 	s.mu.Unlock()
+	if writeNow {
+		s.flushLogged()
+	}
 	if typed, ok := st.(*Stream[T]); ok {
 		typed.Send(v)
 	}
@@ -147,6 +178,7 @@ func (k Key[T]) load(s *Settings) T {
 		}
 	}
 	s.values[k.Name] = v
+	s.encode(k.Name, v)
 	return v
 }
 
@@ -164,30 +196,64 @@ func (k Key[T]) stream(s *Settings) *Stream[T] {
 	return st
 }
 
-// persist writes every value (preserving unknown keys from the loaded
-// file) atomically; the caller holds s.mu. Map keys marshal sorted,
-// so the file is stable across writes.
-func (s *Settings) persist() {
-	merged := make(map[string]json.RawMessage, len(s.raw)+len(s.values))
-	maps.Copy(merged, s.raw)
-	for name, v := range s.values {
-		encoded, err := json.Marshal(v)
-		if err != nil {
-			debug.Log("config", "settings %s: key %s does not encode: %v", s.path, name, err)
-			continue
-		}
-		merged[name] = encoded
-	}
-	data, err := json.MarshalIndent(merged, "", "  ")
+// encode records v as the key's file form; the caller holds s.mu. A
+// value that does not encode keeps the entry it had.
+func (s *Settings) encode(name string, v any) {
+	encoded, err := json.Marshal(v)
 	if err != nil {
-		debug.Log("config", "settings %s: encode: %v", s.path, err)
+		debug.Log("config", "settings %s: key %s does not encode: %v", s.path, name, err)
 		return
 	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		debug.Log("config", "settings %s: mkdir: %v", s.path, err)
-		return
+	s.raw[name] = encoded
+}
+
+// Flush writes unwritten changes now, on the caller's goroutine, and
+// returns once they are on disk. A failed write stays owed: the next
+// Set or Flush tries again.
+func (s *Settings) Flush() error {
+	s.ioMu.Lock()
+	defer s.ioMu.Unlock()
+	s.mu.Lock()
+	if s.cancel != nil {
+		s.cancel()
+		s.cancel = nil
 	}
-	if err := atomicfile.WriteFile(s.path, data, 0o600); err != nil {
-		debug.Log("config", "settings %s: %v", s.path, err)
+	if !s.dirty {
+		s.mu.Unlock()
+		return nil
 	}
+	s.dirty = false
+	snapshot := maps.Clone(s.raw)
+	s.mu.Unlock()
+	data, err := json.MarshalIndent(snapshot, "", "  ")
+	if err == nil {
+		err = s.write(s.path, data)
+	}
+	if err != nil {
+		s.mu.Lock()
+		s.dirty = true
+		s.mu.Unlock()
+		return fmt.Errorf("settings %s: %w", s.path, err)
+	}
+	return nil
+}
+
+func (s *Settings) flushLogged() {
+	if err := s.Flush(); err != nil {
+		debug.Log("config", "%v", err)
+	}
+}
+
+func (s *Settings) stop() {
+	s.mu.Lock()
+	s.stopped = true
+	s.mu.Unlock()
+	s.flushLogged()
+}
+
+func writeSettingsFile(path string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("mkdir: %w", err)
+	}
+	return atomicfile.WriteFile(path, data, 0o600)
 }

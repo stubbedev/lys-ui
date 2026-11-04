@@ -2,9 +2,12 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +21,13 @@ func settingsEnv(t *testing.T) string {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	return dir
+}
+
+func settingsFlush(t *testing.T, s *Settings) {
+	t.Helper()
+	if err := s.Flush(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 var (
@@ -50,6 +60,7 @@ func TestSettingsSetPersistsAndReloads(t *testing.T) {
 	s := NewSettings(testApp(nil), "dev.stubbe.test.settings")
 	setVolume.Set(s, 0.75)
 	setDark.Set(s, true)
+	settingsFlush(t, s)
 
 	path := filepath.Join(cfg, "dev.stubbe.test.settings", "settings.json")
 	reloaded := NewSettings(testApp(nil), "dev.stubbe.test.settings")
@@ -70,6 +81,7 @@ func TestSettingsSetPersistsAndReloads(t *testing.T) {
 	}
 	s = NewSettings(testApp(nil), "dev.stubbe.test.settings")
 	setGreeting.Set(s, "hi")
+	settingsFlush(t, s)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +114,7 @@ func TestSettingsCorruptionFallsBackToDefaults(t *testing.T) {
 		t.Errorf("corrupt file yielded %q, want the default", got)
 	}
 	setVolume.Set(s, 0.25)
+	settingsFlush(t, s)
 	reloaded := NewSettings(testApp(nil), appID)
 	if got := setVolume.Get(reloaded); got != 0.25 {
 		t.Errorf("post-repair volume = %v, want 0.25", got)
@@ -126,6 +139,7 @@ func TestSettingsTypeDriftFallsBackToDefault(t *testing.T) {
 		t.Errorf("type-drifted volume = %v, want the default", got)
 	}
 	setVolume.Set(s, 1)
+	settingsFlush(t, s)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -176,5 +190,154 @@ func TestSettingsBindingBridgesToWidgets(t *testing.T) {
 	a.pump(time.Now())
 	if setDark.Get(s) {
 		t.Error("a switch flip never persisted")
+	}
+}
+
+// callerGoroutine names the calling goroutine, for gates that prove where
+// a seam ran.
+func callerGoroutine() string {
+	buf := make([]byte, 64)
+	return strings.Fields(string(buf[:runtime.Stack(buf, false)]))[1]
+}
+
+// settingsSeams replaces the timer and the file write of a Settings: the
+// armed function waits for the test, and every write is recorded.
+type settingsSeams struct {
+	mu      sync.Mutex
+	armed   []func()
+	writes  []string
+	onCall  int
+	loop    string
+	blocked chan struct{}
+}
+
+func newSettingsSeams(s *Settings) *settingsSeams {
+	seams := &settingsSeams{loop: callerGoroutine()}
+	s.arm = func(fn func()) func() bool {
+		seams.mu.Lock()
+		defer seams.mu.Unlock()
+		seams.armed = append(seams.armed, fn)
+		return func() bool { return true }
+	}
+	s.write = func(_ string, data []byte) error {
+		seams.mu.Lock()
+		seams.writes = append(seams.writes, string(data))
+		if callerGoroutine() == seams.loop {
+			seams.onCall++
+		}
+		blocked := seams.blocked
+		seams.mu.Unlock()
+		if blocked != nil {
+			<-blocked
+		}
+		return nil
+	}
+	return seams
+}
+
+// A burst of Sets on the loop touches no file there: one write is
+// scheduled, and it happens elsewhere with the burst's last values.
+func TestSettingsBurstWritesOnceOffTheCaller(t *testing.T) {
+	settingsEnv(t)
+	s := NewSettings(testApp(nil), "dev.stubbe.test.burst")
+	seams := newSettingsSeams(s)
+	for i := range 100 {
+		setVolume.Set(s, float64(i)/100)
+	}
+	if len(seams.writes) != 0 {
+		t.Fatalf("%d writes during the burst, want none", len(seams.writes))
+	}
+	if len(seams.armed) != 1 {
+		t.Fatalf("%d writes scheduled, want one", len(seams.armed))
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		seams.armed[0]()
+	}()
+	<-done
+	if len(seams.writes) != 1 || seams.onCall != 0 {
+		t.Fatalf("%d writes, %d on the caller; want one, none", len(seams.writes), seams.onCall)
+	}
+	if !strings.Contains(seams.writes[0], "0.99") {
+		t.Errorf("the write missed the last value:\n%s", seams.writes[0])
+	}
+}
+
+// A write stuck on a slow disk holds up neither Set nor Get.
+func TestSettingsStuckWriteBlocksNoSet(t *testing.T) {
+	settingsEnv(t)
+	s := NewSettings(testApp(nil), "dev.stubbe.test.stuck")
+	seams := newSettingsSeams(s)
+	seams.blocked = make(chan struct{})
+	setVolume.Set(s, 0.1)
+	flushed := make(chan error, 1)
+	go func() { flushed <- s.Flush() }()
+	for {
+		seams.mu.Lock()
+		n := len(seams.writes)
+		seams.mu.Unlock()
+		if n == 1 {
+			break
+		}
+		runtime.Gosched()
+	}
+	setVolume.Set(s, 0.2)
+	if got := setVolume.Get(s); got != 0.2 {
+		t.Errorf("volume = %v during the stuck write, want 0.2", got)
+	}
+	close(seams.blocked)
+	if err := <-flushed; err != nil {
+		t.Fatal(err)
+	}
+	settingsFlush(t, s)
+	if len(seams.writes) != 2 || !strings.Contains(seams.writes[1], "0.2") {
+		t.Errorf("writes = %q, want the later value written after the stuck one", seams.writes)
+	}
+}
+
+// Run's exit writes what the delay had not yet, and a Set after it has no
+// exit left to wait for, so it writes at once.
+func TestSettingsFlushAtRunExit(t *testing.T) {
+	cfg := settingsEnv(t)
+	a := testApp(nil)
+	s := NewSettings(a, "dev.stubbe.test.exit")
+	s.arm = func(func()) func() bool { return func() bool { return true } }
+	setVolume.Set(s, 0.33)
+	path := filepath.Join(cfg, "dev.stubbe.test.exit", "settings.json")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("the file exists before the exit: %v", err)
+	}
+	a.watchers.shutdown()
+	if got := setVolume.Get(NewSettings(testApp(nil), "dev.stubbe.test.exit")); got != 0.33 {
+		t.Errorf("after the exit volume = %v, want 0.33", got)
+	}
+	setVolume.Set(s, 0.44)
+	if got := setVolume.Get(NewSettings(testApp(nil), "dev.stubbe.test.exit")); got != 0.44 {
+		t.Errorf("a Set after the exit left volume = %v, want 0.44", got)
+	}
+}
+
+// A failed write stays owed and the next Flush retries it.
+func TestSettingsFailedWriteStaysOwed(t *testing.T) {
+	settingsEnv(t)
+	s := NewSettings(testApp(nil), "dev.stubbe.test.fail")
+	seams := newSettingsSeams(s)
+	failing := true
+	write := s.write
+	s.write = func(path string, data []byte) error {
+		if failing {
+			return errors.New("disk full")
+		}
+		return write(path, data)
+	}
+	setVolume.Set(s, 0.7)
+	if err := s.Flush(); err == nil || !strings.Contains(err.Error(), "disk full") || !strings.Contains(err.Error(), "settings.json") {
+		t.Fatalf("Flush = %v, want the failure with the path", err)
+	}
+	failing = false
+	settingsFlush(t, s)
+	if len(seams.writes) != 1 {
+		t.Errorf("%d writes after the retry, want one", len(seams.writes))
 	}
 }
