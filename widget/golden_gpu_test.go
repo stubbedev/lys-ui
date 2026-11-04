@@ -22,8 +22,6 @@ var goldenDevice = sync.OnceValues(func() (*gpu.Device, error) {
 	return gpu.Open()
 })
 
-// goldenBusyLimit stops a device that never catches up from hanging the
-// test; it judges no speed.
 const goldenBusyLimit = 30 * time.Second
 
 // checkGoldenGPU renders the recorded golden on the GPU and fails on
