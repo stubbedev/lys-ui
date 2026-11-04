@@ -315,6 +315,9 @@ func (n *node) clickWithin() func() { return n.onClickWithin }
 // SetTooltip sets hover text shown after a dwell; empty clears it.
 func (n *node) SetTooltip(s string) {
 	checkLoop("SetTooltip")
+	if n.tooltip != s {
+		MarkA11yChanged()
+	}
 	n.tooltip, n.tooltipMarkup = s, ""
 }
 
@@ -331,6 +334,7 @@ func (n *node) SetTooltipMarkup(markup string) {
 	}
 	n.tooltip, _ = spansText(runs)
 	n.tooltipMarkup = markup
+	MarkA11yChanged()
 }
 
 // TooltipText returns the hover text, empty when none is set.

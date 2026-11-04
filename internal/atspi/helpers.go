@@ -23,12 +23,19 @@ func readToolkitVersion() string {
 	return "devel"
 }
 
-// node returns the published node for id (nil for the app node's
-// never-seen case or an id that left the tree).
+// node returns a copy of the published node for id, detached from the
+// tree since the original is recycled once its tree retires (nil for the
+// app node's never-seen case or an id that left the tree).
 func (b *Bridge) node(id int32) *anode {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.cur.nodes[id]
+	n := b.cur.nodes[id]
+	if n == nil {
+		return nil
+	}
+	c := *n
+	c.parent, c.children = nil, nil
+	return &c
 }
 
 // childAt returns the index-th child's reference, or the null

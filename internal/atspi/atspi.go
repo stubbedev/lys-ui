@@ -6,11 +6,14 @@
 // starts it when the desktop asks for assistive technologies
 // (org.a11y.Status, status.go), so without one it costs nothing.
 //
-// The bridge is snapshot-driven: a sampling pass runs on the
-// application's loop goroutine (Scene.Invoke), rebuilds the tree of
-// widget.A11yState snapshots keyed by stable widget identity, and
-// diffs it against the previous pass — every difference becomes the
-// AT-SPI events: focus (and state-changed focused), state-changed
+// The bridge is snapshot-driven and nothing it does on the loop waits on
+// a bus. Serve runs off the loop. A poller goroutine watches the scene's
+// accessibility generation and only when it moved does a sampling pass run on
+// the application's loop goroutine (Scene.Invoke), rebuilding the tree
+// of widget.A11yState snapshots keyed by stable widget identity. The
+// emitter goroutine takes the finished tree, publishes it, and diffs it
+// against the previous one: every difference becomes the AT-SPI events
+// it sends: focus (and state-changed focused), state-changed
 // (checked, enabled, sensitive, editable), text-changed,
 // text-selection-changed, text-caret-moved, property-change (name,
 // value), bounds-changed, children-changed for tree updates, and the
@@ -19,10 +22,12 @@
 package atspi
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
@@ -139,6 +144,10 @@ type Scene interface {
 	Focused() widget.Widget
 	// Invoke runs fn on the application's loop goroutine, asynchronously.
 	Invoke(fn func())
+	// A11yGeneration moves whenever an accessible state or the set of
+	// roots may have changed. Safe from any goroutine: the poller reads
+	// it to leave an unchanged scene alone without waking the loop.
+	A11yGeneration() uint64
 	// SetFocus moves keyboard focus to w through its window's router
 	// (AT-driven focus), failing as widget.Router.SetFocus does; called
 	// on the loop goroutine.
@@ -158,12 +167,24 @@ type Options struct {
 	// Poll is the sampling interval. Zero means the default (100ms);
 	// negative means no ticker — the embedder drives Refresh itself.
 	Poll time.Duration
+
+	// emit replaces the bus send (tests).
+	emit func(ev event) error
 }
 
-// DefaultPoll is the sampling cadence: fast enough that a screen
-// reader hears state changes promptly, slow enough that the walk never
-// matters in a profile (it is a DescribeTree over the window roots).
+// DefaultPoll is the cadence the scene's generation is checked
+// at: fast enough that a screen reader hears state changes promptly.
+// A check that finds no change costs one atomic load, so an idle scene
+// never wakes the loop.
 const DefaultPoll = 100 * time.Millisecond
+
+const (
+	// busTimeout bounds every call the bridge waits on.
+	busTimeout = 5 * time.Second
+	// stopTimeout bounds how long Stop waits on an emitter stuck in a
+	// write to a bus that stopped reading.
+	stopTimeout = 3 * time.Second
+)
 
 // RootPath is the application root's object path, fixed by the AT-SPI
 // spec ("An application must have a single root object, called
@@ -192,18 +213,38 @@ type Bridge struct {
 
 	stop   chan struct{}
 	closed sync.Once
-	// sampling is held while a sample pass runs: Stop waits on it so
-	// the connection never closes under an in-flight Emit.
-	sampling sync.Mutex
+	emit   func(ev event) error
+
+	// sampledGen is the generation the last pass saw, and
+	// sampleQueued says a pass waits in the scene's Invoke queue, so a
+	// stalled loop accumulates one at most. builds counts the passes.
+	sampledGen   atomic.Uint64
+	sampleQueued atomic.Bool
+	builds       atomic.Uint64
+
+	// handoff guards what crosses from the loop's pass to the emitter:
+	// the finished tree, and the retired nodes coming back. A pass that
+	// finds pending taken builds nothing, so a stuck bus costs the loop
+	// nothing and the next pass still diffs against what was published.
+	handoff  sync.Mutex
+	settled  *sync.Cond
+	pending  *tree
+	applying bool
+	exited   bool
+	spare    *tree
+	kick     chan struct{}
+	done     chan struct{}
 }
 
 // tree is one sampling pass: the synthetic application root, every
 // snapshot keyed by its stable id, and the focused id (-1 when none).
-// Immutable once built.
+// Immutable once built, until it retires.
 type tree struct {
 	root  *anode
 	nodes map[int32]*anode
 	focus int32
+	// free holds the retired nodes while the tree waits to be rebuilt.
+	free []*anode
 }
 
 // anode is one accessible object: the stable id (its object path),
@@ -228,13 +269,16 @@ type childser interface {
 }
 
 // Serve connects to the accessibility bus, exports the scene, embeds
-// with the registry, and starts sampling. The returned error is fatal
-// for the bridge; a registry without a Socket.Embed (older at-spi2
-// watches for new bus names instead) is not — it logs and idles.
+// with the registry, and starts sampling. It waits on the bus, so call
+// it off the loop goroutine. The returned error is fatal for the
+// bridge; a registry without a Socket.Embed (older at-spi2 watches for
+// new bus names instead) is not — it logs and idles.
 func Serve(scene Scene, opts Options) (*Bridge, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), busTimeout)
+	defer cancel()
 	address := opts.Address
 	if address == "" {
-		discovered, err := discoverBus()
+		discovered, err := discoverBus(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -250,9 +294,10 @@ func Serve(scene Scene, opts Options) (*Bridge, error) {
 		// prefixed; the registry tracks apps by unique name anyway.
 		name = fmt.Sprintf("org.a11y.atspi.lysui.p%d", os.Getpid())
 	}
-	if _, err := conn.RequestName(name, dbus.NameFlagDoNotQueue); err != nil {
+	var reply uint32
+	if err := conn.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.RequestName", 0, name, uint32(dbus.NameFlagDoNotQueue)).Store(&reply); err != nil {
 		_ = conn.Close()
-		return nil, fmt.Errorf("atspi: request name: %w", err)
+		return nil, fmt.Errorf("atspi: request name %s: %w", name, err)
 	}
 	poll := DefaultPoll
 	switch {
@@ -271,12 +316,20 @@ func Serve(scene Scene, opts Options) (*Bridge, error) {
 		exported: make(map[dbus.ObjectPath]bool),
 		cur:      &tree{root: &anode{id: 0, index: -1}, nodes: map[int32]*anode{}},
 		stop:     make(chan struct{}),
+		kick:     make(chan struct{}, 1),
+		done:     make(chan struct{}),
+		emit:     opts.emit,
 	}
+	if b.emit == nil {
+		b.emit = func(ev event) error { return conn.Emit(ev.path, ev.name, ev.args...) }
+	}
+	b.settled = sync.NewCond(&b.handoff)
 	// The application node serves its tables from the start; children
 	// gain theirs as sampling first sees them.
 	b.cur.nodes[0] = b.cur.root
 	b.exportNode(0, false, false, false, true)
 	b.exportCache()
+	go b.emitter()
 
 	// The first sample queues through Invoke — before Run it drains
 	// once the loop starts, which is fine: the registry probes the
@@ -293,7 +346,7 @@ func Serve(scene Scene, opts Options) (*Bridge, error) {
 		Name string
 		Path dbus.ObjectPath
 	}
-	if err := registry.Call("org.a11y.atspi.Socket.Embed", 0,
+	if err := registry.CallWithContext(ctx, "org.a11y.atspi.Socket.Embed", 0,
 		objRef{Name: name, Path: RootPath}).Store(&socket); err != nil {
 		debug.Log("a11y", "registry embed: %v (older registry probes roots itself)", err)
 	}
@@ -307,21 +360,21 @@ func Serve(scene Scene, opts Options) (*Bridge, error) {
 // discoverBus asks the session bus for the accessibility bus address —
 // org.a11y.Bus.GetAddress, which dbus-activates at-spi-bus-launcher on
 // a real desktop.
-func discoverBus() (string, error) {
-	bus, err := dbus.SessionBus()
+func discoverBus(ctx context.Context) (string, error) {
+	bus, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return "", fmt.Errorf("atspi: session bus: %w", err)
 	}
 	defer func() { _ = bus.Close() }()
 	obj := bus.Object("org.a11y.Bus", "/org/a11y/bus")
 	var address string
-	if err := obj.Call("org.a11y.Bus.GetAddress", 0).Store(&address); err != nil {
+	if err := obj.CallWithContext(ctx, "org.a11y.Bus.GetAddress", 0).Store(&address); err != nil {
 		return "", fmt.Errorf("atspi: org.a11y.Bus.GetAddress: %w", err)
 	}
 	return address, nil
 }
 
-// loop samples at the poll cadence until Stop.
+// loop checks the scene at the poll cadence until Stop.
 func (b *Bridge) loop() {
 	t := time.NewTicker(b.poll)
 	defer t.Stop()
@@ -330,37 +383,130 @@ func (b *Bridge) loop() {
 		case <-b.stop:
 			return
 		case <-t.C:
-			b.scene.Invoke(b.sample)
+			b.check()
 		}
 	}
 }
 
-// Stop tears the bridge down: the ticker stops, the bus connection
-// closes. Safe to call twice; Serve's error path never returns a
-// bridge.
-func (b *Bridge) Stop() {
-	b.closed.Do(func() {
-		close(b.stop)
-		b.sampling.Lock()
-		defer b.sampling.Unlock()
-		_ = b.conn.Close()
+// check queues a pass when the scene's generation moved since the last one,
+// and leaves the loop asleep otherwise.
+func (b *Bridge) check() {
+	if b.scene.A11yGeneration() == b.sampledGen.Load() || !b.sampleQueued.CompareAndSwap(false, true) {
+		return
+	}
+	b.scene.Invoke(func() {
+		b.sampleQueued.Store(false)
+		b.sample()
 	})
 }
 
-// Refresh runs one sampling pass — for embedders that drive sampling
-// themselves (Options.Poll < 0) and for tests. It queues through the
-// scene's Invoke like the ticker does.
-func (b *Bridge) Refresh() {
-	b.scene.Invoke(b.sample)
+// Stop tears the bridge down: the poller and the emitter stop, and the
+// bus connection closes. An emitter stuck in a write to a bus that
+// stopped reading keeps its goroutine until the write fails. Safe to
+// call twice; Serve's error path never returns a bridge.
+func (b *Bridge) Stop() {
+	b.closed.Do(func() {
+		close(b.stop)
+		t := time.NewTimer(stopTimeout)
+		defer t.Stop()
+		select {
+		case <-b.done:
+			_ = b.conn.Close()
+		case <-t.C:
+			debug.Log("a11y", "the emitter is stuck on the bus; closing without it")
+			go func() { _ = b.conn.Close() }()
+		}
+	})
 }
 
-// sample rebuilds the snapshot tree, publishes it, and emits the diff
-// against the previous pass. Runs inside scene.Invoke — the loop
-// goroutine — where Reads of the widget tree are consistent.
+// Refresh runs one sampling pass whatever the generation and returns once
+// its tree is published and its events sent: for embedders that drive
+// sampling themselves (Options.Poll < 0) and for tests. It queues
+// through the scene's Invoke like the poller does, so it must not run
+// on the loop goroutine.
+func (b *Bridge) Refresh() {
+	b.settle()
+	sampled := make(chan struct{})
+	b.scene.Invoke(func() {
+		b.sample()
+		close(sampled)
+	})
+	select {
+	case <-sampled:
+	case <-b.stop:
+		return
+	}
+	b.settle()
+}
+
+// settle waits until the emitter has nothing left to do.
+func (b *Bridge) settle() {
+	b.handoff.Lock()
+	defer b.handoff.Unlock()
+	for (b.pending != nil || b.applying) && !b.exited {
+		b.settled.Wait()
+	}
+}
+
+// sample rebuilds the snapshot tree and hands it to the emitter. Runs
+// inside scene.Invoke — the loop goroutine — where reads of the widget
+// tree are consistent. While the emitter is behind it builds nothing and
+// leaves the generation unseen, so the poller comes back.
 func (b *Bridge) sample() {
-	b.sampling.Lock()
-	defer b.sampling.Unlock()
+	gen := b.scene.A11yGeneration()
+	b.handoff.Lock()
+	idle := b.pending == nil && !b.exited
+	b.handoff.Unlock()
+	if !idle {
+		return
+	}
 	nt := b.build()
+	b.builds.Add(1)
+	b.sampledGen.Store(gen)
+	b.handoff.Lock()
+	b.pending = nt
+	b.handoff.Unlock()
+	select {
+	case b.kick <- struct{}{}:
+	default:
+	}
+}
+
+// emitter applies finished trees until Stop.
+func (b *Bridge) emitter() {
+	defer func() {
+		b.handoff.Lock()
+		b.exited = true
+		b.settled.Broadcast()
+		b.handoff.Unlock()
+		close(b.done)
+	}()
+	for {
+		select {
+		case <-b.stop:
+			return
+		case <-b.kick:
+		}
+		b.handoff.Lock()
+		nt := b.pending
+		b.pending = nil
+		b.applying = nt != nil
+		b.handoff.Unlock()
+		if nt == nil {
+			continue
+		}
+		b.apply(nt)
+		b.handoff.Lock()
+		b.applying = false
+		b.settled.Broadcast()
+		b.handoff.Unlock()
+	}
+}
+
+// apply publishes nt, sends what changed since the last one, and retires
+// the last one. Handlers reach a tree only under the bridge mutex, so once
+// the swap is done nothing but this function reads the old tree.
+func (b *Bridge) apply(nt *tree) {
 	b.mu.Lock()
 	old := b.cur
 	b.cur = nt
@@ -371,11 +517,44 @@ func (b *Bridge) sample() {
 		b.exportNode(ex.id, ex.text, ex.action, ex.value, false)
 	}
 	for _, ev := range cache {
-		b.emit(ev)
+		b.send(ev)
 	}
 	for _, ev := range diff(old, nt, b.name) {
-		b.emit(ev)
+		b.send(ev)
 	}
+	b.retire(old)
+}
+
+// retire resets old, outside the lock since it is the emitter's alone by
+// now, and hands it back for the next pass with its nodes on its free
+// list. One spare is enough: a second tree only retires while the first
+// waits unused, and goes to the collector.
+func (b *Bridge) retire(old *tree) {
+	for _, n := range old.nodes {
+		kids := n.children
+		clear(kids)
+		*n = anode{children: kids[:0]}
+		old.free = append(old.free, n)
+	}
+	clear(old.nodes)
+	old.root = nil
+	b.handoff.Lock()
+	defer b.handoff.Unlock()
+	if b.spare == nil {
+		b.spare = old
+	}
+}
+
+// newNode returns a node off tr's free list, or a new one.
+func (tr *tree) newNode() *anode {
+	last := len(tr.free) - 1
+	if last < 0 {
+		return new(anode)
+	}
+	n := tr.free[last]
+	tr.free[last] = nil
+	tr.free = tr.free[:last]
+	return n
 }
 
 // exportNew describes the nodes the pass saw for the first time.
@@ -387,7 +566,15 @@ type exportJob struct {
 // build snapshots the scene into a tree, assigning stable ids to
 // first-seen widgets.
 func (b *Bridge) build() *tree {
-	tr := &tree{root: &anode{id: 0, index: -1}, nodes: map[int32]*anode{}, focus: -1}
+	b.handoff.Lock()
+	tr := b.spare
+	b.spare = nil
+	b.handoff.Unlock()
+	if tr == nil {
+		tr = &tree{nodes: map[int32]*anode{}}
+	}
+	tr.root, tr.focus = tr.newNode(), -1
+	tr.root.index = -1
 	tr.nodes[0] = tr.root
 	for _, w := range b.scene.Roots() {
 		tr.root.children = append(tr.root.children, b.buildFrom(w, tr.root, len(tr.root.children), tr))
@@ -409,16 +596,11 @@ func (b *Bridge) buildFrom(w widget.Widget, parent *anode, index int, tr *tree) 
 		b.ids[w] = id
 	}
 	st := widget.Describe(w)
-	n := &anode{
-		id:     id,
-		parent: parent,
-		index:  index,
-		st:     st,
-		w:      w,
-		text:   st.Role == widget.RoleLabel || st.Role == widget.RoleEntry || st.Role == widget.RoleTextArea,
-		action: st.Role == widget.RoleButton || st.Role == widget.RoleToggleButton || st.Role == widget.RoleSwitch || st.Role == widget.RoleCheckBox,
-		value:  st.Role == widget.RoleSlider || st.Role == widget.RoleProgressBar,
-	}
+	n := tr.newNode()
+	n.id, n.parent, n.index, n.st, n.w = id, parent, index, st, w
+	n.text = st.Role == widget.RoleLabel || st.Role == widget.RoleEntry || st.Role == widget.RoleTextArea
+	n.action = st.Role == widget.RoleButton || st.Role == widget.RoleToggleButton || st.Role == widget.RoleSwitch || st.Role == widget.RoleCheckBox
+	n.value = st.Role == widget.RoleSlider || st.Role == widget.RoleProgressBar
 	tr.nodes[id] = n
 	if c, ok := w.(childser); ok {
 		for i, k := range c.Children() {
@@ -645,9 +827,9 @@ func childrenEvent(busName string, parent *anode, op string, index int, child *a
 	}
 }
 
-// emit sends one event signal on the bus.
-func (b *Bridge) emit(ev event) {
-	if err := b.conn.Emit(ev.path, ev.name, ev.args...); err != nil {
+// send emits one event signal on the bus.
+func (b *Bridge) send(ev event) {
+	if err := b.emit(ev); err != nil {
 		debug.Log("a11y", "emit %s: %v", ev.name, err)
 	}
 }

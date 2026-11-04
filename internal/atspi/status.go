@@ -1,6 +1,7 @@
 package atspi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -25,7 +26,8 @@ const (
 // WatchStatus reports the switch to fn: once before returning, then on
 // every change, from the watch's goroutine. address is the session
 // bus; empty reads DBUS_SESSION_BUS_ADDRESS. No session bus, or none
-// with org.a11y.Bus, is an error. stop ends the watch.
+// with org.a11y.Bus, is an error. stop ends the watch. It waits on the
+// bus, so call it off the loop goroutine.
 func WatchStatus(address string, fn func(enabled bool)) (stop func(), err error) {
 	if address == "" {
 		address = os.Getenv("DBUS_SESSION_BUS_ADDRESS")
@@ -33,6 +35,8 @@ func WatchStatus(address string, fn func(enabled bool)) (stop func(), err error)
 	if address == "" {
 		return nil, errors.New("atspi: no session bus")
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), busTimeout)
+	defer cancel()
 	conn, err := dbus.Connect(address)
 	if err != nil {
 		return nil, fmt.Errorf("atspi: session bus: %w", err)
@@ -40,15 +44,15 @@ func WatchStatus(address string, fn func(enabled bool)) (stop func(), err error)
 	obj := conn.Object(busName, busPath)
 	props := map[string]bool{}
 	for _, prop := range []string{"IsEnabled", "ScreenReaderEnabled"} {
-		v, err := obj.GetProperty(ifaceStatus + "." + prop)
-		if err != nil {
+		var v dbus.Variant
+		if err := obj.CallWithContext(ctx, "org.freedesktop.DBus.Properties.Get", 0, ifaceStatus, prop).Store(&v); err != nil {
 			_ = conn.Close()
 			return nil, fmt.Errorf("atspi: %s.%s: %w", ifaceStatus, prop, err)
 		}
 		props[prop], _ = v.Value().(bool)
 	}
 	enabled := props["IsEnabled"] || props["ScreenReaderEnabled"]
-	if err := conn.AddMatchSignal(
+	if err := conn.AddMatchSignalContext(ctx,
 		dbus.WithMatchObjectPath(busPath),
 		dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
 		dbus.WithMatchMember("PropertiesChanged"),

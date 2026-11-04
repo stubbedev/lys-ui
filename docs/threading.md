@@ -139,6 +139,12 @@ no slow service can drop a frame:
   `SetBackgroundStatus`): each returns at once and answers through a
   `done` callback on the loop. They run in order on one worker, so a
   query-end answer follows any `Inhibit` the callback made.
+- **The AT-SPI bridge**: `ServeAccessibility`, the desktop's switch and
+  `Bridge.Stop` run on a worker. A poller reads `widget.A11yGeneration`
+  off the loop and an unchanged scene costs one atomic load, no wake and
+  no tree. A pass on the loop only builds a tree: publishing, diffing
+  and emitting run on the bridge's emitter, and a pass that finds the
+  emitter behind builds nothing.
 - **The file picker**: `FileChooser` lists on a goroutine and answers
   through the invoker, dropping an answer to a view left since. The
   recents file and the recents stats run on the `recentfiles.Manager`'s

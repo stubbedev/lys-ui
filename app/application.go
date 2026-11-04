@@ -122,12 +122,9 @@ type Application struct {
 	// a reconnect posts again.
 	defaultIconSrc image.Image
 	windowIconSrc  map[*Window]image.Image
-	// stopA11y stops the AT-SPI bridge while it serves; stopA11yWatch
-	// ends the A11yAuto watch on the desktop's switch; a11yMode is
-	// SetAccessibility's choice.
-	stopA11y      func()
-	stopA11yWatch func()
-	a11yMode      A11yMode
+	// a11y runs the AT-SPI bridge; a11yMode is SetAccessibility's choice.
+	a11y     a11yRunner
+	a11yMode A11yMode
 	// reconnect is SetReconnect's policy (nil: clean exit);
 	// rebuildPlan holds the windows a disconnect planned to rebuild.
 	reconnect   *ReconnectOptions
@@ -152,7 +149,6 @@ type Application struct {
 	notifyOnce  sync.Once
 	notifyMu    sync.Mutex
 	notifyStore *notify.Notifier
-	notifyDial  func() (notify.Bus, error)
 	notifyOpts  map[string]NotifyOptions
 	// launcher (launcher.go): the OpenURL/OpenPath transport state.
 	launchState launcher
@@ -712,6 +708,7 @@ func (a *Application) newWindow(host surfaceOwner, scale int, root widget.Widget
 		w.input.dismissPopover = func() bool { return a.dismissAutohide(host) }
 	}
 	ov.SetRouter(w.router)
+	widget.MarkA11yChanged()
 	widget.SetSurfaceHost(ov, surfaceHost{a: a, host: host, router: w.router})
 	w.inspector = ov
 	a.windows = append(a.windows, w)
@@ -767,9 +764,6 @@ func (a *Application) Run() error {
 		a.endLoop()
 		// The AT-SPI bridge dies with the loop: its samplers hop
 		// through Invoke, which shutdown just drained.
-		if a.stopA11yWatch != nil {
-			a.stopA11yWatch()
-		}
 		a.stopAccessibility()
 		// Unwind the NewApplication icon-follow wiring: stop the cache's
 		// subscription, then the monitor's goroutines and connection.
@@ -926,6 +920,9 @@ func (a *Application) tick(step func() error, now time.Time) error {
 			return false
 		}
 		closed = append(closed, w)
+	if len(closed) > 0 {
+		widget.MarkA11yChanged()
+	}
 		return true
 	})
 	var moved []movedToasts

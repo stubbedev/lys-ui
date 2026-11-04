@@ -6,15 +6,40 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"slices"
+	"sync"
+	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
 
 	"github.com/stubbedev/lys-ui/internal/atspi"
+	"github.com/stubbedev/lys-ui/internal/worker"
 	"github.com/stubbedev/lys-ui/widget"
 )
+
+const (
+	a11yQueueDepth  = 16
+	a11yStopTimeout = 3 * time.Second
+)
+
+// a11yRunner starts and stops the bridge off the loop: everything that
+// waits on a bus runs on its worker, in order, so a switch flipping back
+// and forth ends in the state it ended in. The worker alone touches
+// bridge and stopWatch.
+type a11yRunner struct {
+	once      sync.Once
+	queue     *worker.Queue
+	bridge    *atspi.Bridge
+	stopWatch func()
+}
+
+func (a *Application) a11yQueue() *worker.Queue {
+	a.a11y.once.Do(func() { a.a11y.queue = worker.New(a11yQueueDepth) })
+	return a.a11y.queue
+}
 
 // A11YOptions configures the AT-SPI bridge (ServeAccessibility).
 type A11YOptions = atspi.Options
@@ -52,71 +77,100 @@ func (a *Application) effectiveA11yMode() A11yMode {
 }
 
 // startAccessibility applies the mode at Run: serve now (A11yOn), or
-// follow the desktop's switch (A11yAuto), hopping onto the loop to
-// start and stop the bridge. A desktop without a session bus or
-// at-spi2 has no switch: nothing serves.
+// follow the desktop's switch (A11yAuto). The switch's bus and the
+// bridge's come up on the worker, so Run's first frame waits on neither.
+// A desktop without a session bus or at-spi2 has no switch: nothing
+// serves.
 func (a *Application) startAccessibility() {
 	switch a.effectiveA11yMode() {
 	case A11yOn:
-		if err := a.ServeAccessibility(A11YOptions{}); err != nil {
-			debug.Log("a11y", "serve: %v", err)
-		}
+		a.ServeAccessibility(A11YOptions{}, nil)
 	case A11yAuto:
-		stop, err := atspi.WatchStatus("", func(on bool) {
-			a.Invoke(func() { a.followA11yStatus(on) })
-		})
-		if err != nil {
-			debug.Log("a11y", "no accessibility switch: %v", err)
-			return
-		}
-		a.stopA11yWatch = stop
+		a.postA11y("watch the accessibility switch", func() error {
+			stop, err := atspi.WatchStatus("", a.followA11yStatus)
+			if err != nil {
+				return err
+			}
+			a.a11y.stopWatch = stop
+			return nil
+		}, nil)
+	}
+}
+
+// postA11y runs work on the worker and reports its error to done on the
+// loop; a nil done logs a failure instead.
+func (a *Application) postA11y(what string, work func() error, done func(error)) {
+	if !a.a11yQueue().Post(func() { a.reportDone(what, done, work()) }) {
+		a.reportDone(what, done, errors.New("app: the accessibility worker is stuck or stopped"))
 	}
 }
 
 // followA11yStatus starts or stops the bridge with the desktop's
-// switch.
+// switch, on any goroutine.
 func (a *Application) followA11yStatus(on bool) {
-	if !on {
-		a.stopAccessibility()
+	if on {
+		a.ServeAccessibility(A11YOptions{}, nil)
 		return
 	}
-	if err := a.ServeAccessibility(A11YOptions{}); err != nil {
-		debug.Log("a11y", "serve: %v", err)
-	}
+	a.postA11y("stop the accessibility bridge", a.stopBridge, nil)
 }
 
-// stopAccessibility stops the bridge if it serves.
+func (a *Application) stopBridge() error {
+	if a.a11y.bridge != nil {
+		a.a11y.bridge.Stop()
+		a.a11y.bridge = nil
+	}
+	return nil
+}
+
+// stopAccessibility is Run's exit: the switch and the bridge stop, after
+// whatever the worker still had queued, and the worker ends. Work stuck
+// on a bus past the bound still reaches the stop when it returns.
 func (a *Application) stopAccessibility() {
-	if a.stopA11y != nil {
-		a.stopA11y()
-		a.stopA11y = nil
+	a.postA11y("stop accessibility", func() error {
+		if a.a11y.stopWatch != nil {
+			a.a11y.stopWatch()
+			a.a11y.stopWatch = nil
+		}
+		return a.stopBridge()
+	}, nil)
+	if !a.a11yQueue().Stop(a11yStopTimeout) {
+		debug.Log("a11y", "the accessibility worker outlived the stop")
 	}
 }
 
 // ServeAccessibility starts the in-process AT-SPI bridge: the
 // accessibility bus is discovered through org.a11y.Bus (opts
 // overrides), the window trees are exported at the AT-SPI root, and
-// the registry handshake runs. Idempotent. Call before Run (the same
-// window SetRoot et al. honor) or from the loop; the bridge stops with
+// the registry handshake runs. It returns at once and waits on no bus:
+// done (nil logs a failure instead) runs on the loop once the bridge
+// serves or failed to. Idempotent. Call before Run (the same window
+// SetRoot et al. honor) or from any goroutine; the bridge stops with
 // Run. The first sample queues through Invoke and drains once Run
 // starts. Run calls it itself under A11yOn, and under A11yAuto when
 // the desktop asks for assistive technologies.
-func (a *Application) ServeAccessibility(opts A11YOptions) error {
-	if a.stopA11y != nil {
-		return nil
-	}
+func (a *Application) ServeAccessibility(opts A11YOptions, done func(error)) {
 	// A negative interval means the embedder samples by hand, which an
 	// application cannot: the bridge would never sample.
 	if opts.Poll < 0 {
-		return fmt.Errorf("app: ServeAccessibility: negative poll interval %v", opts.Poll)
+		a.reportDone("serve accessibility", done, fmt.Errorf("app: ServeAccessibility: negative poll interval %v", opts.Poll))
+		return
 	}
-	br, err := atspi.Serve(a, opts)
-	if err != nil {
-		return err
-	}
-	a.stopA11y = br.Stop
-	return nil
+	a.postA11y("serve accessibility", func() error {
+		if a.a11y.bridge != nil {
+			return nil
+		}
+		br, err := atspi.Serve(a, opts)
+		if err != nil {
+			return err
+		}
+		a.a11y.bridge = br
+		return nil
+	}, done)
 }
+
+// A11yGeneration implements atspi.Scene.
+func (a *Application) A11yGeneration() uint64 { return widget.A11yGeneration() }
 
 // Roots implements atspi.Scene: the window roots in window order.
 // Only ever called on the loop goroutine (from inside Invoke), where

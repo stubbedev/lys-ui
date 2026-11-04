@@ -9,8 +9,10 @@ package atspi
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,6 +66,8 @@ func (s *testScene) Invoke(fn func()) {
 	defer s.loop.Unlock()
 	fn()
 }
+
+func (s *testScene) A11yGeneration() uint64 { return widget.A11yGeneration() }
 
 func (s *testScene) SetFocus(w widget.Widget) error {
 	s.mu.Lock()
@@ -871,5 +875,216 @@ func TestCacheGetItems(t *testing.T) {
 		if it.Name != st.Name || it.Role != atspiRole(st.Role) || len(it.States) != 2 {
 			t.Errorf("item %s = %q role %d states %v, want %q role %d", it.Path.Path, it.Name, it.Role, it.States, st.Name, atspiRole(st.Role))
 		}
+	}
+}
+
+// countingScene counts what the bridge asks of the loop.
+type countingScene struct {
+	testScene
+	invokes int
+}
+
+func (s *countingScene) Invoke(fn func()) {
+	s.invokes++
+	s.testScene.Invoke(fn)
+}
+
+func goroutineName() string {
+	buf := make([]byte, 64)
+	return strings.Fields(string(buf[:runtime.Stack(buf, false)]))[1]
+}
+
+// serveLabel serves one label over a private bus, with no poller: the test
+// drives the checks itself.
+func serveLabel(t *testing.T, scene *countingScene, emit func(event) error) (*Bridge, *widget.Label) {
+	t.Helper()
+	a11y := dbustest.Start(t)
+	lbl := widget.NewLabel(faceOf(t), 13, "before", render.RGB(0, 0, 0))
+	root := widget.NewBox(widget.Column, 0, 0)
+	root.Append(lbl, false)
+	arrange(t, root, 300, 100)
+	scene.roots = []widget.Widget{root}
+	br, err := Serve(scene, Options{Address: a11y.Address, Name: "org.a11y.atspi.lysui.gate", Poll: -1, emit: emit})
+	if err != nil {
+		t.Fatalf("Serve: %v", err)
+	}
+	t.Cleanup(br.Stop)
+	br.settle()
+	return br, lbl
+}
+
+// An undamaged scene costs the loop nothing: a check builds no tree and
+// queues no pass, however many times the poller comes around.
+func TestUndamagedSceneBuildsNothing(t *testing.T) {
+	scene := &countingScene{}
+	br, lbl := serveLabel(t, scene, nil)
+	builds, invokes := br.builds.Load(), scene.invokes
+	if builds != 1 {
+		t.Fatalf("%d builds before the first check, want the first sample", builds)
+	}
+	for range 100 {
+		br.check()
+	}
+	if got := br.builds.Load() - builds; got != 0 {
+		t.Errorf("%d builds over 100 undamaged checks, want none", got)
+	}
+	if got := scene.invokes - invokes; got != 0 {
+		t.Errorf("%d loop wakes over 100 undamaged checks, want none", got)
+	}
+	lbl.SetText("after")
+	br.check()
+	br.check()
+	if got := br.builds.Load() - builds; got != 1 {
+		t.Errorf("%d builds after one change, want one", got)
+	}
+	br.settle()
+	if n := br.node(idOf(t, br, lbl)); n == nil || n.st.Name != "after" {
+		t.Errorf("published node %+v, want the new text", n)
+	}
+}
+
+// What an assistive technology reads can change without a pixel moving: an
+// accessible name, or a tooltip, which is the name of an unnamed widget.
+func TestUnpaintedChangesStillSample(t *testing.T) {
+	scene := &countingScene{}
+	br, lbl := serveLabel(t, scene, nil)
+	lbl.SetAccessibleName("named")
+	br.check()
+	br.settle()
+	if n := br.node(idOf(t, br, lbl)); n == nil || n.st.Name != "named" {
+		t.Errorf("published node %+v, want the new name", n)
+	}
+	builds := br.builds.Load()
+	lbl.SetAccessibleName("named")
+	br.check()
+	if got := br.builds.Load() - builds; got != 0 {
+		t.Errorf("%d builds after an equal name, want none", got)
+	}
+	lbl.SetTooltip("tip")
+	br.check()
+	if got := br.builds.Load() - builds; got != 1 {
+		t.Errorf("%d builds after a tooltip change, want one", got)
+	}
+}
+
+func idOf(t *testing.T, br *Bridge, w widget.Widget) int32 {
+	t.Helper()
+	id, ok := br.ids[w]
+	if !ok {
+		t.Fatalf("%T has no id", w)
+	}
+	return id
+}
+
+// Every event goes out on the emitter, none on the loop, and a bus that
+// stopped reading holds up the emitter alone: the pass returns, and while
+// the emitter is behind no further tree is built.
+func TestStuckBusHoldsUpNoLoopPass(t *testing.T) {
+	loop := goroutineName()
+	var (
+		mu     sync.Mutex
+		onLoop int
+		sent   int
+	)
+	release := make(chan struct{})
+	var once sync.Once
+	entered := make(chan struct{})
+	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	var hold atomic.Bool
+	scene := &countingScene{}
+	br, lbl := serveLabel(t, scene, func(event) error {
+		mu.Lock()
+		sent++
+		if goroutineName() == loop {
+			onLoop++
+		}
+		mu.Unlock()
+		if hold.Load() {
+			select {
+			case entered <- struct{}{}:
+			default:
+			}
+			<-release
+		}
+		return nil
+	})
+	hold.Store(true)
+	lbl.SetText("stuck")
+	br.check()
+	<-entered
+	builds := br.builds.Load()
+	lbl.SetText("stuck too")
+	br.check()
+	lbl.SetText("stuck three")
+	br.check()
+	if got := br.builds.Load() - builds; got != 1 {
+		t.Errorf("%d builds behind a stuck emitter, want the one waiting", got)
+	}
+	lbl.SetText("stuck four")
+	br.check()
+	if got := br.builds.Load() - builds; got != 1 {
+		t.Errorf("%d builds with a tree already waiting, want no more", got)
+	}
+	hold.Store(false)
+	once.Do(func() { close(release) })
+	br.settle()
+	br.check()
+	br.settle()
+	if n := br.node(idOf(t, br, lbl)); n == nil || n.st.Name != "stuck four" {
+		t.Errorf("published node %+v, want the last text once the bus recovered", n)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if onLoop != 0 || sent == 0 {
+		t.Errorf("%d of %d events on the loop, want none", onLoop, sent)
+	}
+}
+
+// A pass over an unchanged shape reuses the retired tree's nodes.
+func TestPassReusesRetiredNodes(t *testing.T) {
+	scene := &countingScene{}
+	br, _ := serveLabel(t, scene, nil)
+	br.Refresh()
+	br.Refresh()
+	allocs := testing.AllocsPerRun(50, func() {
+		nt := br.build()
+		br.retire(nt)
+	})
+	t.Logf("%.1f allocs per build", allocs)
+	if allocs > 6 {
+		t.Errorf("%.1f allocs per build of a 3-node tree, want no per-node allocation beyond Describe's", allocs)
+	}
+}
+
+// Stop returns on a stuck emitter, within its bound.
+func TestStopDoesNotWaitOnAStuckBus(t *testing.T) {
+	release := make(chan struct{})
+	var hold atomic.Bool
+	entered := make(chan struct{}, 1)
+	scene := &countingScene{}
+	br, lbl := serveLabel(t, scene, func(event) error {
+		if hold.Load() {
+			select {
+			case entered <- struct{}{}:
+			default:
+			}
+			<-release
+		}
+		return nil
+	})
+	defer close(release)
+	hold.Store(true)
+	lbl.SetText("stuck")
+	br.check()
+	<-entered
+	stopped := make(chan struct{})
+	go func() {
+		br.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(3 * stopTimeout):
+		t.Fatal("Stop waited on the stuck bus")
 	}
 }
