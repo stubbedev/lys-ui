@@ -31,9 +31,8 @@ import (
 // false, after which Failed holds and the popup draws on the CPU; an
 // error ends the popup.
 type Renderer interface {
-	buffer.Copier
 	NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) (*buffer.Buffer, error)
-	Frame(b *buffer.Buffer, num int, paint func(cv *render.Canvas)) (bool, error)
+	Frame(b *buffer.Buffer, num int, carryFrom *buffer.Buffer, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error)
 	Failed() bool
 }
 
@@ -133,15 +132,6 @@ func (pc *Painter) dropGPU() {
 	pc.gpu = nil
 	pc.pool.Resize(pc.create)
 	pc.damage.Full(render.Rect{W: pc.w, H: pc.h})
-}
-
-// copier is the popup's GPU copier for Pool.CopyForward, nil drawing
-// on the CPU.
-func (pc *Painter) copier() buffer.Copier {
-	if pc.gpu == nil {
-		return nil
-	}
-	return pc.gpu
 }
 
 // Collect drains the visual's invalidations into what the next frame
@@ -267,15 +257,13 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	}
 	start := time.Now()
 	pc.damage.DropCovered(b, int(pc.frac120))
-	if err := pc.pool.CopyForward(b, pc.copier()); err != nil {
-		return false, false, err
-	}
-	rects, changed, regions := pc.damage.Plan(b, int(pc.frac120))
-	drawn, err := pc.paint(b, regions)
+	carryFrom := pc.pool.CopyForward(b)
+	rects, changed, regions := pc.damage.Plan(b, int(pc.frac120), carryFrom != nil)
+	outcome, err := pc.paint(b, carryFrom, regions)
 	if err != nil {
 		return false, false, err
 	}
-	if !drawn {
+	if outcome != buffer.FrameDrawn {
 		pc.dirty.Store(true)
 		return false, true, nil
 	}
@@ -341,11 +329,12 @@ func (pc *Painter) syncBlur() {
 }
 
 // paint draws the visual into b within the device region: through the
-// GPU renderer into a target, onto shared memory otherwise. A GPU frame
-// that failed never reaches the compositor: b goes back, the popup
-// turns to the CPU, and paint reports false for the next pass to
-// repaint.
-func (pc *Painter) paint(b *buffer.Buffer, regions []render.Rect) (bool, error) {
+// GPU renderer into a target, carrying b's staleness from carryFrom,
+// onto shared memory otherwise. A GPU frame that did not go out never
+// reaches the compositor and b goes back: a refused one stays owed for
+// the renderer's retry, and after a failed one the popup turns to the
+// CPU, for the next pass to repaint.
+func (pc *Painter) paint(b, carryFrom *buffer.Buffer, regions []render.Rect) (buffer.FrameOutcome, error) {
 	// The region raw-clears to transparent: with a shadow gutter the
 	// falloff must blend over whatever the popup floats above, and a
 	// recycled buffer must not leak its last frame through. The morph
@@ -361,15 +350,23 @@ func (pc *Painter) paint(b *buffer.Buffer, regions []render.Rect) (bool, error) 
 	}
 	if b.Target == nil {
 		draw(render.NewScaled(b.Data, b.Stride, b.Width, b.Height, int(pc.frac120), scale.Denom))
-		return true, nil
+		return buffer.FrameDrawn, nil
 	}
-	ok, err := pc.gpu.Frame(b, int(pc.frac120), draw)
-	if err != nil || ok {
-		return ok, err
+	outcome, err := pc.gpu.Frame(b, int(pc.frac120), carryFrom, draw)
+	if err != nil {
+		return outcome, err
 	}
-	b.Release()
-	pc.dropGPU()
-	return false, nil
+	switch outcome {
+	case buffer.FrameRefused:
+		debug.Log("frame", "popup frame deferred: GPU busy")
+		b.Release()
+		pc.damage.Refuse()
+	case buffer.FrameLost:
+		b.Release()
+		pc.dropGPU()
+	case buffer.FrameDrawn:
+	}
+	return outcome, nil
 }
 
 // Close releases the painter's pool storage back to the session arena.

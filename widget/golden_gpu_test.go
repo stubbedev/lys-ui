@@ -1,10 +1,12 @@
 package widget
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/gputest"
@@ -20,6 +22,10 @@ var goldenDevice = sync.OnceValues(func() (*gpu.Device, error) {
 	return gpu.Open()
 })
 
+// goldenBusyLimit stops a device that never catches up from hanging the
+// test; it judges no speed.
+const goldenBusyLimit = 30 * time.Second
+
 // checkGoldenGPU renders the recorded golden on the GPU and fails on
 // any pixel differing from want, the CPU's: the GPU's shaders run the
 // CPU's integer and float32 arithmetic step for step.
@@ -34,7 +40,13 @@ func checkGoldenGPU(t *testing.T, name string, l *render.List, want []byte, w, h
 		t.Fatal(err)
 	}
 	defer tg.Close()
-	if err := d.Render(l, tg); err != nil {
+	for deadline := time.Now().Add(goldenBusyLimit); ; time.Sleep(time.Millisecond) {
+		err = d.Render(l, tg)
+		if !errors.Is(err, gpu.ErrBusy) || time.Now().After(deadline) {
+			break
+		}
+	}
+	if err != nil {
 		t.Fatalf("%s: rendering on the GPU: %v", name, err)
 	}
 	got, err := tg.ReadPixels()

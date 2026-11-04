@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/fourcc"
@@ -54,12 +55,16 @@ type gpuRenderer struct {
 	node    uint64
 	hasNode bool
 	// render is the device's Render, a seam for tests.
-	render func(*render.List, *gpu.Target) error
+	render func(*render.List, *gpu.Target, ...gpu.Carry) error
+	// wake arms the loop to wake after a delay: the retry of a frame the
+	// device refused, which no commit will call back for.
+	wake func(time.Duration)
+	// carry and carryRects are Frame's scratch.
+	carry      [1]gpu.Carry
+	carryRects []image.Rectangle
 	// drawn marks a frame since the buffer trim last looked, and
 	// trimmed a device trimmed since its last frame (trimIdle).
 	drawn, trimmed bool
-	// copyRects is Copy's scratch.
-	copyRects []image.Rectangle
 }
 
 // trimIdle trims the device once it has drawn nothing for a whole trim
@@ -168,6 +173,7 @@ func (a *Application) openRenderer() (*gpuRenderer, error) {
 	}
 	return &gpuRenderer{
 		dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render,
+		wake: func(d time.Duration) { a.wake(d) },
 		node: node, hasNode: hasNode,
 	}, nil
 }
@@ -236,45 +242,51 @@ func (r *gpuRenderer) NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) 
 	return buffer.NewDmabuf(r.dev, sess.Dmabuf(), bufW, bufH, scale, r.modifiers, r.refuse)
 }
 
+// gpuBusyRetry is how soon a surface tries a frame again after the
+// device refused it for being too far behind: well inside a refresh, and
+// each retry costs one recording, not a wait.
+const gpuBusyRetry = 4 * time.Millisecond
+
 // Frame renders paint into b's target at device scale num over
-// scale.Denom. A failed frame turns every surface to the CPU (fail)
-// and reports false; with the GPU required it is the error.
-func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, paint func(cv *render.Canvas)) (bool, error) {
+// scale.Denom, carrying b's staleness from carryFrom, when not nil, in
+// the same submission. A device too far behind refuses the frame, having
+// done nothing, and the loop wakes to retry it: no commit went out, so
+// no frame callback will. A failed frame turns every surface to the CPU
+// (fail); with the GPU required it is the error.
+func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, carryFrom *buffer.Buffer, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error) {
 	r.drawn, r.trimmed = true, false
 	cv := r.rec.ResetRecorder(b.Width, b.Height, num, scale.Denom)
 	paint(cv)
-	err := r.render(cv.Recording(), b.Target)
+	err := r.render(cv.Recording(), b.Target, r.carryFor(b, carryFrom)...)
 	// The recording is done once drawn: ending it now releases the
 	// rasters retired while it was open (render.Retire), which an idle
 	// window would otherwise hold back until its next frame.
 	cv.Recording().End()
-	if err != nil {
-		if r.required {
-			return false, fmt.Errorf("app: GPU frame: %w", err)
-		}
-		r.fail(err)
-		return false, nil
-	}
-	return true, nil
-}
-
-// Copy copies rects, in buffer pixels, from src's target into dst's. A
-// failed copy turns every surface to the CPU and reports false, or,
-// with the GPU required, is the error.
-func (r *gpuRenderer) Copy(dst, src *buffer.Buffer, rects []render.Rect) (bool, error) {
-	r.copyRects = r.copyRects[:0]
-	for _, c := range rects {
-		r.copyRects = append(r.copyRects, image.Rect(c.X, c.Y, c.X+c.W, c.Y+c.H))
-	}
-	err := r.dev.CopyRects(dst.Target, src.Target, r.copyRects)
-	if err == nil {
-		return true, nil
-	}
-	if r.required {
-		return false, fmt.Errorf("app: GPU copy: %w", err)
+	switch {
+	case err == nil:
+		return buffer.FrameDrawn, nil
+	case errors.Is(err, gpu.ErrBusy):
+		r.wake(gpuBusyRetry)
+		return buffer.FrameRefused, nil
+	case r.required:
+		return buffer.FrameLost, fmt.Errorf("app: GPU frame: %w", err)
 	}
 	r.fail(err)
-	return false, nil
+	return buffer.FrameLost, nil
+}
+
+// carryFor is what Render copies into b first: its stale rects from
+// carryFrom, nothing without one.
+func (r *gpuRenderer) carryFor(b, carryFrom *buffer.Buffer) []gpu.Carry {
+	if carryFrom == nil {
+		return nil
+	}
+	r.carryRects = r.carryRects[:0]
+	for _, c := range b.Stale.Rects() {
+		r.carryRects = append(r.carryRects, image.Rect(c.X, c.Y, c.X+c.W, c.Y+c.H))
+	}
+	r.carry[0] = gpu.Carry{From: carryFrom.Target, Rects: r.carryRects}
+	return r.carry[:1]
 }
 
 // Failed reports whether a frame failed, turning every surface to the

@@ -895,27 +895,34 @@ func (w *hostWindow) draw() bool {
 		return false
 	}
 	w.damage.DropCovered(b, w.devNum())
-	if err := w.pool.CopyForward(b, w.copier()); err != nil {
-		w.drawErr = err
-		return false
-	}
+	carryFrom := w.pool.CopyForward(b)
 
 	// A buffer with stale content must repaint everything that changed
 	// since its content was last on screen, not just this frame's
 	// damage. Fresh buffers are fully stale: the full-repaint fallback
 	// for the first frame, after resizes, and after rescales.
 	// Everything past this point is in device pixels.
-	rects, changed, regions := w.damage.Plan(b, w.devNum())
+	rects, changed, regions := w.damage.Plan(b, w.devNum(), carryFrom != nil)
 	debug.Log("frame", "draw %dx%d at %d/120: %d damage rect(s), %d region(s)",
 		bw, bh, w.frac120, len(rects), len(regions))
 
 	if b.Target != nil {
-		ok, err := w.renderer.Frame(b, w.devNum(), func(cv *render.Canvas) { w.paintRegions(cv, regions) })
+		outcome, err := w.renderer.Frame(b, w.devNum(), carryFrom, func(cv *render.Canvas) { w.paintRegions(cv, regions) })
 		if err != nil {
 			w.drawErr = err
 			return false
 		}
-		if !ok {
+		switch outcome {
+		case buffer.FrameRefused:
+			// The GPU is behind and nothing happened: the buffer goes
+			// back, and everything the frame owed stays owed for the
+			// retry the renderer armed.
+			debug.Log("frame", "draw deferred: GPU busy")
+			b.Release()
+			w.damage.Refuse()
+			w.dirty = true
+			return true
+		case buffer.FrameLost:
 			// The frame never reached the compositor: its buffer goes
 			// back, the window turns to the CPU, and the next pass
 			// repaints it whole into shared memory.
@@ -924,6 +931,7 @@ func (w *hostWindow) draw() bool {
 			w.damage.Full(render.Rect{W: bw, H: bh})
 			w.dirty = true
 			return true
+		case buffer.FrameDrawn:
 		}
 		w.paintedPixels = repaint.Area(regions)
 	} else {
@@ -1024,15 +1032,6 @@ func (w *hostWindow) notePresented(batch []func(), shown bool) {
 	for _, fn := range batch {
 		fn()
 	}
-}
-
-// copier is the window's GPU copier for Pool.CopyForward, nil drawing
-// on the CPU.
-func (w *hostWindow) copier() buffer.Copier {
-	if w.renderer == nil {
-		return nil
-	}
-	return w.renderer
 }
 
 // dropRenderer turns the window to the CPU after its renderer failed:

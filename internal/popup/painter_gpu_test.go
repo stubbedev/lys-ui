@@ -16,30 +16,31 @@ import (
 
 // gpuFrames is a Renderer over a real device, or one whose frames fail.
 type gpuFrames struct {
-	dev    *gpu.Device
-	lost   bool
-	failed bool
+	dev  *gpu.Device
+	lost bool
+	// refused makes every frame a device-busy refusal.
+	refused bool
+	failed  bool
 }
 
 func (g *gpuFrames) NewBuffer(*wlsession.Session, int, int, int) (*buffer.Buffer, error) {
 	return nil, errors.New("not used")
 }
 
-func (g *gpuFrames) Frame(b *buffer.Buffer, num int, paint func(cv *render.Canvas)) (bool, error) {
+func (g *gpuFrames) Frame(b *buffer.Buffer, num int, _ *buffer.Buffer, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error) {
+	if g.refused {
+		return buffer.FrameRefused, nil
+	}
 	if g.lost {
 		g.failed = true
-		return false, nil
+		return buffer.FrameLost, nil
 	}
 	rec := render.NewRecorder(b.Width, b.Height, num, scale.Denom)
 	paint(rec)
-	return true, g.dev.Render(rec.Recording(), b.Target)
+	return buffer.FrameDrawn, g.dev.Render(rec.Recording(), b.Target)
 }
 
 func (g *gpuFrames) Failed() bool { return g.failed }
-
-func (g *gpuFrames) Copy(*buffer.Buffer, *buffer.Buffer, []render.Rect) (bool, error) {
-	return false, nil
-}
 
 func openGPU(t *testing.T) *gpu.Device {
 	t.Helper()
@@ -70,12 +71,12 @@ func TestPopupFramesDrawOnTheGPU(t *testing.T) {
 		}
 		t.Cleanup(tg.Close)
 		pc := &Painter{gpu: &gpuFrames{dev: dev}, frac120: scale.Denom, visual: v.morph}
-		if ok, err := pc.paint(&buffer.Buffer{Width: w, Height: h, Target: tg}, []render.Rect{{W: w, H: h}}); !ok || err != nil {
-			t.Fatalf("reveal %v: GPU frame drawn %v, %v", reveal, ok, err)
+		if outcome, err := pc.paint(&buffer.Buffer{Width: w, Height: h, Target: tg}, nil, []render.Rect{{W: w, H: h}}); outcome != buffer.FrameDrawn || err != nil {
+			t.Fatalf("reveal %v: GPU frame outcome %v, %v", reveal, outcome, err)
 		}
 		cpu := &buffer.Buffer{Width: w, Height: h, Stride: render.Stride(w), Data: make([]byte, render.Stride(w)*h)}
-		if ok, err := (&Painter{frac120: scale.Denom, visual: v.morph}).paint(cpu, []render.Rect{{W: w, H: h}}); !ok || err != nil {
-			t.Fatalf("reveal %v: CPU frame drawn %v, %v", reveal, ok, err)
+		if outcome, err := (&Painter{frac120: scale.Denom, visual: v.morph}).paint(cpu, nil, []render.Rect{{W: w, H: h}}); outcome != buffer.FrameDrawn || err != nil {
+			t.Fatalf("reveal %v: CPU frame outcome %v, %v", reveal, outcome, err)
 		}
 		got, err := tg.ReadPixels()
 		if err != nil {
@@ -105,13 +106,45 @@ func TestPopupGPUFrameFailureFallsBackToCPU(t *testing.T) {
 	pc := &Painter{gpu: &gpuFrames{dev: dev, lost: true}, frac120: scale.Denom, visual: v.morph}
 	pc.pool = buffer.New(pc.create, 2)
 	b := &buffer.Buffer{Width: 64, Height: 24, Target: tg}
-	if ok, err := pc.paint(b, []render.Rect{{W: b.Width, H: b.Height}}); ok || err != nil {
-		t.Fatalf("failed frame reported %v, %v; want not drawn and no error", ok, err)
+	if outcome, err := pc.paint(b, nil, []render.Rect{{W: b.Width, H: b.Height}}); outcome != buffer.FrameLost || err != nil {
+		t.Fatalf("failed frame reported %v, %v; want lost and no error", outcome, err)
 	}
 	if pc.gpu != nil {
 		t.Error("the popup still draws on the GPU after a failed frame")
 	}
 	if b.Busy() {
 		t.Error("the failed frame's buffer was not given back")
+	}
+}
+
+func TestPopupFrameTheGPURefusedStaysOwedOnTheGPU(t *testing.T) {
+	v, _ := newTweenView(t, 1, GravityBottom)
+	frames := &gpuFrames{refused: true}
+	pc := &Painter{gpu: frames, frac120: scale.Denom, visual: v.morph}
+	bounds := render.Rect{W: 64, H: 24}
+	pc.damage.Full(bounds)
+	pool := buffer.New(func() (*buffer.Buffer, error) {
+		return &buffer.Buffer{Width: 64, Height: 24, Target: &gpu.Target{}, Stale: buffer.RegionOf(bounds)}, nil
+	}, 2)
+	b, err := pool.Acquire()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, regions := pc.damage.Plan(b, scale.Denom, false)
+	outcome, err := pc.paint(b, nil, regions)
+	if outcome != buffer.FrameRefused || err != nil {
+		t.Fatalf("refused frame reported %v, %v", outcome, err)
+	}
+	if pc.gpu == nil {
+		t.Error("a busy GPU turned the popup to the CPU")
+	}
+	if b.Busy() {
+		t.Error("the refused frame's buffer was not given back")
+	}
+	if pc.damage.Empty() {
+		t.Error("the refused frame's damage was lost")
+	}
+	if b.Stale.Empty() {
+		t.Error("the refused frame's stale rects were lost")
 	}
 }

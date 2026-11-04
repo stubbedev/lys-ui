@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"image"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/gputest"
@@ -71,7 +74,7 @@ func TestGPUFrameFailureFallsBackToCPU(t *testing.T) {
 		lost := errors.New("device lost")
 		w.renderer = &gpuRenderer{
 			name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), required: required,
-			render: func(*render.List, *gpu.Target) error { return lost },
+			render: func(*render.List, *gpu.Target, ...gpu.Carry) error { return lost },
 		}
 		fakes := w.newBuffer
 		var gpuBufs []*buffer.Buffer
@@ -248,7 +251,7 @@ func TestGPUReusedBufferCopiesForward(t *testing.T) {
 	}
 	h := newPaintHarness(col, 400, 600)
 	w := h.wnd
-	w.renderer = &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render}
+	w.renderer = &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render, wake: func(time.Duration) {}}
 	var bufs []*buffer.Buffer
 	w.newBuffer = func() (*buffer.Buffer, error) {
 		tg, err := dev.NewOffscreen(400, 600)
@@ -325,9 +328,9 @@ func TestGPUTrimWaitsForAnIdleDevice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render}
+	r := &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render, wake: func(time.Duration) {}}
 	b := &buffer.Buffer{Width: 16, Height: 16, Scale: 1, Target: tg}
-	if ok, err := r.Frame(b, 120, func(cv *render.Canvas) { cv.Clear(cv.Rect(), render.RGB(1, 2, 3)) }); !ok || err != nil {
+	if ok, err := r.Frame(b, 120, nil, func(cv *render.Canvas) { cv.Clear(cv.Rect(), render.RGB(1, 2, 3)) }); ok != buffer.FrameDrawn || err != nil {
 		t.Fatalf("frame: %v, %v", ok, err)
 	}
 	a := &Application{gpu: r}
@@ -344,5 +347,93 @@ func TestGPUTrimWaitsForAnIdleDevice(t *testing.T) {
 	a.trimBuffers()
 	if a.stopTrim != nil {
 		t.Error("the trim timer kept running for a trimmed, idle device")
+	}
+}
+
+func TestAFrameTheGPURefusedStaysOwedAndWakesTheLoop(t *testing.T) {
+	first, second := widget.NewProgressBar(0), widget.NewProgressBar(0)
+	root := widget.NewBox(widget.Column, 0, 0)
+	root.Append(first, false)
+	root.Append(widget.NewBox(widget.Column, 0, 0), true)
+	root.Append(second, false)
+	h := newPaintHarness(root, 200, 200)
+	w := h.wnd
+	busy := false
+	var carried []gpu.Carry
+	var wakes []time.Duration
+	r := &gpuRenderer{
+		name: "test", rec: render.NewRecorder(1, 1, 1, 1), required: true,
+		wake: func(d time.Duration) { wakes = append(wakes, d) },
+		render: func(_ *render.List, _ *gpu.Target, carry ...gpu.Carry) error {
+			carried = append(carried[:0], carry...)
+			if busy {
+				return gpu.ErrBusy
+			}
+			return nil
+		},
+	}
+	w.renderer = r
+	var bufs []*buffer.Buffer
+	w.newBuffer = func() (*buffer.Buffer, error) {
+		b := &buffer.Buffer{Width: 200, Height: 200, Scale: 1, Stale: buffer.RegionOf(render.Rect{W: 200, H: 200}), Target: &gpu.Target{}}
+		bufs = append(bufs, b)
+		return b, nil
+	}
+	w.pool = buffer.New(w.allocator(), 3)
+	frame := func() {
+		t.Helper()
+		w.dirty = true
+		if !w.draw() {
+			t.Fatal(w.drawErr)
+		}
+	}
+	frame()
+	first.SetValue(0.5)
+	frame()
+	if len(bufs) != 2 {
+		t.Fatalf("%d buffers, want a second while the first is held", len(bufs))
+	}
+	bufs[0].Release()
+
+	busy = true
+	second.SetValue(0.5)
+	commits := h.surf.commits
+	frame()
+	if r.Failed() || w.renderer == nil || w.drawErr != nil {
+		t.Fatalf("a busy GPU failed the renderer: %v, renderer %v, %v", r.failed, w.renderer, w.drawErr)
+	}
+	if h.surf.commits != commits {
+		t.Error("a refused frame committed")
+	}
+	if bufs[0].Busy() {
+		t.Error("the refused frame's buffer was not given back")
+	}
+	if !w.dirty || w.damage.Empty() {
+		t.Errorf("after the refusal dirty %v, damage empty %v: the frame must stay owed", w.dirty, w.damage.Empty())
+	}
+	if bufs[0].Stale.Empty() {
+		t.Error("the refused frame cleared the buffer's staleness")
+	}
+	if len(wakes) != 1 || wakes[0] != gpuBusyRetry {
+		t.Errorf("wakes %v, want one retry at %v: no frame callback will come", wakes, gpuBusyRetry)
+	}
+
+	busy = false
+	frame()
+	if h.surf.commits != commits+1 {
+		t.Errorf("the retry made %d commits, want 1", h.surf.commits-commits)
+	}
+	want := image.Rect(first.Bounds().X, first.Bounds().Y, first.Bounds().X+first.Bounds().W, first.Bounds().Y+first.Bounds().H)
+	if len(carried) != 1 || carried[0].From != bufs[1].Target || !slices.Contains(carried[0].Rects, want) {
+		t.Errorf("the retry carried %+v, want the first bar %v from the front", carried, want)
+	}
+	if !bufs[0].Stale.Empty() {
+		t.Errorf("stale %v after the frame went out", bufs[0].Stale.Rects())
+	}
+	if len(wakes) != 1 {
+		t.Errorf("wakes %v, want no further retry", wakes)
+	}
+	for _, b := range bufs {
+		b.Target = nil
 	}
 }

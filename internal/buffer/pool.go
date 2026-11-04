@@ -267,43 +267,49 @@ func CopyRect(dst, src *Buffer, r render.Rect) {
 	}
 }
 
-// Copier copies rects between two GPU targets' buffers: a surface's
-// GPU renderer. A copy it cannot make reports false, with the error
-// when the GPU failed.
-type Copier interface {
-	Copy(dst, src *Buffer, rects []render.Rect) (bool, error)
-}
+// FrameOutcome is what became of a frame handed to a GPU renderer.
+type FrameOutcome uint8
+
+const (
+	// FrameDrawn went to the GPU: the buffer may be committed.
+	FrameDrawn FrameOutcome = iota
+	// FrameRefused did nothing, the GPU being too far behind: the buffer
+	// goes back and the frame stays owed, stale rects and damage alike,
+	// for the retry the renderer armed.
+	FrameRefused
+	// FrameLost failed: the surface turns to the CPU.
+	FrameLost
+)
 
 // CopyForward brings b up to the screen where it is stale by copying
 // that region from the front buffer, which shows what the screen does,
 // instead of painting it: a buffer that sat out frames (the third,
 // taken while frames outpace releases) can owe most of the surface.
-// Shared-memory buffers copy on the CPU, GPU targets through gpu (nil
-// when the surface has no renderer). A copy that cannot be made leaves
-// b stale, for the frame to paint; the GPU's error comes back.
-func (p *Pool) CopyForward(b *Buffer, gpu Copier) error {
+// Shared-memory buffers copy here. A GPU target copies inside the
+// submission that draws it, so the front buffer comes back for the
+// frame to carry b.Stale from, and b stays stale until the frame is
+// Presented: a refused frame carried nothing. A nil result with b still
+// stale leaves the frame to paint it.
+func (p *Pool) CopyForward(b *Buffer) (carryFrom *Buffer) {
 	front := p.front
 	if b.Stale.Empty() || front == nil || front == b || front.Width != b.Width || front.Height != b.Height {
 		return nil
 	}
-	switch {
-	case b.Target != nil && front.Target != nil && gpu != nil:
-		if ok, err := gpu.Copy(b, front, b.Stale.Rects()); !ok {
-			return err
-		}
-	case b.Data != nil && front.Data != nil:
-		for _, r := range b.Stale.Rects() {
-			CopyRect(b, front, r)
-		}
-	default:
+	if b.Target != nil && front.Target != nil {
+		return front
+	}
+	if b.Data == nil || front.Data == nil {
 		return nil
+	}
+	for _, r := range b.Stale.Rects() {
+		CopyRect(b, front, r)
 	}
 	p.copied += b.Stale.Area()
 	b.Stale.Clear()
 	return nil
 }
 
-// CopiedPixels counts the pixels CopyForward copied so far.
+// CopiedPixels counts the pixels CopyForward copied on the CPU so far.
 func (p *Pool) CopiedPixels() int { return p.copied }
 
 // Resize swaps the pool to a new buffer size. Free buffers are disposed

@@ -35,7 +35,7 @@
           "-X github.com/stubbedev/lys-lib/xkb.defaultXLocaleDir=${pkgs.libX11}/share/X11/locale"
         ];
         env.CGO_ENABLED = "0";
-        vendorHash = "sha256-FxtDh+eOFFl+VqqkRCHSuMMw+VCIvrpHqaWRUJ1QS0c=";
+        vendorHash = "sha256-qhYMtUwIRb5GL72eTpqJNKbjDabok4JLgQGTew719GI=";
         doCheck = true;
         preCheck = ''
           export HOME="$TMPDIR" FONTCONFIG_FILE=${testFontsConf}

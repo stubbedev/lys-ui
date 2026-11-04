@@ -475,8 +475,8 @@ func TestCopyForwardCopiesOnlyTheStaleRects(t *testing.T) {
 	changed.Add(bottom)
 	p.Presented(a, &changed)
 	b.Stale = changed
-	if err := p.CopyForward(b, nil); err != nil {
-		t.Fatal(err)
+	if from := p.CopyForward(b); from != nil {
+		t.Fatalf("shared memory asked to carry from %p", from)
 	}
 	if got, want := p.CopiedPixels(), 2*100*8; got != want {
 		t.Errorf("copied %d pixels, want the two strips' %d", got, want)

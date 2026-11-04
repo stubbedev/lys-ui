@@ -25,6 +25,9 @@ type Region struct {
 	seen uint64
 	// dev is the scratch the device rects of a frame are built in.
 	dev []render.Rect
+	// planned is what the last Plan took off pending, kept for a frame
+	// the GPU refused.
+	planned []render.Rect
 	// regions is where the frame's paint regions are built, and changed
 	// what they change on screen.
 	regions, changed buffer.Region
@@ -67,15 +70,16 @@ func (r *Region) Full(bounds render.Rect) { r.Add(bounds, bounds) }
 func (r *Region) Empty() bool { return len(r.pending) == 0 }
 
 // Plan maps the owed rects onto b at device scale num/scale.Denom and
-// clears them. rects is what the frame repaints and damages on the
+// takes them off the region. rects is what the frame repaints and damages on the
 // wire: the owed rects plus whatever b is stale in. changed is only
 // what differs on screen after the commit, the owed rects without b's
 // staleness: a fresh buffer's first paint covers the whole surface
 // but changes nothing the screen did not already show, so the pool
 // must not count it against the other buffers (buffer.Pool.Presented).
 // regions covers rects, the clips the frame paints in. All three are
-// reused by the next Plan.
-func (r *Region) Plan(b *buffer.Buffer, num int) (rects []render.Rect, changed *buffer.Region, regions []render.Rect) {
+// reused by the next Plan. carrying says the frame copies b's staleness
+// forward (buffer.Pool.CopyForward), so it paints none of it.
+func (r *Region) Plan(b *buffer.Buffer, num int, carrying bool) (rects []render.Rect, changed *buffer.Region, regions []render.Rect) {
 	bounds := render.Rect{W: b.Width, H: b.Height}
 	rects = r.dev[:0]
 	r.changed.Clear()
@@ -87,15 +91,24 @@ func (r *Region) Plan(b *buffer.Buffer, num int) (rects []render.Rect, changed *
 			r.regions.Add(d)
 		}
 	}
-	for _, stale := range b.Stale.Rects() {
-		if stale = stale.Intersect(bounds); !stale.Empty() {
-			rects = append(rects, stale)
-			r.regions.Add(stale)
+	if !carrying {
+		for _, stale := range b.Stale.Rects() {
+			if stale = stale.Intersect(bounds); !stale.Empty() {
+				rects = append(rects, stale)
+				r.regions.Add(stale)
+			}
 		}
 	}
-	r.pending = r.pending[:0]
+	r.pending, r.planned = r.planned[:0], r.pending
 	r.dev = rects
 	return rects, &r.changed, r.regions.Rects()
+}
+
+// Refuse owes again what the last Plan took: the GPU refused the frame,
+// having done nothing.
+func (r *Region) Refuse() {
+	r.pending = append(r.pending, r.planned...)
+	r.planned = r.planned[:0]
 }
 
 // DropCovered takes off b's staleness every rect one owed rect, at
