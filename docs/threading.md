@@ -30,7 +30,9 @@ the audio client's goroutine, which shares only atomics: frames played, closed a
 volume, run in order on the stream's audio worker. `Stream.Close` returns at once: the decoder and the source go on goroutines of their own, and
 `Stream.Wait` joins them at the end of a program. Every Stream method, and every subscriber it calls,
 runs on the loop. A `widget.GPUArea`'s `OnFrame` runs on the loop too.
-A window's or popup's GPU buffer allocates its target on a worker of the
+The GPU device opens on a worker too, unless `LYS_UI_RENDERER=gpu` asks for it
+up front: windows draw on the CPU until it lands through `Invoke`, and then
+move to it at a frame boundary, repainting whole. A window's or popup's GPU buffer allocates its target on a worker of the
 renderer's (`Device.PrepareTarget`), and the import goes out on the loop once
 the target comes back through `Invoke`; closing the renderer closes the device,
 which waits for the allocations running, and then joins their workers.

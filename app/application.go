@@ -46,9 +46,13 @@ type Application struct {
 	// gpu is the windows' GPU renderer (renderer), nil drawing on the
 	// CPU; gpuTried marks the one attempt to open it, gpuErr its
 	// failure under LYS_UI_RENDERER=gpu.
-	gpu         *gpuRenderer
-	gpuTried    bool
-	gpuErr      error
+	gpu      *gpuRenderer
+	gpuTried bool
+	gpuErr   error
+	// gpuOpening is the worker opening the renderer, and gpuLanding the
+	// renderer it opened, until the loop adopts it.
+	gpuOpening  sync.WaitGroup
+	gpuLanding  atomic.Pointer[gpuRenderer]
 	tooltipFace *render.Typeface
 	// tooltipOpts tunes tooltips (SetTooltipOptions).
 	tooltipOpts TooltipOptions

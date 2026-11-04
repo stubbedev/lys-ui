@@ -1067,6 +1067,19 @@ func (w *hostWindow) notePresented(batch []func(), shown bool) {
 	}
 }
 
+// useRenderer moves a window drawing on the CPU to r: the pool makes dmabuf
+// buffers from the next frame, which repaints everything.
+func (w *hostWindow) useRenderer(r *gpuRenderer) {
+	if w.renderer != nil {
+		return
+	}
+	w.renderer = r
+	w.pool.Resize(w.allocator())
+	bw, bh := w.layoutSize()
+	w.damage.Full(render.Rect{W: bw, H: bh})
+	w.dirty = true
+}
+
 // dropRenderer turns the window to the CPU after its renderer failed:
 // the pool retires its dmabuf buffers and makes shared-memory ones,
 // fully stale, so the next frame repaints everything.

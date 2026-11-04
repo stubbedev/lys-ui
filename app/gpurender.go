@@ -136,9 +136,10 @@ func (r *gpuRenderer) refuse(err error) {
 		"device", r.name, "named_by_compositor", r.hasNode, "err", err)
 }
 
-// renderer is the application's GPU renderer, opened on first use;
-// nil draws on the CPU. With LYS_UI_RENDERER=gpu a GPU that cannot
-// draw for this compositor is an error.
+// renderer is the application's GPU renderer; nil draws on the CPU. Under
+// LYS_UI_RENDERER=gpu the device opens here, and a GPU that cannot draw for
+// this compositor is an error. Otherwise it opens on a worker, the windows
+// drawing on the CPU until it is there (adoptRenderer).
 func (a *Application) renderer() (*gpuRenderer, error) {
 	if a.gpuTried {
 		return a.gpu, a.gpuErr
@@ -148,52 +149,115 @@ func (a *Application) renderer() (*gpuRenderer, error) {
 	switch mode {
 	case "cpu":
 		return nil, nil
-	case "", "auto", "gpu":
+	case "", "auto":
+		plan, err := a.rendererPlan()
+		if err != nil {
+			logutil.L().Info("app: no GPU renderer; every window draws on the CPU", "err", err)
+			return nil, nil
+		}
+		a.startRenderer(plan, openRenderer)
+		return nil, nil
+	case "gpu":
 	default:
 		a.gpuErr = fmt.Errorf("app: %s=%q: want cpu, gpu or auto", rendererEnv, mode)
 		return nil, a.gpuErr
 	}
-	r, err := a.openRenderer()
+	plan, err := a.rendererPlan()
+	var r *gpuRenderer
 	if err == nil {
-		r.required = mode == "gpu"
+		r, err = openRenderer(plan)
 	}
 	if err != nil {
-		if mode == "gpu" {
-			a.gpuErr = fmt.Errorf("app: %s=gpu: %w", rendererEnv, err)
-			return nil, a.gpuErr
-		}
-		logutil.L().Info("app: no GPU renderer; every window draws on the CPU", "err", err)
-		return nil, nil
+		a.gpuErr = fmt.Errorf("app: %s=gpu: %w", rendererEnv, err)
+		return nil, a.gpuErr
 	}
+	r.required = true
+	a.installRenderer(r)
+	return r, nil
+}
+
+// rendererPlan is what opening a renderer needs from the session, read on the
+// loop: the compositor's main device and the layouts it imports.
+type rendererPlan struct {
+	node    uint64
+	hasNode bool
+	imports []fourcc.Modifier
+}
+
+func (a *Application) rendererPlan() (rendererPlan, error) {
+	if a.sess == nil || a.sess.Dmabuf() == nil {
+		return rendererPlan{}, errors.New("the compositor has no linux-dmabuf")
+	}
+	node, hasNode := a.sess.DmabufDevice()
+	return rendererPlan{node: node, hasNode: hasNode, imports: a.sess.DmabufModifiers(fourcc.ARGB8888)}, nil
+}
+
+// startRenderer opens the renderer on a worker, which waits on the driver and
+// the disk, and hands it to the loop. One that lands after the loop ended is
+// closed by closeRenderer.
+func (a *Application) startRenderer(plan rendererPlan, open func(rendererPlan) (*gpuRenderer, error)) {
+	sess := a.sess
+	a.gpuOpening.Go(func() {
+		r, err := open(plan)
+		if err != nil {
+			a.Invoke(func() {
+				logutil.L().Info("app: no GPU renderer; every window draws on the CPU", "err", err)
+			})
+			return
+		}
+		a.gpuLanding.Store(r)
+		a.Invoke(func() { a.adoptRenderer(sess) })
+	})
+}
+
+// adoptRenderer installs the renderer the worker opened, at a frame boundary:
+// each window drawing on the CPU moves to it and repaints whole, as one that
+// fails moves back (dropRenderer). A renderer opened for a session since
+// replaced is closed and opened again for the new one.
+func (a *Application) adoptRenderer(sess *wlsession.Session) {
+	r := a.gpuLanding.Swap(nil)
+	if r == nil {
+		return
+	}
+	if sess != a.sess {
+		r.dev.Close()
+		if plan, err := a.rendererPlan(); err == nil {
+			a.startRenderer(plan, openRenderer)
+		}
+		return
+	}
+	a.installRenderer(r)
+	for _, w := range a.windows {
+		w.useRenderer(r)
+	}
+}
+
+// installRenderer makes r the application's renderer.
+func (a *Application) installRenderer(r *gpuRenderer) {
+	r.wake, r.invoke = func(d time.Duration) { a.wake(d) }, a.Invoke
 	debug.Log("gpu", "drawing on %s in %d modifier(s)", r.dev.Name(), len(r.modifiers))
 	a.gpu = r
 	// Evicted image rasters drop their textures with their pixels.
 	imgcache.Default().SetForget(r.dev.Forget)
-	return r, nil
 }
 
 // openRenderer opens the GPU device and agrees on the dmabuf layouts it
 // renders and the compositor imports. The device is the compositor's
 // main device, the one whose memory it imports; a compositor that names
 // none (linux-dmabuf before v4) gets the first device that exports.
-func (a *Application) openRenderer() (*gpuRenderer, error) {
-	if a.sess == nil || a.sess.Dmabuf() == nil {
-		return nil, errors.New("the compositor has no linux-dmabuf")
-	}
-	node, hasNode := a.sess.DmabufDevice()
-	dev, err := openDevice(node, hasNode)
+func openRenderer(plan rendererPlan) (*gpuRenderer, error) {
+	dev, err := openDevice(plan.node, plan.hasNode)
 	if err != nil {
 		return nil, err
 	}
-	mods, err := a.agreeModifiers(dev)
+	mods, err := agreeModifiers(dev, plan.imports)
 	if err != nil {
 		dev.Close()
 		return nil, err
 	}
 	r := &gpuRenderer{
 		dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1),
-		wake: func(d time.Duration) { a.wake(d) }, invoke: a.Invoke,
-		node: node, hasNode: hasNode,
+		node: plan.node, hasNode: plan.hasNode,
 	}
 	r.render, r.prepare = r.deviceFrame, r.deviceTarget
 	return r, nil
@@ -212,17 +276,13 @@ func openDevice(dev uint64, named bool) (*gpu.Device, error) {
 	return d, nil
 }
 
-// agreeModifiers is the ARGB8888 layouts dev renders and the session's
-// compositor imports.
-func (a *Application) agreeModifiers(dev *gpu.Device) ([]fourcc.Modifier, error) {
-	if a.sess == nil || a.sess.Dmabuf() == nil {
-		return nil, errors.New("the compositor has no linux-dmabuf")
-	}
+// agreeModifiers is the ARGB8888 layouts dev renders and a compositor
+// imports.
+func agreeModifiers(dev *gpu.Device, imports []fourcc.Modifier) ([]fourcc.Modifier, error) {
 	mods, err := dev.Modifiers(fourcc.ARGB8888)
 	if err != nil {
 		return nil, err
 	}
-	imports := a.sess.DmabufModifiers(fourcc.ARGB8888)
 	mods = slices.DeleteFunc(mods, func(m fourcc.Modifier) bool { return !slices.Contains(imports, m) })
 	if len(mods) == 0 {
 		return nil, fmt.Errorf("%s renders ARGB8888 in no modifier the compositor imports", dev.Name())
@@ -239,9 +299,13 @@ func (a *Application) reagreeRenderer() error {
 	if r == nil {
 		return nil
 	}
-	mods, err := a.agreeModifiers(r.dev)
-	if node, hasNode := a.sess.DmabufDevice(); err == nil && (hasNode != r.hasNode || node != r.node) {
-		err = fmt.Errorf("the new compositor imports from device %d:%d, not the renderer's", unix.Major(node), unix.Minor(node))
+	plan, err := a.rendererPlan()
+	var mods []fourcc.Modifier
+	if err == nil {
+		mods, err = agreeModifiers(r.dev, plan.imports)
+	}
+	if err == nil && (plan.hasNode != r.hasNode || plan.node != r.node) {
+		err = fmt.Errorf("the new compositor imports from device %d:%d, not the renderer's", unix.Major(plan.node), unix.Minor(plan.node))
 	}
 	if err == nil {
 		r.modifiers = mods
@@ -348,6 +412,10 @@ func (a *Application) ForgetImage(id render.ImageID) {
 
 // closeRenderer releases the GPU once every window has gone.
 func (a *Application) closeRenderer() {
+	a.gpuOpening.Wait()
+	if r := a.gpuLanding.Swap(nil); r != nil {
+		r.dev.Close()
+	}
 	if a.gpu != nil {
 		imgcache.Default().SetForget(nil)
 		a.gpu.closed = true
