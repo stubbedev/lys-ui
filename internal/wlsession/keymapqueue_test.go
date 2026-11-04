@@ -2,6 +2,7 @@ package wlsession
 
 import (
 	"os"
+	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
@@ -187,7 +188,25 @@ func TestKeyQueueIsBounded(t *testing.T) {
 	}
 }
 
+const isolatedTestEnv = "LYS_UI_ISOLATED_TEST"
+
+func runIsolated(t *testing.T) bool {
+	t.Helper()
+	if os.Getenv(isolatedTestEnv) == t.Name() {
+		return false
+	}
+	cmd := exec.Command(os.Args[0], "-test.run=^"+t.Name()+"$", "-test.count=1")
+	cmd.Env = append(os.Environ(), isolatedTestEnv+"="+t.Name())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("running %s in its own process: %v\n%s", t.Name(), err, out)
+	}
+	return true
+}
+
 func TestKeyWithNoKeymapPendingAllocatesNothing(t *testing.T) {
+	if runIsolated(t) {
+		return
+	}
 	s := &Session{}
 	s.OnKey = func(uint32, Mods) {}
 	if got := testing.AllocsPerRun(100, func() {
