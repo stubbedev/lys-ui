@@ -115,7 +115,27 @@ Each pooled buffer therefore tracks `Stale` — the damage painted into
 other buffers since its content was last shown — and repaints Stale ∪
 frame damage; fresh buffers start fully stale (internal/buffer/pool.go,
 app/window.go). `Presented` records only what actually changed on
-screen, so one buffer's init paint cannot poison the pool.
+screen, so one buffer's init paint cannot poison the pool. On the GPU
+the stale rects copy inside the frame's own submission (`gpu.Carry`), and
+a frame the device refuses (`gpu.ErrBusy`) stays owed, stale rects
+included, for a retry the renderer wakes the loop for.
+
+A repaint visits only what its clip can reach. Arrange gives each audited
+kit widget a bound on what it and its subtree paint (widget/paintink.go),
+and `PaintChild` skips one outside the clip. A type it does not know,
+which includes every `widget.Base` widget, may paint anywhere: it and its
+ancestors are always visited.
+
+A scroll step moves pixels instead of painting them where that is
+provably the same picture (widget/scrollshift.go): the content is
+translated with no relayout, rows far from the viewport keep only their
+top-level bounds until something asks (`Bounds`, a hit, a paint), and
+the frame copies the viewport in the buffer and paints the exposed
+strip. Anything that does not move with the content rules it out and the
+whole viewport paints: a non-flat backdrop, an overlapping sibling, an
+effect on an ancestor, or a step that lands between device pixels. GPU
+targets always paint the viewport, as no device call copies within a
+target.
 
 ### 4. Resize before Acquire; a resize commit bypasses pacing
 

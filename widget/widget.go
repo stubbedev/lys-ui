@@ -246,6 +246,10 @@ type node struct {
 	// node runs no animation.
 	anims       *nodeAnim
 	inkBox      render.Rect
+	solidBox    render.Rect
+	slot        render.Rect
+	slotSet     bool
+	culled      bool
 	inkClosed   bool
 	inkClips    bool
 	inkNodeless bool
@@ -730,17 +734,21 @@ func (n *node) takeDamage() (bounds render.Rect, extra []render.Rect, dirty bool
 // damage does not leave the widget's old paint behind.
 func (n *node) Arrange(r render.Rect) {
 	n.arranges++
+	if n.culled {
+		n.culled = false
+		culledNodes--
+	}
 	if r != n.bounds {
 		shapeGen++
 	}
-	if !n.bounds.Empty() && r != n.bounds {
+	if !arrangeShifted && !n.bounds.Empty() && r != n.bounds {
 		n.InvalidateRect(n.ink.Grow(n.bounds))
 		n.Invalidate()
 	}
 	// A resized query container's descendants recompute their
 	// @container conditions and container units against the new
 	// bounds; any other widget's resize leaves every style as it was.
-	if r != n.bounds && sensNow.containers && !n.unseen() && n.queryContainer() {
+	if (r.W != n.bounds.W || r.H != n.bounds.H) && sensNow.containers && !n.unseen() && n.queryContainer() {
 		restyleSubtree(n.self)
 	}
 	n.place(r)
@@ -772,6 +780,9 @@ func (n *node) queryContainer() bool {
 // and that includes a widget built but never put in a tree — it is the
 // zero rect, a defined value, never a panic and never stale geometry.
 func (n *node) Bounds() render.Rect {
+	if culledNodes > 0 {
+		n.settleCulled()
+	}
 	return n.bounds
 }
 
@@ -960,6 +971,9 @@ func HitChild(w Widget, p Point) Widget {
 	if w == nil || !ownVisible(w) {
 		return nil
 	}
+	if n := nodeOf(w); n != nil && n.culled {
+		n.settleCulled()
+	}
 	return w.HitTest(p)
 }
 
@@ -985,6 +999,9 @@ func PaintChild(cv *render.Canvas, w Widget) {
 	if n != nil && inkOutsideClip(cv, n) {
 		n.shownWalk = damageWalks.Load()
 		return
+	}
+	if n != nil && n.culled {
+		n.settleCulled()
 	}
 	if n != nil && n.layout.maximum != (Size{}) {
 		prev := cv.PushClip(n.bounds)

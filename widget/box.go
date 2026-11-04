@@ -97,6 +97,7 @@ type Box struct {
 	// (departure.go).
 	departing []*departure
 	arranged  arrangeStamp
+	shiftable bool
 }
 
 type arrangeStamp struct {
@@ -593,6 +594,15 @@ func (b *Box) Arrange(r render.Rect) {
 		b.bubbleInk()
 		return
 	}
+	if arrangeShifted && r.W == b.arranged.rect.W && r.H == b.arranged.rect.H && b.canShift() {
+		b.shiftTo(r)
+		return
+	}
+	if arrangeShifted {
+		shiftBroken = true
+		arrangeShifted = false
+		defer func() { arrangeShifted = true }()
+	}
 	volatility := arrangeVolatility
 	b.arrangeStale = false
 	b.arranged = arrangeStamp{rect: r, style: styleGen, theme: themeGen}
@@ -619,6 +629,7 @@ func (b *Box) Arrange(r render.Rect) {
 		b.arrangeBox(v, inner)
 	}
 	b.restack(mode)
+	b.settleShiftable(inner)
 }
 
 // arrangeBox is the programmatic box layout: the children split the

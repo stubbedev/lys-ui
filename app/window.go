@@ -910,8 +910,11 @@ func (w *hostWindow) draw() bool {
 		w.drawErr = fmt.Errorf("app: acquire buffer: %w", err)
 		return false
 	}
+	front := w.pool.Front()
+	w.damage.PlanBlits(b, front, w.devNum())
 	w.damage.DropCovered(b, w.devNum())
 	carryFrom := w.pool.CopyForward(b)
+	w.damage.BlitNow(b, front)
 
 	// A buffer with stale content must repaint everything that changed
 	// since its content was last on screen, not just this frame's

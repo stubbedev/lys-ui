@@ -295,6 +295,28 @@ func CopyRect(dst, src *Buffer, r render.Rect) {
 	}
 }
 
+// MoveRect puts src's pixels of r, in buffer pixels, into dst moved by
+// dx, dy, whatever falls outside r dropped. dst and src may be one
+// buffer: the rows and pixels copy in the order the overlap needs.
+func MoveRect(dst, src *Buffer, r render.Rect, dx, dy int) {
+	to := render.Rect{X: r.X + dx, Y: r.Y + dy, W: r.W, H: r.H}.Intersect(r)
+	if to.Empty() {
+		return
+	}
+	dst.refresh()
+	src.refresh()
+	rows := to.H
+	for i := range rows {
+		y := to.Y + i
+		if dy > 0 {
+			y = to.Y + rows - 1 - i
+		}
+		at := y*dst.Stride + to.X*4
+		from := (y-dy)*src.Stride + (to.X-dx)*4
+		copy(dst.Data[at:at+to.W*4], src.Data[from:from+to.W*4])
+	}
+}
+
 // FrameOutcome is what became of a frame handed to a GPU renderer.
 type FrameOutcome uint8
 

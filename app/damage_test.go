@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
@@ -594,5 +595,233 @@ func TestAColdAnimationPreparesItsSpareAheadOfTheNextFrame(t *testing.T) {
 	}
 	if *made != 2 {
 		t.Errorf("after the first animated frame the pool made %d buffers, want the spare ready before the next", *made)
+	}
+}
+
+func scrollWindow(t *testing.T) (*paintHarness, *widget.Scroll, []*widget.Label) {
+	t.Helper()
+	face, err := Font("sans", 14)
+	if err != nil {
+		t.Skip(err)
+	}
+	col := widget.NewBox(widget.Column, 2, 4)
+	var labels []*widget.Label
+	for i := range 800 {
+		l := widget.NewLabel(face, 14, fmt.Sprintf("row %d of the long list", i), 0)
+		labels = append(labels, l)
+		col.Append(l, false)
+	}
+	sc := widget.NewScroll(col)
+	root := widget.NewBox(widget.Column, 0, 8).Append(sc, true)
+	return newPaintHarness(root, 400, 300), sc, labels
+}
+
+func wholePaint(h *paintHarness) []byte {
+	w, ht := h.wnd.lastW, h.wnd.lastH
+	buf := make([]byte, render.Stride(w)*ht)
+	cv := render.New(buf, render.Stride(w), w, ht)
+	h.wnd.paintTree(cv, render.Rect{W: w, H: ht})
+	return buf
+}
+
+func assertShowsWholePaint(t *testing.T, h *paintHarness, step int) {
+	t.Helper()
+	got, want := h.wnd.pool.Front(), wholePaint(h)
+	for y := range got.Height {
+		for x := range got.Width {
+			at := y*got.Stride + x*4
+			if [4]byte(got.Data[at:at+4]) != [4]byte(want[at:at+4]) {
+				t.Fatalf("step %d: (%d,%d) shows %v, a whole paint %v", step, x, y, got.Data[at:at+4], want[at:at+4])
+			}
+		}
+	}
+}
+
+func TestScrollBlitMatchesAWholePaint(t *testing.T) {
+	h, sc, labels := scrollWindow(t)
+	h.frame()
+	y := 0
+	for step, d := range []int{13, 30, 1, 299, 7, -40, -3, 500, -501, 2, 2, 2, 60, -60} {
+		y += d
+		sc.SetOffset(0, y)
+		switch step {
+		case 4:
+			labels[20].SetText("a row that changed as it moved")
+		case 9:
+			labels[3].SetText("row 3")
+		}
+		h.frame()
+		assertShowsWholePaint(t, h, step)
+	}
+}
+
+func TestScrollBlitWithAReleasedFrontMatchesAWholePaint(t *testing.T) {
+	h, sc, _ := scrollWindow(t)
+	h.frame()
+	y := 0
+	for step := range 12 {
+		y += 9
+		sc.SetOffset(0, y)
+		h.wnd.dirty = true
+		if !h.wnd.draw() {
+			t.Fatal(h.wnd.drawErr)
+		}
+		for _, b := range h.bufs {
+			if b.Busy() {
+				b.Release()
+			}
+		}
+		assertShowsWholePaint(t, h, step)
+	}
+}
+
+func TestScrollStepPaintsOnlyItsStrip(t *testing.T) {
+	h, sc, _ := scrollWindow(t)
+	h.frame()
+	y := 0
+	nudge := func() { y += 10; sc.SetOffset(0, y) }
+	h.warm(nudge, 4)
+	nudge()
+	painted, damage := h.frame()
+	if limit := 400 * 10 * 2; painted > limit {
+		t.Errorf("a 10 px scroll step painted %d px, want its strip, at most %d", painted, limit)
+	}
+	if got := render.UnionAll(damage); got.Intersect(sc.Bounds()) != got || got.W*got.H < 300*300 {
+		t.Errorf("wire damage %+v, want the viewport %+v, which moved", got, sc.Bounds())
+	}
+}
+
+func TestDeferredScrollStepsPaintTheirViewport(t *testing.T) {
+	h, sc, _ := scrollWindow(t)
+	h.frame()
+	sc.SetOffset(0, 40)
+	h.wnd.syncBlur()
+	h.wnd.router.Root.Arrange(render.Rect{W: 400, H: 300})
+	h.wnd.damage.Collect(h.wnd.router.Root, render.Rect{W: 400, H: 300})
+	sc.SetOffset(0, 90)
+	h.frame()
+	assertShowsWholePaint(t, h, 0)
+}
+
+func TestScrollStepAtAFractionalScaleMatchesAWholePaint(t *testing.T) {
+	h, sc, _ := scrollWindow(t)
+	h.wnd.frac120 = 180
+	h.frame()
+	y := 0
+	for _, d := range []int{2, 4, 3, 7, 2} {
+		y += d
+		sc.SetOffset(0, y)
+		h.frame()
+	}
+	front := h.wnd.pool.Front()
+	w, ht := front.Width, front.Height
+	buf := make([]byte, front.Stride*ht)
+	cv := render.NewScaled(buf, front.Stride, w, ht, 180, scale.Denom)
+	h.wnd.paintTree(cv, render.Rect{W: w, H: ht})
+	for at := range buf {
+		if buf[at] != front.Data[at] {
+			t.Fatalf("byte %d at 1.5x differs from a whole paint", at)
+		}
+	}
+}
+
+func TestStyledScrollBlitMatchesAWholePaint(t *testing.T) {
+	face, err := Font("sans", 14)
+	if err != nil {
+		t.Skip(err)
+	}
+	t.Cleanup(func() { widget.LoadStylesheet("") })
+	widget.LoadStylesheet(`
+		.row { background-color: #334455; border-radius: 4px; box-shadow: 0 1px 3px #000000; margin: 3px; padding: 2px; }
+		.faded { opacity: 0.6; }
+		.moved { transform: translate(4px, 2px); }
+		.panel { background-color: #101820; padding: 6px; }
+	`)
+	for name, decorate := range map[string]func(i int, row *widget.Box){
+		"rounded shadowed rows": func(_ int, row *widget.Box) { row.AddClass("row") },
+		"group opacity":         func(i int, row *widget.Box) { row.AddClass("row"); row.SetClass("faded", i%3 == 0) },
+		"a transform":           func(i int, row *widget.Box) { row.SetClass("moved", i%5 == 0) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			col := widget.NewBox(widget.Column, 2, 0)
+			for i := range 200 {
+				row := widget.NewBox(widget.Row, 4, 0).Append(widget.NewLabel(face, 14, fmt.Sprintf("row %d", i), 0), false)
+				decorate(i, row)
+				col.Append(row, false)
+			}
+			sc := widget.NewScroll(col)
+			sc.ShowBars = true
+			panel := widget.NewBox(widget.Column, 4, 0)
+			panel.AddClass("panel")
+			panel.Append(widget.NewLabel(face, 14, "a header over the list", 0), false)
+			panel.Append(sc, true)
+			panel.Append(widget.NewProgressBar(0.4), false)
+			h := newPaintHarness(panel, 360, 280)
+			h.frame()
+			y := 0
+			for step, d := range []int{11, 40, 3, -20, 120, -1} {
+				y += d
+				sc.SetOffset(0, y)
+				h.frame()
+				assertShowsWholePaint(t, h, step)
+			}
+		})
+	}
+}
+
+func TestAWindowAtRestBehindAMorphMovesItsScroll(t *testing.T) {
+	h, sc, _ := scrollWindow(t)
+	h.wnd.router.Root = widget.NewMorph(h.wnd.router.Root)
+	h.frame()
+	y := 0
+	nudge := func() { y += 10; sc.SetOffset(0, y) }
+	h.warm(nudge, 4)
+	nudge()
+	painted, _ := h.frame()
+	if limit := 400 * 10 * 2; painted > limit {
+		t.Errorf("a step behind a resting morph painted %d px, want its strip, at most %d", painted, limit)
+	}
+	assertShowsWholePaint(t, h, 0)
+}
+
+func TestAGPUWindowPaintsItsViewportWhole(t *testing.T) {
+	h, sc, _ := scrollWindow(t)
+	w := h.wnd
+	w.renderer = &gpuRenderer{
+		name: "test", rec: render.NewRecorder(1, 1, 1, 1), wake: func(time.Duration) {},
+		render: func(*render.List, *gpu.Target, ...gpu.Carry) error { return nil },
+	}
+	w.newBuffer = func() (*buffer.Buffer, error) {
+		return &buffer.Buffer{Width: 400, Height: 300, Scale: 1, Stale: buffer.RegionOf(render.Rect{W: 400, H: 300}), Target: &gpu.Target{}}, nil
+	}
+	w.pool = buffer.New(w.allocator(), 3)
+	h.frame()
+	sc.SetOffset(0, 30)
+	w.dirty = true
+	if !w.draw() {
+		t.Fatal(w.drawErr)
+	}
+	view := sc.Bounds()
+	if got, want := w.paintedPixels, view.W*view.H; got < want {
+		t.Errorf("a GPU step painted %d px, want the whole %d px view: it cannot move pixels in place", got, want)
+	}
+}
+
+func TestAllocBudgetScrollFrame(t *testing.T) {
+	skipAllocBudget(t)
+	h, sc, _ := scrollWindow(t)
+	h.frame()
+	y := 0
+	step := func() {
+		y = (y + 7) % 900
+		sc.SetOffset(0, y)
+		h.frame()
+	}
+	for range 100 {
+		step()
+	}
+	const budget = 0
+	if allocs := testing.AllocsPerRun(100, step); allocs > budget {
+		t.Errorf("a scroll frame through draw allocates %v, budget %d", allocs, budget)
 	}
 }

@@ -52,6 +52,9 @@ func arrangeAt(w Widget, v *style.Values, r render.Rect) {
 			r = stickyRect(w, v, r)
 		}
 	}
+	if n := nodeOf(w); n != nil {
+		n.slot, n.slotSet = r, true
+	}
 	w.Arrange(r)
 }
 

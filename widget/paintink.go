@@ -2,6 +2,7 @@ package widget
 
 import (
 	"math"
+	"unicode/utf8"
 
 	"github.com/stubbedev/lys-lib/render"
 
@@ -13,6 +14,17 @@ type inkBounder interface {
 }
 
 type inkClipper interface{ clipsInk() bool }
+
+type inkOverhanger interface{ inkOverhangs() bool }
+
+func (l *Label) inkOverhangs() bool {
+	for _, r := range l.shown() {
+		if r >= utf8.RuneSelf {
+			return true
+		}
+	}
+	return false
+}
 
 //nolint:unparam
 func (b *Box) ownInk() (Widget, render.Insets, bool) {
@@ -84,6 +96,10 @@ func (n *node) computeInk() {
 	}
 	n.inkClosed = true
 	n.inkBox = focusInk.Grow(n.ink.Grow(reach.Grow(n.bounds)))
+	n.solidBox = n.ink.Grow(n.bounds)
+	if t, ok := self.(inkOverhanger); ok && t.inkOverhangs() {
+		n.solidBox = n.inkBox
+	}
 	if c, ok := self.(inkClipper); ok {
 		n.inkClips = c.clipsInk()
 	}
@@ -93,7 +109,8 @@ func (n *node) opensInk(self Widget) bool {
 	if n.sharedTag != "" || n.motion != nil || n.anims != nil || n.trCancel != nil || n.pseudo != nil {
 		return true
 	}
-	return n.style(self).Has(style.PropTransform) || n.effLayoutMotion(self) != LayoutMotionNone
+	v := n.style(self)
+	return v.Has(style.PropTransform) || v.Has(style.PropBackdropFilter) || n.effLayoutMotion(self) != LayoutMotionNone
 }
 
 func (n *node) settleInk() {
@@ -102,7 +119,7 @@ func (n *node) settleInk() {
 }
 
 func (n *node) bubbleInk() {
-	box, closed := n.inkBox, n.inkClosed
+	box, solid, closed := n.inkBox, n.solidBox, n.inkClosed
 	for p := n.parent; p != nil; p = parentOf(p) {
 		pn := nodeOf(p)
 		switch {
@@ -111,10 +128,11 @@ func (n *node) bubbleInk() {
 			return
 		case !closed:
 			pn.inkClosed = false
-		case pn.inkClips || !pn.inkClosed || box.Intersect(pn.inkBox) == box:
+		case pn.inkClips || !pn.inkClosed || (box.Intersect(pn.inkBox) == box && solid.Intersect(pn.solidBox) == solid):
 			return
 		default:
 			pn.inkBox = pn.inkBox.Union(box)
+			pn.solidBox = pn.solidBox.Union(solid)
 		}
 	}
 }

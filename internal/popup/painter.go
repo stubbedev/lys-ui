@@ -252,8 +252,11 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 		return false, false, err
 	}
 	start := time.Now()
+	front := pc.pool.Front()
+	pc.damage.PlanBlits(b, front, int(pc.frac120))
 	pc.damage.DropCovered(b, int(pc.frac120))
 	carryFrom := pc.pool.CopyForward(b)
+	pc.damage.BlitNow(b, front)
 	rects, changed, regions := pc.damage.Plan(b, int(pc.frac120), carryFrom != nil)
 	outcome, err := pc.paint(b, carryFrom, regions)
 	if err != nil {

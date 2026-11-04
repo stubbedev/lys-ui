@@ -98,11 +98,14 @@ type List struct {
 
 	// view is the content box, the scroll viewport inside the list's
 	// CSS box, where the rows lay out.
-	view  render.Rect
-	offY  int
-	hover int
-	rows  map[int]*listRow
-	order []*listRow
+	view     render.Rect
+	offY     int
+	hover    int
+	rows     map[int]*listRow
+	order    []*listRow
+	orderBuf []*listRow
+	parked   map[int]*listRow
+	shift    viewShift
 
 	// pointer gesture state: dragging while a press is down, the row
 	// the press anchored on (-1 until a point resolves it), the last
@@ -165,6 +168,8 @@ type rowUnbinder interface {
 	unbind(i int)
 }
 
+type modelRecycler interface{ recycles() bool }
+
 // modelAdapter binds a typed model to the erased interface.
 type modelAdapter[W Widget] struct {
 	m ListModel[W]
@@ -173,6 +178,11 @@ type modelAdapter[W Widget] struct {
 func (a modelAdapter[W]) len() int { return a.m.Len() }
 
 func (a modelAdapter[W]) row(i int) Widget { return a.m.Row(i) }
+
+func (a modelAdapter[W]) recycles() bool {
+	_, ok := any(a.m).(rowUnbinder)
+	return ok
+}
 
 func (a modelAdapter[W]) unbind(i int) {
 	if u, ok := any(a.m).(rowUnbinder); ok {
@@ -333,8 +343,27 @@ func (l *List) evict(i int) {
 	}
 }
 
+func (l *List) parkOrEvict(i int, r *listRow, first, last int) {
+	if a, ok := l.model.(modelRecycler); ok && a.recycles() {
+		l.evict(i)
+		return
+	}
+	delete(l.rows, i)
+	if l.parked == nil {
+		l.parked = make(map[int]*listRow)
+	}
+	l.parked[i] = r
+	span := last - first
+	for k := range l.parked {
+		if k < first-span || k >= last+span {
+			delete(l.parked, k)
+		}
+	}
+}
+
 // evictAll drops every cached row.
 func (l *List) evictAll() {
+	clear(l.parked)
 	for i := range l.rows {
 		l.evict(i)
 	}
@@ -349,6 +378,7 @@ func (l *List) Changed() {
 			l.evict(i)
 		}
 	}
+	clear(l.parked)
 	l.offY = min(l.offY, l.scrollMax())
 	l.clampTo(n)
 	l.syncChecks()
@@ -394,9 +424,21 @@ func (l *List) scrollTo(i int) {
 // setOffset scrolls to y, clamped to the content, and lays the rows now
 // in view out.
 func (l *List) setOffset(y int) {
+	from := l.offY
 	l.offY = min(max(0, y), l.scrollMax())
+	if l.offY == from {
+		return
+	}
+	st := beginShift(l.view, false)
 	l.layoutRows()
-	l.Invalidate()
+	if endShift(st) {
+		l.Invalidate()
+		return
+	}
+	l.shift.dy += from - l.offY
+	l.markBranchStale()
+	markDamage()
+	l.markSub()
 }
 
 // layoutRows realizes the rows in view and arranges each in its cell:
@@ -508,20 +550,26 @@ func (l *List) visible() (first, last int) {
 	n, c := l.model.len(), l.columns()
 	first = min(l.offY/l.pitch()*c, max(0, n-1))
 	last = min(n, ((l.offY+l.view.H)/l.pitch()+1)*c)
-	for i := range l.rows {
+	for i, r := range l.rows {
 		if i < first || i >= last {
-			l.evict(i)
+			l.parkOrEvict(i, r, first, last)
 		}
 	}
+	l.orderBuf = l.orderBuf[:0]
 	for i := first; i < last; i++ {
 		r, ok := l.rows[i]
 		if !ok {
-			r = l.newRow(i)
+			if r, ok = l.parked[i]; ok {
+				delete(l.parked, i)
+			} else {
+				r = l.newRow(i)
+			}
 			l.rows[i] = r
-			l.order = nil
 		}
 		r.SetClass(listRowLast, i == n-1)
+		l.orderBuf = append(l.orderBuf, r)
 	}
+	l.order = l.orderBuf
 	return first, last
 }
 

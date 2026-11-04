@@ -33,6 +33,14 @@ type Region struct {
 	regions, changed buffer.Region
 	// drained is the scratch a tree's damage drains into.
 	drained []render.Rect
+	moves   []widget.ScrollMove
+	blits   []blit
+	moved   []render.Rect
+}
+
+type blit struct {
+	area   render.Rect
+	dx, dy int
 }
 
 // Collect drains root's invalidations into the region, clipped to
@@ -45,10 +53,49 @@ func (r *Region) Collect(root widget.Widget, bounds render.Rect) bool {
 		return false
 	}
 	r.seen = gen
+	earlier := len(r.pending) > 0 || len(r.moves) > 0
+	if earlier {
+		r.demote(bounds)
+	}
 	var damaged bool
-	r.drained, damaged = widget.CollectDamageInto(r.drained, root)
+	r.drained, r.moves, damaged = widget.CollectFrameDamageInto(r.drained, r.moves, root)
+	if earlier {
+		r.demote(bounds)
+	}
 	r.Add(bounds, r.drained...)
 	return damaged
+}
+
+func (r *Region) demote(bounds render.Rect) {
+	for _, m := range r.moves {
+		r.Add(bounds, m.View)
+	}
+	r.moves = r.moves[:0]
+}
+
+// PlanBlits decides how b takes the moves the region holds: copied from
+// front, on the wire without being painted, or, for a GPU target or a
+// move landing between device pixels, owed whole so the frame paints it.
+// Call it ahead of DropCovered and CopyForward, and BlitNow after them.
+func (r *Region) PlanBlits(b, front *buffer.Buffer, num int) {
+	r.blits, r.moved = r.blits[:0], r.moved[:0]
+	copies := b.Data != nil && front != nil && front.Data != nil && front.Width == b.Width && front.Height == b.Height
+	for _, m := range r.moves {
+		if !copies || m.DX*num%scale.Denom != 0 || m.DY*num%scale.Denom != 0 {
+			r.pending = append(r.pending, m.View)
+			continue
+		}
+		r.blits = append(r.blits, blit{render.MapRect(m.View, num, scale.Denom), m.DX * num / scale.Denom, m.DY * num / scale.Denom})
+	}
+	r.moves = r.moves[:0]
+}
+
+// BlitNow makes the copies PlanBlits kept.
+func (r *Region) BlitNow(b, front *buffer.Buffer) {
+	for _, c := range r.blits {
+		buffer.MoveRect(b, front, c.area, c.dx, c.dy)
+		r.moved = append(r.moved, c.area)
+	}
 }
 
 // Add owes rects, clipped to bounds, besides what the tree drained: a
@@ -67,7 +114,7 @@ func (r *Region) Full(bounds render.Rect) { r.Add(bounds, bounds) }
 
 // Empty reports whether nothing is owed: the frame can skip its
 // buffer entirely.
-func (r *Region) Empty() bool { return len(r.pending) == 0 }
+func (r *Region) Empty() bool { return len(r.pending) == 0 && len(r.moves) == 0 }
 
 // Plan maps the owed rects onto b at device scale num/scale.Denom and
 // takes them off the region. rects is what the frame repaints and damages on the
@@ -91,6 +138,11 @@ func (r *Region) Plan(b *buffer.Buffer, num int, carrying bool) (rects []render.
 			r.regions.Add(d)
 		}
 	}
+	for _, d := range r.moved {
+		rects = append(rects, d)
+		r.changed.Add(d)
+	}
+	r.moved = r.moved[:0]
 	if !carrying {
 		for _, stale := range b.Stale.Rects() {
 			if stale = stale.Intersect(bounds); !stale.Empty() {

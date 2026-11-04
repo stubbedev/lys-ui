@@ -496,6 +496,9 @@ type Scroll struct {
 	view           render.Rect
 	viewW, viewH   int
 	childX, childY int
+	viewAt         render.Rect
+	childAt        render.Rect
+	shift          viewShift
 
 	// drag state: which handle is grabbed and where in it the press
 	// landed, so the content tracks the pointer 1:1.
@@ -595,6 +598,7 @@ func (s *Scroll) SetChild(child Widget) {
 	notifyRemoved(old)
 	s.child = child
 	s.offX, s.offY = 0, 0
+	s.viewAt, s.childAt, s.shift = render.Rect{}, render.Rect{}, viewShift{}
 	s.dragV, s.dragH = false, false
 	s.stopSmooth()
 	s.nat = Size{}
@@ -614,7 +618,7 @@ func (s *Scroll) scrollMax() (int, int) {
 
 // SetOffset scrolls to x, y, clamped so the child never leaves the
 // viewport (overshoot clamps). A child smaller than the viewport stays
-// pinned at 0. Scrolling invalidates the viewport bounds.
+// pinned at 0. The next Arrange moves the content and owes the damage.
 func (s *Scroll) SetOffset(x, y int) {
 	maxX, maxY := s.scrollMax()
 	x = min(max(0, x), maxX)
@@ -623,7 +627,9 @@ func (s *Scroll) SetOffset(x, y int) {
 		return
 	}
 	s.offX, s.offY = x, y
-	s.Invalidate()
+	s.markBranchStale()
+	markDamage()
+	s.markSub()
 	s.notifyRange()
 	if s.OnScrolled != nil {
 		s.OnScrolled(x, y)
@@ -898,7 +904,7 @@ func (s *Scroll) Arrange(r render.Rect) {
 	s.childX, s.childY = childX, childY
 
 	if s.child != nil {
-		arrangeChild(s.child, render.Rect{
+		s.arrangeContent(render.Rect{
 			X: r.X + childX - s.offX,
 			Y: r.Y + childY - s.offY,
 			W: childW,

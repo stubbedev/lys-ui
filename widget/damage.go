@@ -20,6 +20,10 @@ import (
 // rects than this stops paying for itself.
 const maxDamageRects = 32
 
+type damageClipper interface {
+	damageClip() (render.Rect, bool)
+}
+
 // damageNoder is node's drain hook; every widget that embeds node has it.
 type damageNoder interface {
 	takeDamage() (bounds render.Rect, extra []render.Rect, dirty bool)
@@ -91,6 +95,21 @@ func CollectDamage(root Widget) (rects []render.Rect, any bool) {
 // rects, so a frame loop that keeps its buffer drains without
 // allocating.
 func CollectDamageInto(buf []render.Rect, root Widget) (rects []render.Rect, any bool) {
+	walkTakesMoves = false
+	return collectDamage(buf, root)
+}
+
+// CollectFrameDamageInto is CollectDamageInto for a frame that can copy
+// pixels: a viewport that only scrolled reports a ScrollMove, reusing
+// moves' storage, and owes only what the move exposed.
+func CollectFrameDamageInto(buf []render.Rect, moves []ScrollMove, root Widget) (rects []render.Rect, outMoves []ScrollMove, any bool) {
+	walkTakesMoves, walkMoves = true, moves[:0]
+	rects, any = collectDamage(buf, root)
+	outMoves, walkMoves, walkTakesMoves = walkMoves, nil, false
+	return rects, outMoves, any || len(outMoves) > 0
+}
+
+func collectDamage(buf []render.Rect, root Widget) (rects []render.Rect, any bool) {
 	rects = buf[:0]
 	if root == nil {
 		return rects, false
@@ -98,6 +117,7 @@ func CollectDamageInto(buf []render.Rect, root Widget) (rects []render.Rect, any
 	damageWalks.Add(1)
 	backdropReach = backdropReach[:0]
 	walkIcons = icons.Default().Generation()
+	walkClip, walkClipped, walkShift, walkShiftNext = render.Rect{}, false, viewShift{}, viewShift{}
 	bbox := collectInto(root, &rects)
 	bbox = bbox.Union(widenForBackdrops(&rects))
 	if len(rects) > maxDamageRects {
@@ -142,10 +162,20 @@ func collectInto(w Widget, rects *[]render.Rect) render.Rect {
 	if n := nodeOf(w); n != nil {
 		if v := n.style(w); v.Has(style.PropBackdropFilter) && !v.Backdrop.Empty() {
 			if bs, ok := w.(Boundser); ok {
-				backdropReach = append(backdropReach, v.Backdrop.Extent().Grow(bs.Bounds()))
+				reach := v.Backdrop.Extent().Grow(bs.Bounds())
+				if walkClipped {
+					reach = reach.Intersect(walkClip)
+				}
+				if !reach.Empty() {
+					backdropReach = append(backdropReach, reach)
+				}
 			}
 		}
 	}
+	savedClip, savedClipped, savedShift := walkClip, walkClipped, walkShift
+	defer func() { walkClip, walkClipped, walkShift = savedClip, savedClipped, savedShift }()
+	n := nodeOf(w)
+	clip := walkClipped && n != nil && n.ownInkBounded(w)
 	if dn, ok := w.(damageNoder); ok {
 		var why string
 		if debug.Enabled {
@@ -156,18 +186,27 @@ func collectInto(w Widget, rects *[]render.Rect) render.Rect {
 			noteDamage(w, bounds, why)
 		}
 		if dirty {
-			if !bounds.Empty() {
-				*rects = append(*rects, bounds)
-				bbox = bbox.Union(bounds)
-			}
+			bbox = bbox.Union(emitDamage(rects, bounds, clip))
 			for _, r := range extras {
-				if r.Empty() {
-					continue
-				}
-				*rects = append(*rects, r)
-				bbox = bbox.Union(r)
+				bbox = bbox.Union(emitDamage(rects, r, clip))
 			}
 		}
+	}
+	if walkShiftNext.moved() {
+		walkShift.dx += walkShiftNext.dx
+		walkShift.dy += walkShiftNext.dy
+		walkShiftNext = viewShift{}
+	}
+	if c, ok := w.(damageClipper); ok {
+		if clip, clips := c.damageClip(); clips {
+			if walkClipped {
+				clip = clip.Intersect(walkClip)
+			}
+			walkClip, walkClipped = clip, true
+		}
+	}
+	if n != nil && n.culled {
+		walkClip, walkClipped = render.Rect{}, true
 	}
 	walkStack.each(func(kids []Widget) []Widget { return appendKids(w, kids) }, func(k Widget) {
 		if k != nil {
@@ -176,6 +215,23 @@ func collectInto(w Widget, rects *[]render.Rect) render.Rect {
 		}
 	})
 	return bbox
+}
+
+func emitDamage(rects *[]render.Rect, r render.Rect, clip bool) render.Rect {
+	box := render.Rect{}
+	for _, d := range [2]render.Rect{r, shifted(r, walkShift.dx, walkShift.dy)} {
+		if clip {
+			d = d.Intersect(walkClip)
+		}
+		if !d.Empty() {
+			*rects = append(*rects, d)
+			box = box.Union(d)
+		}
+		if !walkShift.moved() {
+			break
+		}
+	}
+	return box
 }
 
 // widenForBackdrops adds every backdrop reach the damage touches: a
