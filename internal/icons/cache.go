@@ -281,6 +281,33 @@ func (c *Cache) Peek(name string, size int, frac120 uint32) (Raster, bool) {
 	return Raster{Icon: e.natural, Symbolic: e.symbolic, Err: e.err, entry: e}, true
 }
 
+// PeekNearest returns the decoded raster of name at size whose scale is
+// nearest frac120, reading nothing: what a paint shows while the raster
+// for its own scale decodes. Failures are not offered.
+func (c *Cache) PeekNearest(name string, size int, frac120 uint32) (Raster, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var best *cacheEntry
+	bestDist := uint32(0)
+	for _, key := range c.order {
+		if key.name != name || key.size != size {
+			continue
+		}
+		e := c.entries[key]
+		if e.err != nil {
+			continue
+		}
+		dist := max(key.frac, frac120) - min(key.frac, frac120)
+		if best == nil || dist < bestDist {
+			best, bestDist = e, dist
+		}
+	}
+	if best == nil {
+		return Raster{}, false
+	}
+	return Raster{Icon: best.natural, Symbolic: best.symbolic, entry: best}, true
+}
+
 // Tint is r, which Peek returned without failure, recolored to tint: a
 // raster every caller with this tint shares.
 func (c *Cache) Tint(r Raster, tint render.Color) *render.Icon { return c.tintOf(r.entry, tint) }

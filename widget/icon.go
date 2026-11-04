@@ -431,6 +431,7 @@ func (i *Icon) resolve(frac uint32, tint Color) {
 	if !ok {
 		i.request(box)
 		if src, ok = i.peek(box); !ok {
+			i.showNearest(box, tint)
 			return
 		}
 	}
@@ -441,6 +442,31 @@ func (i *Icon) resolve(frac uint32, tint Color) {
 	}
 	i.err = nil
 	i.apply(src, tint)
+}
+
+// showNearest puts the theme raster of the nearest decoded scale on show
+// while box's decodes, when the widget has nothing on show. The raster
+// stays stale, so the answer replaces it.
+func (i *Icon) showNearest(box iconBox, tint Color) {
+	if i.kind != iconTheme || i.ic != nil || i.retint.active {
+		return
+	}
+	name, ok := i.themeName(box.name)
+	if !ok {
+		return
+	}
+	if src, ok := icons.Default().PeekNearest(name, box.size, box.frac); ok {
+		i.apply(src, tint)
+	}
+}
+
+// themeName is the name a theme icon resolves under, reading nothing; ok
+// is false while its fallback is unknown.
+func (i *Icon) themeName(name string) (string, bool) {
+	if !i.fallbacks {
+		return name, true
+	}
+	return icons.Default().PeekFallback(name)
 }
 
 // apply derives the raster on show from src: the natural one, a shared
@@ -464,15 +490,11 @@ func (i *Icon) peek(box iconBox) (icons.Raster, bool) {
 	if i.kind != iconTheme {
 		return i.decoded.raster, i.decoded.box == box
 	}
-	cache := icons.Default()
-	name := box.name
-	if i.fallbacks {
-		var ok bool
-		if name, ok = cache.PeekFallback(name); !ok {
-			return icons.Raster{}, false
-		}
+	name, ok := i.themeName(box.name)
+	if !ok {
+		return icons.Raster{}, false
 	}
-	return cache.Peek(name, box.size, box.frac)
+	return icons.Default().Peek(name, box.size, box.frac)
 }
 
 // request asks for box's decode off the loop; its answer repaints the
@@ -511,6 +533,9 @@ func preloadThemeBox(box iconBox, fallbacks bool) {
 	cache.Preload(name, box.size, box.frac)
 }
 
+// decodeIcon is the decode a file or SVG source goes through.
+var decodeIcon = icons.DecodeIcon
+
 // decodeIconSource reads and decodes a file or SVG source; it reads only
 // its arguments, so it may run off the loop.
 func decodeIconSource(kind iconKind, path string, svg []byte, box iconBox) icons.Raster {
@@ -523,7 +548,7 @@ func decodeIconSource(kind iconKind, path string, svg []byte, box iconBox) icons
 			return icons.Raster{Err: err}
 		}
 	}
-	ic, err := icons.DecodeIcon(data, name, box.size, box.frac)
+	ic, err := decodeIcon(data, name, box.size, box.frac)
 	return icons.Raster{Icon: ic, Symbolic: icons.IsSymbolic(name, data), Err: err}
 }
 

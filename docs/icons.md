@@ -28,7 +28,8 @@ How lys-ui resolves and paints themed icons.
   names an application's own icons by prefix and directory, so drawing
   them never lists the theme chain. A paint never reads or decodes: it
   draws what is decoded, and otherwise asks for the decode off the loop
-  and keeps the raster it has until the answer repaints it
+  and keeps the raster it has, or a theme icon's nearest decoded scale,
+  until the answer repaints it, at every scale, fractional ones included
   ([threading.md](threading.md)). `widget.PreloadThemeIcon` decodes ahead
   of the first paint, so a view that shows an icon once
   `widget.ThemeIconPreloaded` says so never paints it blank.
