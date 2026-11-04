@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/xkb"
@@ -101,6 +102,16 @@ xkb_symbols "(unnamed)" {
 };
 `
 
+// settleBackground plays the loop: it waits out the background goroutine
+// and takes what it posted.
+func settleBackground(t *testing.T, s *Session) {
+	t.Helper()
+	if !s.background().Settle(10 * time.Second) {
+		t.Fatal("the background goroutine never settled")
+	}
+	s.runPosted()
+}
+
 func deliverKeymap(t *testing.T, s *Session, text string) {
 	t.Helper()
 	fd, err := unix.MemfdCreate("keymap", unix.MFD_CLOEXEC)
@@ -111,6 +122,7 @@ func deliverKeymap(t *testing.T, s *Session, text string) {
 		t.Fatal(err)
 	}
 	s.HandleKeyboardKeymap(wl.KeyboardKeymapEvent{Format: 1, Fd: uintptr(fd), Size: uint32(len(text) + 1)})
+	settleBackground(t, s)
 }
 
 func TestVirtualKeyboardKeymapWithIncludesTranslates(t *testing.T) {

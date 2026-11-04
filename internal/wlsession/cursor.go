@@ -1,6 +1,7 @@
 package wlsession
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
+	"github.com/stubbedev/lys-lib/xcursor"
 )
 
 // defaultCursor is shown whenever the app has not asked for another
@@ -23,11 +25,9 @@ const CursorHidden = "none"
 // overrides it.
 const cursorThemeSize = 24
 
-var (
-	cursorOnce sync.Once
-	cursorThm  *cursorTheme
-	cursorErr  error
-)
+// errCursorPending reports a shape the background goroutine is still
+// reading: the shape last shown stays until it arrives.
+var errCursorPending = errors.New("cursor still being read")
 
 // cursorState is everything the cursor path owns. The mutex
 // serializes event-loop calls (SetCursor, pointer enter/leave)
@@ -51,13 +51,23 @@ type cursorState struct {
 	timer   *time.Timer
 	armed   bool
 
-	// now, after, theme, and push stand in for the animation clock,
-	// the frame timer, the xcursor theme, and the wire push in tests;
-	// nil in production.
-	now   func() time.Time
-	after func(time.Duration, func())
-	theme func(desired string) (*themedCursor, string, error)
-	push  func(*cursorImage) error
+	// pool holds the shapes read so far. requested is what was asked of
+	// the background goroutine, reader its own; waiting says the last
+	// apply stopped short on a read in flight.
+	pool      *cursorTheme
+	requested map[string]bool
+	reader    *cursorReader
+	waiting   bool
+
+	// now, after, theme, push, readFrames and readFile stand in for the
+	// animation clock, the frame timer, the xcursor theme, the wire push
+	// and the file reads in tests; nil in production.
+	now        func() time.Time
+	after      func(time.Duration, func())
+	theme      func(desired string) (*themedCursor, string, error)
+	push       func(*cursorImage) error
+	readFrames func(name string) ([]xcursor.Image, error)
+	readFile   func(path string) (xcursor.Image, error)
 }
 
 // cursorAliases maps requested shape names to the xcursor names to
@@ -141,21 +151,6 @@ func effectiveCursor(desired string) string {
 	return desired
 }
 
-// resolveCursorName picks the first candidate for desired that has
-// reports the theme carries, degrading to the default arrow when the
-// theme has none of them.
-func resolveCursorName(has func(string) bool, desired string) string {
-	if desired == "" {
-		return defaultCursor
-	}
-	for _, name := range cursorCandidates(desired) {
-		if has(name) {
-			return name
-		}
-	}
-	return defaultCursor
-}
-
 // SetCursor shows the named xcursor shape (CursorLeftPtr, "xterm",
 // "grabbing", ...) on the pointer. Window-edge interactions can use the
 // toolkit aliases - "resize_e", "resize_nw", the CSS spellings
@@ -187,6 +182,7 @@ func (s *Session) applyCursor() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.stopTimer()
+	c.waiting = false
 	if s.pointer == nil || s.pointerEnterSerial == 0 {
 		return nil
 	}
@@ -222,6 +218,10 @@ func (s *Session) applyNamedCursorLocked(desired string) error {
 		return s.pushCursorLocked(nil)
 	}
 	cur, name, err := s.themeCursor(desired)
+	if errors.Is(err, errCursorPending) {
+		c.waiting = true
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -245,30 +245,164 @@ func (s *Session) applyNamedCursorLocked(desired string) error {
 // themeCursor resolves the theme cursor for a requested shape: the
 // first candidate the theme carries, else the default arrow. It is
 // the only theme-facing step of the cursor path, so tests substitute
-// it through cursorState.theme.
+// it through cursorState.theme. It reads nothing: a shape not yet read
+// asks the background goroutine for it and reports errCursorPending,
+// and the apply runs again when the shape arrives. Called with
+// cursorState.mu held.
 func (s *Session) themeCursor(desired string) (*themedCursor, string, error) {
 	if s.crs.theme != nil {
 		return s.crs.theme(desired)
 	}
-	theme, err := loadCursorTheme(s.shm)
+	theme, err := s.cursorPoolLocked()
 	if err != nil {
 		return nil, "", fmt.Errorf("cursor theme: %w", err)
 	}
-	has := func(name string) bool {
-		_, err := theme.cursor(name)
-		return err == nil
+	name, settled := theme.resolve(desired)
+	if !settled {
+		s.requestCursorLocked(theme, desired)
+		return nil, "", errCursorPending
 	}
-	name := resolveCursorName(has, desired)
-	cur, err := theme.cursor(name)
+	cur, _, err := theme.lookup(name)
 	if err != nil {
-		// Unknown shape: fall back rather than failing the call.
-		cur, err = theme.cursor(defaultCursor)
-		if err != nil {
-			return nil, "", fmt.Errorf("default cursor: %w", err)
-		}
-		name = defaultCursor
+		return nil, "", fmt.Errorf("default cursor: %w", err)
 	}
 	return cur, name, nil
+}
+
+// cursorPoolLocked is the session's cursor pool, made the first time. It
+// is a memfd and a wl_shm_pool: no file a read could stall on. Called
+// with cursorState.mu held.
+func (s *Session) cursorPoolLocked() (*cursorTheme, error) {
+	if s.crs.pool != nil {
+		return s.crs.pool, nil
+	}
+	pool, err := newCursorTheme(s.shm)
+	if err != nil {
+		return nil, err
+	}
+	s.crs.pool = pool
+	return pool, nil
+}
+
+// requestCursorLocked has the background goroutine read what desired can
+// resolve to, once per shape. Shapes arrive one by one, in candidate
+// order, until one exists. Called with cursorState.mu held.
+func (s *Session) requestCursorLocked(theme *cursorTheme, desired string) {
+	c := &s.crs
+	if c.requested[desired] {
+		return
+	}
+	names := theme.unread(desired)
+	if c.requested == nil {
+		c.requested = make(map[string]bool)
+	}
+	c.requested[desired] = true
+	posted := s.background().Post(func() {
+		for _, name := range names {
+			frames, err := s.readCursorFrames(name)
+			s.postToLoop(func() { s.cursorRead(func(t *cursorTheme) { t.addCursor(name, frames, err) }) })
+			if err == nil && name != defaultCursor {
+				return
+			}
+		}
+	})
+	if !posted {
+		delete(c.requested, desired)
+		debug.Log("input", "cursor %q: the background queue is full", desired)
+	}
+}
+
+// requestFileCursorLocked is requestCursorLocked for a file cursor.
+func (s *Session) requestFileCursorLocked(path string) {
+	c := &s.crs
+	key := fileCursorPrefix + path
+	if c.requested[key] {
+		return
+	}
+	if c.requested == nil {
+		c.requested = make(map[string]bool)
+	}
+	c.requested[key] = true
+	posted := s.background().Post(func() {
+		img, err := s.readCursorFile(path)
+		s.postToLoop(func() { s.cursorRead(func(t *cursorTheme) { t.addFile(path, img, err) }) })
+	})
+	if !posted {
+		delete(c.requested, key)
+		debug.Log("input", "file cursor %q: the background queue is full", path)
+	}
+}
+
+// cursorRead puts what the background goroutine read in the pool, on the
+// loop, and shows it if an apply was waiting.
+func (s *Session) cursorRead(add func(*cursorTheme)) {
+	c := &s.crs
+	c.mu.Lock()
+	if c.pool == nil {
+		c.mu.Unlock()
+		return
+	}
+	add(c.pool)
+	waiting := c.waiting
+	c.mu.Unlock()
+	if !waiting {
+		return
+	}
+	if err := s.applyCursor(); err != nil {
+		debug.Log("input", "cursor after its read: %v", err)
+	}
+}
+
+// readCursorFrames reads one theme shape, on the background goroutine.
+func (s *Session) readCursorFrames(name string) ([]xcursor.Image, error) {
+	if s.crs.readFrames != nil {
+		return s.crs.readFrames(name)
+	}
+	if s.crs.reader == nil {
+		s.crs.reader = newCursorReaderFromEnv(cursorThemeSize)
+	}
+	return s.crs.reader.frames(name)
+}
+
+// readCursorFile reads one file cursor, on the background goroutine.
+func (s *Session) readCursorFile(path string) (xcursor.Image, error) {
+	if s.crs.readFile != nil {
+		return s.crs.readFile(path)
+	}
+	return xcursor.ReadWidest(path)
+}
+
+// preloadedCursors are the shapes a pointer crossing a window reaches
+// for: read ahead when the compositor leaves cursors to the client, so
+// the first hover over a link or a window edge has its shape in the pool.
+var preloadedCursors = []string{"", "pointer", "text", "resize_n", "resize_s", "resize_e", "resize_w", "resize_nw", "resize_ne", "resize_sw", "resize_se"}
+
+// preloadCursors asks for preloadedCursors where the theme draws them.
+func (s *Session) preloadCursors() {
+	if s.shapeDevice != nil || s.shm == nil {
+		return
+	}
+	c := &s.crs
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	theme, err := s.cursorPoolLocked()
+	if err != nil {
+		debug.Log("input", "cursor preload: %v", err)
+		return
+	}
+	for _, desired := range preloadedCursors {
+		s.requestCursorLocked(theme, desired)
+	}
+}
+
+// closeCursorPool releases the pool's file with the session.
+func (s *Session) closeCursorPool() {
+	c := &s.crs
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.pool != nil {
+		_ = c.pool.file.Close()
+	}
 }
 
 // pushCursorLocked attaches one frame of the shown cursor to the
@@ -420,12 +554,4 @@ func cursorFrame(totalMs uint32, delays []uint32, elapsedMs uint32) (index int, 
 	// Unreachable with a consistent delay list; show the last frame
 	// for the smallest schedulable slice rather than spin.
 	return len(delays) - 1, time.Millisecond
-}
-
-// loadCursorTheme parses the system xcursor theme once per process.
-func loadCursorTheme(shm *wl.Shm) (*cursorTheme, error) {
-	cursorOnce.Do(func() {
-		cursorThm, cursorErr = loadCursorThemeFromEnv(cursorThemeSize, shm)
-	})
-	return cursorThm, cursorErr
 }

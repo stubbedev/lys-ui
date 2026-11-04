@@ -55,10 +55,6 @@ func TestInspectSnapshot(t *testing.T) {
 	s.HandleRegistryGlobal(wl.RegistryGlobalEvent{Name: 2, Interface: "test_a", Version: 6})
 	s.trackOutput(&Output{Name: "DP-1", Scale: 2, ModeW: 2560, ModeH: 1440})
 
-	oldThm, oldErr := cursorThm, cursorErr
-	cursorThm, cursorErr = nil, nil
-	t.Cleanup(func() { cursorThm, cursorErr = oldThm, oldErr })
-
 	info := s.Inspect()
 	if info.Globals["test_a"] != 6 {
 		t.Errorf("inspect globals[test_a] = %d, want 6", info.Globals["test_a"])
@@ -86,15 +82,12 @@ func TestInspectSnapshot(t *testing.T) {
 	}
 }
 
-func TestCursorThemeReportsLoadedTheme(t *testing.T) {
-	s := &Session{}
-	oldThm, oldErr := cursorThm, cursorErr
-	cursorThm = &cursorTheme{name: "Sentinel", size: 24}
-	cursorErr = nil
-	t.Cleanup(func() { cursorThm, cursorErr = oldThm, oldErr })
-
+func TestCursorThemeReportsTheEnvironment(t *testing.T) {
+	t.Setenv("XCURSOR_THEME", "Sentinel")
+	t.Setenv("XCURSOR_SIZE", "32")
+	s := &Session{shm: &wl.Shm{}}
 	name, size, err := s.CursorTheme()
-	if err != nil || name != "Sentinel" || size != 24 {
-		t.Errorf("CursorTheme = (%q, %d, %v), want (Sentinel, 24, nil)", name, size, err)
+	if err != nil || name != "Sentinel" || size != 32 {
+		t.Errorf("CursorTheme = (%q, %d, %v), want (Sentinel, 32, nil)", name, size, err)
 	}
 }

@@ -66,16 +66,21 @@ func hotspotCoord(s string) (int32, bool) {
 
 // pushFileCursorLocked shows the widest image of the xcursor file
 // with the CSS hotspot. The theme's shm pool backs the buffer, so a
-// theme must load; a missing or malformed file degrades to the CSS
-// fallback keyword (the arrow without one). Called with
-// cursorState.mu held.
+// pool must open; a missing or malformed file degrades to the CSS
+// fallback keyword (the arrow without one), as does a file the
+// background goroutine is still reading. Called with cursorState.mu held.
 func (s *Session) pushFileCursorLocked(fc fileCursor) error {
-	theme, err := loadCursorTheme(s.shm)
+	theme, err := s.cursorPoolLocked()
 	if err != nil {
 		debug.Log("input", "file cursor theme: %v", err)
 		return s.applyNamedCursorLocked(fc.fallback)
 	}
-	ib, err := theme.fileCursor(fc.path)
+	ib, known, err := theme.fileCursor(fc.path)
+	if !known {
+		s.requestFileCursorLocked(fc.path)
+		s.crs.waiting = true
+		return s.applyNamedCursorLocked(fc.fallback)
+	}
 	if err != nil {
 		debug.Log("input", "file cursor %q: %v", fc.path, err)
 		return s.applyNamedCursorLocked(fc.fallback)

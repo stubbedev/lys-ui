@@ -56,21 +56,13 @@ func (s *Session) Globals() map[string]uint32 {
 }
 
 // CursorTheme reports the xcursor theme the session resolves pointer
-// shapes from: the theme's name and nominal size. The theme loads on
-// first use (the cursor path loads it on the first SetCursor anyway),
-// so this can report a load failure; the error says which.
+// shapes from: the theme's name and nominal size, as the environment
+// names them. Without a shm global no theme can draw, and the error says
+// so.
 func (s *Session) CursorTheme() (name string, size uint32, err error) {
-	if cursorThm == nil && cursorErr == nil {
-		if s.shm == nil {
-			return "", 0, errNoShm
-		}
-		_, _ = loadCursorTheme(s.shm)
-	}
-	if cursorErr != nil {
-		return "", 0, cursorErr
-	}
-	if cursorThm == nil {
+	if s.shm == nil {
 		return "", 0, errNoShm
 	}
-	return cursorThm.name, cursorThm.size, nil
+	name, size = cursorThemeFromEnv(cursorThemeSize)
+	return name, size, nil
 }

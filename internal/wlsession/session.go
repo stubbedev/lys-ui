@@ -16,7 +16,6 @@ import (
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/intconv"
-	"github.com/stubbedev/lys-lib/keymapfd"
 	text "github.com/stubbedev/lys-lib/third_party/wayland/unstable/text-input-v3"
 	deco "github.com/stubbedev/lys-lib/third_party/wayland/unstable/xdg-decoration-v1"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -28,6 +27,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/compose"
 	"github.com/stubbedev/lys-ui/internal/logutil"
+	"github.com/stubbedev/lys-ui/internal/worker"
 )
 
 // requiredGlobals are the interfaces no lys-ui surface can exist without, in
@@ -159,24 +159,25 @@ type Session struct {
 	// blurMgr is ext_background_effect_manager_v1; blurCapable is its
 	// last capabilities event's blur bit, and blurSurfaces the
 	// per-surface effect objects.
-	blurMgr             *wlr.ExtBackgroundEffectManagerV1
-	blurCapable         bool
-	blurSurfaces        map[*wl.Surface]*wlr.ExtBackgroundEffectSurfaceV1
-	alphaSurfaces       map[*wl.Surface]*wlr.WpAlphaModifierSurfaceV1
-	bell                *wlr.XdgSystemBellV1
-	wmBase              *xdg.WmBase
-	wmBaseVersion       uint32
-	layerShellVersion   uint32
-	compositorVersion   uint32
-	outputs             []*Output
-	hasArgb             bool
-	globals             map[string]bool
-	globalVersions      map[string]uint32
-	ifaceNames          map[uint32]string
-	mods                uint32
-	locks               Locks
-	repeatRate          uint32
-	repeatDelay         uint32
+	blurMgr           *wlr.ExtBackgroundEffectManagerV1
+	blurCapable       bool
+	blurSurfaces      map[*wl.Surface]*wlr.ExtBackgroundEffectSurfaceV1
+	alphaSurfaces     map[*wl.Surface]*wlr.WpAlphaModifierSurfaceV1
+	bell              *wlr.XdgSystemBellV1
+	wmBase            *xdg.WmBase
+	wmBaseVersion     uint32
+	layerShellVersion uint32
+	compositorVersion uint32
+	outputs           []*Output
+	hasArgb           bool
+	globals           map[string]bool
+	globalVersions    map[string]uint32
+	ifaceNames        map[uint32]string
+	mods              uint32
+	locks             Locks
+	repeatRate        uint32
+	repeatDelay       uint32
+	// xkbContext belongs to the background goroutine.
 	xkbContext          *xkb.Context
 	xkbKeymap           *xkb.Keymap
 	xkbState            *xkb.State
@@ -287,6 +288,17 @@ type Session struct {
 	OnLocks func(Locks)
 	// OnKeyUp fires on key releases with the evdev keycode.
 	OnKeyUp func(keycode uint32)
+
+	// keyQueue is the keyboard's wire order while a keymap compiles;
+	// empty otherwise. bg is the background goroutine (background.go);
+	// posted carries its results back, hasPosted saying so without the
+	// lock. compileKeymap stands in for the compile in tests.
+	keyQueue      []queuedKeyEvent
+	bg            *worker.Queue
+	postedMu      sync.Mutex
+	posted        []func()
+	hasPosted     atomic.Bool
+	compileKeymap func(fd uintptr, size, format uint32) compiledKeymap
 	// OnKeyboardFocus fires when keyboard focus moves: an enter, a
 	// leave, the keyboard going away, or the focused surface being
 	// unregistered (a client-side destroy, which the compositor never
@@ -798,6 +810,7 @@ func (s *Session) handleCapabilities(hasPointer, hasKeyboard bool) {
 			s.ensurePointerGestures()
 			s.ensureCursorShape()
 			s.ensureRelativePointer()
+			s.preloadCursors()
 			debug.Log("seat", "pointer capability gained")
 		}
 	}
@@ -852,6 +865,7 @@ func (s *Session) pointerLost() {
 	s.pointerEnterSerial = 0
 	s.crs.mu.Unlock()
 	s.stopCursorAnim()
+	s.closeCursorPool()
 	grab := s.grabSurface
 	s.grabSurface = nil
 	s.resetAxisFrame()
@@ -885,6 +899,14 @@ func (s *Session) keyboardLost() {
 			_ = k.Release()
 		}
 	}
+	if s.keyboardQueued() {
+		s.queueKeyEvent(s.forgetKeyboard)
+		return
+	}
+	s.forgetKeyboard()
+}
+
+func (s *Session) forgetKeyboard() {
 	s.mods = 0
 	s.loseKeyboardFocus()
 }
@@ -1205,32 +1227,6 @@ func (s *Session) HandlePointerAxisValue120(ev wl.PointerAxisValue120Event) {
 	s.wheel120[min(ev.Axis, 1)] += ev.Value120
 }
 
-// HandleKeyboardKeymap implements wl.KeyboardKeymapHandler: the keymap
-// fd is mapped (keymapfd.Read), compiled, and closed.
-func (s *Session) HandleKeyboardKeymap(ev wl.KeyboardKeymapEvent) {
-	if ev.FdError != nil || ev.Fd == 0 {
-		s.dropKeymap(errors.Join(fmt.Errorf("a keymap event without an fd (format %d)", ev.Format), ev.FdError))
-		return
-	}
-	data, err := keymapfd.Read(ev.Fd, ev.Size)
-	keymapfd.Close(ev.Fd)
-	if err != nil {
-		s.dropKeymap(fmt.Errorf("read the keymap: %w", err))
-		return
-	}
-	if s.xkbContext == nil {
-		s.xkbContext = xkb.NewContext(os.Getenv)
-	}
-	km, err := s.xkbContext.NewKeymapFromString(data)
-	if err != nil {
-		s.dropKeymap(fmt.Errorf("compile a %d byte keymap (format %d): %w", len(data), ev.Format, err))
-		return
-	}
-	s.xkbKeymap = km
-	s.xkbState = km.NewState()
-	debug.Log("input", "keymap (format %d, %d bytes) compiled: KEY_A=%v", ev.Format, len(data), s.xkbState.KeyGetOneSym(30+8))
-}
-
 // dropKeymap forgets the keymap a replacement for failed to arrive: key codes
 // mean what the new keymap says, so reading them through the old one acts on
 // the wrong key. Until a keymap compiles, keys translate to nothing.
@@ -1243,13 +1239,27 @@ func (s *Session) dropKeymap(err error) {
 // HandleKeyboardEnter implements wl.KeyboardEnterHandler: the named
 // surface receives keyboard input until a leave or another enter.
 func (s *Session) HandleKeyboardEnter(ev wl.KeyboardEnterEvent) {
+	if s.keyboardQueued() {
+		s.queueKeyEvent(func() { s.deliverKeyboardEnter(ev) })
+		return
+	}
+	s.deliverKeyboardEnter(ev)
+}
+
+func (s *Session) deliverKeyboardEnter(ev wl.KeyboardEnterEvent) {
 	debug.Log("input", "keyboard enter")
 	s.keyboardFocus = ev.Surface
 	s.keyboardFocusMoved()
 }
 
 // HandleKeyboardLeave implements wl.KeyboardLeaveHandler.
-func (s *Session) HandleKeyboardLeave(wl.KeyboardLeaveEvent) { s.loseKeyboardFocus() }
+func (s *Session) HandleKeyboardLeave(wl.KeyboardLeaveEvent) {
+	if s.keyboardQueued() {
+		s.queueKeyEvent(s.loseKeyboardFocus)
+		return
+	}
+	s.loseKeyboardFocus()
+}
 
 // KeyboardFocus returns the surface currently holding keyboard input,
 // or nil when the compositor gives the seat no keyboard focus.
@@ -1257,6 +1267,14 @@ func (s *Session) KeyboardFocus() *wl.Surface { return s.keyboardFocus }
 
 // HandleKeyboardKey implements wl.KeyboardKeyHandler.
 func (s *Session) HandleKeyboardKey(ev wl.KeyboardKeyEvent) {
+	if s.keyboardQueued() {
+		s.queueKeyEvent(func() { s.deliverKeyboardKey(ev) })
+		return
+	}
+	s.deliverKeyboardKey(ev)
+}
+
+func (s *Session) deliverKeyboardKey(ev wl.KeyboardKeyEvent) {
 	debug.Log("input", "wire key code=%d state=%d serial=%d mods=%#x", ev.Key, ev.State, ev.Serial, s.mods)
 	switch ev.State {
 	case 1:
@@ -1273,6 +1291,14 @@ func (s *Session) HandleKeyboardKey(ev wl.KeyboardKeyEvent) {
 
 // HandleKeyboardModifiers implements wl.KeyboardModifiersHandler.
 func (s *Session) HandleKeyboardModifiers(ev wl.KeyboardModifiersEvent) {
+	if s.keyboardQueued() {
+		s.queueKeyEvent(func() { s.deliverKeyboardModifiers(ev) })
+		return
+	}
+	s.deliverKeyboardModifiers(ev)
+}
+
+func (s *Session) deliverKeyboardModifiers(ev wl.KeyboardModifiersEvent) {
 	debug.Log("input", "wire modifiers depressed=%#x latched=%#x locked=%#x group=%d", ev.ModsDepressed, ev.ModsLatched, ev.ModsLocked, ev.Group)
 	s.mods = ev.ModsDepressed
 	if s.xkbState != nil {
@@ -1500,6 +1526,12 @@ func (d *syncDone) HandleCallbackDone(wl.CallbackDoneEvent) { *d = true }
 // only when the compositor sends something or a WakeAfter kick fires,
 // and a burst of events costs the loop one pass, not one per event.
 func (s *Session) Step() error {
+	err := s.step()
+	s.runPosted()
+	return err
+}
+
+func (s *Session) step() error {
 	ctx := s.Display.Context()
 	if err := runThroughProxyNil(ctx.Run); errors.Is(err, wl.ErrContextRunTimeout) {
 		return s.wakeDue(ctx)
@@ -1572,7 +1604,7 @@ func (s *Session) WakeAfter(d time.Duration) {
 	at := time.Now().Add(max(d, 0))
 	s.wakeMu.Lock()
 	defer s.wakeMu.Unlock()
-	if s.closed.Load() {
+	if s.closed.Load() || s.Display == nil {
 		return
 	}
 	next := len(s.wakes) == 0 || at.Before(slices.MinFunc(s.wakes, time.Time.Compare))
@@ -1615,6 +1647,7 @@ func (s *Session) Closed() bool { return s.closed.Load() }
 // Close disconnects from the display and releases the session's shared
 // buffer arena: the pool proxy, mapping, and the session's one fd.
 func (s *Session) Close() {
+	s.stopBackground()
 	s.wakeMu.Lock()
 	defer s.wakeMu.Unlock()
 	if s.closed.Swap(true) {

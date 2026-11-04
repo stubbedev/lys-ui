@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 
 	"github.com/stubbedev/lys-lib/debug"
@@ -50,25 +51,22 @@ type themedCursor struct {
 }
 
 // cursorTheme holds the session's cursor buffers in one shm pool that
-// grows as cursors load, and the themes that supply them. The pool
-// serves a file cursor too, so it opens with no theme installed.
+// grows as cursors arrive from the background goroutine, and what is
+// known of each shape. The pool serves a file cursor too, so it opens
+// with no theme installed. It touches no file but its own memfd.
 type cursorTheme struct {
-	name     string
-	size     uint32
 	pool     *wl.ShmPool
 	file     *os.File
 	poolSize int32
 	cursors  map[string]*themedCursor
 	missing  map[string]error
 	files    map[string]*cursorImage
+	badFiles map[string]error
 	used     int64
-	lookup   []*xcursor.Theme
-	openErr  error
 }
 
-// loadCursorThemeFromEnv opens the theme XCURSOR_THEME names at the size
-// XCURSOR_SIZE names, or the fallback theme at defaultSize.
-func loadCursorThemeFromEnv(defaultSize uint32, shm *wl.Shm) (*cursorTheme, error) {
+// newCursorTheme opens an empty pool.
+func newCursorTheme(shm *wl.Shm) (*cursorTheme, error) {
 	const initialPoolSize = 16 * 16 * 4
 	file, err := sys.CreateAnonymousFile(initialPoolSize)
 	if err != nil {
@@ -78,6 +76,28 @@ func loadCursorThemeFromEnv(defaultSize uint32, shm *wl.Shm) (*cursorTheme, erro
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("cursor pool: %w", err), file.Close())
 	}
+	return &cursorTheme{
+		pool:     pool,
+		file:     file,
+		poolSize: initialPoolSize,
+		cursors:  make(map[string]*themedCursor),
+		missing:  make(map[string]error),
+		files:    make(map[string]*cursorImage),
+		badFiles: make(map[string]error),
+	}, nil
+}
+
+// cursorReader reads shapes from the themes: disk work, for the background
+// goroutine alone.
+type cursorReader struct {
+	size    uint32
+	lookup  []*xcursor.Theme
+	openErr error
+}
+
+// cursorThemeFromEnv is the theme XCURSOR_THEME names at the size
+// XCURSOR_SIZE names, or the fallback theme at defaultSize.
+func cursorThemeFromEnv(defaultSize uint32) (string, uint32) {
 	name := os.Getenv("XCURSOR_THEME")
 	if name == "" {
 		name = fallbackCursorTheme
@@ -86,19 +106,23 @@ func loadCursorThemeFromEnv(defaultSize uint32, shm *wl.Shm) (*cursorTheme, erro
 	if v, err := strconv.ParseUint(os.Getenv("XCURSOR_SIZE"), 10, 32); err == nil {
 		size = uint32(v)
 	}
+	return name, size
+}
+
+// newCursorReaderFromEnv opens the theme from the environment.
+func newCursorReaderFromEnv(defaultSize uint32) *cursorReader {
+	name, size := cursorThemeFromEnv(defaultSize)
 	lookup, openErr := openCursorThemes(name, cursorSearchPath(os.Getenv))
-	return &cursorTheme{
-		name:     name,
-		size:     size,
-		pool:     pool,
-		file:     file,
-		poolSize: initialPoolSize,
-		cursors:  make(map[string]*themedCursor),
-		missing:  make(map[string]error),
-		files:    make(map[string]*cursorImage),
-		lookup:   lookup,
-		openErr:  openErr,
-	}, nil
+	return &cursorReader{size: size, lookup: lookup, openErr: openErr}
+}
+
+// frames reads a shape, its error naming a theme that did not open.
+func (r *cursorReader) frames(name string) ([]xcursor.Image, error) {
+	frames, err := cursorFrames(r.lookup, intconv.Clamp[int](r.size), name)
+	if err != nil {
+		return nil, errors.Join(err, r.openErr)
+	}
+	return frames, nil
 }
 
 // cursorSearchPath is xcursor's search path and, unless XCURSOR_PATH
@@ -154,57 +178,93 @@ func cursorFrames(themes []*xcursor.Theme, size int, name string) ([]xcursor.Ima
 	return nil, errors.Join(errs...)
 }
 
-// cursor returns the named shape, loading its frames into the pool the
-// first time. A shape no theme has is remembered, because resolving a
-// requested shape walks its candidates on every apply. A theme that did not
-// open answers with why.
-func (t *cursorTheme) cursor(name string) (*themedCursor, error) {
+// lookup reports what is known of a shape: its frames, whether it has
+// been read at all, and why it has none.
+func (t *cursorTheme) lookup(name string) (cur *themedCursor, known bool, err error) {
 	if c, ok := t.cursors[name]; ok {
-		return c, nil
+		return c, true, nil
 	}
 	if err, ok := t.missing[name]; ok {
-		return nil, err
+		return nil, true, err
 	}
-	c, err := t.loadCursor(name)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			t.missing[name] = err
+	return nil, false, nil
+}
+
+// resolve picks the shape desired shows, the first of its candidates that
+// exists, degrading to the arrow when none does. settled is false while
+// a shape that could change the answer has not been read.
+func (t *cursorTheme) resolve(desired string) (name string, settled bool) {
+	for _, candidate := range cursorCandidates(desired) {
+		cur, known, _ := t.lookup(candidate)
+		if !known {
+			return "", false
 		}
-		return nil, err
+		if cur != nil {
+			return candidate, true
+		}
 	}
-	t.cursors[name] = c
-	return c, nil
+	_, known, _ := t.lookup(defaultCursor)
+	return defaultCursor, known
 }
 
-func (t *cursorTheme) loadCursor(name string) (*themedCursor, error) {
-	frames, err := cursorFrames(t.lookup, intconv.Clamp[int](t.size), name)
-	if err != nil {
-		return nil, errors.Join(err, t.openErr)
+// unread lists what must be read to resolve desired, in the order resolve
+// asks: its candidates, then the arrow.
+func (t *cursorTheme) unread(desired string) []string {
+	candidates := cursorCandidates(desired)
+	names := make([]string, 0, len(candidates)+1)
+	for _, name := range append(slices.Clone(candidates), defaultCursor) {
+		if _, known, _ := t.lookup(name); !known && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
 	}
-	images, err := t.addImages(frames)
-	if err != nil {
-		return nil, fmt.Errorf("cursor %q: %w", name, err)
-	}
-	return &themedCursor{images: images}, nil
+	return names
 }
 
-// fileCursor returns the widest image of the xcursor file at path. It is
-// loaded once per file: the pool only grows, so showing a url() cursor again
-// must not add it again.
-func (t *cursorTheme) fileCursor(path string) (*cursorImage, error) {
+// addCursor records one read of a shape, into the pool when it has
+// frames. A shape that failed is not read again: resolve walks a shape's
+// candidates on every apply.
+func (t *cursorTheme) addCursor(name string, frames []xcursor.Image, err error) {
+	if _, known, _ := t.lookup(name); known {
+		return
+	}
+	if err == nil {
+		var images []*cursorImage
+		if images, err = t.addImages(frames); err == nil {
+			t.cursors[name] = &themedCursor{images: images}
+			return
+		}
+		err = fmt.Errorf("cursor %q: %w", name, err)
+	}
+	t.missing[name] = err
+}
+
+// fileCursor reports what is known of the xcursor file at path: its image,
+// whether it has been read at all, and why it has none. It is added once
+// per file: the pool only grows.
+func (t *cursorTheme) fileCursor(path string) (img *cursorImage, known bool, err error) {
 	if img, ok := t.files[path]; ok {
-		return img, nil
+		return img, true, nil
 	}
-	img, err := xcursor.ReadWidest(path)
-	if err != nil {
-		return nil, err
+	if err, ok := t.badFiles[path]; ok {
+		return nil, true, err
 	}
-	images, err := t.addImages([]xcursor.Image{img})
-	if err != nil {
-		return nil, err
+	return nil, false, nil
+}
+
+// addFile records one read of a file cursor, into the pool when it has an
+// image.
+func (t *cursorTheme) addFile(path string, img xcursor.Image, err error) {
+	if _, known, _ := t.fileCursor(path); known {
+		return
 	}
-	t.files[path] = images[0]
-	return images[0], nil
+	if err == nil {
+		var images []*cursorImage
+		if images, err = t.addImages([]xcursor.Image{img}); err == nil {
+			t.files[path] = images[0]
+			return
+		}
+	}
+	t.badFiles[path] = err
 }
 
 // addImages puts frames in the pool, growing it and writing them at once,

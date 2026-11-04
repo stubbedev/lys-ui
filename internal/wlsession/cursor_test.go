@@ -1,6 +1,7 @@
 package wlsession
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"testing"
@@ -105,37 +106,53 @@ func TestCursorCandidates(t *testing.T) {
 // a theme missing every candidate degrades to the arrow instead of
 // failing.
 func TestResolveCursorName(t *testing.T) {
-	theme := map[string]bool{"ew-resize": true, "sb_h_double_arrow": true, defaultCursor: true}
-	has := func(n string) bool { return theme[n] }
-
-	t.Run("the first candidate the theme carries wins", func(t *testing.T) {
-		if got := resolveCursorName(has, "resize_w"); got != "left_side" && got != "ew-resize" {
-			t.Errorf("resize_w resolved to %q", got)
+	theme := func(present ...string) *cursorTheme {
+		c := &cursorTheme{cursors: map[string]*themedCursor{}, missing: map[string]error{}}
+		for _, name := range present {
+			c.cursors[name] = &themedCursor{}
 		}
-	})
-
-	t.Run("missing shapes fall through the candidate list", func(t *testing.T) {
-		// left_side is missing here; the horizontal arrow is not.
-		if got := resolveCursorName(func(n string) bool { return n == "sb_h_double_arrow" }, "resize_w"); got != "sb_h_double_arrow" {
-			t.Errorf("resize_w resolved to %q, want sb_h_double_arrow", got)
+		for _, names := range cursorAliases {
+			for _, name := range names {
+				if _, ok := c.cursors[name]; !ok {
+					c.missing[name] = errors.New("not in the theme")
+				}
+			}
 		}
-	})
-
-	t.Run("a theme with none of them degrades to the arrow", func(t *testing.T) {
-		if got := resolveCursorName(func(string) bool { return false }, "resize_nwse"); got != defaultCursor {
-			t.Errorf("resize_nwse resolved to %q, want %q", got, defaultCursor)
+		for _, name := range []string{defaultCursor, "unknown-shape"} {
+			if _, ok := c.cursors[name]; !ok {
+				c.missing[name] = errors.New("not in the theme")
+			}
 		}
-	})
+		return c
+	}
+	for _, tc := range []struct {
+		name    string
+		present []string
+		desired string
+		want    string
+	}{
+		{"the first candidate the theme carries wins", []string{"ew-resize", "sb_h_double_arrow", defaultCursor}, "resize_w", "ew-resize"},
+		{"missing shapes fall through the candidate list", []string{"sb_h_double_arrow"}, "resize_w", "sb_h_double_arrow"},
+		{"a theme with none of them degrades to the arrow", nil, "resize_nwse", defaultCursor},
+		{"unknown names degrade too", nil, "unknown-shape", defaultCursor},
+		{"named shapes the theme lacks degrade", nil, "grabbing", defaultCursor},
+		{"empty is the arrow", nil, "", defaultCursor},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, settled := theme(tc.present...).resolve(tc.desired)
+			if got != tc.want || !settled {
+				t.Errorf("%q resolved to %q, settled %v; want %q", tc.desired, got, settled, tc.want)
+			}
+		})
+	}
 
-	t.Run("unknown names degrade too", func(t *testing.T) {
-		if got := resolveCursorName(func(string) bool { return false }, "grabbing"); got != defaultCursor {
-			t.Errorf("grabbing resolved to %q, want %q", got, defaultCursor)
+	t.Run("a candidate not yet read holds the answer back", func(t *testing.T) {
+		c := &cursorTheme{cursors: map[string]*themedCursor{"sb_h_double_arrow": {}}, missing: map[string]error{}}
+		if got, settled := c.resolve("resize_w"); settled {
+			t.Errorf("resize_w settled on %q with left_side unread", got)
 		}
-	})
-
-	t.Run("empty is the arrow without consulting the theme", func(t *testing.T) {
-		if got := resolveCursorName(func(string) bool { return false }, ""); got != defaultCursor {
-			t.Errorf("empty resolved to %q, want %q", got, defaultCursor)
+		if got := c.unread("resize_w"); !slices.Equal(got, []string{"left_side", "ew-resize", "size_hor", defaultCursor}) {
+			t.Errorf("unread = %v", got)
 		}
 	})
 }
@@ -212,7 +229,10 @@ func newCursorHarness(t *testing.T, cursors map[string]*themedCursor) *cursorHar
 		h.fire = f
 	}
 	s.crs.theme = func(desired string) (*themedCursor, string, error) {
-		name := resolveCursorName(func(n string) bool { _, ok := cursors[n]; return ok }, desired)
+		name := defaultCursor
+		if i := slices.IndexFunc(cursorCandidates(desired), func(n string) bool { _, ok := cursors[n]; return ok }); i >= 0 {
+			name = cursorCandidates(desired)[i]
+		}
 		cur, ok := cursors[name]
 		if !ok {
 			return nil, "", fmt.Errorf("theme lacks %q", name)
