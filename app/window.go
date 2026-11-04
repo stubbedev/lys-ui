@@ -925,6 +925,7 @@ func (w *hostWindow) draw() bool {
 	debug.Log("frame", "draw %dx%d at %d/120: %d damage rect(s), %d region(s)",
 		bw, bh, w.frac120, len(rects), len(regions))
 
+	incomplete := false
 	if b.Target != nil {
 		outcome, err := w.renderer.Frame(b, w.devNum(), carryFrom, func(cv *render.Canvas) { w.paintRegions(cv, regions) })
 		if err != nil {
@@ -950,8 +951,9 @@ func (w *hostWindow) draw() bool {
 			w.damage.Full(render.Rect{W: bw, H: bh})
 			w.dirty = true
 			return true
-		case buffer.FrameDrawn:
+		case buffer.FrameDrawn, buffer.FrameIncomplete:
 		}
+		incomplete = outcome == buffer.FrameIncomplete
 		w.paintedPixels = repaint.Area(regions)
 	} else {
 		cv := w.canvas.Reset(b.Data, b.Stride, b.Width, b.Height, w.devNum(), scale.Denom)
@@ -996,6 +998,11 @@ func (w *hostWindow) draw() bool {
 	// The commit just went to the screen through b: b is current now,
 	// and every other pooled buffer lags by what changed here.
 	w.pool.Presented(b, changed)
+	if incomplete {
+		debug.Log("frame", "frame went out without an image on its way to the GPU: its damage stays owed")
+		w.damage.Refuse()
+		w.dirty = true
+	}
 	if animclock.Active() {
 		w.animatedAt = animclock.Now()
 		if err := w.pool.Prepare(); err != nil {

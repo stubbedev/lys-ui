@@ -157,7 +157,7 @@ func (r *Region) Plan(b *buffer.Buffer, num int, carrying bool) (rects []render.
 }
 
 // Refuse owes again what the last Plan took: the GPU refused the frame,
-// having done nothing.
+// having done nothing, or drew it without everything in it.
 func (r *Region) Refuse() {
 	r.pending = append(r.pending, r.planned...)
 	r.planned = r.planned[:0]

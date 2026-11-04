@@ -54,8 +54,8 @@ type gpuRenderer struct {
 	// hasNode is false where the compositor named none.
 	node    uint64
 	hasNode bool
-	// render is the device's Render, a seam for tests.
-	render func(*render.List, *gpu.Target, ...gpu.Carry) error
+	// render draws a frame on the device, a seam for tests.
+	render func(*render.List, *gpu.Target, []gpu.Carry) (gpuFrame, error)
 	// wake arms the loop to wake after a delay: the retry of a frame the
 	// device refused, which no commit will call back for.
 	wake func(time.Duration)
@@ -65,6 +65,16 @@ type gpuRenderer struct {
 	// drawn marks a frame since the buffer trim last looked, and
 	// trimmed a device trimmed since its last frame (trimIdle).
 	drawn, trimmed bool
+}
+
+// gpuFrame is what a drawn frame reports beyond its error.
+type gpuFrame struct {
+	incomplete bool
+}
+
+func (r *gpuRenderer) deviceFrame(l *render.List, t *gpu.Target, carry []gpu.Carry) (gpuFrame, error) {
+	err := r.dev.Render(l, t, carry...)
+	return gpuFrame{incomplete: r.dev.FrameIncomplete()}, err
 }
 
 // trimIdle trims the device once it has drawn nothing for a whole trim
@@ -171,11 +181,13 @@ func (a *Application) openRenderer() (*gpuRenderer, error) {
 		dev.Close()
 		return nil, err
 	}
-	return &gpuRenderer{
-		dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render,
+	r := &gpuRenderer{
+		dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1),
 		wake: func(d time.Duration) { a.wake(d) },
 		node: node, hasNode: hasNode,
-	}, nil
+	}
+	r.render = r.deviceFrame
+	return r, nil
 }
 
 // openDevice opens the Vulkan device behind the DRM node dev when the
@@ -251,18 +263,22 @@ const gpuBusyRetry = 4 * time.Millisecond
 // scale.Denom, carrying b's staleness from carryFrom, when not nil, in
 // the same submission. A device too far behind refuses the frame, having
 // done nothing, and the loop wakes to retry it: no commit went out, so
-// no frame callback will. A failed frame turns every surface to the CPU
-// (fail); with the GPU required it is the error.
+// no frame callback will. A frame drawn without an image still on its way
+// to the device is incomplete: it goes out, and what it painted stays owed.
+// A failed frame turns every surface to the CPU (fail); with the GPU
+// required it is the error.
 func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, carryFrom *buffer.Buffer, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error) {
 	r.drawn, r.trimmed = true, false
 	cv := r.rec.ResetRecorder(b.Width, b.Height, num, scale.Denom)
 	paint(cv)
-	err := r.render(cv.Recording(), b.Target, r.carryFor(b, carryFrom)...)
+	drawn, err := r.render(cv.Recording(), b.Target, r.carryFor(b, carryFrom))
 	// The recording is done once drawn: ending it now releases the
 	// rasters retired while it was open (render.Retire), which an idle
 	// window would otherwise hold back until its next frame.
 	cv.Recording().End()
 	switch {
+	case err == nil && drawn.incomplete:
+		return buffer.FrameIncomplete, nil
 	case err == nil:
 		return buffer.FrameDrawn, nil
 	case errors.Is(err, gpu.ErrBusy):

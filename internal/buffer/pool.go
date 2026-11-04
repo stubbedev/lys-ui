@@ -327,6 +327,11 @@ const (
 	// goes back and the frame stays owed, stale rects and damage alike,
 	// for the retry the renderer armed.
 	FrameRefused
+	// FrameIncomplete went to the GPU without something still on its way
+	// there, a large image: the buffer may be committed, and what the frame
+	// painted stays owed for the next one, which the commit's frame callback
+	// brings.
+	FrameIncomplete
 	// FrameLost failed: the surface turns to the CPU.
 	FrameLost
 )

@@ -74,7 +74,7 @@ func TestGPUFrameFailureFallsBackToCPU(t *testing.T) {
 		lost := errors.New("device lost")
 		w.renderer = &gpuRenderer{
 			name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), required: required,
-			render: func(*render.List, *gpu.Target, ...gpu.Carry) error { return lost },
+			render: func(*render.List, *gpu.Target, []gpu.Carry) (gpuFrame, error) { return gpuFrame{}, lost },
 		}
 		fakes := w.newBuffer
 		var gpuBufs []*buffer.Buffer
@@ -251,7 +251,7 @@ func TestGPUReusedBufferCopiesForward(t *testing.T) {
 	}
 	h := newPaintHarness(col, 400, 600)
 	w := h.wnd
-	w.renderer = &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render, wake: func(time.Duration) {}}
+	w.renderer = deviceRenderer(dev)
 	var bufs []*buffer.Buffer
 	w.newBuffer = func() (*buffer.Buffer, error) {
 		tg, err := dev.NewOffscreen(400, 600)
@@ -328,7 +328,7 @@ func TestGPUTrimWaitsForAnIdleDevice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), render: dev.Render, wake: func(time.Duration) {}}
+	r := deviceRenderer(dev)
 	b := &buffer.Buffer{Width: 16, Height: 16, Scale: 1, Target: tg}
 	if ok, err := r.Frame(b, 120, nil, func(cv *render.Canvas) { cv.Clear(cv.Rect(), render.RGB(1, 2, 3)) }); ok != buffer.FrameDrawn || err != nil {
 		t.Fatalf("frame: %v, %v", ok, err)
@@ -364,12 +364,12 @@ func TestAFrameTheGPURefusedStaysOwedAndWakesTheLoop(t *testing.T) {
 	r := &gpuRenderer{
 		name: "test", rec: render.NewRecorder(1, 1, 1, 1), required: true,
 		wake: func(d time.Duration) { wakes = append(wakes, d) },
-		render: func(_ *render.List, _ *gpu.Target, carry ...gpu.Carry) error {
+		render: func(_ *render.List, _ *gpu.Target, carry []gpu.Carry) (gpuFrame, error) {
 			carried = append(carried[:0], carry...)
 			if busy {
-				return gpu.ErrBusy
+				return gpuFrame{}, gpu.ErrBusy
 			}
-			return nil
+			return gpuFrame{}, nil
 		},
 	}
 	w.renderer = r
@@ -436,4 +436,10 @@ func TestAFrameTheGPURefusedStaysOwedAndWakesTheLoop(t *testing.T) {
 	for _, b := range bufs {
 		b.Target = nil
 	}
+}
+
+func deviceRenderer(dev *gpu.Device) *gpuRenderer {
+	r := &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), wake: func(time.Duration) {}}
+	r.render = r.deviceFrame
+	return r
 }

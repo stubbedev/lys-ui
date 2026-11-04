@@ -19,8 +19,9 @@ type gpuFrames struct {
 	dev  *gpu.Device
 	lost bool
 	// refused makes every frame a device-busy refusal.
-	refused bool
-	failed  bool
+	refused    bool
+	incomplete bool
+	failed     bool
 }
 
 func (g *gpuFrames) NewBuffer(*wlsession.Session, int, int, int) (*buffer.Buffer, error) {
@@ -30,6 +31,9 @@ func (g *gpuFrames) NewBuffer(*wlsession.Session, int, int, int) (*buffer.Buffer
 func (g *gpuFrames) Frame(b *buffer.Buffer, num int, _ *buffer.Buffer, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error) {
 	if g.refused {
 		return buffer.FrameRefused, nil
+	}
+	if g.incomplete {
+		return buffer.FrameIncomplete, nil
 	}
 	if g.lost {
 		g.failed = true
@@ -146,5 +150,33 @@ func TestPopupFrameTheGPURefusedStaysOwedOnTheGPU(t *testing.T) {
 	}
 	if b.Stale.Empty() {
 		t.Error("the refused frame's stale rects were lost")
+	}
+}
+
+func TestAnIncompletePopupFrameStaysOwedAfterItsCommit(t *testing.T) {
+	v, _ := newTweenView(t, 1, GravityBottom)
+	pc := &Painter{gpu: &gpuFrames{incomplete: true}, frac120: scale.Denom, visual: v.morph}
+	bounds := render.Rect{W: 64, H: 24}
+	pc.damage.Full(bounds)
+	pc.pool = buffer.New(func() (*buffer.Buffer, error) {
+		return &buffer.Buffer{Width: 64, Height: 24, Target: &gpu.Target{}, Stale: buffer.RegionOf(bounds)}, nil
+	}, 2)
+	b, err := pc.pool.Acquire()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, changed, regions := pc.damage.Plan(b, scale.Denom, false)
+	outcome, err := pc.paint(b, nil, regions)
+	if outcome != buffer.FrameIncomplete || err != nil {
+		t.Fatalf("incomplete frame reported %v, %v", outcome, err)
+	}
+	if !b.Busy() {
+		t.Error("the incomplete frame's buffer went back before its commit")
+	}
+	if err := pc.presented(b, changed, outcome); err != nil {
+		t.Fatal(err)
+	}
+	if pc.damage.Empty() || !pc.Owes() {
+		t.Error("the incomplete frame's damage was not kept for the next frame")
 	}
 }

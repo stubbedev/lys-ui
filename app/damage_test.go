@@ -789,7 +789,7 @@ func TestAGPUWindowPaintsItsViewportWhole(t *testing.T) {
 	w := h.wnd
 	w.renderer = &gpuRenderer{
 		name: "test", rec: render.NewRecorder(1, 1, 1, 1), wake: func(time.Duration) {},
-		render: func(*render.List, *gpu.Target, ...gpu.Carry) error { return nil },
+		render: func(*render.List, *gpu.Target, []gpu.Carry) (gpuFrame, error) { return gpuFrame{}, nil },
 	}
 	w.newBuffer = func() (*buffer.Buffer, error) {
 		return &buffer.Buffer{Width: 400, Height: 300, Scale: 1, Stale: buffer.RegionOf(render.Rect{W: 400, H: 300}), Target: &gpu.Target{}}, nil

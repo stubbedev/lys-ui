@@ -258,7 +258,7 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	if err != nil {
 		return false, false, err
 	}
-	if outcome != buffer.FrameDrawn {
+	if outcome != buffer.FrameDrawn && outcome != buffer.FrameIncomplete {
 		pc.dirty.Store(true)
 		return false, true, nil
 	}
@@ -283,13 +283,9 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	if err := pc.surf.Commit(); err != nil {
 		return false, false, err
 	}
-	pc.pool.Presented(b, changed)
-	if animclock.Active() {
-		if err := pc.pool.Prepare(); err != nil {
-			return false, false, err
-		}
+	if err := pc.presented(b, changed, outcome); err != nil {
+		return false, false, err
 	}
-	pc.framePending = true
 	if debug.Enabled {
 		painted := 0
 		for _, r := range regions {
@@ -298,6 +294,21 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 		debug.Log("frame", "popup %d committed %dx%d: %d region(s), %d px in %v", pc.surf.Id(), b.Width, b.Height, len(regions), painted, time.Since(start))
 	}
 	return true, true, nil
+}
+
+// presented records the frame b just committed. An incomplete one owes again
+// what it painted, for the frame its callback brings.
+func (pc *Painter) presented(b *buffer.Buffer, changed *buffer.Region, outcome buffer.FrameOutcome) error {
+	pc.pool.Presented(b, changed)
+	if outcome == buffer.FrameIncomplete {
+		pc.damage.Refuse()
+		pc.dirty.Store(true)
+	}
+	pc.framePending = true
+	if animclock.Active() {
+		return pc.pool.Prepare()
+	}
+	return nil
 }
 
 // syncBlur publishes the blur for this frame, on the commit that shows
@@ -364,7 +375,7 @@ func (pc *Painter) paint(b, carryFrom *buffer.Buffer, regions []render.Rect) (bu
 	case buffer.FrameLost:
 		b.Release()
 		pc.dropGPU()
-	case buffer.FrameDrawn:
+	case buffer.FrameDrawn, buffer.FrameIncomplete:
 	}
 	return outcome, nil
 }
