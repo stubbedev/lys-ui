@@ -169,7 +169,6 @@ type ParsedStylesheet struct {
 	warns []string
 }
 
-// rules reports p's parse warnings and returns its rules.
 func (p *ParsedStylesheet) rules() *style.Sheet {
 	for _, w := range p.warns {
 		style.Warn(w)
@@ -177,7 +176,6 @@ func (p *ParsedStylesheet) rules() *style.Sheet {
 	return p.sheet
 }
 
-// parseCSS is the parse every stylesheet text goes through.
 var parseCSS = style.ParseCollecting
 
 // ParseStylesheet parses css on any goroutine. Its parse warnings are

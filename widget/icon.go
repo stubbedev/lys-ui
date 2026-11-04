@@ -444,9 +444,6 @@ func (i *Icon) resolve(frac uint32, tint Color) {
 	i.apply(src, tint)
 }
 
-// showNearest puts the theme raster of the nearest decoded scale on show
-// while box's decodes, when the widget has nothing on show. The raster
-// stays stale, so the answer replaces it.
 func (i *Icon) showNearest(box iconBox, tint Color) {
 	if i.kind != iconTheme || i.ic != nil || i.retint.active {
 		return
@@ -460,8 +457,6 @@ func (i *Icon) showNearest(box iconBox, tint Color) {
 	}
 }
 
-// themeName is the name a theme icon resolves under, reading nothing; ok
-// is false while its fallback is unknown.
 func (i *Icon) themeName(name string) (string, bool) {
 	if !i.fallbacks {
 		return name, true
@@ -533,7 +528,6 @@ func preloadThemeBox(box iconBox, fallbacks bool) {
 	cache.Preload(name, box.size, box.frac)
 }
 
-// decodeIcon is the decode a file or SVG source goes through.
 var decodeIcon = icons.DecodeIcon
 
 // decodeIconSource reads and decodes a file or SVG source; it reads only
