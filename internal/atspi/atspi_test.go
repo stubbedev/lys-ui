@@ -978,7 +978,7 @@ func TestStuckBusHoldsUpNoLoopPass(t *testing.T) {
 	)
 	release := make(chan struct{})
 	var once sync.Once
-	entered := make(chan struct{})
+	entered := make(chan struct{}, 1)
 	t.Cleanup(func() { once.Do(func() { close(release) }) })
 	var hold atomic.Bool
 	scene := &countingScene{}
