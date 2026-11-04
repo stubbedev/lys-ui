@@ -69,12 +69,12 @@ type Application struct {
 	// clip enables ctrl+c/x/v via routeKey; primary carries the
 	// primary-selection behavior (middle-click paste, copy-on-select).
 	// SetClipboard fills both from one clipboard.
-	clip    *clipboard.Clipboard
+	clip *clipboard.Clipboard
 	// keyClip is clip as the key path sees it, nil without one; stopClip
 	// cancels clip's stop hook.
 	keyClip  *keyClipboard
 	stopClip func()
-	primary *primarySelection
+	primary  *primarySelection
 	// dnd drives drag-and-drop for every window on this application;
 	// inert when the compositor lacks a data device.
 	dnd *dragdrop.Controller
