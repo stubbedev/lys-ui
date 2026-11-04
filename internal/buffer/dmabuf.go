@@ -1,6 +1,7 @@
 package buffer
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -15,51 +16,71 @@ import (
 	"github.com/stubbedev/lys-lib/wlr"
 )
 
-// NewDmabuf allocates a bufW x bufH buffer the GPU renders into: a
-// target of dev laid out in one of modifiers (ones the compositor
-// imports), imported through mgr as a wl_buffer. Its Data is nil; a
-// frame renders into Target.
+// Allocate makes a bufW x bufH GPU target off the loop and calls done with it
+// on the loop.
+type Allocate func(bufW, bufH int, done func(*gpu.Target, error))
+
+// NewDmabuf returns a bufW x bufH buffer the GPU renders into, pending: its
+// target is allocated through allocate, so the loop waits on no driver, and
+// then imported through mgr as a wl_buffer. Its Data is nil; a frame renders
+// into Target.
 //
 // The import is linux-dmabuf's asynchronous create, whose refusal is an
 // event: create_immed's is the fatal invalid_wl_buffer error, which
 // would end the whole connection. The buffer is pending until the
-// compositor answers, and a pool counts it busy meanwhile. A refusal
-// drops the buffer from its pool and reports the error to rejected.
-// The target is allocated right here because a gpu.Device and all it
-// makes belong to one goroutine: a pool avoids this frame's wait through
-// Pool.Prepare instead.
-func NewDmabuf(dev *gpu.Device, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, modifiers []fourcc.Modifier, rejected func(error)) (*Buffer, error) {
-	start := time.Now()
-	t, err := dev.NewTarget(bufW, bufH, fourcc.ARGB8888, modifiers)
-	if err != nil {
-		return nil, err
-	}
-	allocated := time.Now()
+// compositor answers, and a pool counts it busy meanwhile. A failed
+// allocation or a refusal drops the buffer from its pool and reports the
+// error to rejected. A pool avoids the frame's wait for both through
+// Pool.Prepare.
+func NewDmabuf(allocate Allocate, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, rejected func(error)) (*Buffer, error) {
 	w, err := intconv.Exact[int32](bufW)
 	if err != nil {
-		t.Close()
 		return nil, fmt.Errorf("buffer: dmabuf width: %w", err)
 	}
 	h, err := intconv.Exact[int32](bufH)
 	if err != nil {
-		t.Close()
 		return nil, fmt.Errorf("buffer: dmabuf height: %w", err)
+	}
+	b := &Buffer{Width: bufW, Height: bufH, Scale: scale, Stale: RegionOf(render.Rect{W: bufW, H: bufH}), pending: true}
+	imp := &dmabufImport{b: b, rejected: rejected, done: func() {}}
+	start := time.Now()
+	allocate(bufW, bufH, func(t *gpu.Target, err error) {
+		imp.allocate = time.Since(start)
+		imp.allocated(mgr, t, w, h, err)
+	})
+	return b, nil
+}
+
+// allocated imports the target allocate made, unless the buffer was dropped
+// meanwhile, which closes it.
+func (imp *dmabufImport) allocated(mgr *wlr.ZwpDmabufV1, t *gpu.Target, w, h int32, err error) {
+	b := imp.b
+	if err != nil && b.freed && errors.Is(err, gpu.ErrDeviceClosed) {
+		b.Release()
+		return
+	}
+	if err != nil {
+		imp.failed(fmt.Errorf("buffer: allocate a %dx%d dmabuf: %w", b.Width, b.Height, err))
+		return
+	}
+	b.Target = t
+	if b.freed {
+		b.Release()
+		return
 	}
 	params, err := dmabufwl.Params(mgr, t.Dmabuf())
 	if err != nil {
-		t.Close()
-		return nil, fmt.Errorf("buffer: dmabuf %dx%d: %w", bufW, bufH, err)
+		imp.failed(fmt.Errorf("buffer: dmabuf %dx%d: %w", b.Width, b.Height, err))
+		return
 	}
-	b := &Buffer{Width: bufW, Height: bufH, Scale: scale, Stale: RegionOf(render.Rect{W: bufW, H: bufH}), Target: t, pending: true}
-	imp := &dmabufImport{b: b, done: func() { _ = params.Destroy() }, rejected: rejected, allocate: allocated.Sub(start), sent: time.Now()}
+	imp.done = func() { _ = params.Destroy() }
+	imp.sent = time.Now()
 	params.AddCreatedHandler(imp)
 	params.AddFailedHandler(imp)
 	if err := params.Create(w, h, uint32(fourcc.ARGB8888), 0); err != nil {
 		_ = params.Destroy()
-		t.Close()
-		return nil, fmt.Errorf("buffer: dmabuf create %dx%d: %w", bufW, bufH, err)
+		imp.failed(fmt.Errorf("buffer: dmabuf create %dx%d: %w", b.Width, b.Height, err))
 	}
-	return b, nil
 }
 
 // dmabufImport is one pending import's verdict handler.
@@ -68,7 +89,7 @@ type dmabufImport struct {
 	// done releases the import's params once the compositor answered.
 	done     func()
 	rejected func(error)
-	// allocate is how long the target took; sent is when the import
+	// allocate is how long the target took to come back; sent is when the import
 	// went out. The LYS_DEBUG=frame log reports both.
 	allocate time.Duration
 	sent     time.Time
@@ -86,7 +107,7 @@ func (imp *dmabufImport) HandleZwpBufferParamsV1Created(ev wlr.ZwpBufferParamsV1
 // HandleZwpBufferParamsV1Failed implements the failed handler.
 func (imp *dmabufImport) HandleZwpBufferParamsV1Failed(wlr.ZwpBufferParamsV1FailedEvent) {
 	imp.done()
-	imp.failed()
+	imp.failed(fmt.Errorf("buffer: the compositor refused a %dx%d dmabuf import", imp.b.Width, imp.b.Height))
 }
 
 // created gives the buffer its wl_buffer.
@@ -100,8 +121,8 @@ func (imp *dmabufImport) created(wlb *wl.Buffer) {
 	b.Release()
 }
 
-// failed drops the refused buffer and reports the refusal.
-func (imp *dmabufImport) failed() {
+// failed drops the buffer and reports why.
+func (imp *dmabufImport) failed(err error) {
 	b := imp.b
 	b.pending, b.busy, b.freed = false, false, true
 	b.closeTarget()
@@ -113,7 +134,7 @@ func (imp *dmabufImport) failed() {
 		p.dropRetired(b)
 		b.pool = nil
 	}
-	imp.rejected(fmt.Errorf("buffer: the compositor refused a %dx%d dmabuf import", b.Width, b.Height))
+	imp.rejected(err)
 }
 
 // closeTarget releases a dmabuf buffer's wl_buffer and GPU target.

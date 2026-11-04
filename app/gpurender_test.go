@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/gputest"
 	"github.com/stubbedev/lys-lib/render"
@@ -440,7 +441,7 @@ func TestAFrameTheGPURefusedStaysOwedAndWakesTheLoop(t *testing.T) {
 
 func deviceRenderer(dev *gpu.Device) *gpuRenderer {
 	r := &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), wake: func(time.Duration) {}}
-	r.render = r.deviceFrame
+	r.render, r.prepare = r.deviceFrame, r.deviceTarget
 	return r
 }
 
@@ -503,5 +504,64 @@ func TestAGPUScrollMatchesAWholeRepaint(t *testing.T) {
 				t.Fatalf("(%d,%d) after scrolling = %v, a whole repaint %v", x, y, got.RGBAAt(x, y), want.RGBAAt(x, y))
 			}
 		}
+	}
+}
+
+func TestATargetIsAllocatedOffTheLoopAndLandsThroughIt(t *testing.T) {
+	if _, err := gputest.SetupTest(t); err != nil {
+		t.Fatal(err)
+	}
+	dev, err := gpu.Open()
+	if err != nil {
+		if gputest.Enabled() {
+			t.Fatal(err)
+		}
+		t.Skipf("no GPU: %v", err)
+	}
+	t.Cleanup(dev.Close)
+	queued := make(chan func(), 4)
+	r := deviceRenderer(dev)
+	r.invoke = func(fn func()) { queued <- fn }
+	if !dev.Exports() {
+		r.prepare = func(w, h int, _ []fourcc.Modifier) (*gpu.Target, error) { return dev.PrepareOffscreen(w, h) }
+	}
+	a := &Application{gpu: r}
+	var got *gpu.Target
+	answers := 0
+	r.allocate(64, 32, func(tg *gpu.Target, err error) {
+		answers++
+		if err != nil {
+			t.Error(err)
+		}
+		got = tg
+	})
+	if answers != 0 {
+		t.Fatal("the target came back where it was asked, not through the loop")
+	}
+	select {
+	case fn := <-queued:
+		fn()
+	case <-time.After(time.Minute):
+		t.Fatal("the worker never answered")
+	}
+	if got == nil || got.Size() != image.Pt(64, 32) {
+		t.Fatalf("the worker made %v", got)
+	}
+
+	r.allocate(64, 32, func(tg *gpu.Target, err error) {
+		answers++
+		if !errors.Is(err, gpu.ErrDeviceClosed) || tg != nil {
+			t.Errorf("a target landing after the close: %v, %v; want none and the close", tg, err)
+		}
+	})
+	a.closeRenderer()
+	select {
+	case fn := <-queued:
+		fn()
+	default:
+		t.Fatal("the renderer closed with its worker still running")
+	}
+	if answers != 2 {
+		t.Errorf("%d answers, want 2", answers)
 	}
 }

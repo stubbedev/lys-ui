@@ -63,8 +63,9 @@ type Buffer struct {
 	// used marks a buffer Acquire handed out since the pool's last
 	// Trim.
 	used bool
-	// pending marks a dmabuf buffer whose import the compositor has not
-	// answered yet: it has no wl_buffer, and its pool counts it busy.
+	// pending marks a dmabuf buffer whose target is on its way or whose import
+	// the compositor has not answered yet: it has no wl_buffer, and its pool
+	// counts it busy.
 	pending bool
 
 	// arena owns this buffer's storage; nil for wire-free test buffers.

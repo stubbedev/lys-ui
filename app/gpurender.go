@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
@@ -58,6 +59,14 @@ type gpuRenderer struct {
 	// wake arms the loop to wake after a delay: the retry of a frame the
 	// device refused, which no commit will call back for.
 	wake func(time.Duration)
+	// invoke runs a worker's answer on the loop.
+	invoke func(func())
+	// prepare is the device's PrepareTarget, a seam for tests.
+	prepare func(w, h int, mods []fourcc.Modifier) (*gpu.Target, error)
+	// workers are the target allocations running; closed marks the device
+	// closed, after which a target landing is dropped.
+	workers sync.WaitGroup
+	closed  bool
 	// drawn marks a frame since the buffer trim last looked, and
 	// trimmed a device trimmed since its last frame (trimIdle).
 	drawn, trimmed bool
@@ -71,6 +80,10 @@ type gpuFrame struct {
 func (r *gpuRenderer) deviceFrame(l *render.List, t *gpu.Target, carry []gpu.Carry) (gpuFrame, error) {
 	err := r.dev.Render(l, t, carry...)
 	return gpuFrame{incomplete: r.dev.FrameIncomplete()}, err
+}
+
+func (r *gpuRenderer) deviceTarget(w, h int, mods []fourcc.Modifier) (*gpu.Target, error) {
+	return r.dev.PrepareTarget(w, h, fourcc.ARGB8888, mods)
 }
 
 // trimIdle trims the device once it has drawn nothing for a whole trim
@@ -179,10 +192,10 @@ func (a *Application) openRenderer() (*gpuRenderer, error) {
 	}
 	r := &gpuRenderer{
 		dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1),
-		wake: func(d time.Duration) { a.wake(d) },
+		wake: func(d time.Duration) { a.wake(d) }, invoke: a.Invoke,
 		node: node, hasNode: hasNode,
 	}
-	r.render = r.deviceFrame
+	r.render, r.prepare = r.deviceFrame, r.deviceTarget
 	return r, nil
 }
 
@@ -247,7 +260,24 @@ func (r *gpuRenderer) NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) 
 	if r.refused != nil {
 		return nil, fmt.Errorf("app: %s=gpu: %w", rendererEnv, r.refused)
 	}
-	return buffer.NewDmabuf(r.dev, sess.Dmabuf(), bufW, bufH, scale, r.modifiers, r.refuse)
+	return buffer.NewDmabuf(r.allocate, sess.Dmabuf(), bufW, bufH, scale, r.refuse)
+}
+
+// allocate makes a target on a worker, so a new buffer waits on no driver on
+// the loop, and hands it back through the loop. A target that lands after the
+// renderer closed is closed with it.
+func (r *gpuRenderer) allocate(w, h int, done func(*gpu.Target, error)) {
+	mods := r.modifiers
+	r.workers.Go(func() {
+		t, err := r.prepare(w, h, mods)
+		r.invoke(func() {
+			if r.closed {
+				done(nil, gpu.ErrDeviceClosed)
+				return
+			}
+			done(t, err)
+		})
+	})
 }
 
 // gpuBusyRetry is how soon a surface tries a frame again after the
@@ -320,7 +350,9 @@ func (a *Application) ForgetImage(id render.ImageID) {
 func (a *Application) closeRenderer() {
 	if a.gpu != nil {
 		imgcache.Default().SetForget(nil)
+		a.gpu.closed = true
 		a.gpu.dev.Close()
+		a.gpu.workers.Wait()
 		a.gpu = nil
 	}
 }

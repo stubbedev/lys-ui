@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/lys-lib/gpu"
 )
 
 // pendingImports is a pool whose create makes dmabuf buffers still
@@ -44,7 +46,7 @@ func TestRefusedImportLeavesThePool(t *testing.T) {
 	if _, err := p.Acquire(); !errors.Is(err, ErrBusy) {
 		t.Fatalf("acquire with the import pending: %v, want ErrBusy", err)
 	}
-	(*imps)[0].failed()
+	(*imps)[0].failed(errors.New("buffer: the compositor refused a 4x4 dmabuf import"))
 	if refused == nil || !strings.Contains(refused.Error(), "refused a 4x4 dmabuf import") {
 		t.Errorf("refusal reported as %v", refused)
 	}
@@ -66,5 +68,42 @@ func TestImportAfterCloseIsDropped(t *testing.T) {
 	(*imps)[0].created(nil)
 	if n := p.Pending(); n != 0 {
 		t.Errorf("the closed pool still tracks %d buffers", n)
+	}
+}
+
+func TestADmabufAllocatesNothingWhereItIsAsked(t *testing.T) {
+	var asked []func(*gpu.Target, error)
+	allocate := func(_, _ int, done func(*gpu.Target, error)) { asked = append(asked, done) }
+	p := New(func() (*Buffer, error) {
+		return NewDmabuf(allocate, nil, 4, 4, 1, func(err error) { t.Errorf("rejected: %v", err) })
+	}, 2)
+	if _, err := p.Acquire(); !errors.Is(err, ErrBusy) {
+		t.Fatalf("acquire with the target on its way: %v, want ErrBusy", err)
+	}
+	if len(asked) != 1 || p.buffers[0].Target != nil {
+		t.Fatalf("%d allocations asked, target %v: want one asked and none made here", len(asked), p.buffers[0].Target)
+	}
+	p.Resize(func() (*Buffer, error) { return nil, errors.New("not used") })
+	asked[0](nil, gpu.ErrDeviceClosed)
+	if n := p.Pending(); n != 0 {
+		t.Errorf("an allocation ended by its device's close left %d buffers tracked", n)
+	}
+}
+
+func TestAFailedDmabufAllocationLeavesThePool(t *testing.T) {
+	var refused error
+	var done func(*gpu.Target, error)
+	p := New(func() (*Buffer, error) {
+		return NewDmabuf(func(_, _ int, d func(*gpu.Target, error)) { done = d }, nil, 4, 4, 1, func(err error) { refused = err })
+	}, 2)
+	if _, err := p.Acquire(); !errors.Is(err, ErrBusy) {
+		t.Fatal(err)
+	}
+	done(nil, errors.New("out of device memory"))
+	if refused == nil || !strings.Contains(refused.Error(), "allocate a 4x4 dmabuf: out of device memory") {
+		t.Errorf("the failure reported as %v", refused)
+	}
+	if n := p.Pending(); n != 0 {
+		t.Errorf("the pool still tracks %d buffers after the failure", n)
 	}
 }
