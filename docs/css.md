@@ -13,6 +13,8 @@ widget.LoadStylesheetFile("app.css")             // the application slot, hot-re
 widget.LoadStylesheet(`.title { color: #c00 }`) // or from a string; "" removes it
 settings := widget.AddStylesheet(css, widget.StylePrioritySettings)
 settings.Load(newCSS)                           // replace its rules in place
+parsed := widget.ParseStylesheet(newCSS)        // on any goroutine, off the loop
+settings.LoadParsed(parsed)                     // on the loop: no parse, the same restyle as Load
 settings.Remove()
 
 b := widget.NewButton(child, 10, 8)

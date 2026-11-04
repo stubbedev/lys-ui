@@ -130,7 +130,7 @@ var styleGen uint64 = 1
 // NewStylesheet parses css into a stylesheet at priority without
 // installing it: attach it to the widgets whose subtrees it styles.
 func NewStylesheet(css string, priority int) *Stylesheet {
-	return &Stylesheet{sheet: style.Parse(css), priority: priority, scoped: true}
+	return &Stylesheet{sheet: ParseStylesheet(css).rules(), priority: priority, scoped: true}
 }
 
 // SetParseWarn installs f as the CSS engine's parse-warning sink; nil
@@ -147,7 +147,7 @@ func SetParseWarn(f func(msg string)) {
 // event-loop goroutine, like SetTheme. Malformed rules are skipped with
 // a warning on the library logger — the valid remainder still applies.
 func AddStylesheet(css string, priority int) *Stylesheet {
-	s := &Stylesheet{sheet: style.Parse(css), priority: priority, live: true}
+	s := &Stylesheet{sheet: ParseStylesheet(css).rules(), priority: priority, live: true}
 	sheets = append(sheets, s)
 	relayer()
 	return s
@@ -157,9 +157,40 @@ func AddStylesheet(css string, priority int) *Stylesheet {
 // and position, and stops its hot reload: the sheet is string-backed
 // from here on. Loading into an installed stylesheet that was removed
 // (and is attached nowhere) reinstalls it; a NewStylesheet sheet stays
-// scoped, styling only the subtrees it is attached to.
-func (s *Stylesheet) Load(css string) {
-	s.sheet = style.Parse(css)
+// scoped, styling only the subtrees it is attached to. It parses on the
+// calling goroutine; LoadParsed takes a sheet ParseStylesheet parsed
+// elsewhere.
+func (s *Stylesheet) Load(css string) { s.LoadParsed(ParseStylesheet(css)) }
+
+// ParsedStylesheet is CSS parsed into rules, ready for LoadParsed. It is
+// immutable, so it may be made on one goroutine and installed on another.
+type ParsedStylesheet struct {
+	sheet *style.Sheet
+	warns []string
+}
+
+// rules reports p's parse warnings and returns its rules.
+func (p *ParsedStylesheet) rules() *style.Sheet {
+	for _, w := range p.warns {
+		style.Warn(w)
+	}
+	return p.sheet
+}
+
+// parseCSS is the parse every stylesheet text goes through.
+var parseCSS = style.ParseCollecting
+
+// ParseStylesheet parses css on any goroutine. Its parse warnings are
+// held until LoadParsed reports them on the loop.
+func ParseStylesheet(css string) *ParsedStylesheet {
+	sheet, warns := parseCSS(css)
+	return &ParsedStylesheet{sheet: sheet, warns: warns}
+}
+
+// LoadParsed is Load with the parse already done: installing p costs no
+// parse, and restyles exactly what Load of the same text would.
+func (s *Stylesheet) LoadParsed(p *ParsedStylesheet) {
+	s.sheet = p.rules()
 	unwatch(s)
 	if !s.live && !s.scoped && s.attached == 0 {
 		s.live = true
