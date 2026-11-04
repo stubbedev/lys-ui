@@ -176,7 +176,6 @@ func TestShouldDraw(t *testing.T) {
 	})
 }
 
-
 // TestAnimatingLoopWakesOnFrameDeadlines drives the loop's wake
 // decision across a tween's lifetime: an animating tree wakes once per
 // animation frame period, each tick rolls the deadline forward, and

@@ -17,7 +17,7 @@ type FrameClock struct {
 // again from now when ms sits further behind than any delivery plausibly does.
 func (c *FrameClock) Instant(ms uint32, now time.Time) time.Time {
 	if !c.anchor.IsZero() {
-		at := c.anchor.Add(time.Duration(int32(ms-c.anchorMS)) * time.Millisecond)
+		at := c.anchor.Add(time.Duration(int32(ms-c.anchorMS)) * time.Millisecond) //nolint:gosec
 		if !at.After(now) && now.Sub(at) <= frameClockSlack {
 			return at
 		}

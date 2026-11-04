@@ -152,10 +152,6 @@ func (pc *Painter) collect(bounds render.Rect) bool {
 	return true
 }
 
-// frameDone flips ready when the compositor reports the frame as taken
-// and unregisters the callback: done is a destructor event, so the
-// object is dead on both sides and its id must rejoin the client's
-// pool. A frame loop that skips this leaks a proxy per frame.
 // Owes reports whether the painter has a frame to paint: a tween
 // callback or content change marked it. Owners skip the Pass call
 // while it reads false, the popover-style gate.
