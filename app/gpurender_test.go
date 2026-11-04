@@ -443,3 +443,65 @@ func deviceRenderer(dev *gpu.Device) *gpuRenderer {
 	r.render = r.deviceFrame
 	return r
 }
+
+func TestAGPUScrollMatchesAWholeRepaint(t *testing.T) {
+	if _, err := gputest.SetupTest(t); err != nil {
+		t.Fatal(err)
+	}
+	dev, err := gpu.Open()
+	if err != nil {
+		if gputest.Enabled() {
+			t.Fatal(err)
+		}
+		t.Skipf("no GPU: %v", err)
+	}
+	t.Cleanup(dev.Close)
+	onDevice := func(h *paintHarness) {
+		w := h.wnd
+		w.renderer = deviceRenderer(dev)
+		w.newBuffer = func() (*buffer.Buffer, error) {
+			tg, err := dev.NewOffscreen(400, 300)
+			if err != nil {
+				return nil, err
+			}
+			b := &buffer.Buffer{Width: 400, Height: 300, Scale: 1, Stale: buffer.RegionOf(render.Rect{W: 400, H: 300}), Target: tg}
+			h.bufs = append(h.bufs, b)
+			return b, nil
+		}
+		w.pool = buffer.New(w.allocator(), 3)
+	}
+	scrolled, sc, _ := scrollWindow(t)
+	onDevice(scrolled)
+	scrolled.frame()
+	for _, y := range []int{30, 64, 50, 51} {
+		sc.SetOffset(0, y)
+		scrolled.frame()
+	}
+	if limit := 400 * 40; scrolled.wnd.paintedPixels > limit {
+		t.Errorf("the last step painted %d px, want its exposed strip, at most %d", scrolled.wnd.paintedPixels, limit)
+	}
+	whole, wsc, _ := scrollWindow(t)
+	onDevice(whole)
+	whole.frame()
+	wsc.SetOffset(0, 51)
+	whole.wnd.pool = buffer.New(whole.wnd.allocator(), 3)
+	whole.frame()
+	if painted := whole.wnd.paintedPixels; painted != 400*300 {
+		t.Fatalf("the reference painted %d px, want the whole window", painted)
+	}
+	got, err := scrolled.wnd.pool.Front().Target.ReadPixels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := whole.wnd.pool.Front().Target.ReadPixels()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for y := range 300 {
+		for x := range 400 {
+			if got.RGBAAt(x, y) != want.RGBAAt(x, y) {
+				t.Fatalf("(%d,%d) after scrolling = %v, a whole repaint %v", x, y, got.RGBAAt(x, y), want.RGBAAt(x, y))
+			}
+		}
+	}
+}

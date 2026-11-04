@@ -6,6 +6,7 @@ package app
 
 import (
 	"fmt"
+	"image"
 	"testing"
 	"time"
 
@@ -784,12 +785,20 @@ func TestAWindowAtRestBehindAMorphMovesItsScroll(t *testing.T) {
 	assertShowsWholePaint(t, h, 0)
 }
 
-func TestAGPUWindowPaintsItsViewportWhole(t *testing.T) {
+func TestAGPUScrollStepCarriesItsPixels(t *testing.T) {
 	h, sc, _ := scrollWindow(t)
 	w := h.wnd
+	var carried []gpu.Carry
+	busy := false
 	w.renderer = &gpuRenderer{
 		name: "test", rec: render.NewRecorder(1, 1, 1, 1), wake: func(time.Duration) {},
-		render: func(*render.List, *gpu.Target, []gpu.Carry) (gpuFrame, error) { return gpuFrame{}, nil },
+		render: func(_ *render.List, _ *gpu.Target, carry []gpu.Carry) (gpuFrame, error) {
+			if busy {
+				return gpuFrame{}, gpu.ErrBusy
+			}
+			carried = append(carried[:0], carry...)
+			return gpuFrame{}, nil
+		},
 	}
 	w.newBuffer = func() (*buffer.Buffer, error) {
 		return &buffer.Buffer{Width: 400, Height: 300, Scale: 1, Stale: buffer.RegionOf(render.Rect{W: 400, H: 300}), Target: &gpu.Target{}}, nil
@@ -802,8 +811,43 @@ func TestAGPUWindowPaintsItsViewportWhole(t *testing.T) {
 		t.Fatal(w.drawErr)
 	}
 	view := sc.Bounds()
+	if got, limit := w.paintedPixels, view.W*30; got > limit {
+		t.Errorf("a GPU step painted %d px, want the strip it exposed, at most %d", got, limit)
+	}
+	var moved *gpu.Carry
+	for i := range carried {
+		if carried[i].Offset != (image.Point{}) {
+			moved = &carried[i]
+		}
+	}
+	if moved == nil {
+		t.Fatalf("the step carried %v, want the view moved", carried)
+	}
+	if moved.Offset != image.Pt(0, 30) {
+		t.Errorf("the view moved by %v, want 30 px up", moved.Offset)
+	}
+	for i, a := range carried {
+		for _, ra := range a.Rects {
+			for _, b := range carried[i+1:] {
+				for _, rb := range b.Rects {
+					if !ra.Intersect(rb).Empty() {
+						t.Errorf("carries overlap at %v, which nothing orders on the GPU", ra.Intersect(rb))
+					}
+				}
+			}
+		}
+	}
+
+	busy = true
+	sc.SetOffset(0, 60)
+	w.dirty = true
+	if !w.draw() {
+		t.Fatal(w.drawErr)
+	}
+	busy = false
+	h.frame()
 	if got, want := w.paintedPixels, view.W*view.H; got < want {
-		t.Errorf("a GPU step painted %d px, want the whole %d px view: it cannot move pixels in place", got, want)
+		t.Errorf("after a refused step the next frame painted %d px, want the moved view whole, %d", got, want)
 	}
 }
 

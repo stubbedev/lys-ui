@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"image"
 	"log/slog"
 	"os"
 	"slices"
@@ -59,9 +58,6 @@ type gpuRenderer struct {
 	// wake arms the loop to wake after a delay: the retry of a frame the
 	// device refused, which no commit will call back for.
 	wake func(time.Duration)
-	// carry and carryRects are Frame's scratch.
-	carry      [1]gpu.Carry
-	carryRects []image.Rectangle
 	// drawn marks a frame since the buffer trim last looked, and
 	// trimmed a device trimmed since its last frame (trimIdle).
 	drawn, trimmed bool
@@ -260,18 +256,18 @@ func (r *gpuRenderer) NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) 
 const gpuBusyRetry = 4 * time.Millisecond
 
 // Frame renders paint into b's target at device scale num over
-// scale.Denom, carrying b's staleness from carryFrom, when not nil, in
-// the same submission. A device too far behind refuses the frame, having
+// scale.Denom, after the copies carry makes into it (repaint.Region.Blit),
+// in the same submission. A device too far behind refuses the frame, having
 // done nothing, and the loop wakes to retry it: no commit went out, so
 // no frame callback will. A frame drawn without an image still on its way
 // to the device is incomplete: it goes out, and what it painted stays owed.
 // A failed frame turns every surface to the CPU (fail); with the GPU
 // required it is the error.
-func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, carryFrom *buffer.Buffer, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error) {
+func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, carry []gpu.Carry, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error) {
 	r.drawn, r.trimmed = true, false
 	cv := r.rec.ResetRecorder(b.Width, b.Height, num, scale.Denom)
 	paint(cv)
-	drawn, err := r.render(cv.Recording(), b.Target, r.carryFor(b, carryFrom))
+	drawn, err := r.render(cv.Recording(), b.Target, carry)
 	// The recording is done once drawn: ending it now releases the
 	// rasters retired while it was open (render.Retire), which an idle
 	// window would otherwise hold back until its next frame.
@@ -289,20 +285,6 @@ func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, carryFrom *buffer.Buffer,
 	}
 	r.fail(err)
 	return buffer.FrameLost, nil
-}
-
-// carryFor is what Render copies into b first: its stale rects from
-// carryFrom, nothing without one.
-func (r *gpuRenderer) carryFor(b, carryFrom *buffer.Buffer) []gpu.Carry {
-	if carryFrom == nil {
-		return nil
-	}
-	r.carryRects = r.carryRects[:0]
-	for _, c := range b.Stale.Rects() {
-		r.carryRects = append(r.carryRects, image.Rect(c.X, c.Y, c.X+c.W, c.Y+c.H))
-	}
-	r.carry[0] = gpu.Carry{From: carryFrom.Target, Rects: r.carryRects}
-	return r.carry[:1]
 }
 
 // Failed reports whether a frame failed, turning every surface to the

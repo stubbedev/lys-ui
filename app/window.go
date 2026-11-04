@@ -914,7 +914,7 @@ func (w *hostWindow) draw() bool {
 	w.damage.PlanBlits(b, front, w.devNum())
 	w.damage.DropCovered(b, w.devNum())
 	carryFrom := w.pool.CopyForward(b)
-	w.damage.BlitNow(b, front)
+	carry := w.damage.Blit(b, front, carryFrom)
 
 	// A buffer with stale content must repaint everything that changed
 	// since its content was last on screen, not just this frame's
@@ -927,7 +927,7 @@ func (w *hostWindow) draw() bool {
 
 	incomplete := false
 	if b.Target != nil {
-		outcome, err := w.renderer.Frame(b, w.devNum(), carryFrom, func(cv *render.Canvas) { w.paintRegions(cv, regions) })
+		outcome, err := w.renderer.Frame(b, w.devNum(), carry, func(cv *render.Canvas) { w.paintRegions(cv, regions) })
 		if err != nil {
 			w.drawErr = err
 			return false

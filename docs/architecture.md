@@ -133,9 +133,11 @@ top-level bounds until something asks (`Bounds`, a hit, a paint), and
 the frame copies the viewport in the buffer and paints the exposed
 strip. Anything that does not move with the content rules it out and the
 whole viewport paints: a non-flat backdrop, an overlapping sibling, an
-effect on an ancestor, or a step that lands between device pixels. GPU
-targets always paint the viewport, as no device call copies within a
-target.
+effect on an ancestor, or a step that lands between device pixels. On
+the GPU the move is a carry with an offset from the front target, in the
+frame's own submission; the buffer's staleness carries around the moved
+area, as nothing orders two copies into one target. A frame the GPU
+refuses owes the moved viewport whole.
 
 ### 4. Resize before Acquire; a resize commit bypasses pacing
 

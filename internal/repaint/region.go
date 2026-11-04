@@ -6,6 +6,9 @@
 package repaint
 
 import (
+	"image"
+
+	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
@@ -36,9 +39,17 @@ type Region struct {
 	moves   []widget.ScrollMove
 	blits   []blit
 	moved   []render.Rect
+	// blitted is the logical views the last frame moved, owed again if the
+	// GPU refuses that frame.
+	blitted []render.Rect
+	// carries and carryRects are a GPU frame's copies, built by Blit.
+	carries    []gpu.Carry
+	carryRects []image.Rectangle
+	cutScratch []image.Rectangle
 }
 
 type blit struct {
+	view   render.Rect
 	area   render.Rect
 	dx, dy int
 }
@@ -74,28 +85,88 @@ func (r *Region) demote(bounds render.Rect) {
 }
 
 // PlanBlits decides how b takes the moves the region holds: copied from
-// front, on the wire without being painted, or, for a GPU target or a
-// move landing between device pixels, owed whole so the frame paints it.
-// Call it ahead of DropCovered and CopyForward, and BlitNow after them.
+// front, on the wire without being painted, or, for a front of another
+// size or kind or a move landing between device pixels, owed whole so the
+// frame paints it. Call it ahead of DropCovered and CopyForward, and Blit
+// after them.
 func (r *Region) PlanBlits(b, front *buffer.Buffer, num int) {
-	r.blits, r.moved = r.blits[:0], r.moved[:0]
-	copies := b.Data != nil && front != nil && front.Data != nil && front.Width == b.Width && front.Height == b.Height
+	r.blits, r.moved, r.blitted = r.blits[:0], r.moved[:0], r.blitted[:0]
+	copies := front != nil && front.Width == b.Width && front.Height == b.Height &&
+		(b.Data != nil && front.Data != nil || b.Target != nil && front.Target != nil)
 	for _, m := range r.moves {
 		if !copies || m.DX*num%scale.Denom != 0 || m.DY*num%scale.Denom != 0 {
 			r.pending = append(r.pending, m.View)
 			continue
 		}
-		r.blits = append(r.blits, blit{render.MapRect(m.View, num, scale.Denom), m.DX * num / scale.Denom, m.DY * num / scale.Denom})
+		r.blits = append(r.blits, blit{m.View, render.MapRect(m.View, num, scale.Denom), m.DX * num / scale.Denom, m.DY * num / scale.Denom})
 	}
 	r.moves = r.moves[:0]
 }
 
-// BlitNow makes the copies PlanBlits kept.
-func (r *Region) BlitNow(b, front *buffer.Buffer) {
+// Blit makes the moves PlanBlits kept. Shared memory copies here, and nil
+// comes back. A GPU target copies inside the submission that draws it: the
+// carries come back for the frame, b's staleness from carryFrom first, when
+// not nil (buffer.Pool.CopyForward), then each move from front. The carries
+// are reused by the next Blit.
+func (r *Region) Blit(b, front, carryFrom *buffer.Buffer) []gpu.Carry {
 	for _, c := range r.blits {
-		buffer.MoveRect(b, front, c.area, c.dx, c.dy)
 		r.moved = append(r.moved, c.area)
+		r.blitted = append(r.blitted, c.view)
 	}
+	if b.Target == nil {
+		for _, c := range r.blits {
+			buffer.MoveRect(b, front, c.area, c.dx, c.dy)
+		}
+		return nil
+	}
+	r.carryRects, r.carries = r.carryRects[:0], r.carries[:0]
+	if carryFrom != nil {
+		for _, s := range b.Stale.Rects() {
+			r.carryRects = append(r.carryRects, deviceRect(s))
+		}
+		for _, c := range r.blits {
+			r.carryRects = cutOut(r.carryRects, deviceRect(buffer.MovedArea(c.area, c.dx, c.dy)), &r.cutScratch)
+		}
+	}
+	stale := len(r.carryRects)
+	for _, c := range r.blits {
+		r.carryRects = append(r.carryRects, deviceRect(buffer.MovedArea(c.area, c.dx, c.dy)))
+	}
+	if carryFrom != nil {
+		r.carries = append(r.carries, gpu.Carry{From: carryFrom.Target, Rects: r.carryRects[:stale]})
+	}
+	for i, c := range r.blits {
+		at := stale + i
+		r.carries = append(r.carries, gpu.Carry{From: front.Target, Rects: r.carryRects[at : at+1], Offset: image.Pt(-c.dx, -c.dy)})
+	}
+	return r.carries
+}
+
+func deviceRect(r render.Rect) image.Rectangle { return image.Rect(r.X, r.Y, r.X+r.W, r.Y+r.H) }
+
+// cutOut is rs without cut: the copies of one frame into one target must not
+// overlap, as nothing orders them on the GPU.
+func cutOut(rs []image.Rectangle, cut image.Rectangle, scratch *[]image.Rectangle) []image.Rectangle {
+	out := (*scratch)[:0]
+	for _, r := range rs {
+		in := r.Intersect(cut)
+		if in.Empty() {
+			out = append(out, r)
+			continue
+		}
+		for _, piece := range [4]image.Rectangle{
+			{Min: r.Min, Max: image.Pt(r.Max.X, in.Min.Y)},
+			{Min: image.Pt(r.Min.X, in.Max.Y), Max: r.Max},
+			{Min: image.Pt(r.Min.X, in.Min.Y), Max: image.Pt(in.Min.X, in.Max.Y)},
+			{Min: image.Pt(in.Max.X, in.Min.Y), Max: image.Pt(r.Max.X, in.Max.Y)},
+		} {
+			if !piece.Empty() {
+				out = append(out, piece)
+			}
+		}
+	}
+	*scratch = rs[:0]
+	return out
 }
 
 // Add owes rects, clipped to bounds, besides what the tree drained: a
@@ -156,10 +227,13 @@ func (r *Region) Plan(b *buffer.Buffer, num int, carrying bool) (rects []render.
 	return rects, &r.changed, r.regions.Rects()
 }
 
-// Refuse owes again what the last Plan took: the GPU refused the frame,
-// having done nothing, or drew it without everything in it.
+// Refuse owes again what the last Plan took, the views it moved whole: the
+// GPU refused the frame, having done nothing, or drew it without everything
+// in it.
 func (r *Region) Refuse() {
 	r.pending = append(r.pending, r.planned...)
+	r.pending = append(r.pending, r.blitted...)
+	r.blitted = r.blitted[:0]
 	r.planned = r.planned[:0]
 }
 

@@ -28,7 +28,7 @@ func (g *gpuFrames) NewBuffer(*wlsession.Session, int, int, int) (*buffer.Buffer
 	return nil, errors.New("not used")
 }
 
-func (g *gpuFrames) Frame(b *buffer.Buffer, num int, _ *buffer.Buffer, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error) {
+func (g *gpuFrames) Frame(b *buffer.Buffer, num int, _ []gpu.Carry, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error) {
 	if g.refused {
 		return buffer.FrameRefused, nil
 	}

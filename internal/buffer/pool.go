@@ -295,11 +295,16 @@ func CopyRect(dst, src *Buffer, r render.Rect) {
 	}
 }
 
+// MovedArea is the part of r that moving r's pixels by dx, dy writes.
+func MovedArea(r render.Rect, dx, dy int) render.Rect {
+	return render.Rect{X: r.X + dx, Y: r.Y + dy, W: r.W, H: r.H}.Intersect(r)
+}
+
 // MoveRect puts src's pixels of r, in buffer pixels, into dst moved by
 // dx, dy, whatever falls outside r dropped. dst and src may be one
 // buffer: the rows and pixels copy in the order the overlap needs.
 func MoveRect(dst, src *Buffer, r render.Rect, dx, dy int) {
-	to := render.Rect{X: r.X + dx, Y: r.Y + dy, W: r.W, H: r.H}.Intersect(r)
+	to := MovedArea(r, dx, dy)
 	if to.Empty() {
 		return
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -30,7 +31,7 @@ import (
 // error ends the popup.
 type Renderer interface {
 	NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) (*buffer.Buffer, error)
-	Frame(b *buffer.Buffer, num int, carryFrom *buffer.Buffer, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error)
+	Frame(b *buffer.Buffer, num int, carry []gpu.Carry, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error)
 	Failed() bool
 }
 
@@ -252,9 +253,9 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	pc.damage.PlanBlits(b, front, int(pc.frac120))
 	pc.damage.DropCovered(b, int(pc.frac120))
 	carryFrom := pc.pool.CopyForward(b)
-	pc.damage.BlitNow(b, front)
+	carry := pc.damage.Blit(b, front, carryFrom)
 	rects, changed, regions := pc.damage.Plan(b, int(pc.frac120), carryFrom != nil)
-	outcome, err := pc.paint(b, carryFrom, regions)
+	outcome, err := pc.paint(b, carry, regions)
 	if err != nil {
 		return false, false, err
 	}
@@ -340,12 +341,12 @@ func (pc *Painter) syncBlur() {
 }
 
 // paint draws the visual into b within the device region: through the
-// GPU renderer into a target, carrying b's staleness from carryFrom,
+// GPU renderer into a target, after the copies carry makes into it,
 // onto shared memory otherwise. A GPU frame that did not go out never
 // reaches the compositor and b goes back: a refused one stays owed for
 // the renderer's retry, and after a failed one the popup turns to the
 // CPU, for the next pass to repaint.
-func (pc *Painter) paint(b, carryFrom *buffer.Buffer, regions []render.Rect) (buffer.FrameOutcome, error) {
+func (pc *Painter) paint(b *buffer.Buffer, carry []gpu.Carry, regions []render.Rect) (buffer.FrameOutcome, error) {
 	// The region raw-clears to transparent: with a shadow gutter the
 	// falloff must blend over whatever the popup floats above, and a
 	// recycled buffer must not leak its last frame through. The morph
@@ -363,7 +364,7 @@ func (pc *Painter) paint(b, carryFrom *buffer.Buffer, regions []render.Rect) (bu
 		draw(render.NewScaled(b.Data, b.Stride, b.Width, b.Height, int(pc.frac120), scale.Denom))
 		return buffer.FrameDrawn, nil
 	}
-	outcome, err := pc.gpu.Frame(b, int(pc.frac120), carryFrom, draw)
+	outcome, err := pc.gpu.Frame(b, int(pc.frac120), carry, draw)
 	if err != nil {
 		return outcome, err
 	}
