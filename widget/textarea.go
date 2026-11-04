@@ -2,6 +2,7 @@ package widget
 
 import (
 	"math"
+	"sort"
 	"strings"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -61,6 +62,8 @@ type TextArea struct {
 
 	// hist is the undo/redo history; every mutation records into it.
 	hist undoStack[areaState]
+	// textRev counts the changes to lines, for IMERevision.
+	textRev uint64
 
 	// readOnly freezes user edits the same way Entry.readOnly does:
 	// typing, paste, composition, delete, and undo/redo no-op, while
@@ -269,6 +272,7 @@ func (t *TextArea) notifyChanged() {
 // splitLines replaces the logical lines with s split on newlines,
 // leaving cursor and caches alone.
 func (t *TextArea) splitLines(s string) {
+	t.textRev++
 	t.lines = nil
 	for part := range strings.SplitSeq(s, "\n") {
 		t.lines = append(t.lines, []rune(part))
@@ -355,6 +359,7 @@ func (t *TextArea) snapshot() areaState {
 // so it follows the restored caret instead.
 func (t *TextArea) applyState(s areaState) {
 	defer t.notifyChanged()
+	t.textRev++
 	t.lines = make([][]rune, len(s.lines))
 	for i, l := range s.lines {
 		t.lines[i] = append([]rune{}, l...)
@@ -439,6 +444,7 @@ func (t *TextArea) collapse() {
 		t.cursor, t.anchor = t.clamp(t.cursor), t.clamp(t.cursor)
 		return
 	}
+	t.textRev++
 	head := append([]rune{}, t.lines[start.line][:start.col]...)
 	tail := append([]rune{}, t.lines[end.line][end.col:]...)
 	merged := append(head, tail...)
@@ -518,29 +524,15 @@ func (t *TextArea) ensureRows(availW int) {
 // start of the following row, which keeps downward motion progressing
 // and matches the caret rendering.
 func (t *TextArea) rowOf(col pos) int {
-	first, withStart, last := -1, -1, -1
-	for i, r := range t.rows {
-		if r.line != col.line {
-			if last >= 0 {
-				break
-			}
-			continue
-		}
-		if first < 0 {
-			first = i
-		}
-		last = i
-		if col.col >= r.startCol {
-			withStart = i
-		}
+	first := sort.Search(len(t.rows), func(i int) bool { return t.rows[i].line >= col.line })
+	if first == len(t.rows) || t.rows[first].line != col.line {
+		return len(t.rows) - 1
 	}
-	if withStart >= 0 {
-		return withStart
+	row := first
+	for i := first + 1; i < len(t.rows) && t.rows[i].line == col.line && col.col >= t.rows[i].startCol; i++ {
+		row = i
 	}
-	if first >= 0 {
-		return first
-	}
-	return len(t.rows) - 1
+	return row
 }
 
 // splice is the insert primitive: it drops the composing display,
@@ -551,6 +543,7 @@ func (t *TextArea) rowOf(col pos) int {
 func (t *TextArea) splice(s string) {
 	t.clearPreedit()
 	t.collapse()
+	t.textRev++
 	for _, r := range s {
 		switch r {
 		case '\n':
@@ -600,6 +593,7 @@ func (t *TextArea) deleteAt() {
 		t.collapse()
 		return
 	}
+	t.textRev++
 	c := t.clamp(t.cursor)
 	line := t.lines[c.line]
 	switch {

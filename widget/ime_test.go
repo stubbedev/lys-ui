@@ -1,7 +1,9 @@
 package widget
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stubbedev/lys-lib/render"
 )
@@ -136,7 +138,7 @@ func TestEntryIMEPreedit(t *testing.T) {
 		e.MoveHome()
 		e.MoveCursor(2) // after hé
 		e.IMEPreedit("x", 1, 1)
-		text, cursor, anchor := e.IMESurrounding()
+		text, cursor, anchor := e.IMESurrounding(4000)
 		if text != "héllo" {
 			t.Errorf("surrounding = %q, want héllo", text)
 		}
@@ -259,7 +261,7 @@ func TestTextAreaIMEPreedit(t *testing.T) {
 	t.Run("surrounding text counts newlines in byte offsets", func(t *testing.T) {
 		a := newArea(t)
 		a.SetCursor(1, 0) // byte 6 in "hello\nworld"
-		text, cursor, anchor := a.IMESurrounding()
+		text, cursor, anchor := a.IMESurrounding(4000)
 		if text != "hello\nworld" || cursor != 6 || anchor != 6 {
 			t.Errorf("surrounding = %q %d..%d, want hello\\nworld 6..6", text, cursor, anchor)
 		}
@@ -307,4 +309,115 @@ func TestTextAreaIMEPreedit(t *testing.T) {
 			t.Errorf("caret x %d outside the field %v", r.X, a.bounds)
 		}
 	})
+}
+
+func TestIMESurroundingWindow(t *testing.T) {
+	face := entryFace(t)
+	const line = "the quick brown fox jumps over the lazy dog é世\n"
+	doc := strings.Repeat(line, 500)
+	a := NewTextArea(face, 14, render.RGB(255, 255, 255))
+	a.SetText(doc)
+	a.SetCursor(250, 3)
+	want := 250*len(line) + 3
+	got, cursor, anchor := a.IMESurrounding(4000)
+	if len(got) > 4000 || !utf8.ValidString(got) {
+		t.Fatalf("window = %d bytes, valid %v", len(got), utf8.ValidString(got))
+	}
+	if len(got) < 3990 {
+		t.Errorf("window = %d bytes, want the budget used", len(got))
+	}
+	if cursor != anchor {
+		t.Errorf("cursor %d, anchor %d: nothing is selected", cursor, anchor)
+	}
+	if !strings.HasPrefix(doc[want-cursor:], got) {
+		t.Errorf("window with cursor %d is not the document around offset %d", cursor, want)
+	}
+	if cursor < 1900 || cursor > 2100 {
+		t.Errorf("cursor at %d of %d: the caret belongs near the middle", cursor, len(got))
+	}
+
+	a.anchor, a.cursor = pos{0, 0}, pos{250, 0}
+	got, cursor, anchor = a.IMESurrounding(100)
+	if len(got) > 100 || cursor > len(got) || anchor > len(got) {
+		t.Errorf("selection beyond the window: %d bytes, cursor %d, anchor %d", len(got), cursor, anchor)
+	}
+	if anchor != 0 {
+		t.Errorf("anchor before the window = %d, want its start", anchor)
+	}
+
+	e := NewEntry(face, 14, render.RGB(255, 255, 255))
+	e.SetText(strings.Repeat("世", 2000))
+	got, cursor, _ = e.IMESurrounding(4000)
+	if len(got) > 4000 || len(got)%3 != 0 || cursor != len(got) {
+		t.Errorf("entry window: %d bytes, cursor %d", len(got), cursor)
+	}
+}
+
+func TestIMERevisionFollowsEveryEdit(t *testing.T) {
+	face := entryFace(t)
+	a := NewTextArea(face, 14, render.RGB(255, 255, 255))
+	a.SetText("one\ntwo\nthree")
+	e := NewEntry(face, 14, render.RGB(255, 255, 255))
+	e.SetText("hello world")
+	type tracked struct {
+		name string
+		edit func()
+		tr   IMETracker
+	}
+	steps := []tracked{
+		{"area SetText", func() { a.SetText("abc\ndef\nghi") }, a},
+		{"area SetCursor", func() { a.SetCursor(1, 1) }, a},
+		{"area InsertRune", func() { a.InsertRune('x') }, a},
+		{"area Insert newline", func() { a.Insert("\n") }, a},
+		{"area Backspace", func() { a.Backspace() }, a},
+		{"area Delete", func() { a.Delete() }, a},
+		{"area selection replaced", func() { a.SelectAll(); a.Insert("fresh\ntext") }, a},
+		{"area IMEDelete", func() { a.SetCursor(1, 2); a.IMEDelete(2, 1) }, a},
+		{"area Undo", func() { a.Undo() }, a},
+		{"area Redo", func() { a.Redo() }, a},
+		{"entry SetText", func() { e.SetText("abc def") }, e},
+		{"entry MoveCursor", func() { e.MoveCursor(-1) }, e},
+		{"entry Insert", func() { e.Insert("x") }, e},
+		{"entry Backspace", func() { e.Backspace() }, e},
+		{"entry Delete", func() { e.Delete() }, e},
+		{"entry IMEDelete", func() { e.IMEDelete(1, 1) }, e},
+		{"entry Undo", func() { e.Undo() }, e},
+	}
+	for _, s := range steps {
+		before, beforeRev := surroundingOf(s.tr), s.tr.IMERevision()
+		s.edit()
+		after, afterRev := surroundingOf(s.tr), s.tr.IMERevision()
+		if before == after {
+			t.Errorf("%s: the step changed nothing, so it pins nothing", s.name)
+		}
+		if beforeRev == afterRev {
+			t.Errorf("%s: %+v became %+v under one revision", s.name, before, after)
+		}
+		if again := s.tr.IMERevision(); again != afterRev {
+			t.Errorf("%s: reading the revision moved it", s.name)
+		}
+	}
+}
+
+type surrounding struct {
+	text           string
+	cursor, anchor int
+}
+
+func surroundingOf(tr IMETracker) surrounding {
+	text, cursor, anchor := tr.IMESurrounding(4000)
+	return surrounding{text, cursor, anchor}
+}
+
+func TestTextAreaIMEDeleteAcrossLineBreaks(t *testing.T) {
+	a := NewTextArea(entryFace(t), 14, render.RGB(255, 255, 255))
+	a.SetText("ab\ncd\nef")
+	a.SetCursor(1, 1)
+	a.IMEDelete(2, 2)
+	if got := a.Text(); got != "abef" {
+		t.Errorf("text = %q, want abef", got)
+	}
+	if !a.Undo() || a.Text() != "ab\ncd\nef" {
+		t.Errorf("undo left %q", a.Text())
+	}
 }

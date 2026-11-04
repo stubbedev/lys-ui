@@ -32,15 +32,27 @@ type IMEClient interface {
 // IMETracker exposes an editable widget's text-input state for the
 // set_surrounding_text and set_cursor_rectangle requests.
 type IMETracker interface {
-	// IMESurrounding returns the text around the caret with the
-	// cursor and anchor as byte offsets into it, composing text
-	// excluded.
-	IMESurrounding() (text string, cursor, anchor int)
+	// IMERevision names the text and caret state IMESurrounding reports:
+	// while it stays equal, IMESurrounding would answer the same, so a
+	// host compares it instead of building the text.
+	IMERevision() IMERevision
+	// IMESurrounding returns at most limit bytes of text around the
+	// caret, on rune boundaries, with the cursor and anchor as byte
+	// offsets into it (an anchor outside the text sits at its edge),
+	// composing text excluded.
+	IMESurrounding(limit int) (text string, cursor, anchor int)
 	// IMECursorRect returns the caret rectangle in root coordinates,
 	// for the input method's candidate window.
 	IMECursorRect() render.Rect
 	// IMEMultiline reports multi-line content.
 	IMEMultiline() bool
+}
+
+// IMERevision is a comparable stamp of one editable widget's text and
+// caret; see IMETracker.IMERevision.
+type IMERevision struct {
+	text           uint64
+	cursor, anchor pos
 }
 
 // imeRunesForBytes counts the whole runes covering the first n bytes of
@@ -52,37 +64,95 @@ func imeRunesForBytes(s string, n int) int {
 	return utf8.RuneCountInString(s[:min(n, len(s))])
 }
 
-// imeByteOffset is the byte offset of rune index i in rs, clamped.
-func imeByteOffset(rs []rune, i int) int {
-	n := 0
-	for _, r := range rs[:min(max(i, 0), len(rs))] {
-		n += utf8.RuneLen(r)
+// imePrev is the position one rune or line break before p and that
+// step's bytes, zero at the start of lines.
+func imePrev(lines [][]rune, p pos) (pos, int) {
+	switch {
+	case p.col > 0:
+		return pos{p.line, p.col - 1}, utf8.RuneLen(lines[p.line][p.col-1])
+	case p.line > 0:
+		return pos{p.line - 1, len(lines[p.line-1])}, 1
 	}
-	return n
+	return p, 0
 }
 
-// imeRunesBack counts how many runes ending at index i span n bytes,
-// stopping at the start of rs when the bytes run out.
-func imeRunesBack(rs []rune, i, n int) int {
-	cnt := 0
-	for i > 0 && n > 0 {
-		i--
-		n -= utf8.RuneLen(rs[i])
-		cnt++
+// imeNext is the position one rune or line break after p and that
+// step's bytes, zero at the end of lines.
+func imeNext(lines [][]rune, p pos) (pos, int) {
+	switch {
+	case p.col < len(lines[p.line]):
+		return pos{p.line, p.col + 1}, utf8.RuneLen(lines[p.line][p.col])
+	case p.line < len(lines)-1:
+		return pos{p.line + 1, 0}, 1
 	}
-	return cnt
+	return p, 0
 }
 
-// imeRunesFwd counts how many runes starting at index i span n bytes,
-// stopping at the end of rs when the bytes run out.
-func imeRunesFwd(rs []rune, i, n int) int {
-	cnt := 0
-	for i < len(rs) && n > 0 {
-		n -= utf8.RuneLen(rs[i])
-		i++
-		cnt++
+// imeStep is imePrev or imeNext.
+type imeStep func(lines [][]rune, p pos) (pos, int)
+
+// imeSpan walks from p until n bytes are covered or lines end; a rune
+// straddling n is covered whole.
+func imeSpan(lines [][]rune, p pos, n int, step imeStep) pos {
+	for n > 0 {
+		next, size := step(lines, p)
+		if size == 0 {
+			break
+		}
+		p, n = next, n-size
 	}
-	return cnt
+	return p
+}
+
+// imeFit walks from p while the next rune still fits n bytes, returning
+// where it stopped and the bytes left over.
+func imeFit(lines [][]rune, p pos, n int, step imeStep) (pos, int) {
+	for {
+		next, size := step(lines, p)
+		if size == 0 || size > n {
+			return p, n
+		}
+		p, n = next, n-size
+	}
+}
+
+func posBefore(a, b pos) bool {
+	return a.line < b.line || (a.line == b.line && a.col < b.col)
+}
+
+// imeWindow is at most limit bytes of lines around cursor: half the
+// budget behind it, the rest ahead, and what ahead left over behind.
+// Lines join with newlines, and a document under the limit comes back
+// whole.
+func imeWindow(lines [][]rune, cursor, anchor pos, limit int) (string, int, int) {
+	lo, spare := imeFit(lines, cursor, limit/2, imePrev)
+	hi, spare := imeFit(lines, cursor, limit-limit/2+spare, imeNext)
+	lo, spare = imeFit(lines, lo, spare, imePrev)
+	if posBefore(anchor, lo) {
+		anchor = lo
+	}
+	if posBefore(hi, anchor) {
+		anchor = hi
+	}
+	buf := make([]byte, 0, limit-spare)
+	cursorAt, anchorAt := 0, 0
+	for p := lo; ; {
+		if p == cursor {
+			cursorAt = len(buf)
+		}
+		if p == anchor {
+			anchorAt = len(buf)
+		}
+		if p == hi {
+			return string(buf), cursorAt, anchorAt
+		}
+		if p.col < len(lines[p.line]) {
+			buf = utf8.AppendRune(buf, lines[p.line][p.col])
+		} else {
+			buf = append(buf, '\n')
+		}
+		p, _ = imeNext(lines, p)
+	}
 }
 
 // imePreeditCaret maps a preedit event's byte cursor range to a rune
@@ -180,8 +250,9 @@ func (e *Entry) IMEDelete(before, after int) {
 	}
 	snap := e.snapshot()
 	e.clearPreedit()
-	start := e.cursor - imeRunesBack(e.runes, e.cursor, before)
-	end := e.cursor + imeRunesFwd(e.runes, e.cursor, after)
+	lines := [][]rune{e.runes}
+	start := imeSpan(lines, pos{0, e.cursor}, before, imePrev).col
+	end := imeSpan(lines, pos{0, e.cursor}, after, imeNext).col
 	if start >= end {
 		return
 	}
@@ -201,10 +272,14 @@ func (e *Entry) IMECommit(text string) {
 	}
 }
 
-// IMESurrounding implements IMETracker: the contents with the caret
-// and anchor as byte offsets, composing text excluded.
-func (e *Entry) IMESurrounding() (string, int, int) {
-	return string(e.runes), imeByteOffset(e.runes, e.cursor), imeByteOffset(e.runes, e.anchor)
+// IMERevision implements IMETracker.
+func (e *Entry) IMERevision() IMERevision {
+	return IMERevision{text: e.textRev, cursor: pos{0, e.cursor}, anchor: pos{0, e.anchor}}
+}
+
+// IMESurrounding implements IMETracker.
+func (e *Entry) IMESurrounding(limit int) (string, int, int) {
+	return imeWindow([][]rune{e.runes}, pos{0, e.cursor}, pos{0, e.anchor}, limit)
 }
 
 // IMECursorRect implements IMETracker: the caret band in root
@@ -315,14 +390,15 @@ func (t *TextArea) IMEDelete(before, after int) {
 	if before <= 0 && after <= 0 {
 		return
 	}
-	doc := []rune(t.Text())
-	at := t.docRuneIndex(t.cursor)
-	start := at - imeRunesBack(doc, at, before)
-	end := at + imeRunesFwd(doc, at, after)
-	if start >= end {
+	at := t.clamp(t.cursor)
+	start := imeSpan(t.lines, at, before, imePrev)
+	end := imeSpan(t.lines, at, after, imeNext)
+	if start == end {
 		return
 	}
-	t.setDoc(string(doc[:start])+string(doc[end:]), start)
+	t.anchor, t.cursor = start, end
+	t.collapse()
+	t.hasPref = false
 	t.recordEdit(snap)
 }
 
@@ -334,53 +410,14 @@ func (t *TextArea) IMECommit(text string) {
 	}
 }
 
-// docRuneIndex maps a line/column position to a rune index in Text().
-func (t *TextArea) docRuneIndex(p pos) int {
-	p = t.clamp(p)
-	n := 0
-	for _, l := range t.lines[:p.line] {
-		n += len(l) + 1
-	}
-	return n + p.col
+// IMERevision implements IMETracker.
+func (t *TextArea) IMERevision() IMERevision {
+	return IMERevision{text: t.textRev, cursor: t.cursor, anchor: t.anchor}
 }
 
-// setDoc replaces the contents and parks the caret at rune index at
-// (newlines included in the count). Unlike SetText it leaves the undo
-// history alone — callers record the edit themselves.
-func (t *TextArea) setDoc(s string, at int) {
-	t.splitLines(s)
-	p := pos{0, 0}
-	for at > 0 && p.line < len(t.lines) {
-		switch take := min(len(t.lines[p.line])-p.col, at); {
-		case take > 0:
-			p.col += take
-			at -= take
-		default:
-			p.line, p.col = p.line+1, 0
-			at--
-		}
-	}
-	t.cursor, t.anchor = t.clamp(p), t.clamp(p)
-	t.hasPref = false
-	t.rowsValid = false
-	t.panToCaret()
-	t.InvalidateLayout()
-}
-
-// IMESurrounding implements IMETracker: the document with the caret
-// and anchor as byte offsets, composing text excluded.
-func (t *TextArea) IMESurrounding() (string, int, int) {
-	return t.Text(), t.byteOffset(t.cursor), t.byteOffset(t.anchor)
-}
-
-// byteOffset is the byte offset of a document position in Text().
-func (t *TextArea) byteOffset(p pos) int {
-	p = t.clamp(p)
-	n := 0
-	for _, l := range t.lines[:p.line] {
-		n += imeByteOffset(l, len(l)) + 1
-	}
-	return n + imeByteOffset(t.lines[p.line], p.col)
+// IMESurrounding implements IMETracker.
+func (t *TextArea) IMESurrounding(limit int) (string, int, int) {
+	return imeWindow(t.lines, t.clamp(t.cursor), t.clamp(t.anchor), limit)
 }
 
 // IMECursorRect implements IMETracker: the caret rectangle in root

@@ -244,10 +244,11 @@ no-op.
 
 `app.Application` drives the input method from the focused widget once
 per loop iteration: focusing an editable widget (Entry, TextArea) sends
-enable with the widget's surrounding text (caret and anchor as byte
+enable with up to 4000 bytes of the text around the caret (caret and anchor as byte
 offsets, composing text excluded) and caret rectangle (surface
 coordinates, for the candidate window); focusing anything else sends
-disable. Pushes are deduped against the last state; local changes (all
+disable. A revision stamp on the widget dedups pushes without building
+the text; local changes (all
 routing, not just keys) carry `set_text_change_cause: other` to ask the
 input method to drop its composing state.
 

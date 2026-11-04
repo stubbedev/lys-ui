@@ -19,14 +19,12 @@ type imeWire interface {
 	UpdateIME(wlsession.IMEState)
 }
 
-// imeSnapshot mirrors IMEState for change detection: state is only
-// pushed when it moved since the last push.
+// imeSnapshot is what a push reported, for change detection: state is
+// only pushed when it moved since the last push.
 type imeSnapshot struct {
-	enabled   bool
+	tracker   widget.IMETracker
+	revision  widget.IMERevision
 	multiline bool
-	text      string
-	cursor    int
-	anchor    int
 	rect      render.Rect
 }
 
@@ -59,28 +57,25 @@ func (c *imeController) sync(r *widget.Router, causeOther bool) {
 	}
 	var next imeSnapshot
 	if tr, ok := r.Focused().(widget.IMETracker); ok {
-		next.enabled = true
-		next.multiline = tr.IMEMultiline()
-		next.text, next.cursor, next.anchor = tr.IMESurrounding()
-		next.rect = tr.IMECursorRect()
+		next = imeSnapshot{tracker: tr, revision: tr.IMERevision(), multiline: tr.IMEMultiline(), rect: tr.IMECursorRect()}
 	}
 	if c.have && c.sent == next {
 		return
 	}
 	c.sent, c.have = next, true
 	st := wlsession.IMEState{
-		Enabled:     next.enabled,
-		Multiline:   next.multiline,
-		Surrounding: next.text,
-		Cursor:      next.cursor,
-		Anchor:      next.anchor,
-		CauseOther:  causeOther,
+		Enabled:    next.tracker != nil,
+		Multiline:  next.multiline,
+		CauseOther: causeOther,
 		CursorRect: wlsession.Rect{
 			X: intconv.Clamp[int32](next.rect.X),
 			Y: intconv.Clamp[int32](next.rect.Y),
 			W: intconv.Clamp[int32](next.rect.W),
 			H: intconv.Clamp[int32](next.rect.H),
 		},
+	}
+	if next.tracker != nil {
+		st.Surrounding, st.Cursor, st.Anchor = next.tracker.IMESurrounding(wlsession.MaxIMESurrounding)
 	}
 	c.sess.UpdateIME(st)
 }

@@ -53,9 +53,11 @@ type Entry struct {
 	// frame, and re-converting the runes per read was the entry's
 	// largest steady allocation. Every mutation of runes goes through
 	// setRunes, so disp cannot drift.
-	disp   string
-	cursor int
-	anchor int // selection anchor; equals cursor when nothing is selected
+	disp string
+	// textRev counts the replacements of runes, for IMERevision.
+	textRev uint64
+	cursor  int
+	anchor  int // selection anchor; equals cursor when nothing is selected
 
 	// scrollX is the horizontal pan: the display-space x of the first
 	// on-show pixel. When the text is wider than the field the caret
@@ -573,6 +575,7 @@ func (e *Entry) changed() {
 // here, so displayText never re-converts the runes per read.
 func (e *Entry) setRunes(rs []rune) {
 	e.runes = rs
+	e.textRev++
 	e.disp = string(rs)
 	if e.placeholder != "" {
 		e.invalidateState(style.PlaceholderShown)

@@ -10,9 +10,9 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 )
 
-// maxIMESurrounding is the wayland message size cap the protocol puts
-// on surrounding text; larger buffers are simply not reported.
-const maxIMESurrounding = 4000
+// MaxIMESurrounding is the wayland message size cap the protocol puts
+// on surrounding text.
+const MaxIMESurrounding = 4000
 
 // IMEState is one atomic text-input state update. Callers push the
 // focused editable widget's state; UpdateIME applies it with a commit
@@ -24,9 +24,8 @@ type IMEState struct {
 	// Multiline hints the input method at multi-line content.
 	Multiline bool
 	// Surrounding is the text around the caret (preedit excluded)
-	// with Cursor and Anchor as byte offsets into it. Text beyond
-	// maxIMESurrounding bytes is not sent, which per protocol means
-	// the client is unaware of its surroundings.
+	// with Cursor and Anchor as byte offsets into it, at most
+	// MaxIMESurrounding bytes.
 	Surrounding    string
 	Cursor, Anchor int
 	// CursorRect is the caret rectangle in surface-local coordinates,
@@ -132,9 +131,7 @@ func (s *Session) UpdateIME(st IMEState) {
 			hint = text.ZwpInputV3ContentHintMultiline
 		}
 		_ = ti.SetContentType(hint, text.ZwpInputV3ContentPurposeNormal)
-		if len(st.Surrounding) <= maxIMESurrounding {
-			_ = ti.SetSurroundingText(st.Surrounding, intconv.Clamp[int32](st.Cursor), intconv.Clamp[int32](st.Anchor))
-		}
+		_ = ti.SetSurroundingText(st.Surrounding, intconv.Clamp[int32](st.Cursor), intconv.Clamp[int32](st.Anchor))
 		_ = ti.SetCursorRectangle(st.CursorRect.X, st.CursorRect.Y, st.CursorRect.W, st.CursorRect.H)
 	} else {
 		_ = ti.Disable()

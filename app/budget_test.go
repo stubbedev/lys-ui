@@ -8,11 +8,13 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
+	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
@@ -243,4 +245,53 @@ func skipAllocBudget(t *testing.T) {
 	if debug.Enabled {
 		t.Skip("allocation budgets do not hold under lysdebug")
 	}
+}
+
+// TestAllocBudgetFocusedTextAreaTick pins the loop's steady pass with a
+// 5000-line editable focused and the input method live: nothing changed,
+// so no text is rebuilt and nothing is pushed.
+func TestAllocBudgetFocusedTextAreaTick(t *testing.T) {
+	skipAllocBudget(t)
+	a := idleBudgetApp(t)
+	wire := &fakeIMEWire{available: true}
+	a.ime = newIMEController(wire)
+	area := widget.NewTextArea(imeBudgetFace(t), 14, render.RGB(255, 255, 255))
+	area.SetText(strings.Repeat("the quick brown fox jumps over the lazy dog\n", 5000))
+	widget.SizeWithin(area, widget.Size{W: 600, H: 400})
+	area.Arrange(render.Rect{W: 600, H: 400})
+	w := a.windows[0]
+	w.router.Root = area
+	if err := w.router.SetFocus(area); err != nil {
+		t.Fatal(err)
+	}
+	tick := func() {
+		if err := a.tick(a.step, time.Now()); err != nil {
+			panic(err)
+		}
+	}
+	tick()
+	tick()
+	pushed := len(wire.updates)
+	if pushed != 1 || !wire.updates[0].Enabled {
+		t.Fatalf("focus pushed %d updates, want one enabling", pushed)
+	}
+	if n := len(wire.updates[0].Surrounding); n > wlsession.MaxIMESurrounding {
+		t.Errorf("pushed %d bytes of surrounding text, the protocol allows %d", n, wlsession.MaxIMESurrounding)
+	}
+	const budget = 0
+	if allocs := testing.AllocsPerRun(100, tick); allocs > budget {
+		t.Errorf("a tick with a focused text area allocates %v allocs/op, budget %d", allocs, budget)
+	}
+	if len(wire.updates) != pushed {
+		t.Errorf("nothing changed, yet %d more updates went out", len(wire.updates)-pushed)
+	}
+}
+
+func imeBudgetFace(tb testing.TB) *render.Typeface {
+	tb.Helper()
+	face, err := render.LoadFont(goregular.TTF)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	return face
 }
