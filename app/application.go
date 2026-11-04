@@ -886,7 +886,7 @@ func (a *Application) tick(step func() error, now time.Time) error {
 		a.markDirtyIfDamaged(gen)
 	}
 
-	if code, mods, ok := a.rep.tick(); ok {
+	if code, mods, ok := a.rep.tick(); ok && !a.sess.KeymapPending() {
 		a.deliverKey(code, mods)
 		// Repeat keys are deliveries too: keep the state fresh.
 	}
