@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/xkb"
 )
@@ -204,6 +205,9 @@ func runIsolated(t *testing.T) bool {
 }
 
 func TestKeyWithNoKeymapPendingAllocatesNothing(t *testing.T) {
+	if debug.Enabled {
+		t.Skip("a lysdebug build traces every key, which allocates; the budget is the default build's")
+	}
 	if runIsolated(t) {
 		return
 	}
