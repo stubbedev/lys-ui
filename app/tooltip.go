@@ -110,6 +110,7 @@ type tooltipCtl struct {
 	// delay is the dwell (TooltipOptions); zero is the default.
 	delay   time.Duration
 	pressed bool
+	stalled bool
 }
 
 func (t *tooltipCtl) press() {
@@ -178,7 +179,7 @@ func (t *tooltipCtl) update(router *widget.Router, now time.Time, opener func(wi
 		// rejection) retries after a full delay instead of every loop.
 		t.since = now
 	}
-	if t.painter != nil && t.painter.Owes() {
+	if t.painter != nil && !t.stalled && t.painter.Owes() {
 		if _, err := t.painter.Pass(); err != nil {
 			debug.Log("frame", "tooltip paint: %v", err)
 			t.painter = nil

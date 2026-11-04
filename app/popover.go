@@ -809,8 +809,10 @@ func (a *Application) drivePopovers() error {
 			op.fitContent(a.outputs())
 			op.pop.MarkFrame()
 		}
-		if _, err := op.painter.Pass(); err != nil {
-			return fmt.Errorf("app: popover paint: %w", err)
+		if !a.stalled {
+			if _, err := op.painter.Pass(); err != nil {
+				return fmt.Errorf("app: popover paint: %w", err)
+			}
 		}
 		kept = append(kept, op)
 	}

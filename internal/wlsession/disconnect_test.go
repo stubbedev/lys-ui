@@ -288,3 +288,12 @@ func TestWriteAfterSilentCloseIsConnectionLost(t *testing.T) {
 		t.Fatalf("Classify(%v) = %v, verdict %v; want a lost connection without one", werr, de, s.protoErr)
 	}
 }
+
+func TestARefusedRequestIsALostConnection(t *testing.T) {
+	s := &Session{}
+	err := s.Classify(fmt.Errorf("commit: %w", wl.ErrContextBacklogFull))
+	de, ok := errors.AsType[*DisconnectError](err)
+	if !ok || de.Reason != DisconnectConnectionLost {
+		t.Fatalf("Classify = %v, want a lost connection", err)
+	}
+}

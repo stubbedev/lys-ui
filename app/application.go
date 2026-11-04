@@ -64,8 +64,9 @@ type Application struct {
 	step           func() error
 	// accels is the accelerator table: named actions plus keysym+mods
 	// bindings, consulted by routeKey before text routing.
-	accels *accelTable
-	ime    *imeController
+	accels  *accelTable
+	ime     *imeController
+	stalled bool
 	// clip enables ctrl+c/x/v via routeKey; primary carries the
 	// primary-selection behavior (middle-click paste, copy-on-select).
 	// SetClipboard fills both from one clipboard.
@@ -908,6 +909,11 @@ func (a *Application) tick(step func() error, now time.Time) error {
 			a.markDirtyIfDamaged(gen)
 		}
 	}
+	stalled, err := a.sess.Stalled()
+	if err != nil {
+		return a.loopError(err)
+	}
+	a.stalled = stalled
 	a.updateTips(now)
 
 	var closed []*hostWindow
@@ -945,11 +951,14 @@ func (a *Application) tick(step func() error, now time.Time) error {
 	}
 
 	for _, w := range a.windows {
+		w.takeFrame()
+		if a.stalled {
+			continue
+		}
 		// Pick up a configure-driven size change even when nothing
 		// else is dirty: syncSize resizes the pool and schedules the
 		// repaint, so the frame below already runs at the new size.
 		resized := w.syncSize()
-		w.takeFrame()
 		if w.host.EnsureUsable() != nil {
 			// Not configured yet; the configure event wakes the park.
 			continue
@@ -1053,6 +1062,7 @@ func (a *Application) trimBuffers() {
 func (a *Application) updateTips(now time.Time) {
 	for _, w := range a.windows {
 		w.tip.delay = a.tooltipOpts.Delay
+		w.tip.stalled = a.stalled
 		w.tip.update(w.router, now, func(h widget.Widget, text string) (tooltipWindow, tooltipPainter) {
 			// A nil *popup.Popup must not be wrapped: the interface
 			// would carry a typed nil that the nil checks below let

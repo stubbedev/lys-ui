@@ -162,10 +162,12 @@ func (s *Session) Classify(err error) error { return s.asDisconnect(err) }
 // isConnectionDeath reports whether err is a shape the wire returns
 // when the connection is dead or dying: the peer closed (EOF), a socket
 // operation failed with a dead-connection errno, the local context was
-// closed under the dispatch, or a dispatched event carried the
-// compositor's fatal protocol verdict.
+// closed under the dispatch, a dispatched event carried the compositor's
+// fatal protocol verdict, or a request was refused because the compositor
+// stopped reading, after which the two disagree on the objects.
 func isConnectionDeath(err error) bool {
 	if errors.Is(err, wl.ErrContextRunConnectionClosed) ||
+		errors.Is(err, wl.ErrContextBacklogFull) ||
 		errors.Is(err, wl.ErrContextConnNil) ||
 		errors.Is(err, wl.ErrContextNil) {
 		return true

@@ -273,6 +273,10 @@ type Session struct {
 	wakes  []time.Time
 	wakeMu sync.Mutex
 
+	stalled       bool
+	watchingWrite atomic.Bool
+	writeWatchers sync.WaitGroup
+
 	// protoErr carries the compositor's fatal wl_display.error, if one
 	// arrived, so dispatch failures name the compositor's verdict
 	// instead of a bare connection reset.
@@ -402,6 +406,7 @@ func Connect() (*Session, error) {
 		surfaceHandlers: make(map[*wl.Surface]SurfacePointerHandler),
 		dropHandlers:    make(map[*wl.Surface]SurfaceDropHandler),
 	}
+	d.Context().SetBuffered(true)
 	s.loadCompose()
 
 	reg, err := d.GetRegistry()
@@ -1533,6 +1538,12 @@ func (s *Session) Step() error {
 
 func (s *Session) step() error {
 	ctx := s.Display.Context()
+	wasStalled := s.stalled
+	if pending, err := s.flush(ctx); err != nil {
+		return err
+	} else if wasStalled && !pending {
+		return nil
+	}
 	if err := runThroughProxyNil(ctx.Run); errors.Is(err, wl.ErrContextRunTimeout) {
 		return s.wakeDue(ctx)
 	} else if err := s.asDisconnect(err); err != nil {
@@ -1561,6 +1572,37 @@ func (s *Session) dispatchBuffered(ctx *wl.Context) error {
 		}
 	}
 	return nil
+}
+
+func (s *Session) flush(ctx *wl.Context) (bool, error) {
+	pending, err := ctx.Flush()
+	if err != nil {
+		return true, s.asDisconnect(fmt.Errorf("wlsession: flush requests: %w", err))
+	}
+	s.stalled = pending
+	if pending && s.watchingWrite.CompareAndSwap(false, true) {
+		s.writeWatchers.Go(func() { s.watchWritable(ctx) })
+	}
+	return pending, nil
+}
+
+func (s *Session) watchWritable(ctx *wl.Context) {
+	if err := ctx.WaitWritable(); err != nil && !s.closed.Load() {
+		logutil.L().Error("wlsession: wait for room in the socket", slog.Any("err", err))
+	}
+	s.watchingWrite.Store(false)
+	s.WakeAfter(0)
+}
+
+// Stalled reports whether the compositor has left requests of an earlier
+// pass unread, trying once more to write them: a frame committed now would
+// only queue behind them. It never blocks, and a loop parked in Step wakes
+// when the socket takes writes again.
+func (s *Session) Stalled() (bool, error) {
+	if !s.stalled {
+		return false, nil
+	}
+	return s.flush(s.Display.Context())
 }
 
 // HandleDisplayError implements wl.DisplayErrorHandler: record the
@@ -1648,6 +1690,11 @@ func (s *Session) Closed() bool { return s.closed.Load() }
 // buffer arena: the pool proxy, mapping, and the session's one fd.
 func (s *Session) Close() {
 	s.stopBackground()
+	s.closeWire()
+	s.writeWatchers.Wait()
+}
+
+func (s *Session) closeWire() {
 	s.wakeMu.Lock()
 	defer s.wakeMu.Unlock()
 	if s.closed.Swap(true) {
@@ -1655,9 +1702,14 @@ func (s *Session) Close() {
 	}
 	s.stopCursorAnim()
 	buffer.CloseArenas(s.shm)
-	if s.Display != nil {
-		_ = s.Display.Context().Close()
+	if s.Display == nil {
+		return
 	}
+	ctx := s.Display.Context()
+	if _, err := ctx.Flush(); err != nil {
+		debug.Log("wire", "wlsession: last flush before closing: %v", err)
+	}
+	_ = ctx.Close()
 }
 
 // AxisSteps converts a smooth axis value to scroll steps (one per 10

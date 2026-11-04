@@ -450,21 +450,35 @@ func (s *Session) cursorClock() time.Time {
 // lost pointer drops the chain instead, so the timer stops entirely
 // once no animated cursor shows.
 func (s *Session) advanceCursor(gen uint64) {
+	if !s.pushNextCursorFrame(gen) || s.Display == nil {
+		return
+	}
+	pending, err := s.Display.Context().Flush()
+	if err != nil {
+		debug.Log("wire", "wlsession: flush a cursor frame: %v", err)
+	}
+	if pending {
+		s.WakeAfter(0)
+	}
+}
+
+func (s *Session) pushNextCursorFrame(gen uint64) bool {
 	c := &s.crs
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if gen != c.gen || s.pointer == nil || s.pointerEnterSerial == 0 || c.cur == nil {
-		return
+		return false
 	}
 	c.armed = false
 	img, rest := c.frame(s.cursorClock)
 	if img == nil {
-		return
+		return false
 	}
 	if err := s.pushCursorLocked(img); err != nil {
-		return
+		return false
 	}
 	s.armCursorLocked(rest)
+	return true
 }
 
 // stopCursorAnim drops the pending frame timer, if any. It runs on

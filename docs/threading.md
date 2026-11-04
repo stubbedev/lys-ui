@@ -55,6 +55,16 @@ Enqueueing an `Invoke` arms a single pending wake with one
 a storm of Invokes arms one wake, and the loop drains the whole queue
 in one pass.
 
+Requests wait in a buffer and go out as one non-blocking `sendmsg` when
+`Step` is about to park (`SetBuffered`), so a pass over many surfaces wakes
+the compositor once. `Step` flushes before it reads, so a roundtrip needs
+nothing more; only the animated cursor's timer sends off the loop, and it
+flushes itself. When the socket is full, `Step` starts one goroutine in
+`WaitWritable`, which ends in `WakeAfter(0)`. `Session.Stalled` then holds
+every window's, popover's and tooltip's frame back: skipped, not blocked,
+and drawn on the pass after the socket takes the backlog. A request refused
+because the compositor left a whole backlog unread is a lost connection.
+
 `Every` deadlines join the `nextWake` set. A poller wakes the park
 exactly at its deadline and costs nothing in between. Ticks anchor at
 fire time, so a slow frame delays the next tick instead of bursting to

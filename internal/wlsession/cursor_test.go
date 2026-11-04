@@ -420,3 +420,24 @@ func TestCursorRestoreOnLeave(t *testing.T) {
 		}
 	})
 }
+
+func TestACursorFrameLeavesWithoutALoopPass(t *testing.T) {
+	wire, _, answered := newSyncSession(t)
+	wire.Display.Context().SetBuffered(true)
+	h := newCursorHarness(t, map[string]*themedCursor{defaultCursor: fakeCursor(30, 40)})
+	h.s.Display = wire.Display
+	h.s.crs.push = func(*cursorImage) error {
+		_, err := wire.Display.Sync()
+		return err
+	}
+	if err := h.s.SetCursor(defaultCursor); err != nil {
+		t.Fatalf("SetCursor: %v", err)
+	}
+	h.advance(time.Second)
+	for deadline := time.Now().Add(10 * time.Second); answered.Load() == 0; {
+		if time.Now().After(deadline) {
+			t.Fatalf("an animated cursor's frame stayed in the buffer with the loop parked: %d bytes", wire.Display.Context().Backlog())
+		}
+		time.Sleep(time.Millisecond)
+	}
+}

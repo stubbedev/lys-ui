@@ -83,3 +83,21 @@ func TestRoundtripSurvivesARoundtripInsideItsDispatch(t *testing.T) {
 		t.Fatal("the outer roundtrip never returned: the nested one consumed its done")
 	}
 }
+
+func TestRoundtripFlushesABufferedSync(t *testing.T) {
+	s, _, answered := newSyncSession(t)
+	s.Display.Context().SetBuffered(true)
+	done := make(chan error, 1)
+	go func() { done <- s.Roundtrip() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("a roundtrip stayed parked on a sync it never sent")
+	}
+	if answered.Load() != 1 {
+		t.Fatalf("%d syncs reached the compositor, want 1", answered.Load())
+	}
+}
