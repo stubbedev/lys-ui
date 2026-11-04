@@ -11,6 +11,7 @@
 package atspi
 
 import (
+	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
@@ -77,6 +78,15 @@ func (b *Bridge) exportNode(id int32, text, action, value, app bool) {
 	}
 	mustExport(b, path, ifaceProperties, &propertiesIface{b: b, id: id})
 	mustExport(b, path, ifaceIntrospectable, &introspectIface{text: text, action: action, value: value, app: app})
+}
+
+func (b *Bridge) unexportNode(id int32) {
+	path := widgetPath(id)
+	for _, iface := range []string{ifaceAccessible, ifaceComponent, ifaceText, ifaceAction, ifaceValue, ifaceProperties, ifaceIntrospectable} {
+		if err := b.conn.Export(nil, path, iface); err != nil {
+			debug.Log("a11y", "unexport %s on %s: %v", iface, path, err)
+		}
+	}
 }
 
 // mustExport is ExportAll with the error fatal — a table that fails to

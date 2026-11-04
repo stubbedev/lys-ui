@@ -512,6 +512,13 @@ func (b *Bridge) apply(nt *tree) {
 	b.cur = nt
 	export := b.exportNew(nt)
 	cache := b.cacheEvents(old, nt)
+	var gone []int32
+	for id := range old.nodes {
+		if _, live := nt.nodes[id]; !live {
+			gone = append(gone, id)
+			delete(b.exported, widgetPath(id))
+		}
+	}
 	b.mu.Unlock()
 	for _, ex := range export {
 		b.exportNode(ex.id, ex.text, ex.action, ex.value, false)
@@ -521,6 +528,9 @@ func (b *Bridge) apply(nt *tree) {
 	}
 	for _, ev := range diff(old, nt, b.name) {
 		b.send(ev)
+	}
+	for _, id := range gone {
+		b.unexportNode(id)
 	}
 	b.retire(old)
 }
@@ -582,6 +592,13 @@ func (b *Bridge) build() *tree {
 	if f := b.scene.Focused(); f != nil {
 		if id, ok := b.ids[f]; ok {
 			tr.focus = id
+		}
+	}
+	if len(b.ids) != len(tr.nodes)-1 {
+		for w, id := range b.ids {
+			if _, live := tr.nodes[id]; !live {
+				delete(b.ids, w)
+			}
 		}
 	}
 	return tr

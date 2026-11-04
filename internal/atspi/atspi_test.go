@@ -1088,3 +1088,38 @@ func TestStopDoesNotWaitOnAStuckBus(t *testing.T) {
 		t.Fatal("Stop waited on the stuck bus")
 	}
 }
+
+func TestRemovedWidgetsLeaveNothingBehind(t *testing.T) {
+	scene := &countingScene{}
+	br, _ := serveLabel(t, scene, nil)
+	root := scene.roots[0].(*widget.Box)
+	live := len(br.ids)
+	exported := len(br.exported)
+	var last int32
+	for i := range 50 {
+		kid := widget.NewLabel(faceOf(t), 13, "churn", render.RGB(0, 0, 0))
+		root.Append(kid, false)
+		br.Refresh()
+		last = idOf(t, br, kid)
+		if len(br.ids) != live+1 {
+			t.Fatalf("pass %d: %d ids with one child added, want %d", i, len(br.ids), live+1)
+		}
+		root.Remove(kid)
+		br.Refresh()
+		if len(br.ids) != live {
+			t.Fatalf("pass %d: %d ids after removal, want %d", i, len(br.ids), live)
+		}
+		if len(br.exported) != exported {
+			t.Fatalf("pass %d: %d exported paths after removal, want %d", i, len(br.exported), exported)
+		}
+	}
+	at, err := dbus.Connect(br.addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = at.Close() }()
+	var role uint32
+	if err := at.Object(br.name, widgetPath(last)).Call(ifaceAccessible+".GetRole", 0).Store(&role); err == nil {
+		t.Errorf("a removed widget still answers: role %d", role)
+	}
+}
