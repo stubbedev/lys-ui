@@ -188,8 +188,8 @@ func (pc *Painter) Owes() bool { return pc.dirty.Load() }
 // the visual owes under the current reveal (plus what the reused
 // buffer is stale in), commit, and arm the next frame callback. The
 // whole wire sequence holds p.mu, serialized against the dismissal
-// state machine's SealInput and Destroy. It returns false when the
-// popup is destroyed and the painter is spent.
+// state machine's SealInput and Destroy. While the popup waits on its
+// first configure the frame stays owed and nothing goes out. It returns
 // false when the popup is destroyed and the painter is spent.
 func (pc *Painter) Pass() (bool, error) {
 	if pc.p.Destroyed() {
