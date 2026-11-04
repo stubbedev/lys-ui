@@ -173,6 +173,7 @@ func TestFallbackChain(t *testing.T) {
 	})
 
 	mixed := "g你😀"
+	ch.Prewarm([]rune(mixed)...)
 	s := ch.Shape(mixed, 16)
 
 	t.Run("mixed latin CJK emoji all find covering faces", func(t *testing.T) {

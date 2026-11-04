@@ -483,7 +483,7 @@ func Fallback(base *render.Typeface) *render.Chain {
 			return nil
 		}
 		return tf
-	})
+	}, nil)
 }
 
 // fallbackFace resolves the store's face for r under families, with
