@@ -6,6 +6,7 @@ package app
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/stubbedev/lys-lib/wlr"
 )
@@ -22,11 +23,21 @@ type GlobalShortcut struct {
 	on     func(pressed bool, unixSec uint64)
 }
 
-// GlobalShortcutsAvailable reports whether a transport exists: the
-// compositor's protocol manager, or the desktop's GlobalShortcuts
-// portal.
-func (a *Application) GlobalShortcutsAvailable() bool {
-	return a.sess.GlobalShortcutsManager() != nil || portalShortcutsUp()
+// GlobalShortcutsAvailable reports through done, on the loop, whether a
+// transport exists: the compositor's protocol manager, or the desktop's
+// GlobalShortcuts portal. It returns at once; asking the bus runs on the
+// portal worker.
+func (a *Application) GlobalShortcutsAvailable(done func(bool)) {
+	if a.sess.GlobalShortcutsManager() != nil {
+		a.Invoke(func() { done(true) })
+		return
+	}
+	if !a.shortcuts.post(a, func() {
+		up := portalShortcutsUp()
+		a.Invoke(func() { done(up) })
+	}) {
+		a.Invoke(func() { done(false) })
+	}
 }
 
 // RegisterGlobalShortcut registers id for appID; the desktop shows
@@ -34,30 +45,38 @@ func (a *Application) GlobalShortcutsAvailable() bool {
 // compositor's config or the portal's dialog decides the keys). on
 // runs on the loop goroutine for every press (true) and release, with
 // the event's Unix seconds. The app_id + id pair must be unique for
-// the connection. Call on the loop goroutine.
+// the connection. Call on the loop goroutine. It returns at once, and
+// done runs on the loop with the shortcut or the failure.
 //
 // Transport: the compositor's hyprland_global_shortcuts_v1 when
 // offered, else the freedesktop GlobalShortcuts portal. The portal's
-// bind flow shows the desktop's binding dialog and registration
-// returns only after the user answered - denial is
-// ErrGlobalShortcutDenied - so a portal registration can block on a
-// human; call it from a goroutine when that matters.
-func (a *Application) RegisterGlobalShortcut(id, appID, description, trigger string, on func(pressed bool, unixSec uint64)) (*GlobalShortcut, error) {
+// bind flow shows the desktop's binding dialog, so done may come long
+// after, once the user answered; denial is ErrGlobalShortcutDenied, and
+// ErrPortalBusy says too much is queued behind a portal that stopped
+// answering.
+func (a *Application) RegisterGlobalShortcut(id, appID, description, trigger string, on func(pressed bool, unixSec uint64), done func(*GlobalShortcut, error)) {
 	if mgr := a.sess.GlobalShortcutsManager(); mgr != nil {
 		p, err := mgr.RegisterShortcut(id, appID, description, trigger)
 		if err != nil {
-			return nil, err
+			a.Invoke(func() { done(nil, err) })
+			return
 		}
 		s := &GlobalShortcut{p: p, on: on}
 		p.AddPressedHandler(s)
 		p.AddReleasedHandler(s)
-		return s, nil
+		a.Invoke(func() { done(s, nil) })
+		return
 	}
 	s := &GlobalShortcut{portal: &a.shortcuts, id: id, on: on}
-	if err := a.shortcuts.registerPortal(id, description, trigger, s); err != nil {
-		return nil, err
+	if !a.shortcuts.post(a, func() {
+		if err := a.shortcuts.registerPortal(id, description, trigger, s); err != nil {
+			a.Invoke(func() { done(nil, err) })
+			return
+		}
+		a.Invoke(func() { done(s, nil) })
+	}) {
+		a.Invoke(func() { done(nil, fmt.Errorf("app: global shortcut %s: %w", id, ErrPortalBusy)) })
 	}
-	return s, nil
 }
 
 // Destroy unregisters the shortcut. Call on the loop goroutine.

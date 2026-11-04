@@ -1,10 +1,14 @@
 package app
 
 import (
+	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
+
+	"github.com/stubbedev/lys-ui/internal/wlsession"
 )
 
 // TestPortalShortcutsDispatch pins the portal state machine, fed the
@@ -134,5 +138,122 @@ func TestPortalTokensAreObjectPathElements(t *testing.T) {
 		if token := c.token(kind); !dbus.ObjectPath("/org/freedesktop/portal/desktop/session/x/" + token).IsValid() {
 			t.Errorf("token %q is not an object path element, so the portal cannot build its handle", token)
 		}
+	}
+}
+
+type mockShortcuts struct {
+	d       *mockDesktop
+	hold    chan struct{}
+	entered chan struct{}
+	binds   atomic.Int32
+}
+
+func (m *mockShortcuts) CreateSession(sender dbus.Sender, opts map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
+	m.entered <- struct{}{}
+	<-m.hold
+	path := m.d.handle(sender, opts)
+	m.d.respond(sender, path, 0, map[string]dbus.Variant{
+		"session_handle": dbus.MakeVariant(dbus.ObjectPath("/org/freedesktop/portal/desktop/session/test/s")),
+	})
+	return path, nil
+}
+
+func (m *mockShortcuts) BindShortcuts(sender dbus.Sender, _ dbus.ObjectPath, _ []map[string]dbus.Variant, opts map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
+	m.binds.Add(1)
+	path := m.d.handle(sender, opts)
+	m.d.respond(sender, path, 0, map[string]dbus.Variant{})
+	return path, nil
+}
+
+func shortcutApp(t *testing.T) (*Application, *mockDesktop, *mockShortcuts) {
+	t.Helper()
+	d := startMockDesktop(t)
+	m := &mockShortcuts{d: d, hold: make(chan struct{}), entered: make(chan struct{}, 8)}
+	if err := d.conn.Export(m, "/org/freedesktop/portal/desktop", portalShortcutsIface); err != nil {
+		t.Fatal(err)
+	}
+	a := testApp(nil)
+	a.sess = &wlsession.Session{}
+	t.Cleanup(a.shortcuts.shutdown)
+	return a, d, m
+}
+
+func TestRegisterGlobalShortcutReturnsWhileThePortalIsStuck(t *testing.T) {
+	a, _, m := shortcutApp(t)
+	var (
+		got      *GlobalShortcut
+		err      error
+		answered bool
+		pressed  []bool
+	)
+	a.Invoke(func() {
+		a.RegisterGlobalShortcut("ptt", "dev.stubbe.test", "talk", "CTRL+T", func(on bool, _ uint64) {
+			pressed = append(pressed, on)
+		}, func(s *GlobalShortcut, e error) { got, err, answered = s, e, true })
+	})
+	a.pump(time.Now())
+	select {
+	case <-m.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the worker never reached the portal")
+	}
+	a.pump(time.Now())
+	if answered || m.binds.Load() != 0 {
+		t.Fatalf("answered %v with %d binds while the portal held the session", answered, m.binds.Load())
+	}
+	close(m.hold)
+	pumpUntil(t, a, func() bool { return answered })
+	if err != nil || got == nil {
+		t.Fatalf("registration = %v, %v", got, err)
+	}
+	if m.binds.Load() != 1 {
+		t.Errorf("%d binds, want one", m.binds.Load())
+	}
+	a.shortcuts.dispatch(&dbus.Signal{Name: portalActivated, Body: []any{dbus.ObjectPath("/s"), "ptt", uint64(1_000_000)}})
+	pumpUntil(t, a, func() bool { return len(pressed) == 1 })
+	got.Destroy()
+}
+
+func TestGlobalShortcutsAvailableAsksOffTheLoop(t *testing.T) {
+	a, _, _ := shortcutApp(t)
+	held := make(chan struct{})
+	entered := make(chan struct{})
+	if !a.shortcuts.post(a, func() {
+		close(entered)
+		<-held
+	}) {
+		t.Fatal("the worker refused the holding job")
+	}
+	<-entered
+	var up, answered bool
+	a.GlobalShortcutsAvailable(func(v bool) { up, answered = v, true })
+	a.pump(time.Now())
+	if answered {
+		t.Fatal("answered while the worker was held")
+	}
+	close(held)
+	pumpUntil(t, a, func() bool { return answered })
+	if !up {
+		t.Error("the mock portal owns its name, want available")
+	}
+}
+
+func TestRegisterGlobalShortcutBusyBehindAStuckPortal(t *testing.T) {
+	a, _, _ := shortcutApp(t)
+	held := make(chan struct{})
+	defer close(held)
+	entered := make(chan struct{})
+	a.shortcuts.post(a, func() {
+		close(entered)
+		<-held
+	})
+	<-entered
+	for a.shortcuts.post(a, func() {}) {
+	}
+	var got error
+	a.RegisterGlobalShortcut("x", "app", "", "", func(bool, uint64) {}, func(_ *GlobalShortcut, err error) { got = err })
+	a.pump(time.Now())
+	if !errors.Is(got, ErrPortalBusy) {
+		t.Errorf("registration over a full queue = %v", got)
 	}
 }

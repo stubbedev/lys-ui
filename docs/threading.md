@@ -139,6 +139,9 @@ no slow service can drop a frame:
   `SetBackgroundStatus`): each returns at once and answers through a
   `done` callback on the loop. They run in order on one worker, so a
   query-end answer follows any `Inhibit` the callback made.
+- **Global shortcuts**: `RegisterGlobalShortcut` and
+  `GlobalShortcutsAvailable` answer through a `done` callback on the
+  loop, and the portal path runs in order on its own worker.
 - **The AT-SPI bridge**: `ServeAccessibility`, the desktop's switch and
   `Bridge.Stop` run on a worker. A poller reads `widget.A11yGeneration`
   off the loop and an unchanged scene costs one atomic load, no wake and

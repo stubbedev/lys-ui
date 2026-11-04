@@ -2,18 +2,22 @@
 // xdg-desktop-portal transport that works on every portal desktop,
 // chosen when the compositor offers no hyprland_global_shortcuts_v1
 // manager. The portal's bind flow is interactive - the desktop shows
-// its shortcut-binding dialog and the user confirms - so a portal
-// registration returns only after that confirmation (denial comes
-// back as ErrGlobalShortcutDenied). Triggers arrive as Activated and
-// Deactivated signals and dispatch onto the loop goroutine like every
+// its shortcut-binding dialog and the user confirms - so it runs on a
+// worker and a portal registration answers after that confirmation
+// (denial comes back as ErrGlobalShortcutDenied). Triggers arrive as
+// Activated and Deactivated signals and dispatch onto the loop goroutine like every
 // other event.
 package app
 
 import (
+	"context"
 	"errors"
+	"sync"
 
 	"github.com/stubbedev/lys-lib/debug"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
+
+	"github.com/stubbedev/lys-ui/internal/worker"
 )
 
 // ErrGlobalShortcutDenied reports the user refusing the portal's bind
@@ -34,22 +38,37 @@ const (
 // lazily created on the first portal registration.
 type portalShortcuts struct {
 	portalClient
-	app     *Application
-	session dbus.ObjectPath
+	app      *Application
+	initOnce sync.Once
+	queue    *worker.Queue
+	session  dbus.ObjectPath
 	// live routes Activated and Deactivated by shortcut id.
 	live map[string]*GlobalShortcut
 }
 
-// portalShortcutsUp reports whether the desktop portal owns its name.
+func (p *portalShortcuts) init(a *Application) {
+	p.initOnce.Do(func() {
+		p.app = a
+		p.queue = worker.New(portalQueueDepth)
+	})
+}
+
+func (p *portalShortcuts) post(a *Application, work func()) bool {
+	p.init(a)
+	return p.queue.Post(work)
+}
+
 func portalShortcutsUp() bool {
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return false
 	}
 	defer func() { _ = conn.Close() }()
+	ctx, cancel := context.WithTimeout(conn.Context(), portalStopTimeout)
+	defer cancel()
 	var owned bool
 	if err := conn.Object("org.freedesktop.DBus", "/").CallWithContext(
-		conn.Context(), "org.freedesktop.DBus.NameHasOwner", 0,
+		ctx, "org.freedesktop.DBus.NameHasOwner", 0,
 		portalName).Store(&owned); err != nil {
 		return false
 	}
@@ -177,6 +196,9 @@ func (p *portalShortcuts) registerPortal(id, description, trigger string, s *Glo
 // shutdown closes the portal connection with the loop.
 func (p *portalShortcuts) shutdown() {
 	p.close()
+	if p.queue != nil && !p.queue.Stop(portalStopTimeout) {
+		debug.Log("shell", "the portal shortcut worker outlived the stop")
+	}
 	p.mu.Lock()
 	p.live = map[string]*GlobalShortcut{}
 	p.mu.Unlock()
