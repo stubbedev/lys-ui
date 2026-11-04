@@ -22,6 +22,8 @@ import (
 	"github.com/stubbedev/lys-ui/widget"
 )
 
+var budgetNow = time.Unix(1_700_000_000, 0).UTC()
+
 // idleBudgetApp builds an application over a zero-value session whose
 // single window is a wired fake host: enough loop machinery to run one
 // real tick, no compositor.
@@ -46,7 +48,7 @@ func TestAllocBudgetIdleLoopTick(t *testing.T) {
 	skipAllocBudget(t)
 	a := idleBudgetApp(t)
 	tick := func() {
-		if err := a.tick(a.step, time.Now()); err != nil {
+		if err := a.tick(a.step, budgetNow); err != nil {
 			panic(err)
 		}
 	}
@@ -181,7 +183,7 @@ func TestAllocBudgetPumpScopedDamageWalk(t *testing.T) {
 	a := idleBudgetApp(t)
 	widget.CollectDamage(a.windows[0].router.Root)
 	tick := func() {
-		if err := a.tick(a.step, time.Now()); err != nil {
+		if err := a.tick(a.step, budgetNow); err != nil {
 			panic(err)
 		}
 	}
@@ -246,6 +248,9 @@ func skipAllocBudget(t *testing.T) {
 	if debug.Enabled {
 		t.Skip("allocation budgets do not hold under lysdebug")
 	}
+	if raceEnabled {
+		t.Skip("allocation budgets do not hold under -race, whose instrumentation allocates")
+	}
 }
 
 func TestAllocBudgetFocusedTextAreaTick(t *testing.T) {
@@ -263,7 +268,7 @@ func TestAllocBudgetFocusedTextAreaTick(t *testing.T) {
 		t.Fatal(err)
 	}
 	tick := func() {
-		if err := a.tick(a.step, time.Now()); err != nil {
+		if err := a.tick(a.step, budgetNow); err != nil {
 			panic(err)
 		}
 	}
