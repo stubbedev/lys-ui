@@ -21,7 +21,10 @@ const (
 	portalRequestTimeout = 30 * time.Second
 )
 
-var errPortalTimeout = errors.New("app: portal request timed out")
+var (
+	errPortalTimeout = errors.New("app: portal request timed out")
+	errPortalClosed  = errors.New("app: the portal connection closed")
+)
 
 // ErrPortalUnavailable reports that no xdg-desktop-portal answered on
 // the session bus, or that the running one has no backend for the
@@ -53,12 +56,16 @@ type portalResponseData struct {
 // the Request/Response handshake every interactive portal call uses,
 // and the routing of other portal signals to onSignal.
 type portalClient struct {
-	mu       sync.Mutex
-	conn     *dbus.Conn
-	sig      chan *dbus.Signal
-	nextReq  int
-	pending  map[string]chan portalResponseData
-	onSignal func(*dbus.Signal)
+	// connectMu serializes dialing, so nothing waiting on mu ever waits
+	// on the bus.
+	connectMu sync.Mutex
+	mu        sync.Mutex
+	conn      *dbus.Conn
+	closed    bool
+	sig       chan *dbus.Signal
+	nextReq   int
+	pending   map[string]chan portalResponseData
+	onSignal  func(*dbus.Signal)
 }
 
 func portalParent(w *Window) string {
@@ -72,24 +79,37 @@ func portalParent(w *Window) string {
 }
 
 func (c *portalClient) connect() error {
+	c.connectMu.Lock()
+	defer c.connectMu.Unlock()
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.conn != nil {
+	connected, closed := c.conn != nil, c.closed
+	c.mu.Unlock()
+	if connected {
 		return nil
+	}
+	if closed {
+		return fmt.Errorf("app: portal: %w", errPortalClosed)
 	}
 	conn, err := dbus.ConnectSessionBus()
 	if err != nil {
 		return fmt.Errorf("app: portal: session bus: %w: %w", ErrPortalUnavailable, err)
 	}
-	c.conn = conn
-	c.pending = map[string]chan portalResponseData{}
-	c.sig = make(chan *dbus.Signal, 16)
-	conn.Signal(c.sig)
+	sig := make(chan *dbus.Signal, 16)
+	conn.Signal(sig)
 	go func() {
-		for sig := range c.sig {
-			c.dispatch(sig)
+		for s := range sig {
+			c.dispatch(s)
 		}
 	}()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		_ = conn.Close()
+		return fmt.Errorf("app: portal: %w", errPortalClosed)
+	}
+	c.conn = conn
+	c.pending = map[string]chan portalResponseData{}
+	c.sig = sig
 	return nil
 }
 
@@ -169,8 +189,11 @@ func (c *portalClient) request(method string, opts map[string]dbus.Variant, args
 	select {
 	case resp := <-ch:
 		return resp, handle, nil
-	case <-time.After(portalRequestTimeout):
+	case <-ctx.Done():
 		drop()
+		if conn.Context().Err() != nil {
+			return portalResponseData{}, "", fmt.Errorf("app: portal %s: %w", method, errPortalClosed)
+		}
 		return portalResponseData{}, "", fmt.Errorf("app: portal %s: %w", method, errPortalTimeout)
 	}
 }
@@ -206,9 +229,10 @@ func (c *portalClient) closeRequest(handle dbus.ObjectPath) error {
 
 func (c *portalClient) close() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.conn != nil {
-		_ = c.conn.Close()
+	conn := c.conn
+	c.conn, c.closed = nil, true
+	c.mu.Unlock()
+	if conn != nil {
+		_ = conn.Close()
 	}
-	c.conn = nil
 }

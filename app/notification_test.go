@@ -1,8 +1,13 @@
 package app
 
 import (
+	"context"
+	"runtime"
+	"sync"
 	"testing"
 	"time"
+
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-ui/internal/notify"
 )
@@ -79,5 +84,90 @@ func TestNotifyCarriesItsActions(t *testing.T) {
 	}
 	if plain := notification("t", "b", NotifyOptions{}); len(plain.Actions) != 0 || plain.HasDefault {
 		t.Errorf("plain = %+v, want no actions and no default", plain)
+	}
+}
+
+// fakeNotifyBus is a notification daemon that holds every send until
+// released and records whether any bus call ran on the marked goroutine.
+type fakeNotifyBus struct {
+	loop    string
+	release chan struct{}
+
+	mu     sync.Mutex
+	onLoop int
+	sends  int
+}
+
+func (f *fakeNotifyBus) Call(ctx context.Context, _ string, _ dbus.ObjectPath, method string, _ dbus.Flags, ret any, args ...any) error {
+	f.mu.Lock()
+	if callerGoroutine() == f.loop {
+		f.onLoop++
+	}
+	f.mu.Unlock()
+	if method == "org.freedesktop.DBus.NameHasOwner" {
+		*ret.(*bool) = args[0] == "org.freedesktop.Notifications"
+		return nil
+	}
+	f.mu.Lock()
+	f.sends++
+	f.mu.Unlock()
+	select {
+	case <-f.release:
+	case <-ctx.Done():
+	}
+	return nil
+}
+
+func (f *fakeNotifyBus) Signal(chan<- *dbus.Signal) {}
+
+func (f *fakeNotifyBus) Close() error { return nil }
+
+// A notification daemon that never answers stalls no loop pass: Notify on
+// the loop returns while the bus call is stuck, and no bus call, dial
+// included, ran on the loop.
+func TestNotifyOnLoopSurvivesAStuckDaemon(t *testing.T) {
+	f := &fakeNotifyBus{loop: callerGoroutine(), release: make(chan struct{})}
+	a := testApp(nil)
+	a.notifyOnce.Do(func() {
+		a.adoptNotifier(notify.NewWithDial(func() (notify.Bus, error) {
+			if callerGoroutine() == f.loop {
+				t.Error("the dial ran on the loop")
+			}
+			return f, nil
+		}))
+	})
+	defer a.closeNotifier()
+	defer close(f.release)
+	ran := 0
+	a.Invoke(func() {
+		a.Notify("stuck", "body", NotifyOptions{})
+		a.Notify("stuck too", "body", NotifyOptions{})
+		ran++
+	})
+	a.pump(time.Now())
+	if ran != 1 {
+		t.Fatalf("the pass ran %d times", ran)
+	}
+	a.notifyMu.Lock()
+	registered := len(a.notifyOpts)
+	a.notifyMu.Unlock()
+	if registered != 2 {
+		t.Errorf("registered %d notifications with locally made ids, want 2", registered)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		f.mu.Lock()
+		sends, onLoop := f.sends, f.onLoop
+		f.mu.Unlock()
+		if onLoop != 0 {
+			t.Fatalf("%d bus calls on the loop", onLoop)
+		}
+		if sends > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the worker never reached the daemon")
+		}
+		runtime.Gosched()
 	}
 }

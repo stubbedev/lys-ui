@@ -4,8 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/stubbedev/lys-lib/debug"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
+
+	"github.com/stubbedev/lys-ui/internal/worker"
 )
 
 const (
@@ -17,11 +21,19 @@ const (
 	portalBackgroundIface = "org.freedesktop.portal.Background"
 	portalRequestBg       = portalBackgroundIface + ".RequestBackground"
 	portalSetStatus       = portalBackgroundIface + ".SetStatus"
+
+	portalQueueDepth  = 64
+	portalStopTimeout = 3 * time.Second
 )
 
 // ErrPortalDenied reports a portal request the user or the desktop
 // refused.
 var ErrPortalDenied = errors.New("app: the portal request was denied")
+
+// ErrPortalBusy reports a portal request refused without being sent: the
+// portal has stopped answering and too much is queued behind it, or the
+// application has stopped.
+var ErrPortalBusy = errors.New("app: the portal queue is full or stopped")
 
 // InhibitFlags are the session actions Inhibit holds off.
 type InhibitFlags uint32
@@ -53,7 +65,10 @@ const (
 
 type desktopPortals struct {
 	portalClient
-	app           *Application
+	app *Application
+	// queue runs the portal calls that do not wait on a user, in order,
+	// so a query-end answer always follows the Inhibit made for it.
+	queue         *worker.Queue
 	monitor       dbus.ObjectPath
 	onState       func(state SessionState, screensaver bool)
 	printSettings map[string]dbus.Variant
@@ -62,46 +77,90 @@ type desktopPortals struct {
 
 func (a *Application) desktop() *desktopPortals {
 	a.portalsOnce.Do(func() {
-		a.portals = &desktopPortals{app: a}
+		a.portals = &desktopPortals{app: a, queue: worker.New(portalQueueDepth)}
 		a.portals.onSignal = a.portals.signal
 	})
 	return a.portals
 }
 
+// reportDone hands a worker's result to done on the loop, or logs a
+// failure when there is no done to hear it.
+func (a *Application) reportDone(what string, done func(error), err error) {
+	switch {
+	case done != nil:
+		a.Invoke(func() { done(err) })
+	case err != nil:
+		debug.Log("app", "%s: %v", what, err)
+	}
+}
+
+// post runs work on the portal worker and reports its error to done on
+// the loop; a nil done logs a failure instead. A request the queue
+// refuses fails with ErrPortalBusy.
+func (d *desktopPortals) post(what string, work func() error, done func(error)) {
+	if !d.queue.Post(func() { d.app.reportDone(what, done, work()) }) {
+		d.app.reportDone(what, done, fmt.Errorf("app: %s: %w", what, ErrPortalBusy))
+	}
+}
+
 // Inhibit holds off the session actions in flags, with reason shown to
 // the user, through the xdg-desktop-portal Inhibit portal (GTK's
-// gtk_application_inhibit). The returned release ends the inhibition.
-// It blocks for the portal's answer; without a portal it errors.
-func (a *Application) Inhibit(flags InhibitFlags, reason string) (release func() error, err error) {
+// gtk_application_inhibit). It returns at once, and done runs on the
+// loop with the portal's answer: a release that ends the inhibition, or
+// ErrPortalDenied, ErrPortalUnavailable or the failure. Calling release
+// again does nothing, and a failure to release is logged, since the
+// inhibition ends with the connection anyway.
+func (a *Application) Inhibit(flags InhibitFlags, reason string, done func(release func(), err error)) {
 	d := a.desktop()
-	resp, handle, err := d.request(portalInhibit, map[string]dbus.Variant{"reason": dbus.MakeVariant(reason)}, "", uint32(flags))
-	if err != nil {
-		return nil, err
-	}
-	if resp.code != 0 {
-		return nil, fmt.Errorf("app: inhibit %q: %w", reason, ErrPortalDenied)
-	}
-	var once sync.Once
-	return func() error {
-		var err error
-		once.Do(func() { err = d.closeRequest(handle) })
-		return err
-	}, nil
+	var handle dbus.ObjectPath
+	d.post("inhibit", func() error {
+		resp, h, err := d.request(portalInhibit, map[string]dbus.Variant{"reason": dbus.MakeVariant(reason)}, "", uint32(flags))
+		if err != nil {
+			return err
+		}
+		if resp.code != 0 {
+			return fmt.Errorf("app: inhibit %q: %w", reason, ErrPortalDenied)
+		}
+		handle = h
+		return nil
+	}, func(err error) {
+		if err != nil {
+			done(nil, err)
+			return
+		}
+		done(sync.OnceFunc(func() {
+			d.post("release the inhibition", func() error { return d.closeRequest(handle) }, nil)
+		}), nil)
+	})
 }
 
 // OnSessionStateChange watches the login session's state through the
-// Inhibit portal's monitor. fn runs on the loop goroutine with the
-// state and whether the screensaver is active. When the state is
-// SessionQueryEnd, lys-ui answers the portal's query after fn returns, so
-// an Inhibit(InhibitLogout, ...) made inside fn objects to the logout.
-func (a *Application) OnSessionStateChange(fn func(state SessionState, screensaver bool)) error {
+// Inhibit portal's monitor. It returns at once, and done (nil logs a
+// failure instead) runs on the loop once the monitor stands or failed.
+// fn runs on the loop goroutine with the state and whether the
+// screensaver is active. When the state is SessionQueryEnd, lys-ui
+// answers the portal's query after fn returns and after every Inhibit
+// made inside fn reached the portal, so an Inhibit(InhibitLogout, ...)
+// made inside fn objects to the logout.
+func (a *Application) OnSessionStateChange(fn func(state SessionState, screensaver bool), done func(error)) {
 	d := a.desktop()
 	d.mu.Lock()
 	d.onState = fn
+	d.mu.Unlock()
+	d.post("session monitor", d.ensureMonitor, done)
+}
+
+// ensureMonitor runs on the portal worker, so a second call finds the
+// first one's monitor.
+func (d *desktopPortals) ensureMonitor() error {
+	d.mu.Lock()
 	has := d.monitor != ""
 	d.mu.Unlock()
 	if has {
 		return nil
+	}
+	if err := d.connect(); err != nil {
+		return err
 	}
 	resp, _, err := d.request(portalCreateMonitor, map[string]dbus.Variant{"session_handle_token": dbus.MakeVariant(d.token(sessionToken))}, "")
 	if err != nil {
@@ -150,7 +209,7 @@ func (d *desktopPortals) signal(sig *dbus.Signal) {
 	d.app.Invoke(func() {
 		fn(state, screensaver)
 		if state == SessionQueryEnd {
-			go func() { _ = d.callPlain(portalQueryEnd, handle) }()
+			d.post("answer the query-end", func() error { return d.callPlain(portalQueryEnd, handle) }, nil)
 		}
 	})
 }
@@ -207,7 +266,22 @@ func (a *Application) RequestBackground(req BackgroundRequest, done func(Backgro
 }
 
 // SetBackgroundStatus sets the one-line status the desktop shows for
-// the application while it runs in the background.
-func (a *Application) SetBackgroundStatus(message string) error {
-	return a.desktop().callPlain(portalSetStatus, map[string]dbus.Variant{"message": dbus.MakeVariant(message)})
+// the application while it runs in the background. It returns at once,
+// and done (nil logs a failure instead) runs on the loop with the
+// result.
+func (a *Application) SetBackgroundStatus(message string, done func(error)) {
+	d := a.desktop()
+	d.post("background status", func() error {
+		return d.callPlain(portalSetStatus, map[string]dbus.Variant{"message": dbus.MakeVariant(message)})
+	}, done)
+}
+
+// close ends every portal call in flight by closing the connection, then
+// joins the worker. Queued work finds the connection closed and fails.
+func (d *desktopPortals) close() {
+	d.queue.Stop(0)
+	d.portalClient.close()
+	if !d.queue.Stop(portalStopTimeout) {
+		debug.Log("portal", "the portal worker outlived the stop")
+	}
 }

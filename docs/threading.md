@@ -84,6 +84,13 @@ reverse registration order). Delivery is deferred: a `Send`
 from inside a subscriber or update runs on the next pass.
 `cmd/lys-ui-messages` shows both, with a component on the click path.
 
+Clipboard and drag-and-drop transfers (internal/xfer) run the same way.
+The request leaves on the loop, the pipe is read or written on a
+transfer goroutine, and the result comes back through `Invoke`, so a
+peer that never answers costs a paste that stays pending, never a
+frame. A `transfer.Content` writer runs on such a goroutine. Transfers
+are bounded, and `Run` returning ends and joins them.
+
 The desktop-settings monitor is the background-worker shape: it
 watches the portal on its own dbus goroutine, and `Application`
 bridges each change onto the loop through `Invoke`
@@ -102,6 +109,14 @@ no slow service can drop a frame:
   the one value. The file follows 250 ms later on a timer goroutine, a
   burst of Sets coalesced into one write. Run's exit flushes, and
   `Settings.Flush` does it on demand.
+- **Desktop notifications** (`Application.Notify`): the id is made
+  locally, and the dial and the bus call run on the notifier's worker.
+  A daemon that stopped answering costs a dropped notification once the
+  bounded queue is full.
+- **Session portals** (`Inhibit`, `OnSessionStateChange`,
+  `SetBackgroundStatus`): each returns at once and answers through a
+  `done` callback on the loop. They run in order on one worker, so a
+  query-end answer follows any `Inhibit` the callback made.
 
 ## The relm4 mapping
 

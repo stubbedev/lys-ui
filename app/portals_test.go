@@ -156,7 +156,18 @@ func TestInhibitHoldsUntilReleased(t *testing.T) {
 	d := startMockDesktop(t)
 	a := testApp(nil)
 	defer a.desktop().close()
-	release, err := a.Inhibit(InhibitLogout|InhibitSuspend, "saving the document")
+	inhibit := func(flags InhibitFlags, reason string) (func(), error) {
+		t.Helper()
+		var (
+			release func()
+			err     error
+			done    bool
+		)
+		a.Inhibit(flags, reason, func(r func(), e error) { release, err, done = r, e, true })
+		pumpUntil(t, a, func() bool { return done })
+		return release, err
+	}
+	release, err := inhibit(InhibitLogout|InhibitSuspend, "saving the document")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,17 +177,18 @@ func TestInhibitHoldsUntilReleased(t *testing.T) {
 	if !slices.Equal(flags, []uint32{1 | 4}) || !slices.Equal(reasons, []string{"saving the document"}) {
 		t.Errorf("portal saw flags %v reasons %v", flags, reasons)
 	}
-	if err := release(); err != nil {
-		t.Fatal(err)
+	release()
+	release()
+	if !a.desktop().queue.Settle(5 * time.Second) {
+		t.Fatal("the release never ran")
 	}
-	_ = release()
 	d.mu.Lock()
 	closed := len(d.closed)
 	d.mu.Unlock()
 	if closed != 1 {
 		t.Errorf("release closed %d request handles, want 1", closed)
 	}
-	if _, err := a.Inhibit(InhibitIdle, "deny"); !errors.Is(err, ErrPortalDenied) {
+	if _, err := inhibit(InhibitIdle, "deny"); !errors.Is(err, ErrPortalDenied) {
 		t.Errorf("a denied inhibit returned %v", err)
 	}
 }
@@ -196,9 +208,14 @@ func TestBackgroundRequestAndStatus(t *testing.T) {
 	if !got.Background || !got.Autostart {
 		t.Errorf("result %+v", *got)
 	}
-	if err := a.SetBackgroundStatus("syncing 3 files"); err != nil {
-		t.Fatal(err)
-	}
+	statusDone := false
+	a.SetBackgroundStatus("syncing 3 files", func(err error) {
+		if err != nil {
+			t.Error(err)
+		}
+		statusDone = true
+	})
+	pumpUntil(t, a, func() bool { return statusDone })
 	d.mu.Lock()
 	status := slices.Clone(d.status)
 	d.mu.Unlock()
@@ -212,9 +229,14 @@ func TestSessionStateChangesReachTheLoopAndQueryEndIsAnswered(t *testing.T) {
 	a := testApp(nil)
 	defer a.desktop().close()
 	var states []SessionState
-	if err := a.OnSessionStateChange(func(s SessionState, _ bool) { states = append(states, s) }); err != nil {
-		t.Fatal(err)
-	}
+	monitoring := false
+	a.OnSessionStateChange(func(s SessionState, _ bool) { states = append(states, s) }, func(err error) {
+		if err != nil {
+			t.Error(err)
+		}
+		monitoring = true
+	})
+	pumpUntil(t, a, func() bool { return monitoring })
 	d.mu.Lock()
 	monitor, owner := d.monitor, d.owner
 	d.mu.Unlock()
@@ -236,5 +258,152 @@ func TestSessionStateChangesReachTheLoopAndQueryEndIsAnswered(t *testing.T) {
 	d.mu.Unlock()
 	if queried != monitor {
 		t.Errorf("query-end answered for %q, want the monitor %q", queried, monitor)
+	}
+}
+
+// stuckPortals is a desktopPortals whose worker is held by a job, the state
+// a portal that stopped answering leaves it in.
+func stuckPortals(t *testing.T, a *Application) (release func()) {
+	t.Helper()
+	held, entered := make(chan struct{}), make(chan struct{})
+	if !a.desktop().queue.Post(func() {
+		close(entered)
+		<-held
+	}) {
+		t.Fatal("the worker refused the holding job")
+	}
+	<-entered
+	return sync.OnceFunc(func() { close(held) })
+}
+
+// A portal that stopped answering stalls no loop pass: every session call
+// returns while the bus call waits on the worker, and the worker's queue
+// is the only thing that grows.
+func TestPortalCallsReturnWhileThePortalIsStuck(t *testing.T) {
+	d := startMockDesktop(t)
+	a := testApp(nil)
+	defer a.desktop().close()
+	release := stuckPortals(t, a)
+	defer release()
+	var answers []string
+	a.Invoke(func() {
+		a.Inhibit(InhibitIdle, "stuck", func(_ func(), err error) {
+			if err != nil {
+				t.Error(err)
+			}
+			answers = append(answers, "inhibit")
+		})
+		a.OnSessionStateChange(func(SessionState, bool) {}, func(err error) {
+			if err != nil {
+				t.Error(err)
+			}
+			answers = append(answers, "monitor")
+		})
+		a.SetBackgroundStatus("stuck", func(err error) {
+			if err != nil {
+				t.Error(err)
+			}
+			answers = append(answers, "status")
+		})
+	})
+	a.pump(time.Now())
+	d.mu.Lock()
+	seen := len(d.flags)
+	d.mu.Unlock()
+	if seen != 0 || len(answers) != 0 {
+		t.Fatalf("the stuck worker let through %d bus calls and %v", seen, answers)
+	}
+	release()
+	pumpUntil(t, a, func() bool { return len(answers) == 3 })
+	if !slices.Equal(answers, []string{"inhibit", "monitor", "status"}) {
+		t.Errorf("answers %v, want posting order", answers)
+	}
+}
+
+// The query-end answer waits for an Inhibit the callback made: the portal
+// must see the objection before it hears the application is done.
+func TestQueryEndAnswerFollowsTheInhibitMadeForIt(t *testing.T) {
+	d := startMockDesktop(t)
+	a := testApp(nil)
+	defer a.desktop().close()
+	monitoring := false
+	objected := false
+	a.OnSessionStateChange(func(s SessionState, _ bool) {
+		if s != SessionQueryEnd {
+			return
+		}
+		a.Inhibit(InhibitLogout, "unsaved work", func(_ func(), err error) {
+			if err != nil {
+				t.Error(err)
+			}
+			objected = true
+		})
+	}, func(err error) {
+		if err != nil {
+			t.Error(err)
+		}
+		monitoring = true
+	})
+	pumpUntil(t, a, func() bool { return monitoring })
+	d.mu.Lock()
+	monitor, owner := d.monitor, d.owner
+	d.mu.Unlock()
+	d.unicast(owner, "/org/freedesktop/portal/desktop", portalInhibitIface+"|StateChanged", monitor, map[string]dbus.Variant{
+		"session-state":      dbus.MakeVariant(uint32(SessionQueryEnd)),
+		"screensaver-active": dbus.MakeVariant(false),
+	})
+	flagsAtQuery := -1
+	pumpUntil(t, a, func() bool {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		if len(d.queried) > 0 && flagsAtQuery < 0 {
+			flagsAtQuery = len(d.flags)
+		}
+		return objected && len(d.queried) == 1
+	})
+	if flagsAtQuery != 1 {
+		t.Errorf("the portal saw %d inhibits when the query-end was answered, want the objection", flagsAtQuery)
+	}
+}
+
+// A queue full behind a stuck portal refuses with the error, on the loop.
+func TestPortalBusyWhenTheQueueIsFull(t *testing.T) {
+	a := testApp(nil)
+	d := a.desktop()
+	defer d.close()
+	release := stuckPortals(t, a)
+	defer release()
+	for d.queue.Post(func() {}) {
+	}
+	var got error
+	a.SetBackgroundStatus("x", func(err error) { got = err })
+	a.pump(time.Now())
+	if !errors.Is(got, ErrPortalBusy) {
+		t.Errorf("status over a full queue returned %v", got)
+	}
+}
+
+// Stopping ends a request stuck on an answer that never comes, without
+// waiting out its timeout.
+func TestPortalCloseEndsAStuckRequest(t *testing.T) {
+	startMockDesktop(t)
+	a := testApp(nil)
+	d := a.desktop()
+	result := make(chan error, 1)
+	d.post("hold", func() error {
+		if err := d.connect(); err != nil {
+			return err
+		}
+		_, _, err := d.request(portalRequestBg+"NoSuchMethodThatNeverAnswers", map[string]dbus.Variant{})
+		return err
+	}, nil)
+	go func() {
+		d.close()
+		result <- nil
+	}()
+	select {
+	case <-result:
+	case <-time.After(portalRequestTimeout / 2):
+		t.Fatal("close waited on the portal")
 	}
 }

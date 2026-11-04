@@ -44,12 +44,11 @@ type NotifyOptions struct {
 	OnClosed func(reason notify.CloseReason)
 }
 
-// Notify sends a desktop notification and forgets it: the bus call
-// runs off the loop goroutine, action and close callbacks come back
-// onto it, and a desktop without a notification surface drops the
-// notification silently. The lys-ui-side id the transport works with is
-// internal; withdrawing a notification is CloseNotification on the
-// returned handle.
+// Notify sends a desktop notification and forgets it: the dial and the
+// bus call run on the notifier's worker, action and close callbacks
+// come back onto the loop, and a desktop without a notification surface
+// drops the notification silently. The lys-ui-side id the transport
+// works with is generated here and stays internal.
 func (a *Application) Notify(title, body string, opts NotifyOptions) {
 	n := a.notifier()
 	id := n.Notify(notification(title, body, opts))
@@ -80,20 +79,25 @@ func notification(title, body string, opts NotifyOptions) notify.Notification {
 	}
 }
 
-// notifier starts (once, off the loop) the desktop notifier and wires
-// its signals onto the loop.
+// notifier creates (once) the desktop notifier, which touches no bus
+// until its worker runs, and wires its signals onto the loop.
 func (a *Application) notifier() *notify.Notifier {
-	a.notifyOnce.Do(func() {
-		n := notify.New()
-		a.notifyStore = n
-		n.OnAction(func(id, action string) {
-			a.Invoke(func() { a.notifyAction(id, action) })
-		})
-		n.OnClosed(func(id string, reason notify.CloseReason) {
-			a.Invoke(func() { a.notifyClosed(id, reason) })
-		})
-	})
+	a.notifyOnce.Do(func() { a.adoptNotifier(notify.New()) })
+	a.notifyMu.Lock()
+	defer a.notifyMu.Unlock()
 	return a.notifyStore
+}
+
+func (a *Application) adoptNotifier(n *notify.Notifier) {
+	a.notifyMu.Lock()
+	a.notifyStore = n
+	a.notifyMu.Unlock()
+	n.OnAction(func(id, action string) {
+		a.Invoke(func() { a.notifyAction(id, action) })
+	})
+	n.OnClosed(func(id string, reason notify.CloseReason) {
+		a.Invoke(func() { a.notifyClosed(id, reason) })
+	})
 }
 
 // notifyAction dispatches an activation on the loop; unknown ids

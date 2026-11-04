@@ -5,11 +5,11 @@
 // bus - the appearance.md failure model, inert and logged at Debug.
 // Pure Go over the existing godbus dependency.
 //
-// Threading matches internal/portalsettings: Notify blocks on the bus call
-// and belongs off the Wayland loop goroutine; OnAction and OnClosed
-// callbacks run serialized on the notifier's own goroutine, and the
-// application bridges onto its loop with Invoke. Every method is safe
-// from any goroutine once New returned.
+// Threading: every method returns at once and is safe from any
+// goroutine, including the Wayland loop. The dial, the probe and every
+// bus call run in order on the notifier's worker; OnAction and OnClosed
+// callbacks run serialized on the signal goroutine, and the application
+// bridges onto its loop with Invoke.
 package notify
 
 import (
@@ -21,6 +21,7 @@ import (
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-ui/internal/logutil"
+	"github.com/stubbedev/lys-ui/internal/worker"
 )
 
 // Action is one notification action: the key the daemon reports back
@@ -82,16 +83,48 @@ const (
 	ReasonUnspecified  CloseReason = 4
 )
 
+// Bus is the session-bus connection a Notifier sends through.
+type Bus interface {
+	// Call invokes method and stores the reply into ret when ret is not
+	// nil, returning once ctx ends at the latest.
+	Call(ctx context.Context, dest string, path dbus.ObjectPath, method string, flags dbus.Flags, ret any, args ...any) error
+	// Signal routes the signals the bus delivers to ch.
+	Signal(ch chan<- *dbus.Signal)
+	Close() error
+}
+
+// connBus is the real Bus.
+type connBus struct{ conn *dbus.Conn }
+
+func (b connBus) Call(ctx context.Context, dest string, path dbus.ObjectPath, method string, flags dbus.Flags, ret any, args ...any) error {
+	call := b.conn.Object(dest, path).CallWithContext(ctx, method, flags, args...)
+	if ret == nil {
+		return call.Err
+	}
+	return call.Store(ret)
+}
+
+func (b connBus) Signal(ch chan<- *dbus.Signal) { b.conn.Signal(ch) }
+
+func (b connBus) Close() error { return b.conn.Close() }
+
 // Notifier owns one session-bus connection and sends notifications
-// through the best transport it found at startup. Without a bus (or
-// with neither name owned) it is inert: Notify is a no-op that still
-// returns an id, callbacks never fire, and Close is a no-op.
+// through the best transport its worker finds on the first send.
+// Without a bus (or with neither name owned) it is inert: Notify is a
+// no-op that still returns an id, callbacks never fire, and Close is a
+// no-op. A queue full of a stuck daemon's work drops the notification
+// with a log.
 type Notifier struct {
-	// dial is the connection source; nil on an inert notifier.
-	dial func() (*dbus.Conn, error)
+	dial   func() (Bus, error)
+	queue  *worker.Queue
+	base   context.Context
+	cancel context.CancelFunc
+
+	// probed, read and written on the worker alone, says the dial ran.
+	probed bool
 
 	mu     sync.Mutex
-	conn   *dbus.Conn
+	bus    Bus
 	mode   transport
 	nextID atomic.Int64
 	closed bool
@@ -142,62 +175,95 @@ const (
 	// signalBuffer rides a slow app handler without godbus spawning a
 	// goroutine per signal.
 	signalBuffer = 16
+
+	// queueDepth bounds what a stuck daemon can pile up: past it,
+	// notifications drop.
+	queueDepth = 64
 )
 
-// New probes the session bus once and returns the notifier: portal
-// transport when the desktop portal owns its name, the classic spec
-// when its daemon does, and an inert notifier without a bus. The probe
-// itself is bounded by callTimeout; New blocks that long at most.
+// New returns a notifier over the session bus. It touches no bus: the
+// worker dials and picks the transport on the first send, portal when
+// the desktop portal owns its name, the classic spec when its daemon
+// does, and inert otherwise.
 func New() *Notifier {
-	n := &Notifier{dial: dialSession}
-	conn, err := dialSession()
-	if err != nil {
-		logutil.L().Debug("notify: no session bus; desktop notifications disabled")
-		n.dial = nil
-		return n
-	}
-	n.conn = conn
-	n.mode = n.probe(conn)
-	if n.mode == transportNone {
-		_ = conn.Close()
-		n.conn = nil
-		n.dial = nil
-		return n
-	}
-	n.subscribe()
-	return n
+	return NewWithDial(dialSession)
+}
+
+// NewWithDial is New over another bus.
+func NewWithDial(dial func() (Bus, error)) *Notifier {
+	base, cancel := context.WithCancel(context.Background())
+	return &Notifier{dial: dial, queue: worker.New(queueDepth), base: base, cancel: cancel}
 }
 
 // dialSession is New's connection source, the appearance package's
 // hygiene rule: a private connection the notifier owns and closes.
-func dialSession() (*dbus.Conn, error) {
-	return dbus.ConnectSessionBus()
+func dialSession() (Bus, error) {
+	conn, err := dbus.ConnectSessionBus()
+	if err != nil {
+		return nil, err
+	}
+	return connBus{conn: conn}, nil
+}
+
+// connect runs on the worker: the first send dials and probes, and
+// every later one finds the verdict. It returns the bus and transport
+// to send through, a nil bus when the notifier is inert.
+func (n *Notifier) connect() (Bus, transport) {
+	if !n.probed {
+		n.probed = true
+		n.dialAndProbe()
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.bus, n.mode
+}
+
+func (n *Notifier) dialAndProbe() {
+	bus, err := n.dial()
+	if err != nil {
+		logutil.L().Debug("notify: no session bus; desktop notifications disabled", "err", err)
+		return
+	}
+	mode := n.probe(bus)
+	n.mu.Lock()
+	inert := n.closed || mode == transportNone
+	if !inert {
+		n.bus, n.mode = bus, mode
+	}
+	n.mu.Unlock()
+	if inert {
+		_ = bus.Close()
+		return
+	}
+	n.subscribe(bus)
 }
 
 // probe picks the transport by owned names.
-func (n *Notifier) probe(conn *dbus.Conn) transport {
-	var owned bool
-	if err := conn.Object("org.freedesktop.DBus", "/").CallWithContext(
-		conn.Context(), "org.freedesktop.DBus.NameHasOwner", 0,
-		portalDesktopName).Store(&owned); err == nil && owned {
-		return transportPortal
-	}
-	if err := conn.Object("org.freedesktop.DBus", "/").CallWithContext(
-		conn.Context(), "org.freedesktop.DBus.NameHasOwner", 0,
-		classicName).Store(&owned); err == nil && owned {
-		return transportClassic
+func (n *Notifier) probe(bus Bus) transport {
+	for _, cand := range []struct {
+		name string
+		mode transport
+	}{{portalDesktopName, transportPortal}, {classicName, transportClassic}} {
+		ctx, cancel := context.WithTimeout(n.base, callTimeout)
+		var owned bool
+		err := bus.Call(ctx, "org.freedesktop.DBus", "/", "org.freedesktop.DBus.NameHasOwner", 0, &owned, cand.name)
+		cancel()
+		if err != nil {
+			logutil.L().Debug("notify: NameHasOwner failed", "name", cand.name, "err", err)
+			continue
+		}
+		if owned {
+			return cand.mode
+		}
 	}
 	return transportNone
 }
 
 // subscribe routes ActionInvoked and NotificationClosed signals to the
-// callbacks on one goroutine.
-func (n *Notifier) subscribe() {
-	if n.conn == nil {
-		return
-	}
+// callbacks on one goroutine, which ends when the bus closes.
+func (n *Notifier) subscribe(bus Bus) {
 	ch := make(chan *dbus.Signal, signalBuffer)
-	n.conn.Signal(ch)
+	bus.Signal(ch)
 	go func() {
 		for sig := range ch {
 			switch sig.Name {
@@ -224,77 +290,93 @@ func (n *Notifier) subscribe() {
 	}()
 }
 
-// Notify sends nf and returns its id: stable across transports, safe
-// to hand to Close. It blocks on the bus call (bounded); without a
-// transport it returns the id without sending. The body is capped at
-// maxBodyRunes runes.
+// Notify queues nf for the worker and returns its id at once: generated
+// here, stable across transports, safe to hand to Close. The body is
+// capped at maxBodyRunes runes.
 func (n *Notifier) Notify(nf Notification) string {
 	id := "lys-ui-" + time.Now().Format("20060102T150405.000000000") + "-" + itoa(n.nextID.Add(1))
 	nf.Body = capBody(nf.Body)
-	if n.dial == nil {
-		return id
-	}
-	n.mu.Lock()
-	conn, mode := n.conn, n.mode
-	n.mu.Unlock()
-	if conn == nil || mode == transportNone {
-		return id
-	}
-	ctx, cancel := context.WithTimeout(conn.Context(), callTimeout)
-	defer cancel()
-	switch mode {
-	case transportPortal:
-		if err := conn.Object(portalDesktopName, portalPath).CallWithContext(
-			ctx, portalAdd, dbus.FlagNoReplyExpected, id, portalDict(nf)).Err; err != nil {
-			logutil.L().Debug("notify: portal AddNotification failed", "err", err)
-		}
-	case transportClassic:
-		var classicID uint32
-		if err := conn.Object(classicName, classicPath).CallWithContext(
-			ctx, classicNotify, 0, "lys-ui", uint32(0), nf.Icon,
-			nf.Title, nf.Body, classicActions(nf), classicHints(nf),
-			classicTimeout(nf.Timeout)).Store(&classicID); err != nil {
-			logutil.L().Debug("notify: Notifications.Notify failed", "err", err)
-		} else {
-			n.rememberClassic(classicID, id)
-		}
+	if !n.queue.Post(func() { n.send(id, nf) }) {
+		logutil.L().Debug("notify: dropped a notification, the worker is stuck or stopped", "id", id)
 	}
 	return id
 }
 
-// Close withdraws a still-shown notification; unknown ids and inert
-// notifiers are no-ops.
-func (n *Notifier) Close(id string) {
-	n.mu.Lock()
-	conn, mode := n.conn, n.mode
-	classic := n.classicOf[id]
-	n.mu.Unlock()
-	if conn == nil {
+// send delivers one notification on the worker.
+func (n *Notifier) send(id string, nf Notification) {
+	bus, mode := n.connect()
+	if bus == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(conn.Context(), callTimeout)
+	ctx, cancel := context.WithTimeout(n.base, callTimeout)
 	defer cancel()
-	if mode == transportPortal {
-		_ = conn.Object(portalDesktopName, portalPath).CallWithContext(
-			ctx, portalRemove, dbus.FlagNoReplyExpected, id).Err
-	} else if mode == transportClassic && classic != 0 {
-		_ = conn.Object(classicName, classicPath).CallWithContext(
-			ctx, classicCloseCall, dbus.FlagNoReplyExpected, classic).Err
+	switch mode {
+	case transportPortal:
+		if err := bus.Call(ctx, portalDesktopName, portalPath, portalAdd, dbus.FlagNoReplyExpected, nil, id, portalDict(nf)); err != nil {
+			logutil.L().Debug("notify: portal AddNotification failed", "err", err)
+		}
+	case transportClassic:
+		var classicID uint32
+		if err := bus.Call(ctx, classicName, classicPath, classicNotify, 0, &classicID, "lys-ui", uint32(0), nf.Icon,
+			nf.Title, nf.Body, classicActions(nf), classicHints(nf), classicTimeout(nf.Timeout)); err != nil {
+			logutil.L().Debug("notify: Notifications.Notify failed", "err", err)
+			return
+		}
+		n.rememberClassic(classicID, id)
 	}
 }
 
-// Shutdown closes the connection; the notifier goes inert.
-func (n *Notifier) Shutdown() {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	if n.closed || n.conn == nil {
-		n.closed = true
+// Close queues the withdrawal of a still-shown notification; unknown ids
+// and inert notifiers are no-ops.
+func (n *Notifier) Close(id string) {
+	if !n.queue.Post(func() { n.withdraw(id) }) {
+		logutil.L().Debug("notify: dropped a close, the worker is stuck or stopped", "id", id)
+	}
+}
+
+// withdraw runs on the worker, after the send it follows, so a classic
+// id the send learned is known here.
+func (n *Notifier) withdraw(id string) {
+	bus, mode := n.connect()
+	if bus == nil {
 		return
 	}
-	n.closed = true
-	_ = n.conn.Close()
-	n.conn = nil
-	n.dial = nil
+	n.mu.Lock()
+	classic := n.classicOf[id]
+	n.mu.Unlock()
+	ctx, cancel := context.WithTimeout(n.base, callTimeout)
+	defer cancel()
+	var err error
+	switch {
+	case mode == transportPortal:
+		err = bus.Call(ctx, portalDesktopName, portalPath, portalRemove, dbus.FlagNoReplyExpected, nil, id)
+	case mode == transportClassic && classic != 0:
+		err = bus.Call(ctx, classicName, classicPath, classicCloseCall, dbus.FlagNoReplyExpected, nil, classic)
+	}
+	if err != nil {
+		logutil.L().Debug("notify: withdraw failed", "id", id, "err", err)
+	}
+}
+
+// Shutdown lets queued notifications go out, within callTimeout in all,
+// then closes the connection; the notifier goes inert. A worker stuck
+// past that keeps its goroutine until the stuck call returns, and the
+// connection closes without waiting for it.
+func (n *Notifier) Shutdown() {
+	settled := n.queue.Stop(callTimeout)
+	n.cancel()
+	n.mu.Lock()
+	bus := n.bus
+	n.bus, n.mode, n.closed = nil, transportNone, true
+	n.mu.Unlock()
+	if bus == nil {
+		return
+	}
+	if settled {
+		_ = bus.Close()
+		return
+	}
+	go func() { _ = bus.Close() }()
 }
 
 // OnAction registers the activation callback (id, action key); nil
