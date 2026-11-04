@@ -94,6 +94,9 @@ type hostWindow struct {
 	kick atomic.Bool
 
 	pool *buffer.Pool
+	// surfSync is the surface's explicit synchronization object, while its
+	// buffers have timelines.
+	surfSync buffer.SurfaceSync
 	// animatedAt is when a frame last went out with an animation running.
 	animatedAt time.Time
 	// footprint is the pool's buffer count and bytes as last logged
@@ -232,7 +235,6 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 	w := &hostWindow{
 		host: host, sess: sess, cfg: hooks,
 		afterSync: sess.AfterSync,
-		surf:      wireSurface{wl: host.HostSurface(), comp: sess.Compositor(), sess: sess},
 		frac120:   uint32(initialScale * 120),
 		scale:     initialScale,
 		router:    &widget.Router{Root: root},
@@ -241,6 +243,7 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 		dirty:     true,
 		destroy:   destroy,
 	}
+	w.surf = wireSurface{wl: host.HostSurface(), comp: sess.Compositor(), sess: sess, sync: &w.surfSync}
 	// Animated kinds (layer overlays, dialogs) wrap their tree in a
 	// morph the coordinator drives; the enter starts lazily — at the
 	// first usable pass, after the configure handshake — so the very
@@ -385,6 +388,9 @@ func (w *hostWindow) release() {
 	}
 	if w.dnd != nil {
 		w.dnd.Bind(w.host.HostSurface(), nil)
+	}
+	if err := w.surfSync.Close(); err != nil {
+		debug.Log("frame", "destroy the explicit sync object: %v", err)
 	}
 	w.host.DestroySurface()
 	if w.pool == nil {
@@ -682,6 +688,7 @@ type wireSurface struct {
 	wl   *wl.Surface
 	comp *wl.Compositor
 	sess *wlsession.Session
+	sync *buffer.SurfaceSync
 }
 
 // BlurAvailable implements surfaceHandle.
@@ -693,8 +700,14 @@ func (s wireSurface) SetBlurRegion(rects []render.Rect) error {
 	return s.sess.SetBlurRegion(s.wl, rects)
 }
 
-// Attach implements surfaceHandle.
-func (s wireSurface) Attach(b *buffer.Buffer) error { return s.wl.Attach(b.WL, 0, 0) }
+// Attach implements surfaceHandle, with b's explicit synchronization points
+// where it has a timeline.
+func (s wireSurface) Attach(b *buffer.Buffer) error {
+	if err := s.wl.Attach(b.WL, 0, 0); err != nil {
+		return err
+	}
+	return s.sync.Points(s.sess.SyncobjManager(), s.wl, b)
+}
 
 // Damage implements surfaceHandle: one damage_buffer call per rect, in
 // buffer pixels.

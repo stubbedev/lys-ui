@@ -75,7 +75,7 @@ func TestGPUFrameFailureFallsBackToCPU(t *testing.T) {
 		lost := errors.New("device lost")
 		w.renderer = &gpuRenderer{
 			name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), required: required,
-			render: func(*render.List, *gpu.Target, []gpu.Carry) (gpuFrame, error) { return gpuFrame{}, lost },
+			render: func(*render.List, *gpu.Target, []gpu.Carry, bool) (gpuFrame, error) { return gpuFrame{}, lost },
 		}
 		fakes := w.newBuffer
 		var gpuBufs []*buffer.Buffer
@@ -365,7 +365,7 @@ func TestAFrameTheGPURefusedStaysOwedAndWakesTheLoop(t *testing.T) {
 	r := &gpuRenderer{
 		name: "test", rec: render.NewRecorder(1, 1, 1, 1), required: true,
 		wake: func(d time.Duration) { wakes = append(wakes, d) },
-		render: func(_ *render.List, _ *gpu.Target, carry []gpu.Carry) (gpuFrame, error) {
+		render: func(_ *render.List, _ *gpu.Target, carry []gpu.Carry, _ bool) (gpuFrame, error) {
 			carried = append(carried[:0], carry...)
 			if busy {
 				return gpuFrame{}, gpu.ErrBusy

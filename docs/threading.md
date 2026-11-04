@@ -36,6 +36,10 @@ move to it at a frame boundary, repainting whole. A window's or popup's GPU buff
 renderer's (`Device.PrepareTarget`), and the import goes out on the loop once
 the target comes back through `Invoke`; closing the renderer closes the device,
 which waits for the allocations running, and then joins their workers.
+Where the compositor takes linux-drm-syncobj, each GPU buffer has a timeline of
+its own: a frame's sync_file becomes its acquire point, and the buffer stays
+busy until the compositor signals its release point, which one worker waits on
+for every buffer in epoll and hands to the loop through `Invoke`.
 An application that renders on its own thread hands the finished
 buffer back through `Invoke` and presents it there.
 

@@ -792,7 +792,7 @@ func TestAGPUScrollStepCarriesItsPixels(t *testing.T) {
 	busy := false
 	w.renderer = &gpuRenderer{
 		name: "test", rec: render.NewRecorder(1, 1, 1, 1), wake: func(time.Duration) {},
-		render: func(_ *render.List, _ *gpu.Target, carry []gpu.Carry) (gpuFrame, error) {
+		render: func(_ *render.List, _ *gpu.Target, carry []gpu.Carry, _ bool) (gpuFrame, error) {
 			if busy {
 				return gpuFrame{}, gpu.ErrBusy
 			}

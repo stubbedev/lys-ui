@@ -109,6 +109,7 @@ type Session struct {
 	layerShell    *wlr.ZwlrLayerShellV1
 	viewporter    *wlr.WpViewporter
 	presentation  *wlr.WpPresentation
+	syncobj       *wlr.WpDrmSyncobjManagerV1
 	subcompositor *wl.Subcompositor
 	dmabuf        *wlr.ZwpDmabufV1
 	dmabufVersion uint32
@@ -514,6 +515,12 @@ func (s *Session) HandleRegistryGlobal(ev wl.RegistryGlobalEvent) {
 			return
 		}
 		s.presentation = p
+	case "wp_linux_drm_syncobj_manager_v1":
+		m := wlr.NewWpDrmSyncobjManagerV1(s.registry.Context())
+		if !s.bindOptional(ev, 1, m) {
+			return
+		}
+		s.syncobj = m
 	case "wp_fractional_scale_manager_v1":
 		ctx := s.registry.Context()
 		mgr := wlr.NewWpScaleManagerV1(ctx)

@@ -18,7 +18,7 @@ func TestAnIncompleteGPUFrameGoesOutAndStaysOwed(t *testing.T) {
 	incomplete := false
 	w.renderer = &gpuRenderer{
 		name: "test", rec: render.NewRecorder(1, 1, 1, 1), wake: func(time.Duration) {},
-		render: func(*render.List, *gpu.Target, []gpu.Carry) (gpuFrame, error) {
+		render: func(*render.List, *gpu.Target, []gpu.Carry, bool) (gpuFrame, error) {
 			return gpuFrame{incomplete: incomplete}, nil
 		},
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/wlr"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
@@ -54,8 +55,14 @@ type gpuRenderer struct {
 	// hasNode is false where the compositor named none.
 	node    uint64
 	hasNode bool
-	// render draws a frame on the device, a seam for tests.
-	render func(*render.List, *gpu.Target, []gpu.Carry) (gpuFrame, error)
+	// render draws a frame on the device, a seam for tests: explicit for a
+	// consumer told when it is done through its sync_file, which never waits.
+	render func(l *render.List, t *gpu.Target, carry []gpu.Carry, explicit bool) (gpuFrame, error)
+	// timelines are the device's timeline syncobjs where the compositor takes
+	// explicit synchronization, nil where it does not; syncMgr is the
+	// session's manager the buffers' timelines import into.
+	timelines syncTimelines
+	syncMgr   *wlr.WpDrmSyncobjManagerV1
 	// wake arms the loop to wake after a delay: the retry of a frame the
 	// device refused, which no commit will call back for.
 	wake func(time.Duration)
@@ -72,14 +79,20 @@ type gpuRenderer struct {
 	drawn, trimmed bool
 }
 
-// gpuFrame is what a drawn frame reports beyond its error.
+// gpuFrame is what a drawn frame reports beyond its error: an explicit
+// frame's sync_file, -1 for one done already or not explicit.
 type gpuFrame struct {
 	incomplete bool
+	syncFile   int
 }
 
-func (r *gpuRenderer) deviceFrame(l *render.List, t *gpu.Target, carry []gpu.Carry) (gpuFrame, error) {
+func (r *gpuRenderer) deviceFrame(l *render.List, t *gpu.Target, carry []gpu.Carry, explicit bool) (gpuFrame, error) {
+	if explicit {
+		fd, err := r.dev.RenderExplicit(l, t, carry...)
+		return gpuFrame{incomplete: r.dev.FrameIncomplete(), syncFile: fd}, err
+	}
 	err := r.dev.Render(l, t, carry...)
-	return gpuFrame{incomplete: r.dev.FrameIncomplete()}, err
+	return gpuFrame{incomplete: r.dev.FrameIncomplete(), syncFile: -1}, err
 }
 
 func (r *gpuRenderer) deviceTarget(w, h int, mods []fourcc.Modifier) (*gpu.Target, error) {
@@ -182,6 +195,7 @@ type rendererPlan struct {
 	node    uint64
 	hasNode bool
 	imports []fourcc.Modifier
+	syncobj *wlr.WpDrmSyncobjManagerV1
 }
 
 func (a *Application) rendererPlan() (rendererPlan, error) {
@@ -189,7 +203,7 @@ func (a *Application) rendererPlan() (rendererPlan, error) {
 		return rendererPlan{}, errors.New("the compositor has no linux-dmabuf")
 	}
 	node, hasNode := a.sess.DmabufDevice()
-	return rendererPlan{node: node, hasNode: hasNode, imports: a.sess.DmabufModifiers(fourcc.ARGB8888)}, nil
+	return rendererPlan{node: node, hasNode: hasNode, imports: a.sess.DmabufModifiers(fourcc.ARGB8888), syncobj: a.sess.SyncobjManager()}, nil
 }
 
 // startRenderer opens the renderer on a worker, which waits on the driver and
@@ -235,6 +249,9 @@ func (a *Application) adoptRenderer(sess *wlsession.Session) {
 // installRenderer makes r the application's renderer.
 func (a *Application) installRenderer(r *gpuRenderer) {
 	r.wake, r.invoke = func(d time.Duration) { a.wake(d) }, a.Invoke
+	if t, ok := r.timelines.(*drmTimelines); ok {
+		t.setInvoke(a.Invoke)
+	}
 	debug.Log("gpu", "drawing on %s in %d modifier(s)", r.dev.Name(), len(r.modifiers))
 	a.gpu = r
 	// Evicted image rasters drop their textures with their pixels.
@@ -260,6 +277,15 @@ func openRenderer(plan rendererPlan) (*gpuRenderer, error) {
 		node: plan.node, hasNode: plan.hasNode,
 	}
 	r.render, r.prepare = r.deviceFrame, r.deviceTarget
+	r.syncMgr = plan.syncobj
+	if node, ok := syncNode(plan); ok && plan.syncobj != nil && dev.SyncFiles() {
+		t, err := openTimelines(node)
+		if err != nil {
+			logutil.L().Info("app: no explicit synchronization; surfaces sync implicitly", "node", node, "err", err)
+		} else {
+			r.timelines = t
+		}
+	}
 	return r, nil
 }
 
@@ -308,7 +334,7 @@ func (a *Application) reagreeRenderer() error {
 		err = fmt.Errorf("the new compositor imports from device %d:%d, not the renderer's", unix.Major(plan.node), unix.Minor(plan.node))
 	}
 	if err == nil {
-		r.modifiers = mods
+		r.modifiers, r.syncMgr = mods, plan.syncobj
 		return nil
 	}
 	if r.required {
@@ -319,12 +345,63 @@ func (a *Application) reagreeRenderer() error {
 	return nil
 }
 
-// NewBuffer is a dmabuf buffer of r for a bufW x bufH surface.
+// NewBuffer is a dmabuf buffer of r for a bufW x bufH surface, with a timeline
+// of its own where the compositor takes explicit synchronization.
 func (r *gpuRenderer) NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) (*buffer.Buffer, error) {
 	if r.refused != nil {
 		return nil, fmt.Errorf("app: %s=gpu: %w", rendererEnv, r.refused)
 	}
-	return buffer.NewDmabuf(r.allocate, sess.Dmabuf(), bufW, bufH, scale, r.refuse)
+	b, err := buffer.NewDmabuf(r.allocate, sess.Dmabuf(), bufW, bufH, scale, r.refuse)
+	if err != nil || r.timelines == nil || r.syncMgr == nil {
+		return b, err
+	}
+	if b.Timeline, err = r.newTimeline(); err != nil {
+		return nil, err
+	}
+	b.Timeline.Released = b.Release
+	return b, nil
+}
+
+// newTimeline makes a buffer's timeline and imports it into the compositor.
+func (r *gpuRenderer) newTimeline() (*buffer.Timeline, error) {
+	s, fd, err := r.timelines.create()
+	if err != nil {
+		return nil, fmt.Errorf("app: a buffer's timeline: %w", err)
+	}
+	wlt, err := r.syncMgr.ImportTimeline(uintptr(fd))
+	if cerr := unix.Close(fd); err == nil && cerr != nil {
+		err = cerr
+	}
+	if err != nil {
+		r.timelines.destroy(s)
+		return nil, fmt.Errorf("app: import a buffer's timeline: %w", err)
+	}
+	timelines := r.timelines
+	return buffer.NewTimeline(wlt, s, func() {
+		_ = wlt.Destroy()
+		timelines.destroy(s)
+	}), nil
+}
+
+// syncFrame puts the frame b was drawn with on its timeline: the acquire
+// point takes the frame's sync_file, signalled now for a frame done already,
+// and b is busy until the compositor signals the release point.
+func (r *gpuRenderer) syncFrame(b *buffer.Buffer, syncFile int) error {
+	t := b.Timeline
+	acquire, release := t.Next()
+	err := r.timelines.acquire(t.Syncobj, acquire, syncFile)
+	if syncFile >= 0 {
+		if cerr := unix.Close(syncFile); err == nil && cerr != nil {
+			err = cerr
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("app: a frame's acquire point %d: %w", acquire, err)
+	}
+	if err := r.timelines.watch(t.Syncobj, release, t.Released); err != nil {
+		return fmt.Errorf("app: a frame's release point %d: %w", release, err)
+	}
+	return nil
 }
 
 // allocate makes a target on a worker, so a new buffer waits on no driver on
@@ -361,7 +438,10 @@ func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, carry []gpu.Carry, paint 
 	r.drawn, r.trimmed = true, false
 	cv := r.rec.ResetRecorder(b.Width, b.Height, num, scale.Denom)
 	paint(cv)
-	drawn, err := r.render(cv.Recording(), b.Target, carry)
+	drawn, err := r.render(cv.Recording(), b.Target, carry, b.Timeline != nil)
+	if err == nil && b.Timeline != nil {
+		err = r.syncFrame(b, drawn.syncFile)
+	}
 	// The recording is done once drawn: ending it now releases the
 	// rasters retired while it was open (render.Retire), which an idle
 	// window would otherwise hold back until its next frame.
@@ -421,6 +501,9 @@ func (a *Application) closeRenderer() {
 		a.gpu.closed = true
 		a.gpu.dev.Close()
 		a.gpu.workers.Wait()
+		if a.gpu.timelines != nil {
+			a.gpu.timelines.close()
+		}
 		a.gpu = nil
 	}
 }

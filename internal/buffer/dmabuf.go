@@ -139,6 +139,10 @@ func (imp *dmabufImport) failed(err error) {
 
 // closeTarget releases a dmabuf buffer's wl_buffer and GPU target.
 func (b *Buffer) closeTarget() {
+	if t := b.Timeline; t != nil {
+		b.Timeline = nil
+		t.close()
+	}
 	if b.Target == nil {
 		return
 	}

@@ -42,10 +42,13 @@ type Painter struct {
 	p      *Popup
 	unhost func()
 
-	sess    *wlsession.Session
-	gpu     Renderer // nil draws on the CPU
-	pool    *buffer.Pool
-	surf    *wl.Surface
+	sess *wlsession.Session
+	gpu  Renderer // nil draws on the CPU
+	pool *buffer.Pool
+	surf *wl.Surface
+	// sync is the surface's explicit synchronization object, while its
+	// buffers have timelines.
+	sync    buffer.SurfaceSync
 	frac120 uint32
 	bg      render.Color
 	noPlate bool          // Config.NoPlate: the content paints its own look
@@ -267,6 +270,9 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 	if err := pc.surf.Attach(b.WL, 0, 0); err != nil {
 		return false, false, err
 	}
+	if err := pc.sync.Points(pc.sess.SyncobjManager(), pc.surf, b); err != nil {
+		return false, false, err
+	}
 	for _, r := range rects {
 		if err := pc.surf.DamageBuffer(intconv.Clamp[int32](r.X), intconv.Clamp[int32](r.Y), intconv.Clamp[int32](r.W), intconv.Clamp[int32](r.H)); err != nil {
 			return false, false, err
@@ -384,6 +390,9 @@ func (pc *Painter) paint(b *buffer.Buffer, carry []gpu.Carry, regions []render.R
 // Close releases the painter's pool storage back to the session arena.
 func (pc *Painter) Close() {
 	pc.unhost()
+	if err := pc.sync.Close(); err != nil {
+		debug.Log("frame", "popup: destroy the explicit sync object: %v", err)
+	}
 	pc.pool.Close()
 }
 

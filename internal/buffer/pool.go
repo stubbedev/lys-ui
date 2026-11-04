@@ -43,6 +43,10 @@ type Buffer struct {
 	// buffer.
 	Data []byte
 
+	// Timeline is a dmabuf buffer's explicit synchronization, nil where the
+	// compositor syncs implicitly.
+	Timeline *Timeline
+
 	// Target is a dmabuf buffer's GPU target (NewDmabuf), which a frame
 	// renders into; nil for a shm buffer.
 	Target *gpu.Target
@@ -510,11 +514,15 @@ func dispose(b *Buffer) {
 // refills as the compositor returns buffers. The arena wires it once per
 // buffer at allocation; test-created buffers without a wl object are
 // released by hand.
+// A buffer with a Timeline ignores it: its release point frees it.
 type ReleaseHandler struct {
 	B *Buffer
 }
 
 // HandleBufferRelease implements wl.BufferReleaseHandler.
 func (h ReleaseHandler) HandleBufferRelease(wl.BufferReleaseEvent) {
+	if h.B.Timeline != nil {
+		return
+	}
 	h.B.Release()
 }

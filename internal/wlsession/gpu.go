@@ -124,3 +124,7 @@ func (s *Session) DmabufModifiers(format fourcc.Format) []fourcc.Modifier {
 	slices.Sort(mods)
 	return mods
 }
+
+// SyncobjManager returns the bound wp_linux_drm_syncobj_manager_v1, or nil
+// when the compositor takes no explicit synchronization.
+func (s *Session) SyncobjManager() *wlr.WpDrmSyncobjManagerV1 { return s.syncobj }

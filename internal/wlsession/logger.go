@@ -36,6 +36,7 @@ var optionalGlobals = []string{
 	"wl_data_device_manager",
 	"wp_viewporter",
 	"wp_presentation",
+	"wp_linux_drm_syncobj_manager_v1",
 	"wp_fractional_scale_manager_v1",
 	"zxdg_decoration_manager_v1",
 	"zwp_text_input_manager_v3",
