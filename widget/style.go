@@ -21,11 +21,13 @@ package widget
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -67,7 +69,7 @@ type Stylesheet struct {
 	// attached counts the widgets the sheet is attached to.
 	attached int
 	// files are the file the sheet was loaded from and the files its
-	// @import rules loaded, for the hot-reload poll; nil for a
+	// @import rules loaded, for hot reload; nil for a
 	// string-loaded sheet. Guarded by watchMu.
 	files []styleFile
 }
@@ -152,7 +154,7 @@ func AddStylesheet(css string, priority int) *Stylesheet {
 }
 
 // Load replaces the stylesheet's rules with css, keeping its priority
-// and position, and stops its file poll: the sheet is string-backed
+// and position, and stops its hot reload: the sheet is string-backed
 // from here on. Loading into an installed stylesheet that was removed
 // (and is attached nowhere) reinstalls it; a NewStylesheet sheet stays
 // scoped, styling only the subtrees it is attached to.
@@ -166,7 +168,7 @@ func (s *Stylesheet) Load(css string) {
 	relayer()
 }
 
-// Remove uninstalls the stylesheet and stops its file poll (a scoped
+// Remove uninstalls the stylesheet and stops its hot reload (a scoped
 // NewStylesheetFile sheet keeps styling where it is attached, but no
 // longer reloads); removing twice is a no-op.
 func (s *Stylesheet) Remove() {
@@ -522,21 +524,27 @@ func ratioOr(v, fallback float64) float64 {
 	return v
 }
 
-// styleFile is one loaded stylesheet file: what the hot-reload poll
-// stats and compares against.
+// styleFile is one loaded stylesheet file: what hot reload stats and
+// compares against. The inode tells a same-sized file an editor renamed
+// over it apart within one tick of the file clock.
 type styleFile struct {
 	path string
 	size int64
 	mod  time.Time
+	ino  uint64
 }
 
-// statStyleFile stats path into the styleFile the poll compares.
+// statStyleFile stats path into the styleFile a change is compared to.
 func statStyleFile(path string) (styleFile, error) {
 	fi, err := os.Stat(path)
 	if err != nil {
 		return styleFile{}, fmt.Errorf("stylesheet: stat %s: %w", path, err)
 	}
-	return styleFile{path: path, size: fi.Size(), mod: fi.ModTime()}, nil
+	f := styleFile{path: path, size: fi.Size(), mod: fi.ModTime()}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		f.ino = st.Ino
+	}
+	return f, nil
 }
 
 // changed reports whether f no longer matches the file on disk.
@@ -545,38 +553,48 @@ func (f styleFile) changed() bool {
 	return err != nil || now != f
 }
 
-// watches are the file-backed stylesheets, in load order; pollStarted
-// is whether the one poller is already scheduled. watchMu guards both
-// and each sheet's file.
+// watches are the file-backed stylesheets, in load order; watchStop ends
+// the watch over watchDirs, their directories. watchMu guards them and
+// each sheet's file.
 var (
-	watchMu     sync.Mutex
-	watches     []*Stylesheet
-	pollStarted bool
+	watchMu   sync.Mutex
+	watches   []*Stylesheet
+	watchDirs []string
+	watchStop func()
 )
 
-// pollHook is the app-installed scheduler the poll rides: it runs fn
-// once per second on the event-loop goroutine (app.Application.Every).
-// Widget code cannot reach the loop timer itself, and the poll must
-// not exist at all until a file is loaded.
-var pollHook atomic.Pointer[func(fn func())]
+// StylesheetWatcher reports changes in dirs: changed runs on the
+// event-loop goroutine after anything in them changed, until stop.
+type StylesheetWatcher func(dirs []string, changed func()) (stop func(), err error)
 
-// SetStylesheetPoller installs the scheduler the stylesheet files'
-// hot-reload poll ticks on: poll schedules fn once per second on the
-// event-loop goroutine, for the life of the process. One hook per
-// process, like SetRemovedHook; the app installs it once at startup.
-// Without a hook (no running Application) a loaded file simply never
-// hot-reloads.
-func SetStylesheetPoller(poll func(fn func())) {
-	if poll == nil {
-		pollHook.Store(nil)
-		return
+// watcherHook is the app-installed file watch hot reload rides. Widget
+// code cannot reach the loop itself, and no watch exists until a file is
+// loaded.
+var watcherHook atomic.Pointer[StylesheetWatcher]
+
+// SetStylesheetWatcher installs what tells the stylesheet files' hot
+// reload that something changed, and watches the files already loaded.
+// One hook per process, like SetRemovedHook; the app installs it once at
+// startup. Without a hook (no running Application) a loaded file simply
+// never hot-reloads.
+func SetStylesheetWatcher(watch StylesheetWatcher) {
+	if watch == nil {
+		watcherHook.Store(nil)
+	} else {
+		watcherHook.Store(&watch)
 	}
-	pollHook.Store(&poll)
+	watchMu.Lock()
+	defer watchMu.Unlock()
+	if watchStop != nil {
+		watchStop()
+		watchStop, watchDirs = nil, nil
+	}
+	rearmWatchLocked()
 }
 
 // AddStylesheetFile loads a stylesheet from path and installs it at
-// priority as its own Stylesheet, with the hot-reload poll on it: a
-// stat per second reloads it on change, and Remove stops the poll. A
+// priority as its own Stylesheet, with hot reload on it: a change to the
+// file reloads it off the loop, and Remove stops that. A
 // file that cannot be read or whose parse reports a problem fails
 // with an error naming the path, instead of half-loading.
 func AddStylesheetFile(path string, priority int) (*Stylesheet, error) {
@@ -594,8 +612,8 @@ func AddStylesheetFile(path string, priority int) (*Stylesheet, error) {
 // NewStylesheetFile reads the stylesheet at path into a scoped sheet
 // at priority, like NewStylesheet: attach it to the widgets whose
 // subtrees it styles. Its @import rules resolve relative to path, and
-// the hot-reload poll AddStylesheetFile starts reloads it on change
-// until Remove. A file that cannot be read or whose parse reports a
+// the hot reload AddStylesheetFile starts reloads it on change until
+// Remove. A file that cannot be read or whose parse reports a
 // problem fails with an error naming the path.
 func NewStylesheetFile(path string, priority int) (*Stylesheet, error) {
 	sheet, f, err := readStylesheetFile(path)
@@ -609,7 +627,7 @@ func NewStylesheetFile(path string, priority int) (*Stylesheet, error) {
 
 // LoadStylesheetFile loads a stylesheet from path as the application
 // stylesheet (StylePriorityApplication), replacing whatever
-// LoadStylesheetFile loaded before, with the same hot-reload poll
+// LoadStylesheetFile loaded before, with the same hot reload
 // AddStylesheetFile starts.
 func LoadStylesheetFile(path string) error {
 	s, err := AddStylesheetFile(path, StylePriorityApplication)
@@ -625,7 +643,7 @@ func LoadStylesheetFile(path string) error {
 
 // readStylesheetFile reads and parses the stylesheet at path, with
 // its @import rules resolved beside it; the returned files are the
-// stats the poll compares against: path's, then each import's. A
+// stats a change is compared against: path's, then each import's. A
 // missing or unreadable file, or one whose parse reports a problem,
 // fails with an error carrying the path.
 func readStylesheetFile(path string) (*style.Sheet, []styleFile, error) {
@@ -660,63 +678,111 @@ func readStylesheetFile(path string) (*style.Sheet, []styleFile, error) {
 	return sheet, files, nil
 }
 
-// watchSheet adds s to the hot-reload poll under its files, scheduling the
-// poller once for the life of the process.
+// watchSheet adds s to hot reload under its files.
 func watchSheet(s *Stylesheet, files []styleFile) {
 	watchMu.Lock()
 	defer watchMu.Unlock()
 	s.files = files
 	watches = append(watches, s)
-	if pollStarted {
-		return
-	}
-	pollStarted = true
-	if h := pollHook.Load(); h != nil {
-		(*h)(pollStylesheets)
-	}
+	rearmWatchLocked()
 }
 
-// unwatch takes s out of the hot-reload poll.
+// unwatch takes s out of hot reload.
 func unwatch(s *Stylesheet) {
 	watchMu.Lock()
 	defer watchMu.Unlock()
 	s.files = nil
 	watches = slices.DeleteFunc(watches, func(o *Stylesheet) bool { return o == s })
+	rearmWatchLocked()
 }
 
-// pollStylesheets stats every watched file once and reloads the
-// changed ones — the whole hot-reload cost is one stat per file per
-// second. A file that vanished or no longer parses keeps its last
-// good rules, reported through the parse-warning sink with its path.
-func pollStylesheets() {
+// rearmWatchLocked points the one watch at the directories of every
+// loaded file: an editor replaces a file by renaming over it, which only
+// its directory sees.
+func rearmWatchLocked() {
+	var dirs []string
+	for _, s := range watches {
+		for _, f := range s.files {
+			dirs = append(dirs, filepath.Dir(f.path))
+		}
+	}
+	slices.Sort(dirs)
+	dirs = slices.Compact(dirs)
+	if slices.Equal(dirs, watchDirs) {
+		return
+	}
+	if watchStop != nil {
+		watchStop()
+		watchStop = nil
+	}
+	watchDirs = nil
+	h := watcherHook.Load()
+	if h == nil || len(dirs) == 0 {
+		return
+	}
+	stop, err := (*h)(dirs, stylesheetsChanged)
+	if err != nil {
+		style.Warn(fmt.Sprintf("hot reload: watch %v: %v", dirs, err))
+		return
+	}
+	watchStop, watchDirs = stop, dirs
+}
+
+// stylesheetsChanged reloads each file-backed sheet whose files moved.
+func stylesheetsChanged() {
 	watchMu.Lock()
 	ws := slices.Clone(watches)
 	watchMu.Unlock()
 	for _, s := range ws {
-		s.pollFile()
+		s.reloadIfChanged()
 	}
 }
 
-// pollFile stats the stylesheet's files once and reloads it when any
-// changed. A file that vanished or no longer parses keeps the last
-// good rules, reported through the parse-warning sink with its path.
-func (s *Stylesheet) pollFile() {
+// reloadIfChanged stats the stylesheet's files off the loop and rereads
+// them when any changed. A file that vanished or no longer parses keeps
+// the last good rules, reported through the parse-warning sink with its
+// path.
+func (s *Stylesheet) reloadIfChanged() {
 	watchMu.Lock()
 	files := s.files
 	watchMu.Unlock()
-	if len(files) == 0 || !slices.ContainsFunc(files, styleFile.changed) {
+	if len(files) == 0 {
 		return
 	}
-	sheet, now, err := readStylesheetFile(files[0].path)
-	if err != nil {
-		style.Warn("hot reload: " + err.Error())
-		return
-	}
+	var sheet *style.Sheet
+	var now []styleFile
+	var err error
+	moved := false
+	loadAsset(s, func() {
+		if !slices.ContainsFunc(files, styleFile.changed) {
+			return
+		}
+		moved = true
+		sheet, now, err = readStylesheetFile(files[0].path)
+	}, func() {
+		if moved {
+			s.applyReload(sheet, now, err)
+		}
+	})
+}
+
+// applyReload installs a reload's outcome, unless Remove came first.
+func (s *Stylesheet) applyReload(sheet *style.Sheet, now []styleFile, err error) {
 	watchMu.Lock()
-	s.files = now
+	removed := len(s.files) == 0
+	if !removed && err == nil {
+		s.files = now
+		s.sheet = sheet
+		rearmWatchLocked()
+	}
 	watchMu.Unlock()
-	s.sheet = sheet
-	relayer()
+	switch {
+	case removed:
+	case err != nil:
+		style.Warn("hot reload: " + err.Error())
+	default:
+		relayer()
+	}
 }
 
 // faceResolver resolves a stylesheet font-family/font-weight to a
@@ -810,6 +876,26 @@ func loadFontFaces() {
 	}
 }
 
+// requestFontFace maps a font file off the loop. The file goes into
+// sysfont's cache, and the relayer that follows finds it there.
+func requestFontFace(family, src string) {
+	var failed error
+	loadAsset(fontFaceKey(src), func() {
+		_, failed = sysfont.FaceFile(src)
+	}, func() {
+		if failed != nil {
+			style.Warn(fmt.Sprintf("@font-face %s: load %s: %v", family, src, failed))
+			return
+		}
+		if hasInvoker() {
+			relayer()
+		}
+	})
+}
+
+// fontFaceKey names a font file's load in the asset queue.
+type fontFaceKey string
+
 // fontFaceOf resolves a family and weight through the @font-face
 // registry: a face whose weight range holds the weight, else the
 // family's first face, else nil.
@@ -876,26 +962,6 @@ const (
 	// StateTarget matches :target — the widget an in-app navigation
 	// points at, the role a URL fragment's element plays on the web.
 	StateTarget
-// requestFontFace maps a font file off the loop. The file goes into
-// sysfont's cache, and the relayer that follows finds it there.
-func requestFontFace(family, src string) {
-	var failed error
-	loadAsset(fontFaceKey(src), func() {
-		_, failed = sysfont.FaceFile(src)
-	}, func() {
-		if failed != nil {
-			style.Warn(fmt.Sprintf("@font-face %s: load %s: %v", family, src, failed))
-			return
-		}
-		if hasInvoker() {
-			relayer()
-		}
-	})
-}
-
-// fontFaceKey names a font file's load in the asset queue.
-type fontFaceKey string
-
 )
 
 // styleBits maps flags onto the matcher's state bits.
@@ -1796,6 +1862,9 @@ func (n *node) restyle(w Widget) *style.Values {
 	n.csGen = styleGen
 	n.styleSeen = styleGen
 	n.styleDirty = false
+	if sensNow.pseudo {
+		n.requestPseudoImages(w)
+	}
 	if !firstStyle && n.trCancel == nil && n.anims == nil && n.cs.Equal(v) {
 		styleBusy = false
 		return &n.cs
@@ -1803,6 +1872,7 @@ func (n *node) restyle(w Widget) *style.Values {
 	old := n.cs
 	n.cs = *v
 	styleBusy = false
+	requestStyleImages(&n.cs, w)
 	n.ink = inkOf(&n.cs)
 	n.transitionValues(&old, &n.cs, firstStyle)
 	n.syncAnimation(&n.cs)
@@ -1884,9 +1954,6 @@ func prevCountersOf(n *node, w Widget) (prev, src *style.CounterScope) {
 	return prev, src
 }
 
-	if sensNow.pseudo {
-		n.requestPseudoImages(w)
-	}
 // lastStyleKid is w's last visible styled child, nil for none.
 func lastStyleKid(w Widget) Widget {
 	for _, k := range slices.Backward(appendStyleKids(w, nil)) {
@@ -1894,7 +1961,6 @@ func lastStyleKid(w Widget) Widget {
 			return k
 		}
 	}
-	requestStyleImages(&n.cs, w)
 	return nil
 }
 

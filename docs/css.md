@@ -36,10 +36,10 @@ box.AttachStylesheet(widget.NewStylesheet(css, widget.StylePriorityApplication))
   for `AttachStylesheet` from a file, so its `@import` rules resolve
   relative to it; it hot-reloads like the installed file sheets.
 - **Hot reload.** `AddStylesheetFile`, `LoadStylesheetFile` and
-  `NewStylesheetFile` stat each
-  loaded file once a second on the application's timer and reload it on
-  change; one poller covers every file, starts with the first file load,
-  and each sheet's `Remove` (or `Load`) stops its file. A file that
+  `NewStylesheetFile` watch the directory of each loaded file with
+  inotify and reread a changed file off the loop; nothing polls, one watch
+  covers every file, starts with the first file load, and each sheet's
+  `Remove` (or `Load`) stops its file. A file that
   vanishes or stops parsing keeps its last good rules and is reported
   through `widget.SetParseWarn`; a load that cannot read or parse it
   fails with an error carrying the path.

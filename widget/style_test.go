@@ -474,7 +474,7 @@ func TestNewStylesheetFile(t *testing.T) {
 	if err := os.Chtimes(index, later, later); err != nil {
 		t.Fatal(err)
 	}
-	pollStylesheets()
+	stylesheetsChanged()
 	CollectDamage(root)
 	if radius(inside) != 3 || radius(outside) != 0 {
 		t.Fatalf("after the reload: inside %d outside %d, want 3 inside only", radius(inside), radius(outside))
@@ -485,13 +485,13 @@ func TestNewStylesheetFile(t *testing.T) {
 	if err := os.Chtimes(index, later.Add(time.Minute), later.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	pollStylesheets()
+	stylesheetsChanged()
 	CollectDamage(root)
 	write("base.css", `button { border-radius: 5; }`)
 	if err := os.Chtimes(filepath.Join(dir, "base.css"), later.Add(2*time.Minute), later.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	pollStylesheets()
+	stylesheetsChanged()
 	CollectDamage(root)
 	if radius(inside) != 5 {
 		t.Fatalf("after editing the import: inside %d, want its 5 (#250)", radius(inside))
@@ -502,7 +502,7 @@ func TestNewStylesheetFile(t *testing.T) {
 	if err := os.Chtimes(index, later.Add(time.Hour), later.Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	pollStylesheets()
+	stylesheetsChanged()
 	CollectDamage(root)
 	if radius(inside) != 5 {
 		t.Errorf("a removed sheet reloaded: inside %d, want 5", radius(inside))
@@ -536,18 +536,28 @@ func TestAddStylesheetFileParseError(t *testing.T) {
 func resetWatches(t *testing.T) {
 	t.Helper()
 	watchMu.Lock()
-	watches = nil
-	pollStarted = false
+	watches, watchDirs, watchStop = nil, nil, nil
 	watchMu.Unlock()
 }
 
-func TestStylesheetFileHotReloadPoll(t *testing.T) {
-	resetWatches(t)
-	// The poll hook: file loads schedule the stat tick through the
-	// app-installed scheduler, exactly once for every file.
+// fakeStylesheetWatcher records the watches hot reload arms: scheduled[0]
+// is a change reported, and the count how often the watch was armed.
+func fakeStylesheetWatcher(t *testing.T) *[]func() {
+	t.Helper()
 	var scheduled []func()
-	SetStylesheetPoller(func(fn func()) { scheduled = append(scheduled, fn) })
-	t.Cleanup(func() { SetStylesheetPoller(nil) })
+	SetStylesheetWatcher(func(_ []string, changed func()) (func(), error) {
+		scheduled = append(scheduled, changed)
+		return func() {}, nil
+	})
+	t.Cleanup(func() { SetStylesheetWatcher(nil) })
+	return &scheduled
+}
+
+func TestStylesheetFileHotReload(t *testing.T) {
+	resetWatches(t)
+	// File loads arm the app-installed watch, once for every file in a
+	// directory.
+	sched := fakeStylesheetWatcher(t)
 
 	dir := t.TempDir()
 	write := func(name, css string) string {
@@ -568,13 +578,13 @@ func TestStylesheetFileHotReloadPoll(t *testing.T) {
 		return s
 	}
 	app := load("app.css", `button { border-radius: 5; }`, StylePriorityApplication)
-	if len(scheduled) != 1 {
-		t.Fatalf("poll scheduled %d times, want 1", len(scheduled))
+	if len(*sched) != 1 {
+		t.Fatalf("watch armed %d times, want 1", len(*sched))
 	}
-	// A second file joins the one poller without re-scheduling.
+	// A second file in the directory joins the one watch.
 	theme := load("theme.css", `button { border-radius: 9; }`, StylePriorityTheme)
-	if len(scheduled) != 1 {
-		t.Fatalf("poll re-scheduled: %d", len(scheduled))
+	if len(*sched) != 1 {
+		t.Fatalf("watch re-armed: %d", len(*sched))
 	}
 
 	face := goldenFace(t)
@@ -584,15 +594,15 @@ func TestStylesheetFileHotReloadPoll(t *testing.T) {
 		t.Fatalf("radius = %d, want 5", got)
 	}
 
-	// One tick stats both files; an unchanged stat is free, a changed
-	// one reloads and the next read sees it.
-	scheduled[0]()
+	// A report stats both files; an unchanged stat is free, a changed one
+	// reloads and the next read sees it.
+	(*sched)[0]()
 	if got := b.style(b).Radius.TopLeft; got != 5 {
 		t.Fatalf("unchanged stat restyled: radius %d", got)
 	}
 	write("app.css", `button { border-radius: 11; }`)
 	write("theme.css", `button { border-radius: 3; }`)
-	scheduled[0]()
+	(*sched)[0]()
 	CollectDamage(b)
 	if got := b.style(b).Radius.TopLeft; got != 11 {
 		t.Fatalf("changed files did not reload: radius %d", got)
@@ -603,7 +613,7 @@ func TestStylesheetFileHotReloadPoll(t *testing.T) {
 		t.Fatalf("theme under a removed app file: radius %d, want 3", got)
 	}
 
-	// A removed sheet stops its poll: no reload, and no error for a
+	// A removed sheet stops its reload: no reload, and no error for a
 	// file that vanished after the removal.
 	var warns []string
 	style.SetParseWarn(func(msg string) { warns = append(warns, msg) })
@@ -611,7 +621,7 @@ func TestStylesheetFileHotReloadPoll(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "app.css")); err != nil {
 		t.Fatal(err)
 	}
-	scheduled[0]()
+	(*sched)[0]()
 	CollectDamage(b)
 	if got := b.style(b).Radius.TopLeft; got != 3 {
 		t.Fatalf("removed sheet reloaded: radius %d", got)
@@ -625,7 +635,7 @@ func TestStylesheetFileHotReloadPoll(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "theme.css")); err != nil {
 		t.Fatal(err)
 	}
-	scheduled[0]()
+	(*sched)[0]()
 	CollectDamage(b)
 	if got := b.style(b).Radius.TopLeft; got != 3 {
 		t.Fatalf("deleted file changed the sheet: radius %d", got)
@@ -643,7 +653,7 @@ func TestStylesheetFileHotReloadPoll(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "later.css"), []byte("button { border-radius: 8; } button {"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	scheduled[0]()
+	(*sched)[0]()
 	CollectDamage(b)
 	if got := b.style(b).Radius.TopLeft; got != 7 {
 		t.Fatalf("unparseable reload changed the sheet: radius %d", got)
@@ -655,9 +665,7 @@ func TestStylesheetFileHotReloadPoll(t *testing.T) {
 
 func TestLoadStylesheetFileUsesTheFilePath(t *testing.T) {
 	resetWatches(t)
-	var scheduled []func()
-	SetStylesheetPoller(func(fn func()) { scheduled = append(scheduled, fn) })
-	t.Cleanup(func() { SetStylesheetPoller(nil) })
+	sched := fakeStylesheetWatcher(t)
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "app.css")
@@ -683,7 +691,7 @@ func TestLoadStylesheetFileUsesTheFilePath(t *testing.T) {
 	// it in place, a second load replaces it, and "" removes it (and
 	// its poll).
 	write(`button { border-radius: 11; }`)
-	scheduled[0]()
+	(*sched)[0]()
 	CollectDamage(b)
 	if got := b.style(b).Radius.TopLeft; got != 11 {
 		t.Fatalf("hot reload through the application slot: radius %d", got)

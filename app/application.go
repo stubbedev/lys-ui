@@ -222,11 +222,12 @@ func NewApplication(sess *wlsession.Session) *Application {
 	// Async image loads (widget.Image file/URL sources) deliver through
 	// the loop queue - the only sanctioned bridge (docs/threading.md).
 	widget.SetInvoker(a.Invoke)
-	// Stylesheet files hot-reload through the loop's timer wheel: the
-	// widget package cannot reach it, so the app lends it a scheduler —
-	// one stat per watched file per second once a file is loaded,
-	// nothing before.
-	widget.SetStylesheetPoller(func(fn func()) { a.Every(time.Second, fn) })
+	// Stylesheet files hot-reload through an inotify watch on the loop:
+	// the widget package cannot reach it, so the app lends it one, and
+	// nothing polls.
+	widget.SetStylesheetWatcher(func(dirs []string, changed func()) (func(), error) {
+		return a.WatchFiles(dirs, false, changed)
+	})
 	go sysfont.Warm()
 	// Tree mutations (Box.Remove/RemoveAt/Clear/InsertAt, Stack.Remove,
 	// Scroll.SetChild, ...) must not leave a window's router pointing at

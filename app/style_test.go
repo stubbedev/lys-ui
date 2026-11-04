@@ -1,11 +1,12 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
 
-	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -65,11 +66,57 @@ func (unnamed) Arrange(render.Rect)                   {}
 func (unnamed) Paint(*render.Canvas)                  {}
 func (unnamed) HitTest(widget.Point) widget.Widget    { return nil }
 
-// TestCSSPollerInstalled pins the startup wiring: an Application lends
-// the widget package its timer wheel for stylesheet hot reload, the
-// same one-hook-per-process shape as SetInvoker.
-func TestCSSPollerInstalled(t *testing.T) {
-	if NewApplication(&wlsession.Session{}) == nil {
-		t.Fatal("no application")
+// A stylesheet file reloads on the watch an Application lends the widget
+// package: nothing ticks, so an unchanged file costs no timer and no stat,
+// and a file an editor renames over still lands.
+func TestStylesheetHotReloadWatchesAndNeverPolls(t *testing.T) {
+	a := loopApp(t)
+	onLoop := func(fn func()) {
+		t.Helper()
+		ran := make(chan struct{})
+		a.Invoke(func() {
+			defer close(ran)
+			fn()
+		})
+		<-ran
 	}
+	widget.SetStylesheetWatcher(func(dirs []string, changed func()) (func(), error) {
+		return a.WatchFiles(dirs, false, changed)
+	})
+	widget.SetInvoker(a.Invoke)
+	t.Cleanup(func() {
+		widget.SetInvoker(nil)
+		widget.SetStylesheetWatcher(nil)
+	})
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.css")
+	if err := os.WriteFile(path, []byte(`button { border-radius: 4; }`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var sheet *widget.Stylesheet
+	onLoop(func() {
+		var err error
+		if sheet, err = widget.AddStylesheetFile(path, widget.StylePriorityApplication); err != nil {
+			t.Error(err)
+		}
+	})
+	if sheet == nil {
+		t.FailNow()
+	}
+	t.Cleanup(func() { onLoop(sheet.Remove) })
+	if n := a.queues.timerCount(); n != 0 {
+		t.Errorf("%d timers run with a stylesheet file loaded, want none", n)
+	}
+	replacement := filepath.Join(dir, "next.tmp")
+	if err := os.WriteFile(replacement, []byte(`button { border-radius: 9; }`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := widget.DamageGeneration()
+	if err := os.Rename(replacement, path); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the reload", func() bool {
+		widget.WaitAssetLoads()
+		return widget.DamageGeneration() != before
+	})
 }
