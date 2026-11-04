@@ -97,11 +97,13 @@ func (s *Stream[Msg]) Close() {
 // drain is the closure Send routes through Invoke: it takes the batch and
 // hands each message to the subscribers live at that message.
 func (s *Stream[Msg]) drain() {
-	for _, msg := range s.box.Take() {
+	batch := s.box.Take()
+	for _, msg := range batch {
 		for _, sub := range s.subs.snapshot() {
 			sub.fn(msg)
 		}
 	}
+	s.box.Release(batch)
 }
 
 // SharedState is a loop-owned observable value: Update mutates it from any
@@ -210,7 +212,9 @@ func (r *Reducer[S, M]) Close() {
 }
 
 func (r *Reducer[S, M]) drain() {
-	for _, msg := range r.box.Take() {
+	batch := r.box.Take()
+	defer r.box.Release(batch)
+	for _, msg := range batch {
 		r.mu.Lock()
 		changed := r.reduce(&r.state, msg)
 		state := r.state

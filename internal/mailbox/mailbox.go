@@ -5,10 +5,13 @@ package mailbox
 
 import "sync"
 
+const maxSpareItems = 1024
+
 // Box queues items for one drain closure. The zero value is ready.
 type Box[T any] struct {
 	mu    sync.Mutex
 	items []T
+	spare []T
 	armed bool
 	dead  bool
 }
@@ -31,14 +34,29 @@ func (b *Box[T]) Put(item T) bool {
 }
 
 // Take returns the queued items in order and disarms the box, so the
-// next Put schedules a fresh drain.
+// next Put schedules a fresh drain. Handing the batch to Release when it is
+// done with spares the next batch an allocation.
 func (b *Box[T]) Take() []T {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	items := b.items
-	b.items = nil
+	b.items, b.spare = b.spare, nil
 	b.armed = false
 	return items
+}
+
+// Release takes back a batch Take returned, dropping what it references. A
+// storm's oversized batch goes to the collector instead.
+func (b *Box[T]) Release(batch []T) {
+	clear(batch)
+	if cap(batch) > maxSpareItems {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.spare == nil {
+		b.spare = batch[:0]
+	}
 }
 
 // Pending counts the queued items.
@@ -53,7 +71,7 @@ func (b *Box[T]) Stop() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.dead = true
-	b.items = nil
+	b.items, b.spare = nil, nil
 	b.armed = false
 }
 

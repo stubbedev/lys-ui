@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/render"
 
@@ -153,5 +154,33 @@ func TestDetachingATreeStopsItsCaret(t *testing.T) {
 		if animclock.Active() {
 			t.Errorf("%s: the blink outlived its surface", name)
 		}
+	}
+}
+
+func TestTypingMovesTheNextFlipAndLaunchesNothing(t *testing.T) {
+	clock := pinAnimClock(t)
+	e := NewEntry(testFace(t), 14, render.RGB(255, 255, 255))
+	e.SetText("hello")
+	root := NewBox(Column, 0, 0).Append(e, false)
+	SizeWithin(root, Size{W: 160, H: 80})
+	root.Arrange(render.Rect{W: 160, H: 80})
+	r := &Router{Root: root}
+	if err := r.SetFocus(e); err != nil {
+		t.Fatal(err)
+	}
+	if allocs := testing.AllocsPerRun(100, e.restartBlink); allocs != 0 {
+		t.Errorf("a keystroke's blink restart allocates %v", allocs)
+	}
+	start := clock.now()
+	clock.set(start.Add(caretBlinkHalf - time.Millisecond))
+	e.restartBlink()
+	retyped := clock.now()
+	for e.blink.flips == 0 {
+		if !clock.step() {
+			t.Fatal("the blink stopped before its first flip")
+		}
+	}
+	if got := clock.now().Sub(retyped); got != caretBlinkHalf {
+		t.Errorf("first flip %v after the last keystroke, want %v", got, caretBlinkHalf)
 	}
 }

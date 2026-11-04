@@ -1714,12 +1714,10 @@ type FrameDone struct {
 	MS    uint32
 }
 
-// HandleCallbackDone implements wl.CallbackDoneHandler. Done is a destructor
-// event, so the object is dead on both sides and its id must rejoin the
-// client's pool.
+// HandleCallbackDone implements wl.CallbackDoneHandler. The delete_id that
+// follows a done retires the callback for the next frame to reuse.
 func (f *FrameDone) HandleCallbackDone(ev wl.CallbackDoneEvent) {
 	debug.Log("frame", "frame callback done")
-	ev.C.Unregister()
 	f.Ready, f.MS = true, ev.CallbackData
 }
 

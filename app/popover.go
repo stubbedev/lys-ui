@@ -705,6 +705,7 @@ type openPopover struct {
 	host       Host
 	pop        popSurface
 	painter    popPainter
+	released   bool
 	router     *widget.Router
 	keyRoot    *popoverKeyRoot
 	popover    *Popover
@@ -791,10 +792,12 @@ func (a *Application) drivePopovers() error {
 	a.placePopovers()
 	// Newest first: a nested popover destroyed in the same pass as its
 	// parent must leave the wire before it (xdg_popup's topmost rule).
-	kept := make([]*openPopover, 0, len(a.openPopovers))
+	closed := false
 	for _, op := range slices.Backward(a.openPopovers) {
 		if op.pop.Destroyed() {
 			op.release()
+			op.released = true
+			closed = true
 			if a.popovers.get(op.host) == op.popover {
 				a.popovers.take(op.host)
 			}
@@ -815,10 +818,10 @@ func (a *Application) drivePopovers() error {
 				return fmt.Errorf("app: popover paint: %w", err)
 			}
 		}
-		kept = append(kept, op)
 	}
-	slices.Reverse(kept)
-	a.openPopovers = kept
+	if closed {
+		a.openPopovers = slices.DeleteFunc(a.openPopovers, func(op *openPopover) bool { return op.released })
+	}
 	return nil
 }
 

@@ -48,6 +48,10 @@ func (q *loopQueues) drain() []func() {
 	return q.box.Take()
 }
 
+func (q *loopQueues) release(batch []func()) {
+	q.box.Release(batch)
+}
+
 // pending counts queued fns (tests).
 func (q *loopQueues) pending() int {
 	return q.box.Pending()
@@ -199,10 +203,12 @@ func (a *Application) Every(d time.Duration, fn func()) (cancel func()) {
 // surface a damage check, since an Invoke or timer may have touched any
 // widget tree.
 func (a *Application) pump(now time.Time) (ran bool) {
-	for _, fn := range a.queues.drain() {
+	batch := a.queues.drain()
+	for _, fn := range batch {
 		fn()
 		ran = true
 	}
+	a.queues.release(batch)
 	for _, t := range a.queues.timerWork(now) {
 		ran = true
 		t.fn()

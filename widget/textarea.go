@@ -1232,10 +1232,15 @@ func (t *TextArea) caretRectAt(caret pos) (render.Rect, bool) {
 }
 
 // restartBlink implements caretBlinker.
-func (t *TextArea) restartBlink() { t.blink.restart(t.repaintCaret) }
+func (t *TextArea) restartBlink() {
+	if t.blink.dirty == nil {
+		t.blink.dirty = t.repaintCaret
+	}
+	t.blink.restart()
+}
 
 // stopBlink implements caretBlinker.
-func (t *TextArea) stopBlink() { t.blink.stop(t.repaintCaret) }
+func (t *TextArea) stopBlink() { t.blink.stop() }
 
 // detach implements detacher: a field on no surface blinks for nobody.
 func (t *TextArea) detach() { t.stopBlink() }

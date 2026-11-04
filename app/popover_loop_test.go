@@ -464,3 +464,44 @@ func TestPopoverShrinkWaitsForTheContent(t *testing.T) {
 		t.Errorf("growing resized to %v, want 54x64 at once", last)
 	}
 }
+
+func TestAPopoverOpenedFromACloseHookSurvivesThePass(t *testing.T) {
+	face, err := render.LoadFont(goregular.TTF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, surf, _, _ := newLoopPopover(widget.NewLabel(face, 14, "old", render.RGB(255, 255, 255)))
+	next, _, _, _ := newLoopPopover(widget.NewLabel(face, 14, "next", render.RGB(255, 255, 255)))
+	a := &Application{openPopovers: []*openPopover{old}}
+	old.fireClosed = func() { a.openPopovers = append(a.openPopovers, next) }
+	surf.destroyed = true
+	if err := a.drivePopovers(); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.openPopovers) != 1 || a.openPopovers[0] != next {
+		t.Fatalf("open popovers after the pass: %d, want the one the hook opened", len(a.openPopovers))
+	}
+}
+
+type quietPopPainter struct{ fakePopPainter }
+
+func (*quietPopPainter) Collect() bool { return false }
+
+func TestAllocBudgetDrivePopovers(t *testing.T) {
+	skipAllocBudget(t)
+	face, err := render.LoadFont(goregular.TTF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	op, _, _, _ := newLoopPopover(widget.NewLabel(face, 14, "a", render.RGB(255, 255, 255)))
+	op.keyRoot.Arrange(render.Rect{W: 100, H: 30})
+	op.painter = &quietPopPainter{}
+	a := &Application{openPopovers: []*openPopover{op}}
+	if allocs := testing.AllocsPerRun(100, func() {
+		if err := a.drivePopovers(); err != nil {
+			t.Fatal(err)
+		}
+	}); allocs != 0 {
+		t.Errorf("a popover pass allocates %v", allocs)
+	}
+}

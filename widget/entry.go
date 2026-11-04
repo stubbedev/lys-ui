@@ -1312,10 +1312,15 @@ func (e *Entry) caretRect(sh *render.ShapedText) (render.Rect, bool) {
 }
 
 // restartBlink implements caretBlinker.
-func (e *Entry) restartBlink() { e.blink.restart(e.repaintCaret) }
+func (e *Entry) restartBlink() {
+	if e.blink.dirty == nil {
+		e.blink.dirty = e.repaintCaret
+	}
+	e.blink.restart()
+}
 
 // stopBlink implements caretBlinker.
-func (e *Entry) stopBlink() { e.blink.stop(e.repaintCaret) }
+func (e *Entry) stopBlink() { e.blink.stop() }
 
 // detach implements detacher: a field on no surface blinks for nobody.
 func (e *Entry) detach() { e.stopBlink() }

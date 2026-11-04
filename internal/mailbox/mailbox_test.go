@@ -61,3 +61,51 @@ func TestConcurrentPutsKeepPerProducerOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestReleasedBatchCarriesTheNextOne(t *testing.T) {
+	var b Box[*int]
+	item := new(int)
+	cycle := func() {
+		b.Put(item)
+		batch := b.Take()
+		b.Release(batch)
+	}
+	cycle()
+	cycle()
+	if allocs := testing.AllocsPerRun(100, cycle); allocs != 0 {
+		t.Errorf("a put, take and release allocate %v", allocs)
+	}
+}
+
+func TestReleaseDropsWhatTheBatchReferenced(t *testing.T) {
+	var b Box[*int]
+	b.Put(new(int))
+	batch := b.Take()
+	b.Release(batch)
+	if batch[0] != nil {
+		t.Error("a released batch still references its item")
+	}
+}
+
+func TestATakeInsideADrainGetsItsOwnBatch(t *testing.T) {
+	var b Box[int]
+	b.Put(1)
+	first := b.Take()
+	b.Put(2)
+	second := b.Take()
+	b.Release(second)
+	if first[0] != 1 || second[0] != 0 {
+		t.Fatalf("batches shared an array: %v %v", first, second)
+	}
+}
+
+func TestAStormsBatchGoesToTheCollector(t *testing.T) {
+	var b Box[int]
+	for i := range maxSpareItems + 1 {
+		b.Put(i)
+	}
+	b.Release(b.Take())
+	if b.spare != nil {
+		t.Errorf("the box kept a %d item batch", cap(b.spare))
+	}
+}

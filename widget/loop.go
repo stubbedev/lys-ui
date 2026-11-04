@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-ui/anim"
+	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
 // loop is a repeating linear phase that runs only while on and on
@@ -18,7 +19,7 @@ type loop struct {
 	owner  Widget
 	on     bool
 	cancel anim.Cancel
-	// step receives each frame's phase in [0, 1); a wrap reports 0.
+	// step receives each frame's phase in [0, 1).
 	step func(phase float64)
 }
 
@@ -55,10 +56,8 @@ func (l *loop) arranged() {
 	}
 }
 
-// start launches one cycle; the landing tick relaunches while the loop
-// is still on and on screen (anim callbacks may launch - Tick runs them
-// with its lock released). Under reduced motion a cycle lands at
-// launch, so the loop parks at phase 0 instead of relaunching forever.
+// start runs the phase from 0 until the loop stops or goes off screen.
+// Under reduced motion it parks at phase 0.
 func (l *loop) start() {
 	if l.cancel != nil {
 		l.cancel()
@@ -68,21 +67,15 @@ func (l *loop) start() {
 		l.step(0)
 		return
 	}
-	l.cancel = anim.Play(anim.Animate(l.period, func(t float64) {
+	started := animclock.Now()
+	l.cancel = anim.Cancel(animclock.Drive(func(now time.Time) bool {
 		if !onScreen(l.owner) {
-			l.stop()
-			return
-		}
-		if t >= 1 {
-			l.step(0)
 			l.cancel = nil
-			if l.on {
-				l.start()
-			}
-			return
+			return false
 		}
-		l.step(t)
-	}).Easing(anim.Linear))
+		l.step(float64(now.Sub(started)%l.period) / float64(l.period))
+		return true
+	}))
 }
 
 // stop cancels the running cycle.

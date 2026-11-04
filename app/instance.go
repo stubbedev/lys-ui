@@ -188,9 +188,11 @@ func (ins *Instance) Close() {
 // delivers each invocation to the hooks, activating afterwards so a
 // window the hook just created can be the one focused.
 func (ins *Instance) drain() {
-	for _, inv := range ins.box.Take() {
+	batch := ins.box.Take()
+	for _, inv := range batch {
 		ins.deliver(inv)
 	}
+	ins.box.Release(batch)
 }
 
 func (ins *Instance) deliver(inv Invocation) {

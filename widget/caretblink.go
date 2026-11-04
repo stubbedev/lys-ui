@@ -6,6 +6,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/anim"
+	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
 // The caret blinks as GTK's does: on for half of a gtk-cursor-blink-time
@@ -24,48 +25,77 @@ type caretBlinker interface {
 	stopBlink()
 }
 
-// caretBlink is a field's blink phase and the timeline toggling it.
+const (
+	caretBlinkHalf  = caretBlinkTime / 2
+	caretBlinkFlips = int((caretBlinkTimeout - 1) / caretBlinkHalf)
+)
+
+// caretBlink is a field's blink phase and the one pending piece toggling it.
 type caretBlink struct {
 	hidden bool
 	cancel anim.Cancel
+	dirty  func()
+	land   func(float64)
+	due    time.Time
+	flips  int
 }
 
-// restart shows the caret solid and runs the blink: every half cycle
-// until the timeout, the phase flips and dirty repaints the caret's
-// rect. Reduced motion keeps the caret solid.
-func (b *caretBlink) restart(dirty func()) {
-	b.stop(dirty)
+// restart shows the caret solid and runs the blink: every half cycle until
+// the timeout, the phase flips and dirty repaints the caret's rect. Typing
+// only moves the next flip, so a keystroke launches nothing. Reduced motion
+// keeps the caret solid.
+func (b *caretBlink) restart() {
 	if anim.Instant() {
+		b.stop()
 		return
 	}
-	half := caretBlinkTime / 2
-	var steps []anim.Step
-	for at := half; at < caretBlinkTimeout; at += half {
-		steps = append(steps, anim.Delay(half), anim.Animate(0, func(float64) {
-			b.hidden = !b.hidden
-			dirty()
-		}))
+	b.solid()
+	b.flips = 0
+	b.due = animclock.Now().Add(caretBlinkHalf)
+	if b.cancel == nil {
+		b.arm(caretBlinkHalf)
 	}
-	steps = append(steps, anim.Animate(0, func(float64) {
+}
+
+func (b *caretBlink) arm(after time.Duration) {
+	if b.land == nil {
+		b.land = b.landed
+	}
+	b.cancel = anim.Play(anim.Delay(after), anim.Animate(0, b.land))
+}
+
+func (b *caretBlink) landed(float64) {
+	now := animclock.Now()
+	if now.Before(b.due) {
+		b.arm(b.due.Sub(now))
+		return
+	}
+	b.flips++
+	b.hidden = !b.hidden
+	b.dirty()
+	if b.flips >= caretBlinkFlips {
 		b.cancel = nil
-		if b.hidden {
-			b.hidden = false
-			dirty()
-		}
-	}))
-	b.cancel = anim.Play(anim.Sequence(steps...))
+		b.solid()
+		return
+	}
+	b.due = now.Add(caretBlinkHalf)
+	b.arm(caretBlinkHalf)
+}
+
+func (b *caretBlink) solid() {
+	if b.hidden {
+		b.hidden = false
+		b.dirty()
+	}
 }
 
 // stop ends the blink with the caret solid.
-func (b *caretBlink) stop(dirty func()) {
+func (b *caretBlink) stop() {
 	if b.cancel != nil {
 		b.cancel()
 		b.cancel = nil
 	}
-	if b.hidden {
-		b.hidden = false
-		dirty()
-	}
+	b.solid()
 }
 
 // caretExtents is the caret's vertical span on a line drawn at
