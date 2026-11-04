@@ -33,6 +33,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 	"github.com/stubbedev/lys-lib/wlr"
 
+	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/blursync"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
@@ -93,6 +94,8 @@ type hostWindow struct {
 	kick atomic.Bool
 
 	pool *buffer.Pool
+	// animatedAt is when a frame last went out with an animation running.
+	animatedAt time.Time
 	// footprint is the pool's buffer count and bytes as last logged
 	// (LYS_DEBUG=frame).
 	footprint [2]int
@@ -315,6 +318,21 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 		dnd.Bind(host.HostSurface(), input)
 	}
 	return w
+}
+
+// spareKeep is how long after its last animated frame a window keeps its
+// spare buffers: an animation restarting that soon, a hover flicking on
+// and off, finds them, where a dmabuf made for it would hold its first
+// frames back until the compositor imported it.
+const spareKeep = 30 * time.Second
+
+// trimPool frees the spares no frame used since the last trim, unless an
+// animation ran recently (spareKeep).
+func (w *hostWindow) trimPool() {
+	if animclock.Now().Sub(w.animatedAt) < spareKeep {
+		return
+	}
+	w.pool.Trim()
 }
 
 // noteFootprint logs, in lysdebug builds, what the window's buffers
@@ -977,6 +995,13 @@ func (w *hostWindow) draw() bool {
 	// The commit just went to the screen through b: b is current now,
 	// and every other pooled buffer lags by what changed here.
 	w.pool.Presented(b, changed)
+	if animclock.Active() {
+		w.animatedAt = animclock.Now()
+		if err := w.pool.Prepare(); err != nil {
+			w.drawErr = fmt.Errorf("app: prepare a spare buffer: %w", err)
+			return false
+		}
+	}
 	w.noteFootprint()
 
 	debug.Log("frame", "frame committed, waiting for callback")

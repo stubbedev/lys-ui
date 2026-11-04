@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 
+	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/blursync"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/repaint"
@@ -289,6 +290,11 @@ func (pc *Painter) frame() (committed, live bool, err error) {
 		return false, false, err
 	}
 	pc.pool.Presented(b, changed)
+	if animclock.Active() {
+		if err := pc.pool.Prepare(); err != nil {
+			return false, false, err
+		}
+	}
 	pc.framePending = true
 	if debug.Enabled {
 		painted := 0

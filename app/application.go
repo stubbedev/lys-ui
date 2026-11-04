@@ -1030,7 +1030,7 @@ func (a *Application) armTrim() {
 func (a *Application) trimBuffers() {
 	spares := false
 	for _, w := range a.windows {
-		w.pool.Trim()
+		w.trimPool()
 		w.noteFootprint()
 		spares = spares || w.pool.Spares()
 	}

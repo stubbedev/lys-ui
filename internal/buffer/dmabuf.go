@@ -25,6 +25,9 @@ import (
 // would end the whole connection. The buffer is pending until the
 // compositor answers, and a pool counts it busy meanwhile. A refusal
 // drops the buffer from its pool and reports the error to rejected.
+// The target is allocated right here because a gpu.Device and all it
+// makes belong to one goroutine: a pool avoids this frame's wait through
+// Pool.Prepare instead.
 func NewDmabuf(dev *gpu.Device, mgr *wlr.ZwpDmabufV1, bufW, bufH, scale int, modifiers []fourcc.Modifier, rejected func(error)) (*Buffer, error) {
 	start := time.Now()
 	t, err := dev.NewTarget(bufW, bufH, fourcc.ARGB8888, modifiers)

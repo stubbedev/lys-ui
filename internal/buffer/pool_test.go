@@ -656,3 +656,40 @@ func TestTrimFreesSparesNoFrameUsed(t *testing.T) {
 		t.Errorf("a trimmed pool allocated %d buffers in all (%v), want a fresh spare on demand", created, err)
 	}
 }
+
+func TestPrepareHoldsThePendingSpareAheadOfTheFrame(t *testing.T) {
+	var made []*Buffer
+	create := func() (*Buffer, error) {
+		b := newTestBuffer(10, 10)
+		b.pending = len(made) > 0
+		made = append(made, b)
+		return b, nil
+	}
+	p := New(create, 3)
+	if err := p.Prepare(); err != nil || len(made) != 0 {
+		t.Fatalf("an empty pool prepared %d buffers (%v), want none: it has no frame yet", len(made), err)
+	}
+	front, err := p.Acquire()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Prepare(); err != nil || len(made) != 2 {
+		t.Fatalf("prepared %d buffers in all (%v), want the spare", len(made), err)
+	}
+	if err := p.Prepare(); err != nil || len(made) != 2 {
+		t.Fatalf("a second Prepare made %d buffers in all (%v), want no third", len(made), err)
+	}
+	spare := made[1]
+	spare.pending = false
+	spare.Release()
+	got, err := p.Acquire()
+	if err != nil || got != spare {
+		t.Fatalf("next frame took %p, %v, want the prepared spare %p", got, err, spare)
+	}
+	if p.Deferrals() != 0 {
+		t.Errorf("%d deferrals with the spare prepared, want 0", p.Deferrals())
+	}
+	if front.busy && len(p.buffers) != 2 {
+		t.Errorf("pool holds %d buffers", len(p.buffers))
+	}
+}

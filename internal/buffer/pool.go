@@ -167,6 +167,8 @@ type Pool struct {
 
 	// copied counts the pixels CopyForward copied.
 	copied int
+	// deferrals counts the Acquires that reported ErrBusy.
+	deferrals int
 }
 
 // New returns a pool holding at most capacity buffers, allocated on demand
@@ -206,11 +208,37 @@ func (p *Pool) Acquire() (*Buffer, error) {
 		b.pool = p
 		p.buffers = append(p.buffers, b)
 		if b.pending {
+			p.deferrals++
 			return nil, ErrBusy
 		}
 		return b, nil
 	}
+	p.deferrals++
 	return nil, ErrBusy
+}
+
+// Deferrals counts the Acquires that reported ErrBusy, each a frame that
+// could not go out when it wanted to.
+func (p *Pool) Deferrals() int { return p.deferrals }
+
+// Prepare allocates the second buffer ahead of the frame that needs it:
+// the buffer a frame just committed stays the compositor's until the
+// next commit, so a following frame finds nothing free. A dmabuf import
+// answers before that frame then, rather than holding it back. Call it
+// after a commit while frames are coming; a pool that holds two already,
+// or none, does nothing.
+func (p *Pool) Prepare() error {
+	if p.create == nil || len(p.buffers) != 1 || p.capacity < 2 {
+		return nil
+	}
+	b, err := p.create()
+	if err != nil {
+		return err
+	}
+	b.pool = p
+	b.busy = b.pending
+	p.buffers = append(p.buffers, b)
+	return nil
 }
 
 // dropRetired removes a buffer from the retired list once its release

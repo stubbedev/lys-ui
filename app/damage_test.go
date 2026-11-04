@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
+	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/widget"
@@ -120,6 +121,7 @@ type paintHarness struct {
 }
 
 func newPaintHarness(root widget.Widget, w, hgt int) *paintHarness {
+	animclock.Reset()
 	ph := &paintHarness{
 		surf: &fakeSurface{},
 		wnd: &hostWindow{
@@ -490,5 +492,105 @@ func TestFarApartBarsCopyForwardOnlyTheirStrips(t *testing.T) {
 	got := (h.wnd.pool.CopiedPixels() - before) / frames
 	if got == 0 || got > strips {
 		t.Errorf("copied %d px per frame forward, want the bars' %d px at most, and some", got, strips)
+	}
+}
+
+func spinnerHarness(t *testing.T) (*paintHarness, *widget.Spinner, *int, func(time.Duration)) {
+	t.Helper()
+	clock := time.Unix(1750000000, 0)
+	t.Cleanup(animclock.SetClock(func() time.Time { return clock }))
+	animclock.Reset()
+	t.Cleanup(animclock.Reset)
+	sp := widget.NewSpinner(24)
+	root := widget.NewBox(widget.Column, 0, 0).Append(sp, false)
+	t.Cleanup(widget.Host(root))
+	h := newPaintHarness(root, 200, 100)
+	made := 0
+	inner := h.wnd.newBuffer
+	h.wnd.newBuffer = func() (*buffer.Buffer, error) {
+		made++
+		return inner()
+	}
+	advance := func(d time.Duration) {
+		clock = clock.Add(d)
+		animclock.Tick(clock)
+	}
+	return h, sp, &made, advance
+}
+
+func spin(h *paintHarness, advance func(time.Duration), frames int) {
+	for range frames {
+		advance(16 * time.Millisecond)
+		h.frame()
+	}
+}
+
+func TestAnimationRestartFindsItsSpares(t *testing.T) {
+	h, sp, made, advance := spinnerHarness(t)
+	h.frame()
+	sp.SetSpinning(true)
+	spin(h, advance, 8)
+	sp.SetSpinning(false)
+	h.frame()
+	for _, b := range h.bufs {
+		if b.Busy() {
+			b.Release()
+		}
+	}
+	for range 3 {
+		advance(bufferTrimInterval)
+		h.wnd.trimPool()
+	}
+	before, deferred := *made, h.wnd.pool.Deferrals()
+	sp.SetSpinning(true)
+	spin(h, advance, 8)
+	if got := *made - before; got != 0 {
+		t.Errorf("a warm restart allocated %d buffers on the loop, want 0", got)
+	}
+	if got := h.wnd.pool.Deferrals() - deferred; got != 0 {
+		t.Errorf("a warm restart deferred %d frames with the pool busy, want 0", got)
+	}
+}
+
+func TestSparesGoAfterTheAnimationIsLongOver(t *testing.T) {
+	h, sp, _, advance := spinnerHarness(t)
+	h.frame()
+	sp.SetSpinning(true)
+	spin(h, advance, 8)
+	sp.SetSpinning(false)
+	h.frame()
+	for _, b := range h.bufs {
+		if b.Busy() {
+			b.Release()
+		}
+	}
+	advance(spareKeep)
+	for range 2 {
+		h.wnd.trimPool()
+	}
+	if n, _ := h.wnd.pool.Footprint(); n != 1 {
+		t.Errorf("the window holds %d buffers long after its animation, want the front alone", n)
+	}
+}
+
+func TestAStaticWindowPreparesNoSpare(t *testing.T) {
+	h, _, made, _ := spinnerHarness(t)
+	h.frame()
+	if *made != 1 {
+		t.Errorf("a window that drew once with nothing animating made %d buffers, want 1", *made)
+	}
+}
+
+func TestAColdAnimationPreparesItsSpareAheadOfTheNextFrame(t *testing.T) {
+	h, sp, made, advance := spinnerHarness(t)
+	h.frame()
+	sp.SetSpinning(true)
+	advance(16 * time.Millisecond)
+	h.wnd.dirty = true
+	if !h.wnd.draw() {
+		t.Fatal(h.wnd.drawErr)
+	}
+	if *made != 2 {
+		t.Errorf("after the first animated frame the pool made %d buffers, want the spare ready before the next", *made)
 	}
 }
