@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"image"
 	"os"
 	"path/filepath"
 
@@ -33,6 +34,11 @@ const (
 //   - NewSVGIcon: embedded SVG bytes, for apps that ship their own
 //     glyphs.
 //
+// A dynamic icon never reads or decodes on the UI loop: a paint draws
+// what is decoded and otherwise asks for the decode off the loop, keeping
+// the raster it has (nothing at first) until the result invalidates it.
+// Without a running Application the decode runs inline at the paint.
+//
 // Symbolic sources - -symbolic theme files and SVGs painting with
 // currentColor - recolor to the theme Accent so glyphs follow the
 // palette; SetTint pins a different color. The recoloring is a mask
@@ -64,6 +70,86 @@ type Icon struct {
 	resolvedSize int
 	resolvedGen  uint64
 	err          error
+
+	// base is the natural raster ic or retint was derived from.
+	base *render.Icon
+	// retint is the raster a mask recolor writes to, in place of ic.
+	retint iconRetint
+	// decoded is a file or SVG source's natural raster and the box it
+	// was decoded for; a theme icon's lives in the icons.Cache.
+	decoded iconDecoded
+}
+
+// iconBox is what a decode rasterizes for: the source's name when it has
+// one, size logical pixels, and a 120-based device scale.
+type iconBox struct {
+	name string
+	size int
+	frac uint32
+}
+
+type iconDecoded struct {
+	box    iconBox
+	raster icons.Raster
+}
+
+// iconSelfKey names the decode of one widget's own source.
+type iconSelfKey struct {
+	icon *Icon
+	box  iconBox
+}
+
+// iconThemeKey names the decode of a theme icon.
+type iconThemeKey struct {
+	box       iconBox
+	fallbacks bool
+}
+
+// iconRetint is a raster the widget recolors in place, so a tint moving
+// each frame reads no file and makes no raster. The version tells a GPU
+// renderer to upload it again.
+type iconRetint struct {
+	img     *image.RGBA
+	id      render.ImageID
+	version uint64
+	drawn   image.Image
+	active  bool
+}
+
+// fill makes the raster base recolored to tint.
+func (r *iconRetint) fill(base *render.Icon, tint Color) {
+	src := base.Image()
+	if r.img == nil || r.img.Rect != src.Rect {
+		r.img = image.NewRGBA(src.Rect)
+		r.id = render.NewImageID()
+	}
+	icons.TintInto(r.img, src, tint)
+	r.version++
+	r.drawn = render.VersionedImage{RGBA: r.img, ID: r.id, Version: r.version}
+	r.active = true
+}
+
+// draw blends the raster, made for frac and covering base's logical size,
+// as render.Icon.Draw places one.
+func (r *iconRetint) draw(cv *render.Canvas, base *render.Icon, frac uint32, x, y int) {
+	num, denom := cv.DeviceScale()
+	if int(frac)*denom == num*iconScaleDenom {
+		cv.DrawImageDevice(r.drawn, floorDiv(x*num, denom), floorDiv(y*num, denom))
+		return
+	}
+	w, h := base.LogicalSize()
+	cv.DrawImageRect(r.drawn, render.Rect{X: x, Y: y, W: w, H: h})
+}
+
+// iconScaleDenom is the denominator of the 120-based device scale.
+const iconScaleDenom = 120
+
+func floorDiv(a, b int) int {
+	q := a / b
+	if a%b != 0 && (a < 0) != (b < 0) {
+		q--
+	}
+	return q
 }
 
 // NewIcon returns an icon widget around a rasterized icon.
@@ -193,8 +279,8 @@ func (i *Icon) SetThemeName(name string) {
 }
 
 // Err returns the resolution failure of a dynamic icon: an unknown
-// theme name, a missing file, or undecodable data. Nil until a paint
-// tried and failed.
+// theme name, a missing file, or undecodable data. Nil until a decode a
+// paint asked for has failed.
 func (i *Icon) Err() error { return i.err }
 
 // effSize is the icon box: the stylesheet's -gtk-icon-size when set
@@ -236,7 +322,7 @@ func (i *Icon) Arrange(r render.Rect) {
 // gives the icon any). Dynamic icons
 // resolve first, re-rasterizing when the canvas device scale, the tint,
 // the stylesheet's size, or the icon theme cache moved on since the
-// last frame.
+// last frame, with what is already decoded.
 func (i *Icon) Paint(cv *render.Canvas) {
 	v := i.style(i)
 	b := boxOf(v, render.Insets{})
@@ -250,7 +336,7 @@ func (i *Icon) Paint(cv *render.Canvas) {
 	defer paintOutline(cv, v, i.bounds, radii)
 	if i.kind != iconStatic {
 		i.resolveFor(cv)
-		if i.ic == nil {
+		if i.ic == nil && !i.retint.active {
 			return
 		}
 	}
@@ -258,7 +344,14 @@ func (i *Icon) Paint(cv *render.Canvas) {
 	nat := i.natural()
 	x, y := content.X+(content.W-nat.W)/2, content.Y+(content.H-nat.H)/2
 	if v.Has(style.PropIconTransform) && v.IconXform.M != render.Identity {
+		if i.retint.active {
+			i.ic, i.retint.active = i.base.Tint(i.resolvedTint), false
+		}
 		i.ic.DrawXformed(cv, x, y, v.IconXform.M)
+		return
+	}
+	if i.retint.active {
+		i.retint.draw(cv, i.base, i.resolvedFrac, x, y)
 		return
 	}
 	i.ic.Draw(cv, x, y)
@@ -283,10 +376,10 @@ func (i *Icon) takeDamage() (bounds render.Rect, extra []render.Rect, dirty bool
 	return i.node.takeDamage()
 }
 
-// expire drops the resolved raster so the next paint re-resolves, and
-// schedules a repaint.
+// expire marks the resolved raster out of date, so the next paint
+// re-resolves, and schedules a repaint. The raster stays on show until
+// its replacement is decoded.
 func (i *Icon) expire() {
-	i.ic = nil
 	i.err = nil
 	i.resolvedTint = 0
 	i.resolvedFrac = 0
@@ -320,64 +413,118 @@ func (i *Icon) stale(frac uint32, tint Color) bool {
 	if i.err != nil {
 		return false
 	}
-	if i.ic == nil {
+	if i.ic == nil && !i.retint.active {
 		return true
 	}
 	return i.resolvedFrac != frac || i.resolvedTint != tint || i.resolvedSize != i.effSize()
 }
 
-// resolve rasterizes the source into a device box of
-// icons.DeviceBox(size, frac) pixels and records what it was made for.
+// resolve brings the raster up to date with what is decoded for this
+// canvas, asking for the decode when nothing is.
 func (i *Icon) resolve(frac uint32, tint Color) {
-	size := i.effSize()
-	ic, err := i.rasterize(frac, tint, size)
-	i.resolvedFrac, i.resolvedTint, i.resolvedSize = frac, tint, size
+	box := iconBox{name: i.name, size: i.effSize(), frac: frac}
+	var gen uint64
 	if i.kind == iconTheme {
-		i.resolvedGen = icons.Default().Generation()
+		gen = icons.Default().Generation()
 	}
-	if err != nil {
-		i.err, i.ic = err, nil
+	src, ok := i.peek(box)
+	if !ok {
+		i.request(box)
+		if src, ok = i.peek(box); !ok {
+			return
+		}
+	}
+	i.resolvedFrac, i.resolvedTint, i.resolvedSize, i.resolvedGen = frac, tint, box.size, gen
+	if src.Err != nil {
+		i.err, i.ic, i.base, i.retint.active = src.Err, nil, nil, false
 		return
 	}
-	i.err, i.ic = nil, ic
+	i.err = nil
+	i.apply(src, tint)
 }
 
-// rasterize decodes the source for size logical pixels at frac,
-// mask-recoloring it to tint when it is symbolic or a tint is pinned.
-func (i *Icon) rasterize(frac uint32, tint Color, size int) (*render.Icon, error) {
-	switch i.kind {
-	case iconTheme:
-		cache := icons.Default()
-		name := i.name
-		if i.fallbacks {
-			name = cache.FallbackName(name)
-		}
-		if i.tint != 0 {
-			return cache.Tinted(name, size, frac, tint)
-		}
-		return cache.SymbolicIcon(name, size, frac, tint)
-	case iconFile:
-		data, err := os.ReadFile(i.path)
-		if err != nil {
-			return nil, err
-		}
-		return tintedImage(data, filepath.Base(i.path), size, frac, tint, i.tint != 0 || icons.IsSymbolic(filepath.Base(i.path), data))
+// apply derives the raster on show from src: the natural one, a shared
+// recolor the first time a themed raster is tinted, and the widget's own
+// reused one for every other recolor.
+func (i *Icon) apply(src icons.Raster, tint Color) {
+	switch mask := i.tint != 0 || src.Symbolic; {
+	case !mask:
+		i.ic, i.retint.active = src.Icon, false
+	case i.kind == iconTheme && i.base != src.Icon:
+		i.ic, i.retint.active = icons.Default().Tint(src, tint), false
 	default:
-		return tintedImage(i.svg, "icon.svg", size, frac, tint, i.tint != 0 || icons.IsSymbolic("icon.svg", i.svg))
+		i.ic = nil
+		i.retint.fill(src.Icon, tint)
 	}
+	i.base = src.Icon
 }
 
-// tintedImage decodes data for size logical pixels at frac and, when
-// mask is set, recolors it: every pixel keeps its alpha and takes tint.
-func tintedImage(data []byte, name string, size int, frac uint32, tint Color, mask bool) (*render.Icon, error) {
-	ic, err := icons.DecodeIcon(data, name, size, frac)
-	if err != nil {
-		return nil, err
+// peek returns the source decoded for box if it is, reading nothing.
+func (i *Icon) peek(box iconBox) (icons.Raster, bool) {
+	if i.kind != iconTheme {
+		return i.decoded.raster, i.decoded.box == box
 	}
-	if mask {
-		ic = ic.Tint(tint)
+	cache := icons.Default()
+	name := box.name
+	if i.fallbacks {
+		var ok bool
+		if name, ok = cache.PeekFallback(name); !ok {
+			return icons.Raster{}, false
+		}
 	}
-	return ic, nil
+	return cache.Peek(name, box.size, box.frac)
+}
+
+// request asks for box's decode off the loop; its answer repaints the
+// widget, which then peeks again.
+func (i *Icon) request(box iconBox) {
+	answered := func() {
+		if hasInvoker() {
+			i.Invalidate()
+		}
+	}
+	if i.kind == iconTheme {
+		fallbacks := i.fallbacks
+		loadAsset(iconThemeKey{box, fallbacks}, func() { preloadThemeBox(box, fallbacks) }, answered)
+		return
+	}
+	kind, path, svg := i.kind, i.path, i.svg
+	var raster icons.Raster
+	loaded := false
+	loadAsset(iconSelfKey{i, box}, func() {
+		raster, loaded = decodeIconSource(kind, path, svg, box), true
+	}, func() {
+		if loaded {
+			i.decoded = iconDecoded{box: box, raster: raster}
+		}
+		answered()
+	})
+}
+
+// preloadThemeBox decodes a theme icon for box into the cache.
+func preloadThemeBox(box iconBox, fallbacks bool) {
+	cache := icons.Default()
+	name := box.name
+	if fallbacks {
+		name = cache.FallbackName(name)
+	}
+	cache.Preload(name, box.size, box.frac)
+}
+
+// decodeIconSource reads and decodes a file or SVG source; it reads only
+// its arguments, so it may run off the loop.
+func decodeIconSource(kind iconKind, path string, svg []byte, box iconBox) icons.Raster {
+	data, name := svg, "icon.svg"
+	if kind == iconFile {
+		var err error
+		name = filepath.Base(path)
+		// #nosec G304 -- the path is the application's own NewFileIcon argument.
+		if data, err = os.ReadFile(path); err != nil {
+			return icons.Raster{Err: err}
+		}
+	}
+	ic, err := icons.DecodeIcon(data, name, box.size, box.frac)
+	return icons.Raster{Icon: ic, Symbolic: icons.IsSymbolic(name, data), Err: err}
 }
 
 // fracOf converts a canvas device scale (num device pixels per denom

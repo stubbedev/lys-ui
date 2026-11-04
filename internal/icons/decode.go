@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"image"
 	"io"
 	"path/filepath"
 	"strings"
@@ -58,6 +59,24 @@ func DecodeIcon(data []byte, fileName string, size int, frac120 uint32) (*render
 		return nil, err
 	}
 	return ic.AtScale(int(frac120), fracDenom), nil
+}
+
+// TintInto writes src recolored to tint into dst, a raster of its size:
+// the pixels render.Icon.Tint makes, without a raster of their own.
+func TintInto(dst, src *image.RGBA, tint render.Color) {
+	tr, tg, tb, ta := uint32(tint.R()), uint32(tint.G()), uint32(tint.B()), uint32(tint.A())
+	w, h := src.Rect.Dx(), src.Rect.Dy()
+	for y := range h {
+		from := src.Pix[y*src.Stride:][:4*w]
+		to := dst.Pix[y*dst.Stride:][:4*w]
+		for x := 3; x < len(from); x += 4 {
+			a := uint32(from[x])
+			to[x-3] = uint8(min(tr*a/255, 255))
+			to[x-2] = uint8(min(tg*a/255, 255))
+			to[x-1] = uint8(min(tb*a/255, 255))
+			to[x] = uint8(min(ta*a/255, 255))
+		}
+	}
 }
 
 // hasJPEGMagic reports whether data starts with the JPEG SOI marker.

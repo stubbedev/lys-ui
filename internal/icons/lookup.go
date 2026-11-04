@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -37,30 +38,61 @@ func Lookup(name string, size int, frac120 uint32) (string, error) {
 // and last the bundled set - whose matches return a "builtin:" path
 // rather than a file.
 func (c *Cache) Lookup(name string, size int, frac120 uint32) (string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.resolveLocked(name, size, frac120)
+	return c.resolve(name, size, frac120)
 }
 
-// resolveLocked is Lookup without the lock; the error wraps ErrNotFound.
-// Results, misses included, are memoized in the theme index until a
-// reset drops it.
-func (c *Cache) resolveLocked(name string, size int, frac120 uint32) (string, error) {
+// resolve is Lookup; the error wraps ErrNotFound. Results, misses
+// included, are memoized in the theme index until a reset drops it. It
+// reads the disk with the cache's lock released.
+func (c *Cache) resolve(name string, size int, frac120 uint32) (string, error) {
 	if filepath.IsAbs(name) {
 		return name, nil
 	}
-	if path := c.namespaceFileLocked(name); path != "" {
+	if path := c.namespaceFile(name); path != "" {
 		return path, nil
 	}
-	if c.index == nil {
-		c.index = buildThemeIndex(c.fsys, c.theme, c.searchPathsLocked())
-	}
+	ix := c.built(&c.index, func(fsys themeFS, theme string, _ iconNamespace, paths []string) *themeIndex {
+		return buildThemeIndex(fsys, theme, paths)
+	})
 	scale := dirScale(frac120)
-	path := c.index.resolve(name, size, scale)
+	path := ix.resolve(name, size, scale)
 	if path == "" {
 		return "", fmt.Errorf("%w: %q at size %d scale %d", ErrNotFound, name, size, scale)
 	}
 	return path, nil
+}
+
+// built returns the index in slot, building it with the lock released,
+// one build at a time. A build a reset overtook starts over on the new
+// state.
+func (c *Cache) built(slot **themeIndex, build func(themeFS, string, iconNamespace, []string) *themeIndex) *themeIndex {
+	c.mu.Lock()
+	ix := *slot
+	c.mu.Unlock()
+	if ix != nil {
+		return ix
+	}
+	c.buildMu.Lock()
+	defer c.buildMu.Unlock()
+	for {
+		c.mu.Lock()
+		ix := *slot
+		gen, theme, ns, paths := c.gen.Load(), c.theme, c.namespace, c.searchPathsLocked()
+		c.mu.Unlock()
+		if ix != nil {
+			return ix
+		}
+		ix = build(c.fsys, theme, ns, paths)
+		c.mu.Lock()
+		current := c.gen.Load() == gen
+		if current {
+			*slot = ix
+		}
+		c.mu.Unlock()
+		if current {
+			return ix
+		}
+	}
 }
 
 // iconNamespace is a set of icon names one directory below each base
@@ -94,18 +126,23 @@ func (c *Cache) SetNamespace(dir string, prefixes []string) {
 	runAll(listeners)
 }
 
-// namespaceFileLocked returns the file of a name in the namespace, ""
-// for any other name and for one its directories do not hold.
-func (c *Cache) namespaceFileLocked(name string) string {
-	if !c.namespace.owns(name) {
+// namespaceFile returns the file of a name in the namespace, "" for any
+// other name and for one its directories do not hold.
+func (c *Cache) namespaceFile(name string) string {
+	c.mu.Lock()
+	owned := c.namespace.owns(name)
+	c.mu.Unlock()
+	if !owned {
 		return ""
 	}
-	if c.namespaceIndex == nil {
-		c.namespaceIndex = buildNamespaceIndex(c.fsys, c.namespace.dir, c.searchPathsLocked())
-	}
-	st := stems{name: name, nameHits: c.namespaceIndex.stems[name]}
+	ix := c.built(&c.namespaceIndex, func(fsys themeFS, _ string, ns iconNamespace, paths []string) *themeIndex {
+		return buildNamespaceIndex(fsys, ns.dir, paths)
+	})
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	st := stems{name: name, nameHits: ix.stems[name]}
 	for sh := range st.slots() {
-		if path := c.namespaceIndex.file(sh); path != "" {
+		if path := ix.file(sh); path != "" {
 			return path
 		}
 	}
@@ -196,6 +233,9 @@ const maxResolved = 4096
 // every base directory. A cache reset drops it, so icons installed
 // since are found.
 type themeIndex struct {
+	// mu guards resolved and the followed links, and is held across the
+	// stat that follows one; a paint never takes it.
+	mu    sync.Mutex
 	fsys  themeFS
 	chain []*Theme
 	// scales lists, per theme of the chain, the directory scales it
@@ -328,6 +368,8 @@ func splitIconFile(name string) (string, int, bool) {
 // resolve returns the path name resolves to at size and directory
 // scale, "" when nothing holds it, memoized.
 func (ix *themeIndex) resolve(name string, size, scale int) string {
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
 	key := resolveKey{name: name, size: size, scale: scale}
 	if path, ok := ix.resolved[key]; ok {
 		return path
@@ -514,15 +556,45 @@ const symbolicSuffix = "-symbolic"
 // resolves, GThemedIcon's default fallbacks: a missing
 // preferences-system-network tries preferences-system, then
 // preferences. A -symbolic suffix stays on every form. It returns name
-// itself when none resolves.
+// itself when none resolves. It may read the disk; the answer is kept
+// for PeekFallback until a reset.
 func (c *Cache) FallbackName(name string) string {
+	c.mu.Lock()
+	if known, ok := c.fallbacks[name]; ok {
+		c.mu.Unlock()
+		return known
+	}
+	gen := c.gen.Load()
+	c.mu.Unlock()
+	found := c.fallbackOf(name)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.gen.Load() == gen {
+		if len(c.fallbacks) >= maxResolved {
+			clear(c.fallbacks)
+		}
+		c.fallbacks[name] = found
+	}
+	return found
+}
+
+// PeekFallback returns FallbackName's answer if it is known, reading
+// nothing.
+func (c *Cache) PeekFallback(name string) (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	known, ok := c.fallbacks[name]
+	return known, ok
+}
+
+func (c *Cache) fallbackOf(name string) string {
 	base, suffix := strings.CutSuffix(name, symbolicSuffix)
 	tail := ""
 	if suffix {
 		tail = symbolicSuffix
 	}
 	for n := base; n != ""; {
-		if _, err := c.Lookup(n+tail, 16, 120); err == nil {
+		if _, err := c.resolve(n+tail, 16, 120); err == nil {
 			return n + tail
 		}
 		i := strings.LastIndexByte(n, '-')

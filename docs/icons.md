@@ -26,7 +26,12 @@ How lys-ui resolves and paints themed icons.
   default), and `widget.RefreshIcons` forgets every resolved icon so
   icons installed or removed since are picked up. `widget.SetIconNamespace`
   names an application's own icons by prefix and directory, so drawing
-  them never lists the theme chain.
+  them never lists the theme chain. A paint never reads or decodes: it
+  draws what is decoded, and otherwise asks for the decode off the loop
+  and keeps the raster it has until the answer repaints it
+  ([threading.md](threading.md)). `widget.PreloadThemeIcon` decodes ahead
+  of the first paint, so a view that shows an icon once
+  `widget.ThemeIconPreloaded` says so never paints it blank.
 - `render.Icon.Tint` — the recoloring primitive.
 
 ## Symbolic recoloring
@@ -48,7 +53,9 @@ currentColor → transparent) survive unchanged.
 A symbolic `widget.Icon` takes the stylesheet's `color`, else
 `widget.Current().Accent`;
 `SetTint` pins a different color (zero un-pins). Non-symbolic sources
-keep their colors unless a tint is pinned.
+keep their colors unless a tint is pinned. Widgets showing a theme icon in
+one color share one raster; a widget whose tint then moves recolors a
+raster of its own in place, reading no file.
 
 ## Icon-theme changes are followed live
 

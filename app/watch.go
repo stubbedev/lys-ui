@@ -9,6 +9,8 @@ import (
 
 	"github.com/stubbedev/lys-lib/intconv"
 	"golang.org/x/sys/unix"
+
+	"github.com/stubbedev/lys-ui/widget"
 )
 
 // File descriptors and paths watched on the application loop: a
@@ -237,4 +239,5 @@ func (a *Application) endedChan() chan struct{} {
 func (a *Application) endLoop() {
 	ch := a.endedChan()
 	a.endedOnce.Do(func() { close(ch) })
+	widget.StopAssetLoads()
 }

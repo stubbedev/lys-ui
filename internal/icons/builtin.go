@@ -3,7 +3,6 @@ package icons
 import (
 	"embed"
 	"io/fs"
-	"os"
 	"path"
 	"slices"
 	"strings"
@@ -110,11 +109,11 @@ func lookupBuiltin(name string) string {
 }
 
 // readIcon reads a resolved icon: a theme file, or a bundled one.
-func readIcon(p string) ([]byte, error) {
+func readIcon(fsys themeFS, p string) ([]byte, error) {
 	if file, ok := strings.CutPrefix(p, builtinPrefix); ok {
 		return lucideFS.ReadFile(file)
 	}
-	return os.ReadFile(p) //nolint:gosec // paths come from the theme lookup, not untrusted input
+	return fsys.ReadFile(p)
 }
 
 // BuiltinNames lists the freedesktop names the bundled set serves,
