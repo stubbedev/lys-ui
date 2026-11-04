@@ -144,8 +144,8 @@ func (r *Region) Blit(b, front, carryFrom *buffer.Buffer) []gpu.Carry {
 
 func deviceRect(r render.Rect) image.Rectangle { return image.Rect(r.X, r.Y, r.X+r.W, r.Y+r.H) }
 
-// cutOut is rs without cut: the copies of one frame into one target must not
-// overlap, as nothing orders them on the GPU.
+// cutOut is rs without cut: a stale rect a move then overwrites is not worth
+// copying.
 func cutOut(rs []image.Rectangle, cut image.Rectangle, scratch *[]image.Rectangle) []image.Rectangle {
 	out := (*scratch)[:0]
 	for _, r := range rs {

@@ -4,10 +4,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sync"
 
 	"github.com/stubbedev/lys-lib/drm"
+	"github.com/stubbedev/lys-lib/gpu"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/logutil"
@@ -28,20 +28,6 @@ type syncTimelines interface {
 	destroy(s drm.Syncobj)
 	// close ends the watching and closes the device.
 	close()
-}
-
-// syncNode is the render node explicit synchronization makes its timelines
-// on: the compositor's main device's. A compositor that named none gets none,
-// and its surfaces sync implicitly.
-func syncNode(plan rendererPlan) (string, bool) {
-	if !plan.hasNode {
-		return "", false
-	}
-	nodes, err := filepath.Glob(fmt.Sprintf("/sys/dev/char/%d:%d/device/drm/renderD*", unix.Major(plan.node), unix.Minor(plan.node)))
-	if err != nil || len(nodes) == 0 {
-		return "", false
-	}
-	return "/dev/dri/" + filepath.Base(nodes[0]), true
 }
 
 // openTimelines opens the timelines on node, which must have timeline
@@ -200,4 +186,25 @@ func (t *drmTimelines) close() {
 	if err := errors.Join(unix.Close(t.stop), unix.Close(t.epfd), t.dev.Close()); err != nil {
 		logutil.L().Warn("app: close the timelines", "err", err)
 	}
+}
+
+// explicitTimelines are dev's timelines for a compositor that takes explicit
+// synchronization, on dev's own render node; nil, syncing implicitly, for a
+// device the driver names no node for or one without sync_files.
+func explicitTimelines(dev *gpu.Device) syncTimelines {
+	node, ok := dev.RenderNode()
+	if !ok {
+		logutil.L().Info("app: no explicit synchronization; surfaces sync implicitly", "device", dev.Name(), "why", "the driver names no render node")
+		return nil
+	}
+	if !dev.SyncFiles() {
+		logutil.L().Info("app: no explicit synchronization; surfaces sync implicitly", "device", dev.Name(), "why", "the device has no sync_files")
+		return nil
+	}
+	t, err := openTimelines(node)
+	if err != nil {
+		logutil.L().Info("app: no explicit synchronization; surfaces sync implicitly", "node", node, "err", err)
+		return nil
+	}
+	return t
 }

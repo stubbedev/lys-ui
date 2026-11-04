@@ -278,13 +278,8 @@ func openRenderer(plan rendererPlan) (*gpuRenderer, error) {
 	}
 	r.render, r.prepare = r.deviceFrame, r.deviceTarget
 	r.syncMgr = plan.syncobj
-	if node, ok := syncNode(plan); ok && plan.syncobj != nil && dev.SyncFiles() {
-		t, err := openTimelines(node)
-		if err != nil {
-			logutil.L().Info("app: no explicit synchronization; surfaces sync implicitly", "node", node, "err", err)
-		} else {
-			r.timelines = t
-		}
+	if plan.syncobj != nil {
+		r.timelines = explicitTimelines(dev)
 	}
 	return r, nil
 }

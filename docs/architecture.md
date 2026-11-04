@@ -136,7 +136,7 @@ whole viewport paints: a non-flat backdrop, an overlapping sibling, an
 effect on an ancestor, or a step that lands between device pixels. On
 the GPU the move is a carry with an offset from the front target, in the
 frame's own submission; the buffer's staleness carries around the moved
-area, as nothing orders two copies into one target. A frame the GPU
+area, which the move writes anyway. A frame the GPU
 refuses owes the moved viewport whole.
 
 ### 4. Resize before Acquire; a resize commit bypasses pacing

@@ -831,7 +831,7 @@ func TestAGPUScrollStepCarriesItsPixels(t *testing.T) {
 			for _, b := range carried[i+1:] {
 				for _, rb := range b.Rects {
 					if !ra.Intersect(rb).Empty() {
-						t.Errorf("carries overlap at %v, which nothing orders on the GPU", ra.Intersect(rb))
+						t.Errorf("carries overlap at %v: the stale copy wrote what the move overwrites", ra.Intersect(rb))
 					}
 				}
 			}

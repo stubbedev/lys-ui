@@ -1,18 +1,22 @@
 package app
 
 import (
-	"os"
+	"bytes"
+	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/gputest"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
+	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -189,19 +193,29 @@ func TestACompositorWithoutExplicitSyncKeepsTodaysPath(t *testing.T) {
 	}
 }
 
-func TestExplicitSyncTakesTheCompositorsNodeOrNone(t *testing.T) {
-	if _, ok := syncNode(rendererPlan{}); ok {
-		t.Error("a compositor that named no device got a node to guess at")
+func TestADeviceWithoutARenderNodeSyncsImplicitly(t *testing.T) {
+	if _, err := gputest.SetupTest(t); err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := syncNode(rendererPlan{node: unix.Mkdev(1, 3), hasNode: true}); ok {
-		t.Error("a device with no render node got one")
+	dev, err := gpu.Open()
+	if err != nil {
+		if gputest.Enabled() {
+			t.Fatal(err)
+		}
+		t.Skipf("no GPU: %v", err)
 	}
-	const major, minor = 226, 128
-	if _, err := os.Stat("/sys/dev/char/226:128/device/drm/renderD128"); err != nil {
-		t.Skip("no DRM render node in /sys")
+	t.Cleanup(dev.Close)
+	if _, named := dev.RenderNode(); named {
+		t.Skipf("%s has a render node", dev.Name())
 	}
-	if node, ok := syncNode(rendererPlan{node: unix.Mkdev(major, minor), hasNode: true}); !ok || node != "/dev/dri/renderD128" {
-		t.Errorf("the compositor's renderD128 gave %q, %v", node, ok)
+	var log bytes.Buffer
+	logutil.Set(slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { logutil.Set(nil) })
+	if explicitTimelines(dev) != nil {
+		t.Error("a device with no render node made timelines on one")
+	}
+	if !strings.Contains(log.String(), "sync implicitly") || !strings.Contains(log.String(), "no render node") {
+		t.Errorf("log %q: want the implicit path named with its reason", log.String())
 	}
 }
 
