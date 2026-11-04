@@ -203,8 +203,17 @@ onto white, so image editors that only read JPEG paste too), `Files`
 and `URIs` (`text/uri-list` with the uris as plain text), `HTML`
 (formatted text with its plain fallback) - and `Merge` combines them.
 `Clipboard.Write` claims the selection with any content;
-`Clipboard.Read(prefs...)` reads the best mime offered, with
-`ReadText`, `ReadImageBytes`, `ReadURIs` and `ReadHTML` on top.
+`Clipboard.Read(prefs, done)` reads the best mime offered, with
+`ReadText`, `ReadImageBytes`, `ReadURIs` and `ReadHTML` on top. Every
+read takes a callback: the other end is a foreign client that may
+answer late or never, so the transfer runs off the loop and `done` runs
+on the loop when it ends. A payload a `ctrl+v` asked for lands in the
+widget that held focus at the press, and a drop in the widget under
+it, whatever happened in the wait. A selection or drag this client
+serves is written off the loop too, so a writer in a `transfer.Content`
+must not touch widgets; the builders above only copy bytes. At most
+`xfer.MaxTransfers` run at once, and a read past that fails with
+`xfer.ErrBusy`.
 
 A drag is a `transfer.Drag` (`widget.DragContent`): content plus the
 actions it offers (copy unless set; a row reorder offers move),

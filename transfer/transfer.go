@@ -41,7 +41,9 @@ var TextMimes = []string{
 var ImageMimes = []string{MimePNG, MimeWebP, MimeJPEG, MimeGIF}
 
 // Content is one transfer's payload: the mimes it is offered as, best
-// first, and Write, which writes the bytes for one of them.
+// first, and Write, which writes the bytes for one of them. Write runs
+// off the event loop, possibly several at once, so it must not touch
+// widgets.
 type Content struct {
 	Mimes []string
 	Write func(mime string, w io.Writer) error

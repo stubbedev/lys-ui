@@ -20,35 +20,39 @@ type primarySelection struct {
 	copyOnSelect bool
 }
 
-// pasteAt reads the primary selection into the text widget under the
-// pointer — else the keyboard-focused one — inserting at its caret.
-// Reports whether something was pasted, and the read's error.
+// pasteAt starts reading the primary selection into the text widget
+// under the pointer — else the keyboard-focused one — inserting at its
+// caret when the transfer lands, off the loop like every paste
+// (keyClipboard.paste). Reports whether a read started; report hears its
+// failure.
 //
 // Every error rejects the paste, the same contract as the keyboard
-// paste path (pasteSelection in app.go): a hostile peer — a payload
-// past xfer.MaxPayload, or one that stalls past the transfer deadline
-// — pastes nothing and is reported (Application.OnTransferError).
+// paste path: a hostile peer — a payload past xfer.MaxPayload, or one
+// that stalls past the transfer deadline — pastes nothing and is
+// reported (Application.OnTransferError).
 //
 // A read-only or disabled text widget under the pointer is still the
 // target: it refuses the insert, as it refuses typing, and a read-only
 // one rings the error bell - the paste is not redirected to whatever
 // widget holds the keyboard, which would surprise more than help.
-func (p *primarySelection) pasteAt(router *widget.Router) (bool, error) {
+func (p *primarySelection) pasteAt(router *widget.Router, report func(error)) bool {
 	if p == nil || p.src == nil {
-		return false, nil
+		return false
 	}
 	target := inserterAt(router)
 	if target == nil {
-		return false, nil
+		return false
 	}
-	text, err := p.src.ReadPrimary()
-	if err != nil {
-		return false, err
-	}
-	// One Insert replaces any active selection and fires OnChanged
-	// exactly once, whatever the pasted length.
-	target.Insert(text)
-	return true, nil
+	p.src.ReadPrimary(func(text string, err error) {
+		if err != nil {
+			report(err)
+			return
+		}
+		// One Insert replaces any active selection and fires OnChanged
+		// exactly once, whatever the pasted length.
+		target.Insert(text)
+	})
+	return true
 }
 
 // copyAfterRelease claims the primary selection with the focused

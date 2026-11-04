@@ -153,7 +153,8 @@ func (a *Application) redial() (*wlsession.Session, error) {
 func (a *Application) adoptSession(sess *wlsession.Session) {
 	a.sess = sess
 	a.step, a.wake = sess.Step, sess.WakeAfter
-	a.dnd = dragdrop.New(sess)
+	a.dnd.Stop()
+	a.dnd = dragdrop.New(sess, a.Invoke)
 	a.ime = newIMEController(sess)
 	a.rep = newKeyRepeater(sess.RepeatInfo())
 	a.kicker = &loopKicker{}

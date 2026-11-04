@@ -49,19 +49,20 @@ func TestTransferErrorHandler(t *testing.T) {
 	}
 
 	clip := &clipboard.Clipboard{}
+	clip.SetScheduler(nil, func(fn func()) { fn() })
+	keys := &keyClipboard{clip: clip, report: a.reportTransfer}
 	face := testFace(t)
 	entry := widget.NewEntry(face, 14, render.RGB(0, 0, 0))
 	r := &widget.Router{Root: entry}
 	r.SetFocus(entry)
-	if err := pasteSelection(r, clip); err != nil {
-		t.Errorf("text paste from an empty clipboard: %v", err)
-	}
+	keys.paste(r)
 	img := widget.NewImage(nil)
 	img.OnPasteImage = func(image.Image) {}
 	r = &widget.Router{Root: img}
 	r.SetFocus(img)
-	if err := pasteSelection(r, clip); err != nil {
-		t.Errorf("image paste from an empty clipboard: %v", err)
+	keys.paste(r)
+	if len(got) != 1 {
+		t.Errorf("pasting from an empty clipboard reported %v", got[1:])
 	}
 
 	in := &surfaceInput{transferError: a.reportTransfer}

@@ -3,8 +3,8 @@ package dragdrop
 import (
 	"errors"
 	"io"
-	"os"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
@@ -137,6 +137,7 @@ func (t *recordingTarget) Drop(x, y float64) {
 func newTestController() *Controller {
 	return &Controller{
 		sess:    &wlsession.Session{},
+		invoke:  func(fn func()) { fn() },
 		version: minActionVersion,
 		offers:  make(map[*wl.DataOffer]*offerMimes),
 	}
@@ -307,6 +308,7 @@ func TestDropDeliversOnlyWhenAccepted(t *testing.T) {
 func newSourceController(dev *fakeDevice, src *fakeSource, version uint32) *Controller {
 	return &Controller{
 		dev:     dev,
+		invoke:  func(fn func()) { fn() },
 		maker:   fakeMaker{src: src},
 		version: version,
 		offers:  make(map[*wl.DataOffer]*offerMimes),
@@ -508,12 +510,12 @@ func TestReadPayloadShortCircuitsSelfDrops(t *testing.T) {
 		},
 	}
 
-	data, err := c.ReadPayload("application/x-lys-ui-tile")
-	if err != nil {
-		t.Fatalf("ReadPayload: %v", err)
+	r := readPayload(t, c, "application/x-lys-ui-tile")
+	if r.err != nil {
+		t.Fatalf("ReadPayload: %v", r.err)
 	}
-	if string(data) != "payload:application/x-lys-ui-tile" {
-		t.Errorf("payload = %q, want the provider's bytes", data)
+	if string(r.data) != "payload:application/x-lys-ui-tile" {
+		t.Errorf("payload = %q, want the provider's bytes", r.data)
 	}
 	// The wire transfer never starts for a self-drop…
 	if len(offer.received) != 0 || offer.finished != 0 {
@@ -528,25 +530,39 @@ func TestReadPayloadShortCircuitsSelfDrops(t *testing.T) {
 	}
 }
 
+// readPayload bounds the wait for one ReadPayload delivery.
+func readPayload(t *testing.T, c *Controller, mime string) receiveResult {
+	t.Helper()
+	ch := make(chan receiveResult, 1)
+	c.ReadPayload(mime, func(data []byte, err error) { ch <- receiveResult{data, err} })
+	select {
+	case r := <-ch:
+		return r
+	case <-time.After(10 * time.Second):
+		t.Fatalf("ReadPayload(%q) never delivered", mime)
+		return receiveResult{}
+	}
+}
+
 func TestReadPayloadRequiresADrag(t *testing.T) {
 	c := newTestController()
-	if _, err := c.ReadPayload(""); !errors.Is(err, ErrNoPayload) {
-		t.Errorf("empty mime = %v, want ErrNoPayload", err)
+	if r := readPayload(t, c, ""); !errors.Is(r.err, ErrNoPayload) {
+		t.Errorf("empty mime = %v, want ErrNoPayload", r.err)
 	}
-	if _, err := c.ReadPayload("a/b"); !errors.Is(err, ErrNoPayload) {
-		t.Errorf("no drag = %v, want ErrNoPayload", err)
+	if r := readPayload(t, c, "a/b"); !errors.Is(r.err, ErrNoPayload) {
+		t.Errorf("no drag = %v, want ErrNoPayload", r.err)
 	}
 	// An accepted drag whose receive fails surfaces the error.
 	c.dragOffer = &fakeOffer{receiveErr: errors.New("no fd")}
 	c.accepted = "a/b"
-	if _, err := c.ReadPayload("a/b"); err == nil {
+	if r := readPayload(t, c, "a/b"); r.err == nil {
 		t.Error("failed receive returned no error")
 	}
 }
 
 func TestBindRoutesThroughSession(t *testing.T) {
 	sess := &wlsession.Session{}
-	c := New(sess)
+	c := New(sess, func(fn func()) { fn() })
 	target := &recordingTarget{accept: "a/b", motionRe: "a/b"}
 	surf := &wl.Surface{}
 	c.Bind(surf, target)
@@ -585,12 +601,9 @@ func TestBindRoutesThroughSession(t *testing.T) {
 func TestSourceSendWritesAndCloses(t *testing.T) {
 	c := newTestController()
 	c.srcData = transfer.Drag{Mimes: []string{"text/plain"}, Write: fakeWriter}
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain", Fd: w.Fd()})
-	w.Close()
+	r, w := rawWriteEnd(t)
+	defer r.Close()
+	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain", Fd: w})
 
 	buf := make([]byte, 64)
 	n, _ := r.Read(buf)
@@ -601,9 +614,14 @@ func TestSourceSendWritesAndCloses(t *testing.T) {
 		t.Error("fd still open after Send")
 	}
 
-	// A send for a drag without content is ignored.
+	// A send for a drag without content writes nothing and closes.
 	c2 := newTestController()
-	c2.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain", Fd: w.Fd()})
+	r2, w2 := rawWriteEnd(t)
+	defer r2.Close()
+	c2.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain", Fd: w2})
+	if n, err := r2.Read(buf); n != 0 || !errors.Is(err, io.EOF) {
+		t.Errorf("a send without content read %d bytes, %v; want EOF", n, err)
+	}
 }
 
 // actionTarget is a drop target that prefers one action.
@@ -634,8 +652,9 @@ func TestDropActions(t *testing.T) {
 
 	// The fake keeps no copy of the fd: the read ends empty at once.
 	resolveOffer := &fakeOffer{}
-	if _, err := receivePayload(resolveOffer, "a/b", func() error { return nil }, minActionVersion, transfer.ActionMove); err != nil {
-		t.Fatal(err)
+	c.resolve = transfer.ActionMove
+	if r := awaitReceive(t, c, resolveOffer, "a/b"); r.err != nil {
+		t.Fatal(r.err)
 	}
 	if len(resolveOffer.setActions) != 1 || resolveOffer.setActions[0] != [2]uint32{2, 2} || resolveOffer.finished != 1 {
 		t.Errorf("ask resolve set %v finish %d, want move alone then finish", resolveOffer.setActions, resolveOffer.finished)

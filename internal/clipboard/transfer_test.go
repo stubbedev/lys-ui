@@ -3,8 +3,8 @@ package clipboard
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
-	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -67,21 +67,59 @@ func shortTransferTimeout(t *testing.T) {
 
 // rawWriteEnd creates a pipe the Go runtime has never seen, so the
 // send handler's DeadlineWriter gets a descriptor like the compositor
-// hands out: never registered with the poller before. (An os.Pipe end
-// is already registered, which the deadline arming would refuse.)
-func rawWriteEnd(t *testing.T) (r, w *os.File) {
+// hands out: never registered with the poller before, and the handler's
+// to close. (An os.Pipe end is already registered, which the deadline
+// arming would refuse.)
+func rawWriteEnd(t *testing.T) (*os.File, uintptr) {
 	t.Helper()
 	var fds [2]int
 	if err := syscall.Pipe2(fds[:], 0); err != nil {
 		t.Fatal(err)
 	}
-	r = os.NewFile(uintptr(fds[0]), "clipboard-test-raw-r")
-	w = os.NewFile(uintptr(fds[1]), "clipboard-test-raw-w")
-	t.Cleanup(func() {
-		_ = r.Close()
-		_ = w.Close()
+	return os.NewFile(uintptr(fds[0]), "clipboard-test-raw-r"), uintptr(fds[1])
+}
+
+// testClipboard is a clipboard whose invoke stands in for the event
+// loop: it runs what comes back on the transfer goroutine, where the
+// test's channels pick it up.
+func testClipboard(t *testing.T) *Clipboard {
+	t.Helper()
+	c := &Clipboard{invoke: func(fn func()) { fn() }}
+	t.Cleanup(c.Stop)
+	return c
+}
+
+// awaitRead bounds the wait for one read's delivery.
+func awaitRead[T any](t *testing.T, ch <-chan T) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(10 * time.Second):
+		t.Fatal("the read never delivered")
+		panic("unreachable")
+	}
+}
+
+type readResult struct {
+	data []byte
+	mime string
+	err  error
+}
+
+func collectRead(t *testing.T, start func(done func([]byte, string, error))) readResult {
+	t.Helper()
+	ch := make(chan readResult, 1)
+	start(func(data []byte, mime string, err error) { ch <- readResult{data, mime, err} })
+	return awaitRead(t, ch)
+}
+
+func collectText(t *testing.T, start func(done func(string, error))) (string, error) {
+	t.Helper()
+	r := collectRead(t, func(done func([]byte, string, error)) {
+		start(func(s string, err error) { done([]byte(s), "", err) })
 	})
-	return r, w
+	return string(r.data), r.err
 }
 
 // The offer pipeline keeps working for an honest peer.
@@ -91,7 +129,7 @@ func TestReadOfferTextRoundtripsASmallPayload(t *testing.T) {
 		wait = fakePeer(t, fd, []byte("pasted text"))
 		return nil
 	}
-	text, err := readOfferText(receive, func() error { return nil }, map[string]bool{"text/plain;charset=utf-8": true})
+	text, err := readOfferText(t, receive, map[string]bool{"text/plain;charset=utf-8": true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +152,7 @@ func TestReadOfferTextRefusesAnOversizePeer(t *testing.T) {
 		wait = fakePeer(t, fd, payload)
 		return nil
 	}
-	text, err := readOfferText(receive, func() error { return nil }, map[string]bool{"text/plain": true})
+	text, err := readOfferText(t, receive, map[string]bool{"text/plain": true})
 	if !errors.Is(err, xfer.ErrTooLarge) {
 		t.Fatalf("read = %v, want xfer.ErrTooLarge", err)
 	}
@@ -126,93 +164,147 @@ func TestReadOfferTextRefusesAnOversizePeer(t *testing.T) {
 	}
 }
 
-// A peer that never writes must not hang the paste: the deadline cuts
-// the read off, with no goroutine left behind.
+// A peer that never writes leaves the paste pending, not the caller, and
+// the deadline ends it with an error.
 func TestReadOfferTextCutsOffASilentPeer(t *testing.T) {
 	shortTransferTimeout(t)
+	c := testClipboard(t)
 	receive := func(mime string, fd uintptr) error {
 		holdSilentPeer(t, fd)
 		return nil
 	}
-
-	before := runtime.NumGoroutine()
-	start := time.Now()
-	_, err := readOfferText(receive, func() error { return nil }, map[string]bool{"text/plain": true})
-	elapsed := time.Since(start)
-	if !errors.Is(err, xfer.ErrTimeout) {
+	ch := make(chan error, 1)
+	c.fetchText(selectionView{receive: receive, mimes: map[string]bool{"text/plain": true}}, transfer.TextMimes, bytesToString,
+		func(_ string, err error) { ch <- err })
+	if err := awaitRead(t, ch); !errors.Is(err, xfer.ErrTimeout) {
 		t.Fatalf("read = %v, want xfer.ErrTimeout", err)
-	}
-	if elapsed > 2*time.Second {
-		t.Errorf("silent peer hung the read for %s, want the short deadline", elapsed)
-	}
-	time.Sleep(250 * time.Millisecond)
-	if after := runtime.NumGoroutine(); after > before {
-		t.Errorf("goroutines %d -> %d: the deadline leaked one", before, after)
 	}
 }
 
-// A consumer that never reads must not stall the dispatch loop: the
-// bounded send returns once the deadline fires, leaking nothing. The
-// primary selection shares sendPayload and is exercised the same way
-// below.
-func TestSendToAStuckConsumerIsBounded(t *testing.T) {
-	shortTransferTimeout(t)
-	c := &Clipboard{content: transfer.Text(string(bytes.Repeat([]byte("p"), 1<<20)))} // far past the pipe buffer
-	_, w := rawWriteEnd(t)
+// The caller returns before a silent peer has answered, and stopping the
+// clipboard ends the transfer long before its deadline.
+func TestReadReturnsBeforeASilentPeerAndStopEndsIt(t *testing.T) {
+	c := testClipboard(t)
+	receives := 0
+	receive := func(mime string, fd uintptr) error {
+		receives++
+		holdSilentPeer(t, fd)
+		return nil
+	}
+	delivered := make(chan error, 1)
+	c.fetchText(selectionView{receive: receive, mimes: map[string]bool{"text/plain": true}}, transfer.TextMimes, bytesToString,
+		func(_ string, err error) { delivered <- err })
+	if receives != 1 {
+		t.Fatalf("receive ran %d times before the read returned, want the request out", receives)
+	}
+	select {
+	case err := <-delivered:
+		t.Fatalf("a silent peer's read delivered %v, want it pending", err)
+	default:
+	}
+	c.Stop()
+	if err := awaitRead(t, delivered); err == nil {
+		t.Error("a stopped transfer delivered no error")
+	}
+}
 
-	before := runtime.NumGoroutine()
-	start := time.Now()
-	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: w.Fd()})
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("send to a silent consumer blocked for %s, want the deadline", elapsed)
+// Reads past xfer.MaxTransfers are refused rather than queued without
+// bound, and refused on the loop like any other result.
+func TestReadsPastTheBoundAreRefused(t *testing.T) {
+	c := testClipboard(t)
+	receive := func(mime string, fd uintptr) error {
+		holdSilentPeer(t, fd)
+		return nil
 	}
-	time.Sleep(250 * time.Millisecond)
-	if after := runtime.NumGoroutine(); after > before {
-		t.Errorf("goroutines %d -> %d: the bounded send leaked one", before, after)
+	view := selectionView{receive: receive, mimes: map[string]bool{"text/plain": true}}
+	for range xfer.MaxTransfers {
+		c.fetchText(view, transfer.TextMimes, bytesToString, func(string, error) {})
 	}
+	ch := make(chan error, 1)
+	c.fetchText(view, transfer.TextMimes, bytesToString, func(_ string, err error) { ch <- err })
+	if err := awaitRead(t, ch); !errors.Is(err, xfer.ErrBusy) {
+		t.Errorf("read past the bound = %v, want xfer.ErrBusy", err)
+	}
+}
+
+// A clipboard no loop owns refuses a read at the call instead of leaving
+// the reader waiting for a delivery nothing will run.
+func TestReadWithoutASchedulerFailsLoudly(t *testing.T) {
+	var got error
+	(&Clipboard{}).ReadText(func(_ string, err error) { got = err })
+	if !errors.Is(got, errNoScheduler) {
+		t.Errorf("read without a scheduler = %v, want errNoScheduler", got)
+	}
+}
+
+// A consumer that never reads holds a transfer goroutine, never the
+// handler: it returns with the send running, and Stop ends the write.
+func TestSendToAStuckConsumerIsBounded(t *testing.T) {
+	c := testClipboard(t)
+	c.content = transfer.Text(string(bytes.Repeat([]byte("p"), 1<<20)))
+	r, w := rawWriteEnd(t)
+	defer r.Close()
+	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: w})
+	c.Stop()
 }
 
 func TestPrimarySendToAStuckConsumerIsBounded(t *testing.T) {
-	shortTransferTimeout(t)
-	c := &Clipboard{primaryContent: transfer.Text(string(bytes.Repeat([]byte("p"), 1<<20)))}
-	_, w := rawWriteEnd(t)
+	c := testClipboard(t)
+	c.primaryContent = transfer.Text(string(bytes.Repeat([]byte("p"), 1<<20)))
+	r, w := rawWriteEnd(t)
+	defer r.Close()
+	c.HandleZwpPrimarySelectionSourceV1Send(wlr.ZwpPrimarySelectionSourceV1SendEvent{MimeType: transfer.MimeText, Fd: w})
+	c.Stop()
+}
 
-	before := runtime.NumGoroutine()
-	start := time.Now()
-	c.HandleZwpPrimarySelectionSourceV1Send(wlr.ZwpPrimarySelectionSourceV1SendEvent{MimeType: transfer.MimeText, Fd: w.Fd()})
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("send to a silent consumer blocked for %s, want the deadline", elapsed)
+// The deadline also ends a stuck send with nobody stopping it: the
+// consumer sees EOF after the bytes the pipe took.
+func TestSendDeadlineEndsAStuckConsumer(t *testing.T) {
+	shortTransferTimeout(t)
+	c := testClipboard(t)
+	c.content = transfer.Text(string(bytes.Repeat([]byte("p"), 1<<20)))
+	r, w := rawWriteEnd(t)
+	defer r.Close()
+	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: w})
+	data, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
 	}
-	time.Sleep(250 * time.Millisecond)
-	if after := runtime.NumGoroutine(); after > before {
-		t.Errorf("goroutines %d -> %d: the bounded send leaked one", before, after)
+	if len(data) == 0 {
+		t.Error("the consumer read nothing before EOF")
 	}
 }
 
 // A consumer that closed its end early ends the send on EPIPE, right
 // away.
 func TestSendToAClosedConsumerEndsOnEPIPE(t *testing.T) {
-	shortTransferTimeout(t)
-	c := &Clipboard{content: transfer.Text("nobody reads this")}
+	c := testClipboard(t)
+	c.content = transfer.Text("nobody reads this")
 	r, w := rawWriteEnd(t)
 	r.Close()
-
-	start := time.Now()
-	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: w.Fd()})
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("send to a closed consumer took %s, want an immediate EPIPE", elapsed)
-	}
+	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: w})
+	c.Stop()
 }
 
 // readOfferText and readOfferImage read an offer the way ReadText and
-// ReadImageBytes do, against an injected receive/flush pair.
-func readOfferText(receive func(string, uintptr) error, flush func() error, mimes map[string]bool) (string, error) {
-	data, _, err := readOffer(receive, flush, mimes, transfer.TextMimes)
-	return string(data), err
+// ReadImageBytes do, against an injected receive.
+func readOfferText(t *testing.T, receive func(string, uintptr) error, mimes map[string]bool) (string, error) {
+	t.Helper()
+	c := testClipboard(t)
+	return collectText(t, func(done func(string, error)) {
+		c.fetchText(selectionView{receive: receive, mimes: mimes}, transfer.TextMimes, bytesToString, done)
+	})
 }
 
-func readOfferImage(receive func(string, uintptr) error, flush func() error, mimes map[string]bool) ([]byte, string, error) {
-	return readOffer(receive, flush, mimes, transfer.ImageMimes)
+func readOfferImage(t *testing.T, receive func(string, uintptr) error, mimes map[string]bool) ([]byte, string, error) {
+	t.Helper()
+	c := testClipboard(t)
+	r := collectRead(t, func(done func([]byte, string, error)) {
+		c.fetch(selectionView{receive: receive, mimes: mimes}, transfer.ImageMimes, func(data []byte, mime string, err error) func() {
+			return func() { done(data, mime, err) }
+		})
+	})
+	return r.data, r.mime, r.err
 }
 
 // pickTextMime and pickImageMime are the read preferences.

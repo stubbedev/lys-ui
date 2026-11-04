@@ -550,9 +550,9 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	// popup skips its own enter tween (#200's anchor reveal). It needs
 	// this popup placed too, so a nested popover under an unplaced
 	// parent keeps the reveal.
-	base, basePlaced := widget.Point{}, true
+	basePlaced := true
 	if parent != nil {
-		base, basePlaced = a.originOf(parent)
+		_, basePlaced = a.originOf(parent)
 	}
 	pcfg.NoEnter = basePlaced && widget.SharedMorphPending(cfg.Content)
 	pop, err := popup.New(a.sess, pcfg)
@@ -632,9 +632,6 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		popover:    p,
 		fireClosed: fireClosed,
 		unanchor:   unanchor,
-	}
-	if x, y, ok := pop.Position(); ok && basePlaced {
-		op.origin, op.placed = widget.Point{X: base.X + x, Y: base.Y + y}, true
 	}
 	p.focus = func(w widget.Widget) error {
 		if err := router.SetFocus(w); err != nil {
@@ -768,7 +765,29 @@ func (op *openPopover) release() {
 // its close; a live one refits and repaints when its content drained
 // damage, as a window draws only what changed, and paints at most one
 // frame.
+// placePopovers records where the compositor put each popover its first
+// configure placed, parents first, ahead of the paint that needs it.
+func (a *Application) placePopovers() {
+	for _, op := range a.openPopovers {
+		if op.placed {
+			continue
+		}
+		x, y, ok := op.pop.Position()
+		if !ok {
+			continue
+		}
+		base, basePlaced := widget.Point{}, true
+		if op.popover != nil && op.popover.parent != nil {
+			base, basePlaced = a.originOf(op.popover.parent)
+		}
+		if basePlaced {
+			op.origin, op.placed = widget.Point{X: base.X + x, Y: base.Y + y}, true
+		}
+	}
+}
+
 func (a *Application) drivePopovers() error {
+	a.placePopovers()
 	// Newest first: a nested popover destroyed in the same pass as its
 	// parent must leave the wire before it (xdg_popup's topmost rule).
 	kept := make([]*openPopover, 0, len(a.openPopovers))
@@ -864,7 +883,7 @@ func (a *Application) deliverPopoverKey(tr keyTranslator, op *openPopover, keyco
 		return
 	}
 	if op.router.Focused() != nil {
-		a.reportTransfer(routeKey(tr, op.router, keycode, mods, a.clip, a.accels, nil))
+		routeKey(tr, op.router, keycode, mods, a.keyClip, a.accels, nil)
 		return
 	}
 	if isAction {

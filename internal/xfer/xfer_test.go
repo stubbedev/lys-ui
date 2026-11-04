@@ -236,3 +236,95 @@ func TestDeadlineWriterRejectsANilDescriptor(t *testing.T) {
 		t.Error("a failed dup (fd 0) was accepted")
 	}
 }
+
+// Running transfers are bounded, refused past the bound with ErrBusy, and
+// Stop joins them at once whatever their peers do: nothing outlives it,
+// and nothing starts after it.
+func TestTransfersBoundAndStop(t *testing.T) {
+	var tr Transfers
+	silent := make([]*os.File, 0, MaxTransfers)
+	t.Cleanup(func() {
+		for _, f := range silent {
+			_ = f.Close()
+		}
+	})
+	done := make(chan error, MaxTransfers)
+	hold := func(fd uintptr) error {
+		d, err := syscall.Dup(int(fd))
+		if err != nil {
+			return err
+		}
+		silent = append(silent, os.NewFile(uintptr(d), "silent-peer"))
+		return nil
+	}
+	for range MaxTransfers {
+		err := tr.Receive(MaxPayload, time.Hour, hold, func(_ []byte, err error) { done <- err })
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tr.Receive(MaxPayload, time.Hour, hold, func([]byte, error) {}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("a transfer past the bound = %v, want ErrBusy", err)
+	}
+	if err := tr.Go(func() {}); !errors.Is(err, ErrBusy) {
+		t.Fatalf("Go past the bound = %v, want ErrBusy", err)
+	}
+	tr.Stop()
+	if len(done) != MaxTransfers {
+		t.Fatalf("Stop returned with %d of %d transfers done", len(done), MaxTransfers)
+	}
+	if err := tr.Go(func() {}); !errors.Is(err, ErrStopped) {
+		t.Errorf("Go after Stop = %v, want ErrStopped", err)
+	}
+}
+
+// A refused send still closes what it took over, so the consumer sees
+// EOF instead of waiting on a descriptor nobody holds.
+func TestRefusedSendClosesTheDescriptor(t *testing.T) {
+	var tr Transfers
+	tr.Stop()
+	r, w := rawPipe(t)
+	wfd, err := syscall.Dup(int(w.Fd()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	err = tr.Send(uintptr(wfd), time.Hour, func(io.Writer) error { return nil }, func(error) {})
+	if !errors.Is(err, ErrStopped) {
+		t.Fatalf("send after Stop = %v, want ErrStopped", err)
+	}
+	if n, err := r.Read(make([]byte, 1)); n != 0 || !errors.Is(err, io.EOF) {
+		t.Errorf("consumer read %d bytes, %v; want EOF", n, err)
+	}
+}
+
+// A send runs off its caller: a provider still writing leaves the caller
+// free.
+func TestSendRunsOffTheCaller(t *testing.T) {
+	var tr Transfers
+	r, w := rawPipe(t)
+	wfd, err := syscall.Dup(int(w.Fd()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	release := make(chan struct{})
+	err = tr.Send(uintptr(wfd), time.Hour, func(w io.Writer) error {
+		<-release
+		_, err := w.Write([]byte("late"))
+		return err
+	}, func(err error) { t.Errorf("send: %v", err) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	close(release)
+	data, err := io.ReadAll(r)
+	if err != nil || string(data) != "late" {
+		t.Errorf("consumer read %q, %v", data, err)
+	}
+	tr.Stop()
+}

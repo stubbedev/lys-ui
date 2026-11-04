@@ -35,7 +35,7 @@ const maxDragIcon = 512
 type dragController interface {
 	StartDrag(cfg dragdrop.StartConfig) error
 	Dragging() bool
-	ReadPayload(mime string) ([]byte, error)
+	ReadPayload(mime string, done func([]byte, error))
 }
 
 // startDrag promotes the active press into a data-device drag when it
@@ -173,12 +173,11 @@ func (in *surfaceInput) DragLeave() {
 	in.request()
 }
 
-// Drop implements dragdrop.Target: fetch the payload for the accepted
-// mime and hand it to the widget. Same-process drops resolve inside
-// ReadPayload without touching the wire; cross-process ones go through
-// the offer pipe. Every ReadPayload error rejects the drop — past
-// xfer.MaxPayload or stalled past the transfer deadline, the payload
-// is refused (and traced), never handed to the widget truncated.
+// Drop implements dragdrop.Target: the drag over this surface ends now,
+// and the widget under it hears the payload once it is fetched off the
+// loop. Every ReadPayload error rejects the drop — past xfer.MaxPayload
+// or stalled past the transfer deadline, the payload is refused (and
+// traced), never handed to the widget truncated.
 func (in *surfaceInput) Drop(x, y float64) {
 	if in.dropInput() {
 		return
@@ -187,14 +186,18 @@ func (in *surfaceInput) Drop(x, y float64) {
 	if mime == "" {
 		return
 	}
-	data, err := in.dnd.ReadPayload(mime)
-	if err != nil {
-		debug.Log("input", "dnd drop: %v", err)
-		in.reportTransfer(err)
-		return
-	}
-	in.router.Drop(mime, data, in.dropPoint(x, y))
+	p := in.dropPoint(x, y)
+	deliver := in.router.BeginDrop()
 	in.request()
+	in.dnd.ReadPayload(mime, func(data []byte, err error) {
+		if err != nil {
+			debug.Log("input", "dnd drop: %v", err)
+			in.reportTransfer(err)
+			return
+		}
+		deliver(mime, data, p)
+		in.request()
+	})
 }
 
 // DragAction implements dragdrop.ActionTarget: the drop target's pick

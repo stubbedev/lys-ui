@@ -34,9 +34,9 @@ func (f *fakeDnD) StartDrag(cfg dragdrop.StartConfig) error {
 
 func (f *fakeDnD) Dragging() bool { return f.dragging }
 
-func (f *fakeDnD) ReadPayload(mime string) ([]byte, error) {
+func (f *fakeDnD) ReadPayload(mime string, done func([]byte, error)) {
 	f.lastReadMime = mime
-	return f.payload, f.payloadErr
+	done(f.payload, f.payloadErr)
 }
 
 // dragStub is a clickable widget that declares draggable content.

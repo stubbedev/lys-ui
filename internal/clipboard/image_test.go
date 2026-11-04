@@ -8,7 +8,6 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -51,15 +50,12 @@ func TestImageSendByMime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := &Clipboard{content: content}
+	c := testClipboard(t)
+	c.content = content
 	send := func(mime string) []byte {
-		r, w, err := os.Pipe()
-		if err != nil {
-			t.Fatal(err)
-		}
+		r, w := rawWriteEnd(t)
 		defer r.Close()
-		c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: mime, Fd: w.Fd()})
-		w.Close()
+		c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: mime, Fd: w})
 		data, _ := io.ReadAll(r)
 		return data
 	}
@@ -108,8 +104,7 @@ func TestReadOfferImage(t *testing.T) {
 			wait := fakePeer(t, fd, []byte("fake-png-bytes"))
 			return wait()
 		}
-		data, mime, err := readOfferImage(receive, func() error { return nil },
-			map[string]bool{"image/png": true})
+		data, mime, err := readOfferImage(t, receive, map[string]bool{"image/png": true})
 		if err != nil || mime != "image/png" {
 			t.Fatalf("read = %q, %v", mime, err)
 		}
@@ -119,8 +114,7 @@ func TestReadOfferImage(t *testing.T) {
 	})
 
 	t.Run("a text-only offer is unavailable", func(t *testing.T) {
-		if _, _, err := readOfferImage(func(string, uintptr) error { return nil },
-			func() error { return nil }, map[string]bool{"text/plain": true}); !errors.Is(err, ErrUnavailable) {
+		if _, _, err := readOfferImage(t, func(string, uintptr) error { return nil }, map[string]bool{"text/plain": true}); !errors.Is(err, ErrUnavailable) {
 			t.Errorf("text offer read = %v, want ErrUnavailable", err)
 		}
 	})

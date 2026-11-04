@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -16,15 +15,15 @@ import (
 	"github.com/stubbedev/lys-ui/transfer"
 )
 
-// capturingOffer plays a foreign drag offer and remembers the write
-// end Receive was handed, so a test can attach a peer to it.
+// capturingOffer plays a foreign drag offer and hands a test the write
+// end Receive was given, so it can attach a peer while the end is open.
 type capturingOffer struct {
 	fakeOffer
-	fd uintptr
+	onReceive func(fd uintptr)
 }
 
 func (c *capturingOffer) Receive(mimeType string, fd uintptr) error {
-	c.fd = fd
+	c.onReceive(fd)
 	return c.receiveErr
 }
 
@@ -89,36 +88,47 @@ func shortTransferTimeout(t *testing.T) {
 // send handler's DeadlineWriter gets a descriptor like the compositor
 // hands out: never registered with the poller before. (An os.Pipe end
 // is already registered, which the deadline arming would refuse.)
-func rawWriteEnd(t *testing.T) (r, w *os.File) {
+func rawWriteEnd(t *testing.T) (*os.File, uintptr) {
 	t.Helper()
 	var fds [2]int
 	if err := syscall.Pipe2(fds[:], 0); err != nil {
 		t.Fatal(err)
 	}
-	r = os.NewFile(uintptr(fds[0]), "dragdrop-test-raw-r")
-	w = os.NewFile(uintptr(fds[1]), "dragdrop-test-raw-w")
-	t.Cleanup(func() {
-		_ = r.Close()
-		_ = w.Close()
-	})
-	return r, w
+	return os.NewFile(uintptr(fds[0]), "dragdrop-test-raw-r"), uintptr(fds[1])
+}
+
+// receiveResult is one delivered drop payload.
+type receiveResult struct {
+	data []byte
+	err  error
+}
+
+// awaitReceive reads through the controller's receive path and bounds
+// the wait for its delivery.
+func awaitReceive(t *testing.T, c *Controller, offer offerAPI, mime string) receiveResult {
+	t.Helper()
+	ch := make(chan receiveResult, 1)
+	c.receive(offer, mime, func(data []byte, err error) { ch <- receiveResult{data, err} })
+	select {
+	case r := <-ch:
+		return r
+	case <-time.After(10 * time.Second):
+		t.Fatal("the drop payload never delivered")
+		return receiveResult{}
+	}
 }
 
 // A cross-process drop keeps working for an honest source, and a
 // successful transfer still finishes the drag transaction.
 func TestReceivePayloadRoundtripsASmallDrop(t *testing.T) {
-	offer := &capturingOffer{}
 	var wait func() error
-	flush := func() error {
-		wait = peerStream(t, offer.fd, []byte("dropped text"))
-		return nil
+	offer := &capturingOffer{onReceive: func(fd uintptr) { wait = peerStream(t, fd, []byte("dropped text")) }}
+	r := awaitReceive(t, newTestController(), offer, "text/plain")
+	if r.err != nil {
+		t.Fatal(r.err)
 	}
-	data, err := receivePayload(offer, "text/plain", flush, minActionVersion, transfer.ActionNone)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(data) != "dropped text" {
-		t.Errorf("payload = %q, want the source's payload", data)
+	if string(r.data) != "dropped text" {
+		t.Errorf("payload = %q, want the source's payload", r.data)
 	}
 	if offer.finished != 1 {
 		t.Errorf("finish calls = %d, want 1 after a full transfer", offer.finished)
@@ -133,19 +143,15 @@ func TestReceivePayloadRoundtripsASmallDrop(t *testing.T) {
 // blocks, and the truncated transfer is not finished: the drag
 // transaction unwinds instead of completing.
 func TestReceivePayloadRefusesAnOversizeSource(t *testing.T) {
-	offer := &capturingOffer{}
 	payload := bytes.Repeat([]byte{0xD5}, xfer.MaxPayload+64)
 	var wait func() error
-	flush := func() error {
-		wait = peerStream(t, offer.fd, payload)
-		return nil
+	offer := &capturingOffer{onReceive: func(fd uintptr) { wait = peerStream(t, fd, payload) }}
+	r := awaitReceive(t, newTestController(), offer, "text/plain")
+	if !errors.Is(r.err, xfer.ErrTooLarge) {
+		t.Fatalf("read = %v, want xfer.ErrTooLarge", r.err)
 	}
-	data, err := receivePayload(offer, "text/plain", flush, minActionVersion, transfer.ActionNone)
-	if !errors.Is(err, xfer.ErrTooLarge) {
-		t.Fatalf("read = %v, want xfer.ErrTooLarge", err)
-	}
-	if data != nil {
-		t.Errorf("payload = %d bytes, want none: a capped drop is refused whole", len(data))
+	if r.data != nil {
+		t.Errorf("payload = %d bytes, want none: a capped drop is refused whole", len(r.data))
 	}
 	if offer.finished != 0 {
 		t.Error("a truncated transfer was finished")
@@ -155,48 +161,50 @@ func TestReceivePayloadRefusesAnOversizeSource(t *testing.T) {
 	}
 }
 
-// A source that never writes must not hang the drop: the deadline cuts
-// the read off, with no goroutine left behind.
+// A source that never writes leaves the drop pending, never the caller:
+// the deadline ends it, unfinished.
 func TestReceivePayloadCutsOffASilentSource(t *testing.T) {
 	shortTransferTimeout(t)
-	offer := &capturingOffer{}
-	flush := func() error {
-		holdSilentPeer(t, offer.fd)
-		return nil
-	}
-
-	before := runtime.NumGoroutine()
-	start := time.Now()
-	if _, err := receivePayload(offer, "text/plain", flush, minActionVersion, transfer.ActionNone); !errors.Is(err, xfer.ErrTimeout) {
-		t.Fatalf("read = %v, want xfer.ErrTimeout", err)
-	} else if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("silent source hung the read for %s, want the short deadline", elapsed)
-	}
-	time.Sleep(250 * time.Millisecond)
-	if after := runtime.NumGoroutine(); after > before {
-		t.Errorf("goroutines %d -> %d: the deadline leaked one", before, after)
+	offer := &capturingOffer{onReceive: func(fd uintptr) { holdSilentPeer(t, fd) }}
+	r := awaitReceive(t, newTestController(), offer, "text/plain")
+	if !errors.Is(r.err, xfer.ErrTimeout) {
+		t.Fatalf("read = %v, want xfer.ErrTimeout", r.err)
 	}
 	if offer.finished != 0 {
 		t.Error("a timed-out transfer was finished")
 	}
 }
 
-// A consumer that never reads must not stall the dispatch loop: the
-// bounded send returns once the deadline fires, leaking nothing.
+// A drop's read returns with the transfer running, whatever the source
+// does, and the offer finishes only once the bytes are in. Stop ends it
+// without its deadline.
+func TestDropReturnsBeforeASilentSource(t *testing.T) {
+	c := newTestController()
+	offer := &capturingOffer{onReceive: func(fd uintptr) { holdSilentPeer(t, fd) }}
+	c.dragOffer, c.accepted = offer, "text/plain"
+	delivered := make(chan error, 1)
+	c.ReadPayload("text/plain", func(_ []byte, err error) { delivered <- err })
+	select {
+	case err := <-delivered:
+		t.Fatalf("a silent source's drop delivered %v, want it pending", err)
+	default:
+	}
+	c.Stop()
+	if err := <-delivered; err == nil {
+		t.Error("a stopped transfer delivered no error")
+	}
+	if offer.finished != 0 {
+		t.Error("a stopped transfer was finished")
+	}
+}
+
+// A consumer that never reads holds a transfer goroutine, never the
+// handler; Stop ends the write.
 func TestSourceSendToAStuckConsumerIsBounded(t *testing.T) {
-	shortTransferTimeout(t)
 	c := newTestController()
 	c.srcData = transfer.Drag{Mimes: []string{"text/plain"}, Write: fakeSourceWriter(bytes.Repeat([]byte("d"), 1<<20))}
-	_, w := rawWriteEnd(t)
-
-	before := runtime.NumGoroutine()
-	start := time.Now()
-	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain", Fd: w.Fd()})
-	if elapsed := time.Since(start); elapsed > 2*time.Second {
-		t.Errorf("send to a silent consumer blocked for %s, want the deadline", elapsed)
-	}
-	time.Sleep(250 * time.Millisecond)
-	if after := runtime.NumGoroutine(); after > before {
-		t.Errorf("goroutines %d -> %d: the bounded send leaked one", before, after)
-	}
+	r, w := rawWriteEnd(t)
+	defer r.Close()
+	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain", Fd: w})
+	c.Stop()
 }

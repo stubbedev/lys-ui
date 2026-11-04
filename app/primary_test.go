@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -24,7 +25,7 @@ type fakePrimarySource struct {
 	claims   []primaryClaim
 }
 
-func (f *fakePrimarySource) ReadPrimary() (string, error) { return f.readText, f.readErr }
+func (f *fakePrimarySource) ReadPrimary(done func(string, error)) { done(f.readText, f.readErr) }
 
 func (f *fakePrimarySource) WritePrimary(text string, serial uint32) error {
 	f.claims = append(f.claims, primaryClaim{text: text, serial: serial})
@@ -47,6 +48,9 @@ func newPrimaryEntry(t *testing.T) (*widget.Router, *widget.Entry) {
 	return r, e
 }
 
+// noReport is a paste with nobody to tell of a failure.
+func noReport(error) {}
+
 // newPrimaryInput builds a surface input routing into r, carrying the
 // given primary-selection behavior.
 func newPrimaryInput(r *widget.Router, p *primarySelection) *surfaceInput {
@@ -62,7 +66,7 @@ func TestPastePrimaryReplacesSelectionAndFiresOnce(t *testing.T) {
 	e.OnChanged = func(string) { changes++ }
 
 	p := &primarySelection{src: &fakePrimarySource{readText: "XY"}}
-	if ok, _ := p.pasteAt(r); !ok {
+	if ok := p.pasteAt(r, noReport); !ok {
 		t.Fatal("pasteAt = false, want a paste")
 	}
 	if got := e.Text(); got != "XYlo" {
@@ -101,7 +105,7 @@ func TestPastePrimaryTargetsHoveredOverFocused(t *testing.T) {
 	}
 
 	p := &primarySelection{src: &fakePrimarySource{readText: "XY"}}
-	if ok, _ := p.pasteAt(r); !ok {
+	if ok := p.pasteAt(r, noReport); !ok {
 		t.Fatal("pasteAt = false, want a paste")
 	}
 	if got := left.Text(); got != "XY" {
@@ -122,7 +126,7 @@ func TestPastePrimaryFallsBackToFocused(t *testing.T) {
 	}
 
 	p := &primarySelection{src: &fakePrimarySource{readText: "XY"}}
-	if ok, _ := p.pasteAt(r); !ok {
+	if ok := p.pasteAt(r, noReport); !ok {
 		t.Fatal("pasteAt = false, want a paste into the focused entry")
 	}
 	if got := e.Text(); got != "XY" {
@@ -131,27 +135,31 @@ func TestPastePrimaryFallsBackToFocused(t *testing.T) {
 }
 
 func TestPastePrimaryWithoutSourceOrText(t *testing.T) {
-	r, _ := newPrimaryEntry(t)
+	r, entry := newPrimaryEntry(t)
 
 	// No clipboard configured (or no primary protocol): no paste, no
 	// panic.
 	var disabled *primarySelection
-	if ok, _ := disabled.pasteAt(r); ok {
+	if ok := disabled.pasteAt(r, noReport); ok {
 		t.Error("a nil primary pasted")
 	}
-	if ok, _ := (&primarySelection{}).pasteAt(r); ok {
+	if ok := (&primarySelection{}).pasteAt(r, noReport); ok {
 		t.Error("a primary without a source pasted")
 	}
-	// A source that reports nothing to read: no paste.
+	// A source that reports nothing to read: the read is told to report
+	// and nothing lands.
+	before := entry.Text()
 	unavailable := &primarySelection{src: &fakePrimarySource{readErr: clipboard.ErrUnavailable}}
-	if ok, _ := unavailable.pasteAt(r); ok {
-		t.Error("a failed read pasted")
+	var heard error
+	unavailable.pasteAt(r, func(err error) { heard = err })
+	if !errors.Is(heard, clipboard.ErrUnavailable) || entry.Text() != before {
+		t.Errorf("a failed read reported %v and left %q, want ErrUnavailable and %q", heard, entry.Text(), before)
 	}
 	// Neither the widget under the pointer nor the focus is an
 	// editor: no paste target.
 	noTarget := &primarySelection{src: &fakePrimarySource{readText: "XY"}}
 	blank := &widget.Router{Root: widget.NewBox(widget.Row, 0, 0)}
-	if ok, _ := noTarget.pasteAt(blank); ok {
+	if ok := noTarget.pasteAt(blank, noReport); ok {
 		t.Error("a paste without a text target succeeded")
 	}
 }

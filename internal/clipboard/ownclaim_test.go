@@ -17,12 +17,11 @@ import (
 // past the pipe buffer would deadlock the loop if it went through one.
 func TestOwnClaimIsReadInProcess(t *testing.T) {
 	big := strings.Repeat("x", 1<<20)
-	c := &Clipboard{
-		source: &wl.DataSource{}, content: transfer.Text(big),
-		primarySource: &wlr.ZwpPrimarySelectionSourceV1{}, primaryContent: transfer.Text("primary payload"),
-	}
+	c := testClipboard(t)
+	c.source, c.content = &wl.DataSource{}, transfer.Text(big)
+	c.primarySource, c.primaryContent = &wlr.ZwpPrimarySelectionSourceV1{}, transfer.Text("primary payload")
 
-	text, err := c.ReadText()
+	text, err := collectText(t, c.ReadText)
 	if err != nil || text != big {
 		t.Fatalf("ReadText of our own claim = %d bytes, %v; want the %d-byte claim", len(text), err, len(big))
 	}
@@ -32,10 +31,10 @@ func TestOwnClaimIsReadInProcess(t *testing.T) {
 	if c.Offers("image/png") {
 		t.Error("Offers reports a mime our claim does not carry")
 	}
-	if _, _, err := c.Read("image/png"); !errors.Is(err, ErrUnavailable) {
-		t.Errorf("Read of a mime our claim lacks = %v, want ErrUnavailable", err)
+	if r := collectRead(t, func(done func([]byte, string, error)) { c.Read([]string{"image/png"}, done) }); !errors.Is(r.err, ErrUnavailable) {
+		t.Errorf("Read of a mime our claim lacks = %v, want ErrUnavailable", r.err)
 	}
-	if got, err := c.ReadPrimary(); err != nil || got != "primary payload" {
+	if got, err := collectText(t, c.ReadPrimary); err != nil || got != "primary payload" {
 		t.Errorf("ReadPrimary of our own claim = %q, %v", got, err)
 	}
 }

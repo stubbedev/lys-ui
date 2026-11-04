@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,9 +61,15 @@ type fakeCompositor struct {
 	toplevel map[uint32]uint32
 	serial   uint32
 	mapped   chan struct{}
+	// syncs counts wl_display.sync; onRequest and onFds, set before the
+	// client connects, see every request and may keep what arrived by
+	// descriptor.
+	syncs     atomic.Int64
+	onRequest func(iface string, obj, opcode uint32, body []byte)
+	onFds     func(fds []int) bool
 }
 
-func startFakeCompositor(t *testing.T, globals []fakeGlobal) *fakeCompositor {
+func startFakeCompositor(t *testing.T, globals []fakeGlobal, setup ...func(*fakeCompositor)) *fakeCompositor {
 	t.Helper()
 	ln, _ := wltest.LoopbackDisplay(t, "wayland-fake")
 	t.Cleanup(func() { _ = ln.Close() })
@@ -73,6 +80,9 @@ func startFakeCompositor(t *testing.T, globals []fakeGlobal) *fakeCompositor {
 		pending:  map[uint32]bool{},
 		toplevel: map[uint32]uint32{},
 		mapped:   make(chan struct{}, 1),
+	}
+	for _, fn := range setup {
+		fn(f)
 	}
 	go func() {
 		conn, err := ln.AcceptUnix()
@@ -95,7 +105,7 @@ func (f *fakeCompositor) serve() {
 		if err != nil {
 			return
 		}
-		closeReceivedFds(oob[:oobn])
+		f.takeFds(oob[:oobn])
 		buf = append(buf, chunk[:n]...)
 		for len(buf) >= headerSize {
 			sizeOpcode := binary.NativeEndian.Uint32(buf[4:8])
@@ -109,7 +119,7 @@ func (f *fakeCompositor) serve() {
 	}
 }
 
-func closeReceivedFds(oob []byte) {
+func (f *fakeCompositor) takeFds(oob []byte) {
 	msgs, err := unix.ParseSocketControlMessage(oob)
 	if err != nil {
 		return
@@ -117,6 +127,9 @@ func closeReceivedFds(oob []byte) {
 	for i := range msgs {
 		fds, err := unix.ParseUnixRights(&msgs[i])
 		if err != nil {
+			continue
+		}
+		if f.onFds != nil && f.onFds(fds) {
 			continue
 		}
 		for _, fd := range fds {
@@ -128,8 +141,12 @@ func closeReceivedFds(oob []byte) {
 func word(body []byte, i int) uint32 { return binary.NativeEndian.Uint32(body[4*i:]) }
 
 func (f *fakeCompositor) handle(obj, opcode uint32, body []byte) {
+	if f.onRequest != nil {
+		f.onRequest(f.objects[obj], obj, opcode, body)
+	}
 	switch iface := f.objects[obj]; {
 	case iface == "wl_display" && opcode == displaySync:
+		f.syncs.Add(1)
 		id := word(body, 0)
 		f.send(id, callbackEventDone, 0)
 		f.send(wlDisplayID, displayEventDeleteID, id)
@@ -177,7 +194,11 @@ func (f *fakeCompositor) bind(body []byte) {
 }
 
 func (f *fakeCompositor) configureXdg(xdgSurface uint32) {
-	f.send(f.toplevel[xdgSurface], configureEvent, fakeSurfaceW, fakeSurfaceH, 0)
+	toplevel, ok := f.toplevel[xdgSurface]
+	if !ok {
+		return
+	}
+	f.send(toplevel, configureEvent, fakeSurfaceW, fakeSurfaceH, 0)
 	f.serial++
 	f.send(xdgSurface, configureEvent, f.serial)
 }
@@ -201,6 +222,14 @@ func (f *fakeCompositor) send(obj, opcode uint32, args ...uint32) {
 	for _, a := range args {
 		msg = binary.NativeEndian.AppendUint32(msg, a)
 	}
+	f.write(obj, opcode, msg)
+}
+
+func (f *fakeCompositor) sendString(obj, opcode uint32, s string) {
+	msg := make([]byte, headerSize, 64)
+	msg = binary.NativeEndian.AppendUint32(msg, uint32(len(s)+1))
+	msg = append(msg, s...)
+	msg = append(msg, make([]byte, 4-len(s)%4)...)
 	f.write(obj, opcode, msg)
 }
 
@@ -231,8 +260,13 @@ func (f *fakeCompositor) awaitMapped(t *testing.T, what string) {
 
 func connectFake(t *testing.T, globals []fakeGlobal) (*fakeCompositor, *app.Application) {
 	t.Helper()
+	return connectFakeWith(t, globals)
+}
+
+func connectFakeWith(t *testing.T, globals []fakeGlobal, setup ...func(*fakeCompositor)) (*fakeCompositor, *app.Application) {
+	t.Helper()
 	t.Setenv("LYS_UI_RENDERER", "cpu")
-	f := startFakeCompositor(t, globals)
+	f := startFakeCompositor(t, globals, setup...)
 	sess, err := app.Connect()
 	if err != nil {
 		t.Fatalf("connect with %v: %v", globals, err)

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -46,6 +47,13 @@ var (
 	ErrTimeout = errors.New("xfer: peer stalled and the deadline cut the transfer off")
 )
 
+// chunks are the buffers Copy reads through: a paste costs its payload,
+// not a chunk per transfer.
+var chunks = sync.Pool{New: func() any {
+	chunk := make([]byte, 32<<10)
+	return &chunk
+}}
+
 // Read drains r up to limit bytes, under a deadline, into a fresh
 // slice: Copy into memory Read owns.
 //
@@ -54,7 +62,6 @@ var (
 // bytes.
 func Read(r *os.File, limit int64, timeout time.Duration) ([]byte, error) {
 	var b bytes.Buffer
-	b.Grow(int(min(limit, 64<<10)))
 	_, err := Copy(&b, r, limit, timeout)
 	if err != nil && !errors.Is(err, ErrTooLarge) {
 		return nil, err
@@ -80,7 +87,9 @@ func Copy(w io.Writer, r *os.File, limit int64, timeout time.Duration) (int64, e
 	timer := time.AfterFunc(timeout, func() { _ = r.Close() })
 	defer timer.Stop()
 
-	chunk := make([]byte, 32<<10)
+	chunkp, _ := chunks.Get().(*[]byte)
+	defer chunks.Put(chunkp)
+	chunk := *chunkp
 	var written int64
 	overrun := false
 	readErr := error(nil)
@@ -180,4 +189,176 @@ func readFailure(err error) error {
 		return fmt.Errorf("xfer: read: %w", ErrTimeout)
 	}
 	return fmt.Errorf("xfer: read: %w", err)
+}
+
+// MaxTransfers bounds the transfers a Transfers runs at once. A foreign
+// client can ask for a selection in a loop, and each stalled transfer
+// holds a goroutine and a descriptor until its deadline.
+const MaxTransfers = 8
+
+// ErrBusy reports a transfer refused because MaxTransfers already run.
+var ErrBusy = errors.New("xfer: too many transfers in flight")
+
+// ErrStopped reports a transfer refused after Stop.
+var ErrStopped = errors.New("xfer: transfers stopped")
+
+// Transfers runs payload transfers off the event loop: each on its own
+// goroutine, at most MaxTransfers at once, every one ended and joined
+// by Stop. The zero value is ready.
+type Transfers struct {
+	mu      sync.Mutex
+	files   map[*os.File]struct{}
+	running int
+	stopped bool
+	wg      sync.WaitGroup
+}
+
+func (t *Transfers) acquire() error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.stopped {
+		return ErrStopped
+	}
+	if t.running >= MaxTransfers {
+		return ErrBusy
+	}
+	t.running++
+	t.wg.Add(1)
+	return nil
+}
+
+func (t *Transfers) release() {
+	t.mu.Lock()
+	t.running--
+	t.mu.Unlock()
+	t.wg.Done()
+}
+
+// track registers f for Stop to close, and reports false when Stop has
+// already run, which leaves closing f to the caller.
+func (t *Transfers) track(f *os.File) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.stopped {
+		return false
+	}
+	if t.files == nil {
+		t.files = make(map[*os.File]struct{}, MaxTransfers)
+	}
+	t.files[f] = struct{}{}
+	return true
+}
+
+func (t *Transfers) untrack(f *os.File) {
+	t.mu.Lock()
+	delete(t.files, f)
+	t.mu.Unlock()
+	_ = f.Close()
+}
+
+// Go runs fn on a transfer goroutine, or refuses with ErrBusy or
+// ErrStopped.
+func (t *Transfers) Go(fn func()) error {
+	if err := t.acquire(); err != nil {
+		return err
+	}
+	go func() {
+		defer t.release()
+		fn()
+	}()
+	return nil
+}
+
+// Receive starts one offer read: a pipe, receive handing its write end
+// to the wire, then Read of the read end on a transfer goroutine, which
+// calls done with Read's result. The write end closes as soon as
+// receive returns, so a request that has left the client by then is all
+// receive may rely on: the kernel dups the descriptor when the request
+// is written. An error return means the transfer never started and done
+// will not run.
+func (t *Transfers) Receive(limit int64, timeout time.Duration, receive func(fd uintptr) error, done func([]byte, error)) error {
+	if err := t.acquire(); err != nil {
+		return err
+	}
+	r, err := t.requestPipe(receive)
+	if err != nil {
+		t.release()
+		return err
+	}
+	go func() {
+		defer t.release()
+		defer t.untrack(r)
+		if !t.track(r) {
+			done(nil, ErrStopped)
+			return
+		}
+		done(Read(r, limit, timeout))
+	}()
+	return nil
+}
+
+func (t *Transfers) requestPipe(receive func(fd uintptr) error) (*os.File, error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, fmt.Errorf("xfer: pipe: %w", err)
+	}
+	defer func() { _ = w.Close() }()
+	if err := receive(w.Fd()); err != nil {
+		return nil, errors.Join(fmt.Errorf("xfer: receive: %w", err), r.Close())
+	}
+	return r, nil
+}
+
+// Send takes over fd, the pipe end a consumer handed over, and runs
+// write on a transfer goroutine under the deadline (DeadlineWriter),
+// closing fd whatever the outcome so the consumer sees EOF. A refused
+// send closes fd at once and reports why. write's failure goes to
+// report, on the transfer goroutine.
+func (t *Transfers) Send(fd uintptr, timeout time.Duration, write func(io.Writer) error, report func(error)) error {
+	if err := t.acquire(); err != nil {
+		return errors.Join(err, closeDescriptor(fd))
+	}
+	go func() {
+		defer t.release()
+		w, err := DeadlineWriter(fd, timeout)
+		if err != nil {
+			report(errors.Join(err, closeDescriptor(fd)))
+			return
+		}
+		defer t.untrack(w)
+		if !t.track(w) {
+			report(ErrStopped)
+			return
+		}
+		if err := write(w); err != nil {
+			report(err)
+		}
+	}()
+	return nil
+}
+
+func closeDescriptor(fd uintptr) error {
+	if fd == 0 {
+		return nil
+	}
+	if err := syscall.Close(int(fd)); err != nil {
+		return fmt.Errorf("xfer: close send descriptor: %w", err)
+	}
+	return nil
+}
+
+// Stop ends every running transfer, closing its descriptor so a blocked
+// read or write returns now rather than at its deadline, waits for them
+// all, and refuses later ones. A transfer's done or report may still run
+// during Stop; it must not wait on the goroutine calling Stop.
+func (t *Transfers) Stop() {
+	t.mu.Lock()
+	t.stopped = true
+	files := t.files
+	t.files = nil
+	t.mu.Unlock()
+	for f := range files {
+		_ = f.Close()
+	}
+	t.wg.Wait()
 }

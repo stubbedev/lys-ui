@@ -2,7 +2,6 @@ package clipboard
 
 import (
 	"errors"
-	"os"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -36,8 +35,9 @@ func TestPickTextMime(t *testing.T) {
 }
 
 func TestClipboardUnavailableWithoutOffer(t *testing.T) {
-	c := &Clipboard{sess: &wlsession.Session{}}
-	if _, err := c.ReadText(); !errors.Is(err, ErrUnavailable) {
+	c := testClipboard(t)
+	c.sess = &wlsession.Session{}
+	if _, err := collectText(t, c.ReadText); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("ReadText = %v, want ErrUnavailable", err)
 	}
 }
@@ -49,7 +49,8 @@ func TestClipboardUnavailableWithoutOffer(t *testing.T) {
 // promotes one, so the selection must survive a drag's offer
 // advertising a non-text mime.
 func TestSelectionSurvivesDragOffers(t *testing.T) {
-	c := &Clipboard{sess: &wlsession.Session{}, offers: make(map[*wl.DataOffer]*offerMimes)}
+	c := testClipboard(t)
+	c.sess, c.offers = &wlsession.Session{}, make(map[*wl.DataOffer]*offerMimes)
 	sel := &wl.DataOffer{} // opaque identity; never driven on the wire here
 	selectionMimes := &offerMimes{mimes: make(map[string]bool)}
 	selectionMimes.HandleDataOfferOffer(wl.DataOfferOfferEvent{MimeType: "text/plain;charset=utf-8"})
@@ -78,19 +79,17 @@ func TestSelectionSurvivesDragOffers(t *testing.T) {
 	if c.selection != nil || c.selectionMimes != nil {
 		t.Errorf("nil selection left state: %v %v", c.selection, c.selectionMimes)
 	}
-	if _, err := c.ReadText(); !errors.Is(err, ErrUnavailable) {
+	if _, err := collectText(t, c.ReadText); !errors.Is(err, ErrUnavailable) {
 		t.Errorf("ReadText = %v, want ErrUnavailable after clearing", err)
 	}
 }
 
 func TestSendHandlerWritesAndCloses(t *testing.T) {
-	c := &Clipboard{content: transfer.Text("clipboard payload")}
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain;charset=utf-8", Fd: w.Fd(), FdError: nil})
-	w.Close()
+	c := testClipboard(t)
+	c.content = transfer.Text("clipboard payload")
+	r, w := rawWriteEnd(t)
+	defer r.Close()
+	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain;charset=utf-8", Fd: w, FdError: nil})
 
 	buf := make([]byte, 64)
 	n, _ := r.Read(buf)

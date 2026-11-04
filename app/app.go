@@ -276,8 +276,7 @@ func (in *surfaceInput) HandlePointerButton(button, state, serial uint32) {
 		// refugees): the router ignores non-left presses, so this is
 		// the whole handling a middle press gets.
 		if button == widget.BTNMiddle {
-			_, err := in.primary.pasteAt(in.router)
-			in.reportTransfer(err)
+			in.primary.pasteAt(in.router, in.reportTransfer)
 		}
 		in.router.Press(button, p, in.mods())
 		// Remember the press for the drag gesture: the threshold is
@@ -494,11 +493,11 @@ func feedCompose(sess keyTranslator, sym xkb.Keysym) (compose.Result, string) {
 
 // primarySelectionSource is the clipboard-facing slice the
 // primary-selection behavior needs: read the current primary
-// selection and claim it with the triggering event's serial.
-// *clipboard.Clipboard implements it; tests stub it, mirroring
-// keyTranslator.
+// selection, delivered on the loop, and claim it with the triggering
+// event's serial. *clipboard.Clipboard implements it; tests stub it,
+// mirroring keyTranslator.
 type primarySelectionSource interface {
-	ReadPrimary() (string, error)
+	ReadPrimary(done func(string, error))
 	WritePrimary(text string, serial uint32) error
 }
 
@@ -520,7 +519,7 @@ type primarySelectionSource interface {
 //     committed string lands when the sequence completes (X11 style,
 //     no preedit), and backspace unwinds a level instead of deleting;
 //  4. extra (OnKey), which observes every press either way.
-func routeKey(sess keyTranslator, router *widget.Router, keycode uint32, mods wlsession.Mods, clip *clipboard.Clipboard, accels *accelTable, extra func(*widget.Router, uint32, wlsession.Mods)) (pasteErr error) {
+func routeKey(sess keyTranslator, router *widget.Router, keycode uint32, mods wlsession.Mods, clip *keyClipboard, accels *accelTable, extra func(*widget.Router, uint32, wlsession.Mods)) {
 	sym := sess.KeySym(keycode)
 	isCtrl := ctrl(mods)
 	// shift re-keys letters and keeps shift+combo free for accels, so
@@ -529,15 +528,15 @@ func routeKey(sess keyTranslator, router *widget.Router, keycode uint32, mods wl
 	handled := false
 	switch {
 	case isCtrl && noShift && clip != nil && (sym == xkb.Keysym('c') || sym == xkb.Keysym('C')):
-		copySelection(router, clip)
+		copySelection(router, clip.clip)
 		handled = true
 	case isCtrl && noShift && clip != nil && (sym == xkb.Keysym('x') || sym == xkb.Keysym('X')):
-		if copySelection(router, clip) {
+		if copySelection(router, clip.clip) {
 			router.KeyAction(widget.KeyDelete, widget.Mods(mods))
 		}
 		handled = true
 	case isCtrl && noShift && clip != nil && (sym == xkb.Keysym('v') || sym == xkb.Keysym('V')):
-		pasteErr = pasteSelection(router, clip)
+		clip.paste(router)
 		handled = true
 	case isCtrl && noShift && (sym == xkb.Keysym('a') || sym == xkb.Keysym('A')):
 		router.SelectAll()
@@ -580,7 +579,7 @@ func routeKey(sess keyTranslator, router *widget.Router, keycode uint32, mods wl
 		if extra != nil {
 			extra(router, keycode, mods)
 		}
-		return nil
+		return
 	}
 	if !handled {
 		// Ctrl, Alt and Super chords are shortcuts, never text.
@@ -609,7 +608,6 @@ func routeKey(sess keyTranslator, router *widget.Router, keycode uint32, mods wl
 	if extra != nil {
 		extra(router, keycode, mods)
 	}
-	return pasteErr
 }
 
 // copySelection puts the focused widget's selection on the clipboard
@@ -647,31 +645,52 @@ func focusedSelection(router *widget.Router) (string, bool) {
 	return sel.SelectedText()
 }
 
-// pasteSelection puts the clipboard payload where the focused widget
+// keyClipboard is the clipboard the key path copies to and pastes from,
+// with where a failed paste is told.
+type keyClipboard struct {
+	clip   *clipboard.Clipboard
+	report func(error)
+}
+
+// paste starts putting the clipboard payload where the focused widget
 // wants it: a ContentPaster takes the best of its own mimes (an image
 // view decodes image bytes off the loop goroutine); everything else
-// takes text — Entry and TextArea are text-only by design.
+// takes text — Entry and TextArea are text-only by design. The transfer
+// runs off the loop, and the payload lands in the widget that held focus
+// at the press, wherever focus went meanwhile: what a user typed in the
+// wait stays before it, as in GTK. A plain widget that takes runes gets
+// them only while it still holds focus.
 //
 // Every error rejects the paste. A failure worth telling the user - a
 // hostile peer's payload past xfer.MaxPayload, one that stalls past
-// the transfer deadline, a broken pipe - is returned for
-// Application.OnTransferError; an empty selection pastes nothing
+// the transfer deadline, a broken pipe - goes to report
+// (Application.OnTransferError); an empty selection pastes nothing
 // quietly.
-func pasteSelection(router *widget.Router, clip *clipboard.Clipboard) error {
-	if paster, ok := router.Focused().(widget.ContentPaster); ok {
-		data, mime, err := clip.Read(paster.PasteMimes()...)
+func (k *keyClipboard) paste(router *widget.Router) {
+	focused := router.Focused()
+	if paster, ok := focused.(widget.ContentPaster); ok {
+		k.clip.Read(paster.PasteMimes(), func(data []byte, mime string, err error) {
+			if err != nil {
+				k.report(err)
+				return
+			}
+			paster.PasteContent(mime, data)
+		})
+		return
+	}
+	k.clip.ReadText(func(text string, err error) {
 		if err != nil {
-			return transferFailure(err)
+			k.report(err)
+			return
 		}
-		paster.PasteContent(mime, data)
-		return nil
-	}
-	text, err := clip.ReadText()
-	if err != nil {
-		return transferFailure(err)
-	}
-	insertText(router, text)
-	return nil
+		if ins, ok := focused.(widget.TextInserter); ok {
+			ins.Insert(text)
+			return
+		}
+		if router.Focused() == focused {
+			insertText(router, text)
+		}
+	})
 }
 
 // transferFailure keeps the transfer errors worth reporting: nothing

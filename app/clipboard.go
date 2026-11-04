@@ -12,7 +12,9 @@ import (
 // It is the alias external consumers name the clipboard by; hand it to
 // Application.SetClipboard (or Config.Clipboard) to wire the built-in
 // copy and paste keys, and keep it to put content on the clipboard from
-// application code - a launcher copying a calculator result, say.
+// application code - a launcher copying a calculator result, say. Reads
+// take a callback: a peer may never answer, so the payload arrives on
+// the loop goroutine when the transfer ends.
 type Clipboard = clipboard.Clipboard
 
 // ErrClipboardUnavailable reports that the clipboard holds no content

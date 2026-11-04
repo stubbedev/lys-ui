@@ -11,7 +11,7 @@ package dragdrop
 import (
 	"errors"
 	"fmt"
-	"os"
+	"io"
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -38,7 +38,7 @@ var ErrNoPayload = errors.New("dragdrop: no drag payload available")
 
 // transferTimeout bounds one payload transfer against a peer that
 // stalls (a var so tests can shorten it); the read is also capped by
-// xfer.MaxPayload, so a hostile source can neither hang the drop nor
+// xfer.MaxPayload, so a hostile source can neither hold the drop nor
 // stream unbounded bytes into memory.
 var transferTimeout = xfer.DefaultTimeout
 
@@ -125,6 +125,11 @@ type Controller struct {
 	// feedback is what the source last heard: the accepted mime and
 	// the negotiated action.
 	feedback transfer.Feedback
+
+	// invoke runs a closure on the event loop, from any goroutine; xf runs
+	// the transfers off it.
+	invoke func(func())
+	xf     xfer.Transfers
 }
 
 // dataDeviceAPI is the slice of wl.DataDevice the controller sends.
@@ -209,10 +214,12 @@ func (m wireSourceMaker) CreateDataSource() (*wl.DataSource, sourceAPI, error) {
 // New wires a controller to the session's data device and starts
 // tracking advertised offers. Safe to call when the device is missing
 // (compositor without wl_data_device_manager): every request then
-// fails with ErrUnavailable.
-func New(sess *wlsession.Session) *Controller {
+// fails with ErrUnavailable. invoke runs a closure on the event loop, from
+// any goroutine: it brings finished transfers back.
+func New(sess *wlsession.Session, invoke func(func())) *Controller {
 	c := &Controller{
 		sess:    sess,
+		invoke:  invoke,
 		version: sess.DataDeviceVersion(),
 		offers:  make(map[*wl.DataOffer]*offerMimes),
 	}
@@ -482,28 +489,55 @@ func (c *Controller) CancelDrag() bool {
 	return true
 }
 
-// ReadPayload returns the drop's bytes for mime. A drag that
-// originated in this process short-circuits the wire: the content
-// provider hands over the bytes directly, with no fd round-trip — the
-// source and destination share an address space, so the pipe detour
-// only adds latency. Cross-process drops read through the offer pipe
-// and, on version 3+, acknowledge with finish.
-func (c *Controller) ReadPayload(mime string) ([]byte, error) {
+// ReadPayload delivers the drop's bytes for mime to done on the loop
+// goroutine, always on a later pass: the loop never waits for the peer,
+// and the offer stays open for the transfer after the drop event ends. A
+// drag that originated in this process short-circuits the wire: the
+// content provider hands over the bytes directly, with no fd round-trip.
+// Cross-process drops read through the offer pipe and, on version 3+,
+// acknowledge with finish.
+func (c *Controller) ReadPayload(mime string, done func([]byte, error)) {
+	refuse := func(err error) { c.invoke(func() { done(nil, err) }) }
 	if mime == "" {
-		return nil, ErrNoPayload
+		refuse(ErrNoPayload)
+		return
 	}
 	if c.src != nil && c.srcData.Write != nil && c.srcData.Has(mime) {
-		data, err := c.srcData.Bytes(mime)
-		// No wl_data_offer.receive will ever arrive for this drop —
-		// both ends are us — so the source concludes locally instead
-		// of waiting for a dnd_finished that will not come.
-		c.concludeSource(c.finishedAction())
-		return data, err
+		c.readOwn(mime, done)
+		return
 	}
 	if c.dragOffer == nil || c.accepted == "" {
-		return nil, ErrNoPayload
+		refuse(ErrNoPayload)
+		return
 	}
-	return c.receive(c.dragOffer, mime)
+	c.receive(c.dragOffer, mime, done)
+}
+
+// readOwn serves a drop of this process's own drag. No
+// wl_data_offer.receive will ever arrive for it - both ends are us - so
+// the source concludes locally once the bytes are out, instead of
+// waiting for a dnd_finished that will not come. A drag that ended and
+// was replaced meanwhile keeps its own conclusion.
+func (c *Controller) readOwn(mime string, done func([]byte, error)) {
+	src, content, action := c.src, c.srcData.Content, c.finishedAction()
+	conclude := func() {
+		if c.src == src {
+			c.concludeSource(action)
+		}
+	}
+	err := c.xf.Go(func() {
+		data, err := content.Bytes(mime)
+		c.invoke(func() {
+			conclude()
+			done(data, err)
+		})
+	})
+	if err != nil {
+		c.invoke(func() {
+			conclude()
+			done(nil, fmt.Errorf("dragdrop: read own %s drag: %w", mime, err))
+		})
+	}
 }
 
 // finishedAction is the action a finished drop reports to the
@@ -523,48 +557,42 @@ func (c *Controller) finishedAction() transfer.Action {
 	}
 }
 
-// receive transfers the payload through the offer pipe: request, flush
-// so the compositor dups the fd and asks the source to write, then read
-// to EOF under the hostile-peer guard.
-func (c *Controller) receive(offer offerAPI, mime string) ([]byte, error) {
-	return receivePayload(offer, mime, c.sess.Roundtrip, c.version, c.resolve)
-}
-
-// receivePayload is the wire choreography of receive, split from the
-// controller so tests can play both the offer and the flush. The
-// transfer is capped at xfer.MaxPayload and bounded by the deadline;
-// an oversize or stalled source surfaces as an error, with the fd
-// drained and closed either way so its pipe never blocks forever. A
+// receive transfers the payload through the offer pipe off the loop.
+// wl_data_offer.receive has left the client when Receive returns, so the
+// compositor holds its own copy of the write end and no roundtrip is
+// owed. The transfer is capped at xfer.MaxPayload and bounded by the
+// deadline; an oversize or stalled source surfaces as an error, with the
+// fd drained and closed either way so its pipe never blocks forever. A
 // truncated transfer is not finished: the drag transaction unwinds
-// through the compositor's cancel path instead. resolve, when set,
-// settles an ask drop on one action before the finish, as the
-// protocol requires.
-func receivePayload(offer offerAPI, mime string, flush func() error, version uint32, resolve transfer.Action) ([]byte, error) {
-	r, w, err := os.Pipe()
+// through the compositor's cancel path instead. An ask drop settles on
+// one action before the finish, as the protocol requires.
+func (c *Controller) receive(offer offerAPI, mime string, done func([]byte, error)) {
+	version, resolve := c.version, c.resolve
+	err := c.xf.Receive(xfer.MaxPayload, transferTimeout,
+		func(fd uintptr) error { return offer.Receive(mime, fd) },
+		func(data []byte, err error) {
+			c.invoke(func() {
+				if err != nil {
+					done(nil, fmt.Errorf("dragdrop: transfer %s: %w", mime, err))
+					return
+				}
+				if version >= minActionVersion {
+					if resolve != transfer.ActionNone {
+						_ = offer.SetActions(uint32(resolve), uint32(resolve))
+					}
+					_ = offer.Finish()
+				}
+				done(data, nil)
+			})
+		})
 	if err != nil {
-		return nil, fmt.Errorf("dragdrop: pipe: %w", err)
+		c.invoke(func() { done(nil, fmt.Errorf("dragdrop: receive %s: %w", mime, err)) })
 	}
-	defer r.Close()
-	if err := offer.Receive(mime, w.Fd()); err != nil {
-		return nil, fmt.Errorf("dragdrop: receive: %w", err)
-	}
-	if err := flush(); err != nil {
-		return nil, fmt.Errorf("dragdrop: flush: %w", err)
-	}
-	_ = w.Close()
-
-	data, err := xfer.Read(r, xfer.MaxPayload, transferTimeout)
-	if err != nil {
-		return nil, fmt.Errorf("dragdrop: transfer: %w", err)
-	}
-	if version >= minActionVersion {
-		if resolve != transfer.ActionNone {
-			_ = offer.SetActions(uint32(resolve), uint32(resolve))
-		}
-		_ = offer.Finish()
-	}
-	return data, nil
 }
+
+// Stop ends every running transfer and waits for them: an application
+// stops its controller when its loop ends or its session goes.
+func (c *Controller) Stop() { c.xf.Stop() }
 
 // concludeSource tears down the source side of a drag and reports the
 // outcome through OnDone: the finished action, ActionNone for a
@@ -588,24 +616,24 @@ func (c *Controller) concludeSource(done transfer.Action) {
 }
 
 // HandleDataSourceSend implements wl.DataSourceSendHandler: a
-// cross-process consumer asked for our data; write it bounded by the
-// deadline — a consumer that stops reading cannot stall the dispatch
-// loop — and close so the reader sees EOF whatever the outcome. A
-// failed write (EPIPE, deadline) leaves the consumer a short payload
-// plus EOF, evidence the transfer broke.
+// cross-process consumer asked for our data; write it off the loop,
+// bounded by the deadline, and close so the reader sees EOF whatever the
+// outcome. A failed write (EPIPE, deadline) leaves the consumer a short
+// payload plus EOF, evidence the transfer broke.
 func (c *Controller) HandleDataSourceSend(ev wl.DataSourceSendEvent) {
-	if ev.FdError != nil || c.srcData.Write == nil {
+	if ev.FdError != nil {
 		return
 	}
-	f, err := xfer.DeadlineWriter(ev.Fd, transferTimeout)
+	provider, mime := c.srcData.Write, ev.MimeType
+	err := c.xf.Send(ev.Fd, transferTimeout, func(w io.Writer) error {
+		if provider == nil {
+			return nil
+		}
+		return provider(mime, w)
+	}, func(err error) { debug.Log("input", "dnd send %q: %v", mime, err) })
 	if err != nil {
-		debug.Log("input", "dnd send: %v", err)
-		return
+		debug.Log("input", "dnd send %q refused: %v", mime, err)
 	}
-	if err := c.srcData.Write(ev.MimeType, f); err != nil {
-		debug.Log("input", "dnd send %q: %v", ev.MimeType, err)
-	}
-	_ = f.Close()
 }
 
 // HandleDataSourceCancelled implements wl.DataSourceCancelledHandler:
