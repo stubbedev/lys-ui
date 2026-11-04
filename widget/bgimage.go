@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"image"
-	"os"
 
 	"github.com/stubbedev/lys-lib/render"
 
@@ -93,8 +92,7 @@ func (img *cssImage) settle(decoded *render.Icon, failed error, path string) {
 // decodeCSSImage reads and decodes a url() file at its natural size,
 // capped; it reads only its argument, so it may run off the loop.
 func decodeCSSImage(path string) (*render.Icon, error) {
-	// #nosec G304 -- the path is the stylesheet's own url() declaration.
-	data, err := os.ReadFile(path)
+	data, err := readAssetFile(path, cssImageLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +102,8 @@ func decodeCSSImage(path string) (*render.Icon, error) {
 	}
 	return icons.DecodeImage(data, path, w, h)
 }
+
+const cssImageLimit = 64 << 20
 
 // requestStyleImages asks for every url() file v's paint reads.
 func requestStyleImages(v *style.Values, w Widget) {

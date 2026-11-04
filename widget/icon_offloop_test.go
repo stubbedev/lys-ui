@@ -64,19 +64,32 @@ func fifoPath(t *testing.T, path string) {
 	}
 }
 
-// feedFifo writes data to the pipe, which returns once a reader opened it.
-func feedFifo(t *testing.T, path string, data string) {
+// holdRead makes the asset read of path wait until the returned feed hands
+// it data, as a slow disk would.
+func holdRead(t *testing.T, path string) (feed func(data string)) {
 	t.Helper()
-	onTime(t, "the off-loop reader never opened the pipe, so feeding it", func() {
-		if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
-			t.Error(err)
+	read := readAssetFile
+	held := make(chan string)
+	fed := false
+	readAssetFile = func(name string, limit int64) ([]byte, error) {
+		if name != path {
+			return read(name, limit)
 		}
+		return []byte(<-held), nil
+	}
+	t.Cleanup(func() {
+		if !fed {
+			close(held)
+		}
+		WaitAssetLoads()
+		readAssetFile = read
 	})
+	return func(data string) {
+		fed = true
+		onTime(t, "the off-loop read never started, so feeding it", func() { held <- data })
+	}
 }
 
-// A theme whose index.theme is a pipe holds the index build for as long as
-// the test wants: a paint must not wait for it, and the icon arrives with
-// damage once it is written.
 func TestThemeIconPaintNeverWaitsForTheIndex(t *testing.T) {
 	f := newFakeInvoker(t)
 	root := t.TempDir()
@@ -87,8 +100,9 @@ func TestThemeIconPaintNeverWaitsForTheIndex(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(theme, "16x16/apps/flag.svg"), []byte(testGreenSVG), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	index := filepath.Join(theme, "index.theme")
-	fifoPath(t, index)
+	if err := os.WriteFile(filepath.Join(theme, "index.theme"), []byte("[Icon Theme]\nName=W\nDirectories=16x16/apps\n\n[16x16/apps]\nSize=16\nType=Fixed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	def := icons.Default()
 	def.SetSearchPaths([]string{root})
 	def.SetTheme("wfifo")
@@ -106,7 +120,6 @@ func TestThemeIconPaintNeverWaitsForTheIndex(t *testing.T) {
 	onTime(t, "the generation", func() { _ = def.Generation() })
 	CollectDamage(w)
 
-	feedFifo(t, index, "[Icon Theme]\nName=W\nDirectories=16x16/apps\n\n[16x16/apps]\nSize=16\nType=Fixed\n")
 	settleAssets(t, f)
 	if _, any := CollectDamage(w); !any {
 		t.Fatal("the decode's answer repainted nothing")
@@ -123,11 +136,11 @@ func TestThemeIconPaintNeverWaitsForTheIndex(t *testing.T) {
 func TestFileIconPaintNeverReads(t *testing.T) {
 	f := newFakeInvoker(t)
 	path := filepath.Join(t.TempDir(), "held.svg")
-	fifoPath(t, path)
+	feed := holdRead(t, path)
 	w := NewFileIcon(path, 16)
 	onTime(t, "a paint", func() { paintIcon(w, 16, 1, 1) })
 	onTime(t, "a second paint", func() { paintIcon(w, 16, 1, 1) })
-	feedFifo(t, path, testGreenSVG)
+	feed(testGreenSVG)
 	settleAssets(t, f)
 	data, _ := paintIcon(w, 16, 1, 1)
 	if got := centerPx(data, 16); got != render.RGB(0, 0xff, 0) {
@@ -245,7 +258,9 @@ func TestStopDropsWhatHasNotStarted(t *testing.T) {
 	collectingInvoker(t)
 	hold := make(chan struct{})
 	var ran atomic.Bool
-	loadAsset("held", func() { <-hold }, func() {})
+	for i := range maxAssetWorkers {
+		loadAsset(i, func() { <-hold }, func() {})
+	}
 	loadAsset("queued", func() { ran.Store(true) }, func() {})
 	StopAssetLoads()
 	close(hold)

@@ -47,8 +47,8 @@ func TestFontFaceMapsOnceAcrossRelayers(t *testing.T) {
 	}
 }
 
-// A pipe holds the open: a stylesheet load must not wait for it, and the
-// failure reports once its answer comes back.
+// A pipe at the src is refused off the loop, and the failure reports once
+// its answer comes back.
 func TestFontFaceNeverOpensOnTheLoop(t *testing.T) {
 	f := newFakeInvoker(t)
 	path := filepath.Join(t.TempDir(), "held.ttf")
@@ -66,16 +66,6 @@ func TestFontFaceNeverOpensOnTheLoop(t *testing.T) {
 	if len(warns) != 0 {
 		t.Fatalf("reported before the answer: %v", warns)
 	}
-	onTime(t, "the off-loop reader never opened the pipe, so opening it", func() {
-		w, err := os.OpenFile(path, os.O_WRONLY, 0)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if err := w.Close(); err != nil {
-			t.Error(err)
-		}
-	})
 	settleAssets(t, f)
 	if len(warns) != 1 || !strings.Contains(warns[0], path) {
 		t.Errorf("warnings = %v, want one naming the file", warns)

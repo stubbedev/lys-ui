@@ -32,6 +32,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/internal/assetfile"
 	"github.com/stubbedev/lys-ui/internal/style"
 	"github.com/stubbedev/lys-ui/internal/sysfont"
 )
@@ -680,7 +681,7 @@ func readStylesheetFile(path string) (*style.Sheet, []styleFile, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	b, err := os.ReadFile(path) //nolint:gosec // path is the app's stylesheet argument
+	b, err := assetfile.Read(path, style.SheetLimit)
 	if err != nil {
 		return nil, nil, fmt.Errorf("stylesheet: read %s: %w", path, err)
 	}

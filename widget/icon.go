@@ -2,7 +2,6 @@ package widget
 
 import (
 	"image"
-	"os"
 	"path/filepath"
 
 	"github.com/stubbedev/lys-lib/intconv"
@@ -542,8 +541,7 @@ func decodeIconSource(kind iconKind, path string, svg []byte, box iconBox) icons
 	if kind == iconFile {
 		var err error
 		name = filepath.Base(path)
-		// #nosec G304 -- the path is the application's own NewFileIcon argument.
-		if data, err = os.ReadFile(path); err != nil {
+		if data, err = readAssetFile(path, icons.FileLimit); err != nil {
 			return icons.Raster{Err: err}
 		}
 	}

@@ -50,7 +50,7 @@ func TestStylesheetImageNeverReadsOnTheLoop(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFakeInvoker(t)
 			path := filepath.Join(t.TempDir(), "held.png")
-			fifoPath(t, path)
+			feed := holdRead(t, path)
 			addCSS(t, bytesReplaceOne(tc.css, path), 900)
 			w := &boxLayersLeaf{}
 			w.AddClass("i")
@@ -60,7 +60,7 @@ func TestStylesheetImageNeverReadsOnTheLoop(t *testing.T) {
 			onTime(t, "a restyle and paint", func() { first = paintTree(w, 30, 30) })
 			CollectDamage(w)
 
-			feedFifo(t, path, redPNG(t))
+			feed(redPNG(t))
 			settleAssets(t, f)
 			if _, any := CollectDamage(w); !any {
 				t.Fatal("the decode's answer repainted nothing")

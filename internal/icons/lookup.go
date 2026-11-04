@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"github.com/stubbedev/lys-ui/internal/assetfile"
 )
 
 // ErrNotFound reports that no theme in the chain, nor any unthemed
@@ -174,7 +176,7 @@ type themeFS interface {
 type osFS struct{}
 
 func (osFS) ReadFile(name string) ([]byte, error) {
-	return os.ReadFile(name) //nolint:gosec // the path comes from the XDG search path, not untrusted input
+	return assetfile.Read(name, FileLimit)
 }
 
 // ReadDir lists name unsorted: the index groups entries by stem, so

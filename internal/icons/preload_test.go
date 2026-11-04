@@ -1,33 +1,45 @@
 package icons
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/lys-ui/internal/assetfile"
 )
 
-// A FIFO holds the preload inside its read for as long as the test wants:
+// heldReadFS parks every ReadFile until release hands it the contents,
+// closing entered once a read is inside.
+type heldReadFS struct {
+	osFS
+	once    sync.Once
+	entered chan struct{}
+	release chan string
+}
+
+func (f *heldReadFS) ReadFile(string) ([]byte, error) {
+	f.once.Do(func() { close(f.entered) })
+	return []byte(<-f.release), nil
+}
+
+// A held read keeps the preload inside it for as long as the test wants:
 // the read must not hold the lock, and a theme switch during it must keep
 // the stale raster out.
 func TestPreloadReadsOutsideTheLockAndDropsAStaleDecode(t *testing.T) {
 	c := newTestCache(t, "hicolor")
+	fsys := &heldReadFS{entered: make(chan struct{}), release: make(chan string)}
+	c.fsys = fsys
 	path := filepath.Join(t.TempDir(), "held.svg")
-	if err := syscall.Mkfifo(path, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		c.Preload(path, 16, 120)
 	}()
-	// Opening for write returns once the preload has opened for read.
-	w, err := os.OpenFile(path, os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = w.Close() }()
+	<-fsys.entered
 	if !c.mu.TryLock() {
 		t.Fatal("the lock is held across the read: a painting UI loop would wait")
 	}
@@ -36,12 +48,7 @@ func TestPreloadReadsOutsideTheLockAndDropsAStaleDecode(t *testing.T) {
 		t.Error("cached before its decode finished")
 	}
 	c.InvalidateTheme()
-	if _, err := w.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"/>`); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
+	fsys.release <- `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"/>`
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
@@ -66,5 +73,26 @@ func TestCachedNeverWaits(t *testing.T) {
 	defer c.mu.Unlock()
 	if c.Cached(path, 16, 120) {
 		t.Error("with the lock held elsewhere the answer is no")
+	}
+}
+
+func TestAPipeAtAnIconPathIsRefusedWithoutBlocking(t *testing.T) {
+	c := newTestCache(t, "hicolor")
+	path := filepath.Join(t.TempDir(), "pipe.svg")
+	if err := syscall.Mkfifo(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.Preload(path, 16, 120)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the preload blocked on the pipe")
+	}
+	if r, ok := c.Peek(path, 16, 120); !ok || !errors.Is(r.Err, assetfile.ErrNotRegular) {
+		t.Errorf("raster %+v, %v: want the pipe refused", r, ok)
 	}
 }

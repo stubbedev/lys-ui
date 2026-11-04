@@ -12,6 +12,9 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 )
 
+// FileLimit is the most an icon file or a theme index may hold.
+const FileLimit = 8 << 20
+
 // currentColor is the SVG paint keyword that means "the context's
 // foreground". oksvg rejects it in strict mode, so DecodeImage rewrites
 // it to opaque white before parsing; recoloring goes through

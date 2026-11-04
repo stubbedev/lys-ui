@@ -27,6 +27,9 @@ import (
 	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
+// SheetLimit is the most a stylesheet file or an @import may hold.
+const SheetLimit = 16 << 20
+
 // parseWarn is the parse-warning sink: warnings route to the injected
 // library logger at Warn level. Tests swap it to capture.
 var parseWarn = func(msg string) { logutil.L().Warn(msg) }

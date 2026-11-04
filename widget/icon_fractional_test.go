@@ -76,8 +76,9 @@ func TestThemeIconNeverDecodesOnTheLoopAtFractionalScales(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(theme, "16x16/apps/flag.svg"), []byte(testGreenSVG), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			index := filepath.Join(theme, "index.theme")
-			fifoPath(t, index)
+			if err := os.WriteFile(filepath.Join(theme, "index.theme"), []byte("[Icon Theme]\nName=W\nDirectories=16x16/apps\n\n[16x16/apps]\nSize=16\nType=Fixed\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
 			def := icons.Default()
 			def.SetSearchPaths([]string{root})
 			def.SetTheme("wfrac")
@@ -86,8 +87,9 @@ func TestThemeIconNeverDecodesOnTheLoopAtFractionalScales(t *testing.T) {
 				def.SetTheme("hicolor")
 			})
 			w := NewThemeIcon("flag", 16)
-			onTime(t, "a paint", func() { paintIcon(w, 16, sc.num, sc.denom) })
-			feedFifo(t, index, "[Icon Theme]\nName=W\nDirectories=16x16/apps\n\n[16x16/apps]\nSize=16\nType=Fixed\n")
+			if data, dev := paintIcon(w, 16, sc.num, sc.denom); centerPx(data, dev) != render.RGB(0, 0, 0) {
+				t.Error("the first paint decoded inline")
+			}
 			settleAssets(t, f)
 			data, dev := paintIcon(w, 16, sc.num, sc.denom)
 			if got := centerPx(data, dev); got != render.RGB(0, 0xff, 0) {

@@ -4,6 +4,8 @@ import (
 	"maps"
 	"slices"
 	"sync"
+
+	"github.com/stubbedev/lys-ui/internal/assetfile"
 )
 
 // maxAssetQueue bounds the decodes waiting: only what a frame painted
@@ -18,17 +20,22 @@ type assetJob struct {
 	deliver func(func())
 }
 
-// assets runs the decodes paints ask for, in order, on one goroutine
-// that exists only while there is work. Its load functions touch no
-// widget; answers come back through the invoker.
+const maxAssetWorkers = 8
+
+// assets runs the decodes paints ask for, in the order asked, on up to
+// maxAssetWorkers goroutines that exist only while there is work, so one
+// read that never returns holds up only its own. Its load functions touch
+// no widget; answers come back through the invoker.
 var assets = newAssetQueue()
+
+var readAssetFile = assetfile.Read
 
 type assetQueue struct {
 	mu      sync.Mutex
 	idle    sync.Cond
 	queue   []*assetJob
 	jobs    map[any]*assetJob
-	running bool
+	running int
 }
 
 func newAssetQueue() *assetQueue {
@@ -70,8 +77,8 @@ func (q *assetQueue) add(key any, load, done func(), deliver func(func())) (drop
 	j := &assetJob{key: key, load: load, waiters: []func(){done}, deliver: deliver}
 	q.jobs[key] = j
 	q.queue = append(q.queue, j)
-	if !q.running {
-		q.running = true
+	if q.running < maxAssetWorkers {
+		q.running++
 		go q.run()
 	}
 	return dropped
@@ -91,8 +98,10 @@ func (q *assetQueue) run() {
 		answer(j)
 		q.mu.Lock()
 	}
-	q.running = false
-	q.idle.Broadcast()
+	q.running--
+	if q.running == 0 {
+		q.idle.Broadcast()
+	}
 }
 
 // answer runs the waiters on the loop. A dropped job answers too: whoever
@@ -105,8 +114,8 @@ func answer(j *assetJob) {
 	})
 }
 
-// stop drops what has not started; the running decode finishes and ends
-// the goroutine, and its answer goes nowhere once the loop has ended.
+// stop drops what has not started; the running decodes finish and end
+// their goroutines, and their answers go nowhere once the loop has ended.
 func (q *assetQueue) stop() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -116,11 +125,11 @@ func (q *assetQueue) stop() {
 	q.queue = nil
 }
 
-// wait blocks until the goroutine has run out of work.
+// wait blocks until every goroutine has run out of work.
 func (q *assetQueue) wait() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	for q.running {
+	for q.running > 0 {
 		q.idle.Wait()
 	}
 }

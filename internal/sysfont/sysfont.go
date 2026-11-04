@@ -12,7 +12,6 @@ package sysfont
 import (
 	"errors"
 	"fmt"
-	"os"
 	"slices"
 	"sync"
 
@@ -23,6 +22,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/typesetting/language"
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-ui/internal/assetfile"
 	"github.com/stubbedev/lys-ui/internal/uifont"
 )
 
@@ -285,17 +285,15 @@ func parseFace(data []byte, path string, index uint16) (*font.Face, error) {
 	return font.NewFace(ft), nil
 }
 
+const fontFileLimit = 512 << 20
+
 func mapFile(path string) ([]byte, error) {
-	f, err := os.Open(path) //nolint:gosec // path is fontscan's trusted font index, not user input
+	f, size, err := assetfile.Open(path, fontFileLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	return unix.Mmap(int(f.Fd()), 0, int(info.Size()), unix.PROT_READ, unix.MAP_PRIVATE)
+	return unix.Mmap(int(f.Fd()), 0, int(size), unix.PROT_READ, unix.MAP_PRIVATE)
 }
 
 // Sans returns the system's default sans-serif face, resolved with the

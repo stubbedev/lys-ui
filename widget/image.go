@@ -9,7 +9,6 @@ import (
 	"io"
 	"math"
 	"net/http"
-	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -66,8 +65,8 @@ type imageSource struct {
 	key  string      // imgcache source key; empty until a load resolves it
 }
 
-// imageFetchLimit caps how much of a URL body is read, so a runaway
-// download cannot balloon the pixel cache.
+// imageFetchLimit caps how much of a URL body or an image file is read,
+// so a runaway source cannot balloon the pixel cache.
 const imageFetchLimit = 64 << 20
 
 // imageHTTP bounds URL fetches; media servers stall more often than
@@ -597,7 +596,7 @@ func shrunk(img image.Image, shrink int) image.Image {
 func fetchSource(src imageSource) ([]byte, error) {
 	switch src.kind {
 	case imageFile:
-		return os.ReadFile(src.path)
+		return readAssetFile(src.path, imageFetchLimit)
 	case imageURL:
 		return fetchURL(src.url)
 	default:

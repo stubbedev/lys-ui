@@ -1,10 +1,11 @@
 package style
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/stubbedev/lys-ui/internal/assetfile"
 )
 
 // Media is the environment @media conditions evaluate against: the
@@ -802,7 +803,7 @@ func FileImport(ref, base string) (string, string, error) {
 	if base != "" && !filepath.IsAbs(ref) {
 		p = filepath.Join(filepath.Dir(base), ref)
 	}
-	b, err := os.ReadFile(p) //nolint:gosec // an app stylesheet names its imports
+	b, err := assetfile.Read(p, SheetLimit)
 	if err != nil {
 		return "", "", err
 	}
