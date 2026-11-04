@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/stubbedev/lys-lib/intconv"
@@ -30,6 +31,9 @@ import (
 type slot struct {
 	offset int
 	bytes  int
+	// resident marks free bytes a buffer drew in, still holding pages
+	// until the next Trim.
+	resident bool
 }
 
 // Arena is one session's shared wl_shm pool. It is not safe for
@@ -47,6 +51,8 @@ type Arena struct {
 
 	free []slot // free slots sorted by offset, adjacent ones merged
 	live int    // sub-allocations handed out and not yet retired
+	// punches counts the fallocate calls Trim made.
+	punches int
 
 	// lastFormat is the shm format the most recent wire buffer creation
 	// advertised (buffer.Format); an inspection point for the format
@@ -86,6 +92,28 @@ func CloseArenas(shm *wl.Shm) {
 	arenas.Unlock()
 	if ok {
 		_ = a.Close()
+	}
+}
+
+// Reclaimable reports whether a session arena holds freed slots a
+// TrimArenas would give back.
+func Reclaimable() bool {
+	arenas.Lock()
+	defer arenas.Unlock()
+	for _, a := range arenas.m {
+		if a.reclaimable() {
+			return true
+		}
+	}
+	return false
+}
+
+// TrimArenas gives every session arena's freed slots back to the kernel.
+func TrimArenas() {
+	arenas.Lock()
+	defer arenas.Unlock()
+	for _, a := range arenas.m {
+		a.Trim()
 	}
 }
 
@@ -166,8 +194,9 @@ func (a *Arena) take(need int) (slot, error) {
 		s := a.free[best]
 		a.free = append(a.free[:best], a.free[best+1:]...)
 		if s.bytes > need {
-			a.put(slot{offset: s.offset + need, bytes: s.bytes - need})
+			a.put(slot{offset: s.offset + need, bytes: s.bytes - need, resident: s.resident})
 			s.bytes = need
+			s.resident = false
 		}
 		return s, nil
 	}
@@ -251,14 +280,38 @@ func (a *Arena) put(s slot) slot {
 	// Merge left, then right, while the neighbors touch.
 	if i > 0 && a.free[i-1].offset+a.free[i-1].bytes == s.offset {
 		a.free[i-1].bytes += a.free[i].bytes
+		a.free[i-1].resident = a.free[i-1].resident || a.free[i].resident
 		a.free = append(a.free[:i], a.free[i+1:]...)
 		i--
 	}
 	if i+1 < len(a.free) && a.free[i].offset+a.free[i].bytes == a.free[i+1].offset {
 		a.free[i].bytes += a.free[i+1].bytes
+		a.free[i].resident = a.free[i].resident || a.free[i+1].resident
 		a.free = append(a.free[:i+1], a.free[i+2:]...)
 	}
 	return a.free[i]
+}
+
+// reclaimable reports whether a free slot still holds pages.
+func (a *Arena) reclaimable() bool {
+	return slices.ContainsFunc(a.free, func(s slot) bool { return s.resident })
+}
+
+// Trim gives the pages of every slot freed since the last Trim back to
+// the kernel. A resize frees and retakes slots each step, so retire
+// leaves that to this idle-paced call: one fallocate per free range,
+// however many buffers came and went.
+func (a *Arena) Trim() {
+	for i := range a.free {
+		s := &a.free[i]
+		if !s.resident {
+			continue
+		}
+		s.resident = false
+		if err := a.punch(*s); err != nil {
+			logutil.L().Warn("buffer: freed slot stays resident", slog.Int("offset", s.offset), slog.Int("bytes", s.bytes), slog.Any("err", err))
+		}
+	}
 }
 
 func (a *Arena) punch(s slot) error {
@@ -274,15 +327,17 @@ func (a *Arena) punch(s slot) error {
 	if end <= start {
 		return nil
 	}
+	a.punches++
 	if err := unix.Fallocate(int(a.file.Fd()), unix.FALLOC_FL_PUNCH_HOLE|unix.FALLOC_FL_KEEP_SIZE, int64(start), int64(end-start)); err != nil {
 		return fmt.Errorf("buffer: punch pool bytes [%d, %d): %w", start, end, err)
 	}
 	return nil
 }
 
-// retire returns a buffer's slot to the free list. Called when the
-// compositor released a freed buffer (Buffer.Release) or when its owner
-// dropped it while already free.
+// retire returns a buffer's slot to the free list, its pages resident
+// until the next Trim. Called when the compositor released a freed
+// buffer (Buffer.Release) or when its owner dropped it while already
+// free.
 func (a *Arena) retire(b *Buffer) {
 	if a == nil || a.closed {
 		b.arena = nil
@@ -292,9 +347,9 @@ func (a *Arena) retire(b *Buffer) {
 		_ = b.WL.Destroy()
 		b.WL = nil
 	}
-	if err := a.punch(a.put(b.slot)); err != nil {
-		logutil.L().Warn("buffer: freed slot stays resident", slog.Int("offset", b.slot.offset), slog.Int("bytes", b.slot.bytes), slog.Any("err", err))
-	}
+	s := b.slot
+	s.resident = true
+	a.put(s)
 	a.live--
 	b.arena = nil
 }

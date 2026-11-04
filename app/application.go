@@ -22,6 +22,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/gtksettings"
 	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/clipboard"
 	"github.com/stubbedev/lys-ui/internal/datacontrol"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
@@ -68,6 +69,10 @@ type Application struct {
 	// primary-selection behavior (middle-click paste, copy-on-select).
 	// SetClipboard fills both from one clipboard.
 	clip    *clipboard.Clipboard
+	// keyClip is clip as the key path sees it, nil without one; stopClip
+	// cancels clip's stop hook.
+	keyClip  *keyClipboard
+	stopClip func()
 	primary *primarySelection
 	// dnd drives drag-and-drop for every window on this application;
 	// inert when the compositor lacks a data device.
@@ -146,6 +151,7 @@ type Application struct {
 	notifyOnce  sync.Once
 	notifyMu    sync.Mutex
 	notifyStore *notify.Notifier
+	notifyDial  func() (notify.Bus, error)
 	notifyOpts  map[string]NotifyOptions
 	// launcher (launcher.go): the OpenURL/OpenPath transport state.
 	launchState launcher
@@ -201,7 +207,6 @@ func NewApplication(sess *wlsession.Session) *Application {
 		sess:         sess,
 		accels:       newAccelTable(),
 		primary:      &primarySelection{},
-		dnd:          dragdrop.New(sess),
 		rep:          newKeyRepeater(sess.RepeatInfo()),
 		kicker:       &loopKicker{},
 		ime:          newIMEController(sess),
@@ -211,6 +216,8 @@ func NewApplication(sess *wlsession.Session) *Application {
 		appliedIcons: make(map[*hostWindow]*postedIcon),
 		launchState:  launcher{openPortal: portalOpen, openExternal: xdgOpen},
 	}
+	a.dnd = dragdrop.New(sess, a.Invoke)
+	a.OnStop(func() { a.dnd.Stop() })
 	// Async image loads (widget.Image file/URL sources) deliver through
 	// the loop queue - the only sanctioned bridge (docs/threading.md).
 	widget.SetInvoker(a.Invoke)
@@ -270,14 +277,23 @@ func (a *Application) Clipboard() *Clipboard { return a.clip }
 // SetClipboard enables ctrl+c/x/v on every window's focused widget,
 // plus the primary-selection behavior (middle-click paste, and
 // copy-on-select once SetCopyOnSelect turns it on), and gives the
-// clipboard the application's loop to expire claims on
-// (Clipboard.WriteExpiring).
+// clipboard the application's loop: its reads deliver there, it expires
+// claims there (Clipboard.WriteExpiring), and its transfers end with it.
 func (a *Application) SetClipboard(c *clipboard.Clipboard) {
+	if a.stopClip != nil {
+		a.stopClip()
+		a.stopClip = nil
+		a.clip.Stop()
+	}
 	a.clip = c
 	a.primary.src = c
-	if c != nil {
-		c.SetScheduler(func(d time.Duration, fn func()) { time.AfterFunc(d, func() { a.Invoke(fn) }) })
+	a.keyClip = nil
+	if c == nil {
+		return
 	}
+	a.keyClip = &keyClipboard{clip: c, report: a.reportTransfer}
+	c.SetScheduler(func(d time.Duration, fn func()) { time.AfterFunc(d, func() { a.Invoke(fn) }) }, a.Invoke)
+	a.stopClip = a.OnStop(c.Stop)
 }
 
 // SetCopyOnSelect turns X11-style copy-on-select on or off; a finished
@@ -998,7 +1014,7 @@ func (a *Application) armTrim() {
 	if a.stopTrim != nil {
 		return
 	}
-	if !slices.ContainsFunc(a.windows, func(w *hostWindow) bool { return w.pool.Spares() }) && (a.gpu == nil || !a.gpu.drawn) {
+	if !slices.ContainsFunc(a.windows, func(w *hostWindow) bool { return w.pool.Spares() }) && (a.gpu == nil || !a.gpu.drawn) && !buffer.Reclaimable() {
 		return
 	}
 	a.stopTrim = a.Every(bufferTrimInterval, a.trimBuffers)
@@ -1018,6 +1034,7 @@ func (a *Application) trimBuffers() {
 		w.noteFootprint()
 		spares = spares || w.pool.Spares()
 	}
+	buffer.TrimArenas()
 	if a.gpu != nil && a.gpu.trimIdle() {
 		spares = true
 	}
@@ -1097,7 +1114,7 @@ func (a *Application) deliverKey(keycode uint32, mods wlsession.Mods) {
 	if captureKey(a.sess, target.cfg.keyCapture, keycode, mods) {
 		return
 	}
-	a.reportTransfer(routeKey(a.sess, target.router, keycode, mods, a.clip, a.accels, extra))
+	routeKey(a.sess, target.router, keycode, mods, a.keyClip, a.accels, extra)
 }
 
 // captureKey offers one press to a window's KeyCapture hook and

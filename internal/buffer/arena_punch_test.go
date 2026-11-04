@@ -27,7 +27,7 @@ func filled(t *testing.T, a *Arena, w, h int) *Buffer {
 	return b
 }
 
-func TestRetirePunchesFreedSlot(t *testing.T) {
+func TestRetireLeavesTheFreedSlotForTrim(t *testing.T) {
 	a := NewArena(nil)
 	t.Cleanup(func() { _ = a.Close() })
 	w := unix.Getpagesize() / 4
@@ -36,8 +36,42 @@ func TestRetirePunchesFreedSlot(t *testing.T) {
 		t.Fatalf("allocated pages = %d with the buffer drawn, want 8", got)
 	}
 	Cancel(b)
+	if a.punches != 0 {
+		t.Errorf("retire punched %d times, want none: a resize frees slots each step", a.punches)
+	}
+	a.Trim()
 	if got := allocatedPages(t, a); got != 0 {
-		t.Errorf("allocated pages = %d after retire, want 0: the freed slot stays resident", got)
+		t.Errorf("allocated pages = %d after Trim, want 0: the freed slot stays resident", got)
+	}
+	if a.reclaimable() {
+		t.Error("a trimmed arena still reports a slot to reclaim")
+	}
+}
+
+func TestResizeStepsPunchNothing(t *testing.T) {
+	a := NewArena(nil)
+	t.Cleanup(func() { _ = a.Close() })
+	w := 64
+	create := func() (*Buffer, error) { return a.Acquire(w, 64, 1) }
+	p := New(create, 3)
+	for step := range 50 {
+		w = 64 + step
+		p.Resize(create)
+		b, err := p.Acquire()
+		if err != nil {
+			t.Fatalf("acquire at step %d: %v", step, err)
+		}
+		b.Release()
+	}
+	if a.punches != 0 {
+		t.Errorf("50 resize steps made %d fallocate calls, want 0", a.punches)
+	}
+	if !a.reclaimable() {
+		t.Error("the freed slots are not left for Trim")
+	}
+	a.Trim()
+	if a.punches == 0 || a.reclaimable() {
+		t.Errorf("Trim made %d fallocate calls, reclaimable %v: want the free ranges punched", a.punches, a.reclaimable())
 	}
 }
 
@@ -46,6 +80,7 @@ func TestReusedPunchedSlotIsZeroAndUsable(t *testing.T) {
 	t.Cleanup(func() { _ = a.Close() })
 	w := unix.Getpagesize() / 4
 	Cancel(filled(t, a, w, 8))
+	a.Trim()
 	b, err := a.Acquire(w, 8, 1)
 	if err != nil {
 		t.Fatalf("reacquire: %v", err)
@@ -80,6 +115,7 @@ func TestRetireFreesEveryPageOfASlotBetweenLiveNeighbors(t *testing.T) {
 	third := filled(t, a, w, 1)
 	drawn := allocatedPages(t, a)
 	Cancel(second)
+	a.Trim()
 	if got := allocatedPages(t, a); got != drawn-2 {
 		t.Errorf("allocated pages = %d after freeing a 1.5-page slot between live ones, want %d: a page it shares with a neighbor stays resident", got, drawn-2)
 	}
@@ -92,6 +128,7 @@ func TestRetireFreesEveryPageOfASlotBetweenLiveNeighbors(t *testing.T) {
 	}
 	Cancel(first)
 	Cancel(third)
+	a.Trim()
 	if got := allocatedPages(t, a); got != 0 {
 		t.Errorf("allocated pages = %d with every slot free, want 0", got)
 	}
