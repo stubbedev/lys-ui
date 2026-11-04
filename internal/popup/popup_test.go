@@ -391,3 +391,70 @@ func TestDetachReachesTheDestroyedSurface(t *testing.T) {
 		t.Error("the destroyed surface keeps its input handler")
 	}
 }
+
+// A popup waits on its first configure with nothing painted and its enter
+// tween unstarted, so the tween's first frame is the first on screen. The
+// configure starts it, once; a later configure leaves it be.
+func TestFirstConfigureStartsTheEnter(t *testing.T) {
+	base := time.Unix(1750000000, 0)
+	t.Cleanup(animclock.SetClock(func() time.Time { return base }))
+	animclock.Reset()
+	t.Cleanup(animclock.Reset)
+	p := &Popup{}
+	p.fx = surfx.NewCoordinator(surfx.KindMenu, p, func() bool { return true })
+	painter := &Painter{p: p}
+	painter.dirty.Store(true)
+
+	if err := p.EnsureUsable(); err == nil {
+		t.Error("a popup with no configure yet reads usable")
+	}
+	if _, _, placed := p.Position(); placed {
+		t.Error("a popup with no configure yet reads placed")
+	}
+	if live, err := painter.Pass(); !live || err != nil {
+		t.Errorf("Pass while pending = %v, %v; want it alive and idle", live, err)
+	}
+	if !painter.Owes() {
+		t.Error("the frame a pending popup owes was spent")
+	}
+	if animclock.Active() {
+		t.Error("the enter tween started before the configure")
+	}
+
+	p.HandleSurfaceConfigure(xdg.SurfaceConfigureEvent{Serial: 1})
+	if err := p.EnsureUsable(); err != nil {
+		t.Errorf("after the configure: %v", err)
+	}
+	if !animclock.Active() {
+		t.Fatal("the first configure did not start the enter")
+	}
+	if reveal, _ := p.fx.Visual(); reveal != 0 {
+		t.Errorf("reveal %v at the first frame, want 0", reveal)
+	}
+	animclock.Reset()
+	p.HandleSurfaceConfigure(xdg.SurfaceConfigureEvent{Serial: 2})
+	if animclock.Active() {
+		t.Error("a later configure restarted the enter")
+	}
+}
+
+// Dismissed while still waiting: the popup closes without ever having
+// shown, and a configure landing after that is harmless.
+func TestPopupDismissedBeforeItsConfigure(t *testing.T) {
+	base := time.Unix(1750000000, 0)
+	t.Cleanup(animclock.SetClock(func() time.Time { return base }))
+	animclock.Reset()
+	t.Cleanup(animclock.Reset)
+	p := &Popup{}
+	p.fx = surfx.NewCoordinator(surfx.KindMenu, p, nil)
+	closed := 0
+	p.SetOnClosed(func() { closed++ })
+	p.Close()
+	p.HandleSurfaceConfigure(xdg.SurfaceConfigureEvent{Serial: 1})
+	if closed != 1 || !p.Destroyed() {
+		t.Errorf("closed %d times, destroyed %v", closed, p.Destroyed())
+	}
+	if animclock.Active() {
+		t.Error("a configure after the close started an enter")
+	}
+}

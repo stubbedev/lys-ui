@@ -164,9 +164,11 @@ type Config struct {
 	BlurRoot widget.Widget
 }
 
-// New positions and maps a popup, then grabs the seat so clicks outside
-// dismiss it. The configure handshake completes inside New: callers can
-// draw immediately.
+// New positions a popup, grabs the seat so clicks outside dismiss it,
+// and sends the initial commit. It never waits for the compositor: the
+// popup stays pending until its first configure dispatches, EnsureUsable
+// says so, a Painter holds its frames back, and the enter tween starts
+// then, so its first frame is the first on screen.
 func New(sess *wlsession.Session, cfg Config) (*Popup, error) {
 	serial := sess.InputSerial()
 	if !cfg.NoGrab && serial == 0 {
@@ -242,24 +244,6 @@ func New(sess *wlsession.Session, cfg Config) (*Popup, error) {
 	}
 	if err := surf.Commit(); err != nil {
 		return nil, fmt.Errorf("popup: commit: %w", err)
-	}
-	for range 20 {
-		if p.EnsureUsable() == nil {
-			break
-		}
-		if err := sess.Roundtrip(); err != nil {
-			return nil, fmt.Errorf("popup: configure roundtrip: %w", err)
-		}
-	}
-	if err := p.EnsureUsable(); err != nil {
-		return nil, fmt.Errorf("popup: %w", err)
-	}
-	// The enter tween starts mapped-at-progress-0: ApplyVisual(0) lands
-	// synchronously here, so Run's first paint is the hidden or offset
-	// first frame, never a flash of the finished surface. Reduced
-	// motion collapses the tween and lands at rest inside this call.
-	if !cfg.NoEnter {
-		p.fx.Enter()
 	}
 	return p, nil
 }
@@ -386,11 +370,20 @@ func (p *Popup) Position() (x, y int, ok bool) {
 // Gutter is the shadow margin the content sits inside.
 func (p *Popup) Gutter() int { return p.gutter }
 
-// HandleSurfaceConfigure completes the configure round.
+// HandleSurfaceConfigure completes the configure round. The first one
+// ends the pending state and starts the enter tween mapped-at-progress-0:
+// ApplyVisual(0) lands synchronously here, so the first paint is the
+// hidden or offset first frame, never a flash of the finished surface.
+// Reduced motion collapses the tween and lands at rest inside this call.
 func (p *Popup) HandleSurfaceConfigure(ev xdg.SurfaceConfigureEvent) {
+	first := !p.configured
 	p.configured = true
 	if p.XdgSurface != nil {
 		_ = p.XdgSurface.AckConfigure(ev.Serial)
+	}
+	p.dirty.Store(true)
+	if first && !p.cfg.NoEnter {
+		p.fx.Enter()
 	}
 }
 
@@ -529,8 +522,9 @@ func (p *Popup) Destroy() {
 // tooltip input-region trick, applied at dismissal. The commit only
 // refreshes the region (the current buffer stays attached), and later
 // animation commits keep it: the input region is double-buffered state
-// that persists until changed. Under p.mu, serialized against frames
-// like Destroy.
+// that persists until changed. A popup still pending carries the region
+// on its first frame instead. Under p.mu, serialized against frames like
+// Destroy.
 func (p *Popup) SealInput() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -544,7 +538,9 @@ func (p *Popup) SealInput() {
 	_ = region.Add(0, 0, 0, 0)
 	_ = p.WLSurface.SetInputRegion(region)
 	_ = region.Destroy()
-	_ = p.WLSurface.Commit()
+	if p.configured {
+		_ = p.WLSurface.Commit()
+	}
 }
 
 // ApplyVisual implements surfx.Driver: one tween frame.
