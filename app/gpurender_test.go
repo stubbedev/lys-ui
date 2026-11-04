@@ -522,7 +522,11 @@ func TestATargetIsAllocatedOffTheLoopAndLandsThroughIt(t *testing.T) {
 	queued := make(chan func(), 4)
 	r := deviceRenderer(dev)
 	r.invoke = func(fn func()) { queued <- fn }
-	if !dev.Exports() {
+	if dev.Exports() {
+		if r.modifiers, err = dev.Modifiers(fourcc.ARGB8888); err != nil {
+			t.Fatal(err)
+		}
+	} else {
 		r.prepare = func(w, h int, _ []fourcc.Modifier) (*gpu.Target, error) { return dev.PrepareOffscreen(w, h) }
 	}
 	a := &Application{gpu: r}
