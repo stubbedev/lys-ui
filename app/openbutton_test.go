@@ -23,6 +23,12 @@ func openButtonApp(t *testing.T) *Application {
 	}
 	a := &Application{}
 	a.SetTooltipFace(face)
+	t.Cleanup(func() {
+		a.watchers.shutdown()
+		if a.recentFiles != nil && !a.recentFiles.Stop(5*time.Second) {
+			t.Error("the recents worker outlived the test")
+		}
+	})
 	return a
 }
 

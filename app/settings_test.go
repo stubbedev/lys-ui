@@ -23,6 +23,13 @@ func settingsEnv(t *testing.T) string {
 	return dir
 }
 
+func testSettings(t *testing.T, a *Application, appID string) *Settings {
+	t.Helper()
+	s := NewSettings(a, appID)
+	t.Cleanup(s.stop)
+	return s
+}
+
 func settingsFlush(t *testing.T, s *Settings) {
 	t.Helper()
 	if err := s.Flush(); err != nil {
@@ -40,7 +47,7 @@ var (
 // key reads its default and nothing is written until a Set happens.
 func TestSettingsDefaultsBeforeAnyFile(t *testing.T) {
 	cfg := settingsEnv(t)
-	s := NewSettings(testApp(nil), "dev.stubbe.test.settings")
+	s := testSettings(t, testApp(nil), "dev.stubbe.test.settings")
 	if got := setGreeting.Get(s); got != "hello" {
 		t.Errorf("greeting = %q, want the default", got)
 	}
@@ -57,13 +64,13 @@ func TestSettingsDefaultsBeforeAnyFile(t *testing.T) {
 // stored values, and unknown keys in the file survive rewrites.
 func TestSettingsSetPersistsAndReloads(t *testing.T) {
 	cfg := settingsEnv(t)
-	s := NewSettings(testApp(nil), "dev.stubbe.test.settings")
+	s := testSettings(t, testApp(nil), "dev.stubbe.test.settings")
 	setVolume.Set(s, 0.75)
 	setDark.Set(s, true)
 	settingsFlush(t, s)
 
 	path := filepath.Join(cfg, "dev.stubbe.test.settings", "settings.json")
-	reloaded := NewSettings(testApp(nil), "dev.stubbe.test.settings")
+	reloaded := testSettings(t, testApp(nil), "dev.stubbe.test.settings")
 	if got := setVolume.Get(reloaded); got != 0.75 {
 		t.Errorf("reloaded volume = %v, want 0.75", got)
 	}
@@ -79,7 +86,7 @@ func TestSettingsSetPersistsAndReloads(t *testing.T) {
 		[]byte(`{"future-key": [1, 2], "volume": 0.75, "dark-mode": true}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s = NewSettings(testApp(nil), "dev.stubbe.test.settings")
+	s = testSettings(t, testApp(nil), "dev.stubbe.test.settings")
 	setGreeting.Set(s, "hi")
 	settingsFlush(t, s)
 	data, err := os.ReadFile(path)
@@ -109,13 +116,13 @@ func TestSettingsCorruptionFallsBackToDefaults(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"greeting": "tru`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewSettings(testApp(nil), appID)
+	s := testSettings(t, testApp(nil), appID)
 	if got := setGreeting.Get(s); got != "hello" {
 		t.Errorf("corrupt file yielded %q, want the default", got)
 	}
 	setVolume.Set(s, 0.25)
 	settingsFlush(t, s)
-	reloaded := NewSettings(testApp(nil), appID)
+	reloaded := testSettings(t, testApp(nil), appID)
 	if got := setVolume.Get(reloaded); got != 0.25 {
 		t.Errorf("post-repair volume = %v, want 0.25", got)
 	}
@@ -134,7 +141,7 @@ func TestSettingsTypeDriftFallsBackToDefault(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"volume": "loud"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := NewSettings(testApp(nil), appID)
+	s := testSettings(t, testApp(nil), appID)
 	if got := setVolume.Get(s); got != 0.5 {
 		t.Errorf("type-drifted volume = %v, want the default", got)
 	}
@@ -155,7 +162,7 @@ func TestSettingsTypeDriftFallsBackToDefault(t *testing.T) {
 func TestSettingsNotifiesOnLoopAndSuppressesEqual(t *testing.T) {
 	settingsEnv(t)
 	a := testApp(nil)
-	s := NewSettings(a, "dev.stubbe.test.notify")
+	s := testSettings(t, a, "dev.stubbe.test.notify")
 	seen := 0
 	cancel := setVolume.Subscribe(s, func(v float64) { seen++ })
 	defer cancel()
@@ -174,7 +181,7 @@ func TestSettingsNotifiesOnLoopAndSuppressesEqual(t *testing.T) {
 func TestSettingsBindingBridgesToWidgets(t *testing.T) {
 	settingsEnv(t)
 	a := testApp(nil)
-	s := NewSettings(a, "dev.stubbe.test.bind")
+	s := testSettings(t, a, "dev.stubbe.test.bind")
 	b := setDark.Binding(s)
 
 	sw := widget.NewSwitch(false)
@@ -239,7 +246,7 @@ func newSettingsSeams(s *Settings) *settingsSeams {
 // scheduled, and it happens elsewhere with the burst's last values.
 func TestSettingsBurstWritesOnceOffTheCaller(t *testing.T) {
 	settingsEnv(t)
-	s := NewSettings(testApp(nil), "dev.stubbe.test.burst")
+	s := testSettings(t, testApp(nil), "dev.stubbe.test.burst")
 	seams := newSettingsSeams(s)
 	for i := range 100 {
 		setVolume.Set(s, float64(i)/100)
@@ -267,7 +274,7 @@ func TestSettingsBurstWritesOnceOffTheCaller(t *testing.T) {
 // A write stuck on a slow disk holds up neither Set nor Get.
 func TestSettingsStuckWriteBlocksNoSet(t *testing.T) {
 	settingsEnv(t)
-	s := NewSettings(testApp(nil), "dev.stubbe.test.stuck")
+	s := testSettings(t, testApp(nil), "dev.stubbe.test.stuck")
 	seams := newSettingsSeams(s)
 	seams.blocked = make(chan struct{})
 	setVolume.Set(s, 0.1)
@@ -301,7 +308,7 @@ func TestSettingsStuckWriteBlocksNoSet(t *testing.T) {
 func TestSettingsFlushAtRunExit(t *testing.T) {
 	cfg := settingsEnv(t)
 	a := testApp(nil)
-	s := NewSettings(a, "dev.stubbe.test.exit")
+	s := testSettings(t, a, "dev.stubbe.test.exit")
 	s.arm = func(func()) func() bool { return func() bool { return true } }
 	setVolume.Set(s, 0.33)
 	path := filepath.Join(cfg, "dev.stubbe.test.exit", "settings.json")
@@ -309,11 +316,11 @@ func TestSettingsFlushAtRunExit(t *testing.T) {
 		t.Fatalf("the file exists before the exit: %v", err)
 	}
 	a.watchers.shutdown()
-	if got := setVolume.Get(NewSettings(testApp(nil), "dev.stubbe.test.exit")); got != 0.33 {
+	if got := setVolume.Get(testSettings(t, testApp(nil), "dev.stubbe.test.exit")); got != 0.33 {
 		t.Errorf("after the exit volume = %v, want 0.33", got)
 	}
 	setVolume.Set(s, 0.44)
-	if got := setVolume.Get(NewSettings(testApp(nil), "dev.stubbe.test.exit")); got != 0.44 {
+	if got := setVolume.Get(testSettings(t, testApp(nil), "dev.stubbe.test.exit")); got != 0.44 {
 		t.Errorf("a Set after the exit left volume = %v, want 0.44", got)
 	}
 }
@@ -321,7 +328,7 @@ func TestSettingsFlushAtRunExit(t *testing.T) {
 // A failed write stays owed and the next Flush retries it.
 func TestSettingsFailedWriteStaysOwed(t *testing.T) {
 	settingsEnv(t)
-	s := NewSettings(testApp(nil), "dev.stubbe.test.fail")
+	s := testSettings(t, testApp(nil), "dev.stubbe.test.fail")
 	seams := newSettingsSeams(s)
 	failing := true
 	write := s.write
