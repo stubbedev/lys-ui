@@ -176,6 +176,8 @@ type hostWindow struct {
 	dirty        bool
 	frame        wlsession.FrameDone
 	framePending bool
+	shown        bool
+	showBy       time.Time
 	drawErr      error
 	// paintedPixels is the pixel count the last frame actually wrote
 	// on the CPU, and the area of the region it repainted on the GPU;
@@ -1160,4 +1162,23 @@ func (w *hostWindow) focusChangeRects() []render.Rect {
 	}
 	w.lastRing = ring
 	return rects
+}
+
+const firstFrameAssetWait = 250 * time.Millisecond
+
+func (w *hostWindow) holdsFirstFrame(now time.Time) bool {
+	if w.shown {
+		return false
+	}
+	if w.showBy.IsZero() {
+		w.showBy = now.Add(firstFrameAssetWait)
+	}
+	return widget.AssetLoadsOwed() && now.Before(w.showBy)
+}
+
+func (w *hostWindow) firstFrameDeadline() (time.Time, bool) {
+	if w.shown || w.showBy.IsZero() || !widget.AssetLoadsOwed() {
+		return time.Time{}, false
+	}
+	return w.showBy, true
 }

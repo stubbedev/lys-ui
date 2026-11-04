@@ -38,13 +38,18 @@ func newAssetQueue() *assetQueue {
 }
 
 func loadAsset(key any, load, done func()) {
-	deliver, ok := loopInvoker()
-	if !ok {
+	b := invoker.Load()
+	if b == nil {
 		load()
 		done()
 		return
 	}
-	if dropped := assets.add(key, load, done, deliver); dropped != nil {
+	b.owed.Add(1)
+	answered := func() {
+		b.owed.Add(-1)
+		done()
+	}
+	if dropped := assets.add(key, load, answered, b.deliver); dropped != nil {
 		answer(dropped)
 	}
 }

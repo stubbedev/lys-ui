@@ -83,7 +83,12 @@ var memSourceSeq atomic.Uint64
 // only sanctioned bridge (docs/threading.md). Without an invoker there
 // is no loop to deliver to, and file/URL sources settle synchronously
 // at their first paint instead.
-var invoker atomic.Pointer[func(func())]
+type loopBridge struct {
+	deliver func(func())
+	owed    atomic.Int64
+}
+
+var invoker atomic.Pointer[loopBridge]
 
 // SetInvoker installs the function asynchronous image loads use to run
 // their completion on the event-loop goroutine; app calls it with
@@ -94,8 +99,9 @@ func SetInvoker(fn func(func())) (remove func()) {
 		invoker.Store(nil)
 		return func() {}
 	}
-	invoker.Store(&fn)
-	return func() { invoker.CompareAndSwap(&fn, nil) }
+	b := &loopBridge{deliver: fn}
+	invoker.Store(b)
+	return func() { invoker.CompareAndSwap(b, nil) }
 }
 
 func hasInvoker() bool { return invoker.Load() != nil }
@@ -105,7 +111,28 @@ func loopInvoker() (deliver func(func()), ok bool) {
 	if p == nil {
 		return nil, false
 	}
-	return *p, true
+	return p.deliver, true
+}
+
+func loopAnswer() (deliver func(func()), ok bool) {
+	b := invoker.Load()
+	if b == nil {
+		return nil, false
+	}
+	b.owed.Add(1)
+	return func(fn func()) {
+		b.deliver(func() {
+			b.owed.Add(-1)
+			fn()
+		})
+	}, true
+}
+
+// AssetLoadsOwed reports whether an icon or image load asked for on the
+// current loop has yet to apply its answer there.
+func AssetLoadsOwed() bool {
+	b := invoker.Load()
+	return b != nil && b.owed.Load() > 0
 }
 
 // Image paints a raster image - album art, an avatar, a rendered
@@ -429,7 +456,7 @@ func (im *Image) PasteImage(data []byte, mime string) {
 	im.img, im.loadErr = nil, nil
 	im.loaded = false
 	im.InvalidateLayout()
-	deliver, ok := loopInvoker()
+	deliver, ok := loopAnswer()
 	if !ok {
 		img, err := decodeImageData(data, "pasted "+mime)
 		im.applyPaste(gen, img, err)
@@ -480,7 +507,7 @@ func (im *Image) ensureSettled(box render.Rect, fit render.ImageScale) {
 		return
 	}
 	src, gen := im.src, im.gen
-	deliver, ok := loopInvoker()
+	deliver, ok := loopAnswer()
 	if !ok {
 		im.applyLoad(gen, loadImage(src, box, fit))
 		return

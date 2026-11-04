@@ -8,7 +8,7 @@ import (
 
 var (
 	faceEpoch      atomic.Uint64
-	faceAnswerOwed atomic.Pointer[func(func())]
+	faceAnswerOwed atomic.Pointer[loopBridge]
 )
 
 // FontFaceResolved tells the widgets a fallback chain has a new face: text
@@ -25,7 +25,7 @@ func FontFaceResolved() {
 	if faceAnswerOwed.Swap(p) == p {
 		return
 	}
-	(*p)(func() {
+	p.deliver(func() {
 		faceAnswerOwed.CompareAndSwap(p, nil)
 		faceEpoch.Add(1)
 		bumpStyleGen("font fallback")

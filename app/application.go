@@ -952,6 +952,9 @@ func (a *Application) tick(step func() error, now time.Time) error {
 			// Not configured yet; the configure event wakes the park.
 			continue
 		}
+		if w.holdsFirstFrame(now) {
+			continue
+		}
 		// Start the enter tween on the first usable pass, before the
 		// first draw, so the window's first frame sits at reveal 0.
 		w.enterIfDue()
@@ -966,6 +969,7 @@ func (a *Application) tick(step func() error, now time.Time) error {
 				// socket) classifies exactly like a dispatch one.
 				return a.loopError(w.drawErr)
 			}
+			w.shown = true
 		}
 	}
 	a.armTrim()
@@ -976,10 +980,13 @@ func (a *Application) tick(step func() error, now time.Time) error {
 		return ErrClosed
 	}
 
-	var tipNext, repNext, animFrame time.Time
+	var windowNext, repNext, animFrame time.Time
 	for _, w := range a.windows {
-		if t, ok := w.tip.next(); ok && (tipNext.IsZero() || t.Before(tipNext)) {
-			tipNext = t
+		if t, ok := w.tip.next(); ok && (windowNext.IsZero() || t.Before(windowNext)) {
+			windowNext = t
+		}
+		if t, ok := w.firstFrameDeadline(); ok && (windowNext.IsZero() || t.Before(windowNext)) {
+			windowNext = t
 		}
 	}
 	if t, ok := a.rep.nextDeadline(); ok {
@@ -989,7 +996,7 @@ func (a *Application) tick(step func() error, now time.Time) error {
 	if t, ok := animclock.Next(pace); ok {
 		animFrame = t
 	}
-	wakeAt, _ := nextWake(repNext, animFrame, tipNext, a.queues.nextDeadline(), now)
+	wakeAt, _ := nextWake(repNext, animFrame, windowNext, a.queues.nextDeadline(), now)
 	a.arm(wakeAt)
 	if err := step(); err != nil {
 		// A dead connection (compositor restart, protocol verdict)

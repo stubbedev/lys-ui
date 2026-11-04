@@ -382,7 +382,7 @@ func (in *surfaceInput) pinCursor(shape string) {
 // deadline. Deadlines already due return false: the next loop
 // iteration handles them, and parking for zero duration would only
 // burn a cycle.
-func nextWake(repeat, animFrame, tipNext, timers, now time.Time) (time.Time, bool) {
+func nextWake(repeat, animFrame, windowNext, timers, now time.Time) (time.Time, bool) {
 	wake := time.Time{}
 	found := false
 	consider := func(t time.Time) {
@@ -395,7 +395,7 @@ func nextWake(repeat, animFrame, tipNext, timers, now time.Time) (time.Time, boo
 	}
 	consider(repeat)
 	consider(animFrame)
-	consider(tipNext)
+	consider(windowNext)
 	consider(timers)
 	return wake, found
 }
