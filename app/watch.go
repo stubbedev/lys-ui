@@ -239,5 +239,8 @@ func (a *Application) endedChan() chan struct{} {
 func (a *Application) endLoop() {
 	ch := a.endedChan()
 	a.endedOnce.Do(func() { close(ch) })
+	if a.removeInvoker != nil {
+		a.removeInvoker()
+	}
 	widget.StopAssetLoads()
 }

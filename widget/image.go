@@ -88,23 +88,25 @@ var invoker atomic.Pointer[func(func())]
 
 // SetInvoker installs the function asynchronous image loads use to run
 // their completion on the event-loop goroutine; app calls it with
-// Application.Invoke. Nil removes the bridge.
-func SetInvoker(fn func(func())) {
+// Application.Invoke. Nil removes the bridge. The returned function
+// removes this one and leaves a later install in place.
+func SetInvoker(fn func(func())) (remove func()) {
 	if fn == nil {
 		invoker.Store(nil)
-		return
+		return func() {}
 	}
 	invoker.Store(&fn)
+	return func() { invoker.CompareAndSwap(&fn, nil) }
 }
 
 func hasInvoker() bool { return invoker.Load() != nil }
 
-func invoke(fn func()) {
-	if p := invoker.Load(); p != nil {
-		(*p)(fn)
-		return
+func loopInvoker() (deliver func(func()), ok bool) {
+	p := invoker.Load()
+	if p == nil {
+		return nil, false
 	}
-	fn()
+	return *p, true
 }
 
 // Image paints a raster image - album art, an avatar, a rendered
@@ -428,7 +430,8 @@ func (im *Image) PasteImage(data []byte, mime string) {
 	im.img, im.loadErr = nil, nil
 	im.loaded = false
 	im.InvalidateLayout()
-	if !hasInvoker() {
+	deliver, ok := loopInvoker()
+	if !ok {
 		img, err := decodeImageData(data, "pasted "+mime)
 		im.applyPaste(gen, img, err)
 		return
@@ -436,7 +439,7 @@ func (im *Image) PasteImage(data []byte, mime string) {
 	im.loading = true
 	go func() {
 		img, err := decodeImageData(data, "pasted "+mime)
-		invoke(func() { im.applyPaste(gen, img, err) })
+		deliver(func() { im.applyPaste(gen, img, err) })
 	}()
 }
 
@@ -478,14 +481,15 @@ func (im *Image) ensureSettled(box render.Rect, fit render.ImageScale) {
 		return
 	}
 	src, gen := im.src, im.gen
-	if !hasInvoker() {
+	deliver, ok := loopInvoker()
+	if !ok {
 		im.applyLoad(gen, loadImage(src, box, fit))
 		return
 	}
 	im.loading = true
 	go func() {
 		res := loadImage(src, box, fit)
-		invoke(func() { im.applyLoad(gen, res) })
+		deliver(func() { im.applyLoad(gen, res) })
 	}()
 }
 

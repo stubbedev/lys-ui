@@ -15,6 +15,7 @@ type assetJob struct {
 	key     any
 	load    func()
 	waiters []func()
+	deliver func(func())
 }
 
 // assets runs the decodes paints ask for, in order, on one goroutine
@@ -40,19 +41,20 @@ func newAssetQueue() *assetQueue {
 // done on the loop for each asker. Without an invoker there is no loop
 // to answer on, and both run inline.
 func loadAsset(key any, load, done func()) {
-	if !hasInvoker() {
+	deliver, ok := loopInvoker()
+	if !ok {
 		load()
 		done()
 		return
 	}
-	if dropped := assets.add(key, load, done); dropped != nil {
+	if dropped := assets.add(key, load, done, deliver); dropped != nil {
 		answer(dropped)
 	}
 }
 
 // add queues the job, or joins the one already there, and returns the
-// waiters of a job the bound dropped.
-func (q *assetQueue) add(key any, load, done func()) (dropped []func()) {
+// job the bound dropped.
+func (q *assetQueue) add(key any, load, done func(), deliver func(func())) (dropped *assetJob) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if j, ok := q.jobs[key]; ok {
@@ -63,9 +65,9 @@ func (q *assetQueue) add(key any, load, done func()) (dropped []func()) {
 		oldest := q.queue[0]
 		q.queue = slices.Delete(q.queue, 0, 1)
 		delete(q.jobs, oldest.key)
-		dropped = oldest.waiters
+		dropped = oldest
 	}
-	j := &assetJob{key: key, load: load, waiters: []func(){done}}
+	j := &assetJob{key: key, load: load, waiters: []func(){done}, deliver: deliver}
 	q.jobs[key] = j
 	q.queue = append(q.queue, j)
 	if !q.running {
@@ -85,9 +87,8 @@ func (q *assetQueue) run() {
 		j.load()
 		q.mu.Lock()
 		delete(q.jobs, j.key)
-		waiters := j.waiters
 		q.mu.Unlock()
-		answer(waiters)
+		answer(j)
 		q.mu.Lock()
 	}
 	q.running = false
@@ -96,9 +97,9 @@ func (q *assetQueue) run() {
 
 // answer runs the waiters on the loop. A dropped job answers too: whoever
 // still paints the asset asks again.
-func answer(waiters []func()) {
-	invoke(func() {
-		for _, w := range waiters {
+func answer(j *assetJob) {
+	j.deliver(func() {
+		for _, w := range j.waiters {
 			w()
 		}
 	})

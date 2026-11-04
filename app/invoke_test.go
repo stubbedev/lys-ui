@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/icons"
 	"github.com/stubbedev/lys-ui/internal/surfx"
+	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -334,5 +336,18 @@ func TestSetSurfaceMotion(t *testing.T) {
 	a.SetSurfaceMotion(true)
 	if st := surfx.Plan(surfx.KindOverlay, true); !surfx.Enabled() || st.Enter.Spring == nil {
 		t.Error("surface motion on did not restore the overlay spring")
+	}
+}
+
+func TestAnEndedLoopLeavesIconsPaintingInline(t *testing.T) {
+	t.Cleanup(func() { widget.SetInvoker(nil) })
+	a := NewApplication(&wlsession.Session{})
+	a.endLoop()
+	ic := widget.NewSVGIcon([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#e04020"/></svg>`), 16)
+	ic.Arrange(render.Rect{W: 16, H: 16})
+	data := make([]byte, render.Stride(16)*16)
+	ic.Paint(render.New(data, render.Stride(16), 16, 16))
+	if slices.Max(data) == 0 {
+		t.Error("an icon painted after the loop ended waits on a loop that will never answer")
 	}
 }

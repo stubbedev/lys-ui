@@ -110,6 +110,7 @@ type Application struct {
 	gtkIniOnce       sync.Once
 	gtkIni           gtksettings.Settings
 	stopMotionFollow func()
+	removeInvoker    func()
 	lockWatchers     []*func(Locks)
 	stopIconFollow   func()
 	// windowIcons (windowicon.go): per-window overrides and the app
@@ -217,7 +218,7 @@ func NewApplication(sess *wlsession.Session) *Application {
 	a.OnStop(func() { a.dnd.Stop() })
 	// Async image loads (widget.Image file/URL sources) deliver through
 	// the loop queue - the only sanctioned bridge (docs/threading.md).
-	widget.SetInvoker(a.Invoke)
+	a.removeInvoker = widget.SetInvoker(a.Invoke)
 	// Stylesheet files hot-reload through an inotify watch on the loop:
 	// the widget package cannot reach it, so the app lends it one, and
 	// nothing polls.

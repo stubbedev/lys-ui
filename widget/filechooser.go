@@ -139,14 +139,15 @@ func osDirSource(dir string) ([]FileEntry, error) {
 // runOffLoop runs load on a goroutine of its own and then done on the
 // loop, or both inline without an invoker. load touches no widget.
 func runOffLoop(load, done func()) {
-	if !hasInvoker() {
+	deliver, ok := loopInvoker()
+	if !ok {
 		load()
 		done()
 		return
 	}
 	go func() {
 		load()
-		invoke(done)
+		deliver(done)
 	}()
 }
 
