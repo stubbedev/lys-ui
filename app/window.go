@@ -125,7 +125,11 @@ type hostWindow struct {
 	// scaleApplied records that the wire scale state went out at least
 	// once, so the first draw publishes it when the surface had no size
 	// to scale at creation time.
-	scaleApplied bool
+	scaleApplied   bool
+	scaleKnown     bool
+	notedRoot      widget.Widget
+	notedFrac      uint32
+	scaleListeners []*func(num, denom int)
 	// dnd is the application's drag-and-drop controller; its Bind
 	// lifetime matches the window's.
 	dnd    *dragdrop.Controller
@@ -291,7 +295,8 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 	// fractional protocols the compositor's preferred_scale events (the
 	// initial one included) land in rescale; without them the window
 	// keeps the integer scale it was created with.
-	w.sc = scale.New(sess, host.HostSurface(), w.rescale)
+	sc := scale.New(sess, host.HostSurface(), w.rescale)
+	w.sc, w.scaleKnown = sc, !sc.Fractional()
 	input := &surfaceInput{
 		sess: sess, surf: host.HostSurface(),
 		router: w.router, tip: w.tip,
@@ -629,7 +634,15 @@ func (w *hostWindow) reportSize(bw, bh int) {
 // a resize does. frac120 is the 120-based preferred scale (150 is 1.25);
 // zero is not a scale and is ignored.
 func (w *hostWindow) rescale(frac120 uint32) {
-	if frac120 == 0 || frac120 == w.frac120 {
+	if frac120 == 0 {
+		return
+	}
+	known := w.scaleKnown
+	w.scaleKnown = true
+	if frac120 == w.frac120 {
+		if !known {
+			w.noteScale()
+		}
 		return
 	}
 	w.frac120 = frac120
@@ -651,6 +664,8 @@ func (w *hostWindow) rescale(frac120 uint32) {
 	w.dirty = true
 	debug.Log("frame", "rescale %d/120: buffers %d px per logical px",
 		frac120, frac120)
+	w.noteScale()
+	w.scaleChanged()
 }
 
 // surfaceHandle is the wire-facing half of the host surface: the
@@ -868,6 +883,7 @@ func (w *hostWindow) draw() bool {
 	// so the drain below sees moves from this frame too. All tree
 	// coordinates are logical pixels.
 	w.hostRoot()
+	w.noteScale()
 	w.router.Root.Arrange(render.Rect{X: 0, Y: 0, W: bw, H: bh})
 	// Arranging a new subtree parents it, and a widget first measured
 	// without ancestors resolved no scoped stylesheet: settle the layout

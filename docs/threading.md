@@ -52,6 +52,11 @@ a paint reads the disk. Without an `Application` the load runs inline, and
 a test that paints under one waits with `widget.WaitAssetLoads`, then lets
 the loop take a pass.
 
+A window passes the device scale the compositor reports, before its first
+frame, to its tree through `widget.SetDeviceScale`, so an icon decodes for
+that scale ahead of its first paint and again on every change, while the
+raster on show stays until its replacement is decoded.
+
 A fallback chain (`app.FontFallback`) resolves a rune its faces lack on a
 goroutine of its own, and shapes it with the primary face meanwhile. The
 answer comes back through `Invoke`: text shaped before it shapes again, and

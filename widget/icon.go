@@ -77,7 +77,9 @@ type Icon struct {
 	retint iconRetint
 	// decoded is a file or SVG source's natural raster and the box it
 	// was decoded for; a theme icon's lives in the icons.Cache.
-	decoded iconDecoded
+	decoded     iconDecoded
+	prepared    iconBox
+	preparedGen uint64
 }
 
 // iconBox is what a decode rasterizes for: the source's name when it has
@@ -315,6 +317,9 @@ func (i *Icon) Measure(axis Axis, forSize int) Sizes {
 func (i *Icon) Arrange(r render.Rect) {
 	border, _ := boxRects(boxOf(i.style(i), render.Insets{}), r)
 	i.node.Arrange(border)
+	if frac := styleRootOf(&i.node).deviceScale; frac != 0 {
+		i.prepare(frac)
+	}
 }
 
 // Paint draws the icon centered in the content box, as GtkImage

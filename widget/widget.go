@@ -191,7 +191,8 @@ type node struct {
 	anchored    []Widget
 	// viewport is the @media viewport a style root's window reported
 	// (SetMediaViewportFor); zero falls back to the global one.
-	viewport struct{ w, h int }
+	viewport    struct{ w, h int }
+	deviceScale uint32
 
 	// style identity: the element name (a constructor-set override and
 	// the type-derived default, resolved once), the `#id`, the classes

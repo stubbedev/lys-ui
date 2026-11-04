@@ -143,6 +143,7 @@ type Popover struct {
 	// surface, teardown its no-tween close; parent and children link a
 	// nested chain (loop only).
 	host     Host
+	frac     uint32
 	pop      *popup.Popup
 	teardown func()
 	parent   *Popover
@@ -623,10 +624,12 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	// holds focus. Content the app mutates from Invoke repaints on the
 	// next pass, and nothing paints from a second goroutine.
 	widget.SetSurfaceHost(cfg.Content, surfaceHost{a: a, host: host, parent: p, router: router})
+	p.frac = a.fracFor(host)
+	widget.SetDeviceScale(cfg.Content, int(p.frac), scale.Denom)
 	op := &openPopover{
 		host:       host,
 		pop:        pop,
-		painter:    pop.NewPainter(a.sess, a.popupRenderer(), a.fracFor(host), keyRoot, widget.Current().Surface),
+		painter:    pop.NewPainter(a.sess, a.popupRenderer(), p.frac, keyRoot, widget.Current().Surface),
 		router:     router,
 		keyRoot:    keyRoot,
 		popover:    p,

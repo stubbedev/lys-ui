@@ -312,11 +312,13 @@ func (a *Application) rebuildLayer(old *hostWindow) error {
 }
 
 // carryOver moves loop-side state from a window's old loop record to
-// its rebuilt one: dialog exemption, the modal block, and keyboard
-// focus inside the tree. A focus that went unfocusable since it was
-// set stays behind, as the old router would have dropped it.
+// its rebuilt one: dialog exemption, the modal block, the scale
+// listeners, and keyboard focus inside the tree. A focus that went
+// unfocusable since it was set stays behind, as the old router would
+// have dropped it.
 func (a *Application) carryOver(old, hw *hostWindow) error {
 	hw.isDialog, hw.blocked = old.isDialog, old.blocked
+	hw.scaleListeners = old.scaleListeners
 	f := old.router.Focused()
 	if f == nil {
 		return nil
