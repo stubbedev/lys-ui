@@ -65,6 +65,8 @@ func (f *fakeBus) Signal(ch chan<- *dbus.Signal) {
 	f.ch = ch
 }
 
+func (f *fakeBus) AddMatch(context.Context, string, dbus.ObjectPath) error { return nil }
+
 func (f *fakeBus) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

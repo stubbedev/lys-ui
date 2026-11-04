@@ -90,6 +90,8 @@ type Bus interface {
 	Call(ctx context.Context, dest string, path dbus.ObjectPath, method string, flags dbus.Flags, ret any, args ...any) error
 	// Signal routes the signals the bus delivers to ch.
 	Signal(ch chan<- *dbus.Signal)
+	// AddMatch asks the bus for the broadcast signals of iface at path.
+	AddMatch(ctx context.Context, iface string, path dbus.ObjectPath) error
 	Close() error
 }
 
@@ -105,6 +107,10 @@ func (b connBus) Call(ctx context.Context, dest string, path dbus.ObjectPath, me
 }
 
 func (b connBus) Signal(ch chan<- *dbus.Signal) { b.conn.Signal(ch) }
+
+func (b connBus) AddMatch(ctx context.Context, iface string, path dbus.ObjectPath) error {
+	return b.conn.AddMatchSignalContext(ctx, dbus.WithMatchInterface(iface), dbus.WithMatchObjectPath(path))
+}
 
 func (b connBus) Close() error { return b.conn.Close() }
 
@@ -236,6 +242,15 @@ func (n *Notifier) dialAndProbe() {
 		return
 	}
 	n.subscribe(bus)
+	iface, path := portalIface, portalPath
+	if mode == transportClassic {
+		iface, path = classicIface, classicPath
+	}
+	ctx, cancel := context.WithTimeout(n.base, callTimeout)
+	defer cancel()
+	if err := bus.AddMatch(ctx, iface, path); err != nil {
+		logutil.L().Debug("notify: no signal match; actions and closes will not arrive", "iface", iface, "err", err)
+	}
 }
 
 // probe picks the transport by owned names.
@@ -277,13 +292,18 @@ func (n *Notifier) subscribe(bus Bus) {
 				if len(sig.Body) >= 2 {
 					id, _ := sig.Body[0].(uint32)
 					action, _ := sig.Body[1].(string)
-					n.fireAction(n.classicID(id), action)
+					if known := n.classicID(id); known != "" {
+						n.fireAction(known, action)
+					}
 				}
 			case classicClosedSig:
 				if len(sig.Body) >= 2 {
 					id, _ := sig.Body[0].(uint32)
 					reason, _ := sig.Body[1].(uint32)
-					n.fireClosed(n.classicID(id), CloseReason(min(reason, uint32(ReasonUnspecified))))
+					if known := n.classicID(id); known != "" {
+						n.fireClosed(known, CloseReason(min(reason, uint32(ReasonUnspecified))))
+						n.forgetClassic(id)
+					}
 				}
 			}
 		}
@@ -431,6 +451,13 @@ func (n *Notifier) classicID(classic uint32) string {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return n.classicIDs[classic]
+}
+
+func (n *Notifier) forgetClassic(classic uint32) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	delete(n.classicOf, n.classicIDs[classic])
+	delete(n.classicIDs, classic)
 }
 
 func itoa(v int64) string {
