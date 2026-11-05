@@ -34,6 +34,12 @@ const (
 	portalDeactivated = portalShortcutsIface + ".Deactivated"
 )
 
+// portalShortcut is one entry of BindShortcuts' a(sa{sv}).
+type portalShortcut struct {
+	ID         string
+	Properties map[string]dbus.Variant
+}
+
 // portalShortcuts is the application's one portal shortcuts session,
 // lazily created on the first portal registration.
 type portalShortcuts struct {
@@ -154,15 +160,16 @@ func (p *portalShortcuts) bindOne(id, description, trigger string) error {
 	if session == "" {
 		return ErrGlobalShortcutsUnavailable
 	}
-	shortcut := map[string]dbus.Variant{"id": dbus.MakeVariant(id)}
+	shortcut := portalShortcut{ID: id, Properties: map[string]dbus.Variant{}}
 	if description != "" {
-		shortcut["description"] = dbus.MakeVariant(description)
+		shortcut.Properties["description"] = dbus.MakeVariant(description)
 	}
 	if trigger != "" {
-		shortcut["preferred_trigger"] = dbus.MakeVariant(trigger)
+		shortcut.Properties["preferred_trigger"] = dbus.MakeVariant(trigger)
 	}
+	const noParentWindow = ""
 	resp, err := p.call(portalBindShortcuts, map[string]dbus.Variant{},
-		session, []map[string]dbus.Variant{shortcut})
+		session, []portalShortcut{shortcut}, noParentWindow)
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -141,11 +142,15 @@ func TestPortalTokensAreObjectPathElements(t *testing.T) {
 	}
 }
 
+const bindShortcutsSignature = "oa(sa{sv})sa{sv}"
+
 type mockShortcuts struct {
 	d       *mockDesktop
 	hold    chan struct{}
 	entered chan struct{}
 	binds   atomic.Int32
+	mu      sync.Mutex
+	bound   []portalShortcut
 }
 
 func (m *mockShortcuts) CreateSession(sender dbus.Sender, opts map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
@@ -158,8 +163,14 @@ func (m *mockShortcuts) CreateSession(sender dbus.Sender, opts map[string]dbus.V
 	return path, nil
 }
 
-func (m *mockShortcuts) BindShortcuts(sender dbus.Sender, _ dbus.ObjectPath, _ []map[string]dbus.Variant, opts map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
+func (m *mockShortcuts) BindShortcuts(msg dbus.Message, sender dbus.Sender, _ dbus.ObjectPath, shortcuts []portalShortcut, _ string, opts map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
+	if sig, _ := msg.Headers[dbus.FieldSignature].Value().(dbus.Signature); sig.String() != bindShortcutsSignature {
+		return "", dbus.NewError("org.freedesktop.DBus.Error.InvalidArgs", []any{"BindShortcuts takes " + bindShortcutsSignature + ", not " + sig.String()})
+	}
 	m.binds.Add(1)
+	m.mu.Lock()
+	m.bound = append(m.bound, shortcuts...)
+	m.mu.Unlock()
 	path := m.d.handle(sender, opts)
 	m.d.respond(sender, path, 0, map[string]dbus.Variant{})
 	return path, nil
@@ -208,6 +219,14 @@ func TestRegisterGlobalShortcutReturnsWhileThePortalIsStuck(t *testing.T) {
 	}
 	if m.binds.Load() != 1 {
 		t.Errorf("%d binds, want one", m.binds.Load())
+	}
+	m.mu.Lock()
+	bound := m.bound
+	m.mu.Unlock()
+	if len(bound) != 1 || bound[0].ID != "ptt" ||
+		bound[0].Properties["description"].Value() != "talk" ||
+		bound[0].Properties["preferred_trigger"].Value() != "CTRL+T" {
+		t.Errorf("the portal bound %+v, want ptt with its description and trigger", bound)
 	}
 	a.shortcuts.dispatch(&dbus.Signal{Name: portalActivated, Body: []any{dbus.ObjectPath("/s"), "ptt", uint64(1_000_000)}})
 	pumpUntil(t, a, func() bool { return len(pressed) == 1 })
