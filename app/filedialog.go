@@ -143,23 +143,20 @@ func (a *Application) fileDialog(parent *Window, mode widget.FileMode, defTitle,
 	}
 	checkOverwrite := func(path string) {
 		askingDisk = true
-		go func() {
-			_, statErr := os.Stat(path)
-			a.Invoke(func() {
-				askingDisk = false
-				if d.Closed() {
-					return
-				}
-				if statErr != nil {
-					replaceAccepted = true
-					d.Respond("ok")
-					return
-				}
-				if err := askReplace(); err != nil {
-					chooser.SetStatus(strings.ReplaceAll(widget.Tr("could not ask to replace the file: {error}"), "{error}", err.Error()))
-				}
-			})
-		}()
+		chooser.ProbeExists(path, func(exists bool) {
+			askingDisk = false
+			if d.Closed() {
+				return
+			}
+			if !exists {
+				replaceAccepted = true
+				d.Respond("ok")
+				return
+			}
+			if err := askReplace(); err != nil {
+				chooser.SetStatus(strings.ReplaceAll(widget.Tr("could not ask to replace the file: {error}"), "{error}", err.Error()))
+			}
+		})
 	}
 	chooser.OnApply = func(paths []string) {
 		chosen = paths

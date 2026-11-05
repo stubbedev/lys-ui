@@ -417,3 +417,65 @@ func TestFileChooserShowsAListingFailure(t *testing.T) {
 		t.Errorf("status = %q after a good listing", got)
 	}
 }
+
+func countedStat(release chan struct{}, exists map[string]bool) (StatSource, *atomic.Int32, *atomic.Int32) {
+	loop := goroutineID()
+	var stats, onLoop atomic.Int32
+	return func(path string) error {
+		stats.Add(1)
+		if goroutineID() == loop {
+			onLoop.Add(1)
+		} else {
+			<-release
+		}
+		if exists[path] {
+			return nil
+		}
+		return os.ErrNotExist
+	}, &stats, &onLoop
+}
+
+func saveProbe(t *testing.T, name string) (exists, answered bool, stats, onLoop int32) {
+	t.Helper()
+	loop := installChooserLoop(t)
+	c := NewFileChooser(chooserFace(t), 14, FileModeSave, "/home/Documents", chooserFilters)
+	c.SetSource(fixtureSource)
+	release := make(chan struct{})
+	stat, statCount, onLoopCount := countedStat(release, map[string]bool{"/home/Documents/report.pdf": true})
+	c.SetStatSource(stat)
+	c.SetSaveName(name)
+	paths, ok := c.Apply()
+	if !ok || len(paths) != 1 {
+		t.Fatalf("Apply = %v, %v", paths, ok)
+	}
+	c.ProbeExists(paths[0], func(e bool) { exists, answered = e, true })
+	if answered {
+		t.Fatal("the probe answered before its stat was released")
+	}
+	close(release)
+	deadline := time.Now().Add(10 * time.Second)
+	for !answered && time.Now().Before(deadline) {
+		loop.pumpFor(t, 1)
+	}
+	return exists, answered, statCount.Load(), onLoopCount.Load()
+}
+
+func TestASaveOntoAnExistingNameStatsOffTheLoop(t *testing.T) {
+	exists, answered, stats, onLoop := saveProbe(t, "report.pdf")
+	if !answered || !exists {
+		t.Errorf("probe answered %v exists %v, want an existing file", answered, exists)
+	}
+	if stats != 1 || onLoop != 0 {
+		t.Errorf("%d stats, %d on the loop, want one off the loop", stats, onLoop)
+	}
+}
+
+func TestASaveOntoANewNameIsReportedMissing(t *testing.T) {
+	exists, answered, stats, onLoop := saveProbe(t, "new.pdf")
+	if !answered || exists {
+		t.Errorf("probe answered %v exists %v, want a missing file", answered, exists)
+	}
+	if stats != 1 || onLoop != 0 {
+		t.Errorf("%d stats, %d on the loop, want one off the loop", stats, onLoop)
+	}
+}

@@ -39,6 +39,7 @@ type FileChooser struct {
 	filters []FileFilter
 	filter  int
 	source  DirSource
+	stat    StatSource
 	recents func() []string
 
 	dir         string
@@ -103,6 +104,15 @@ type FileEntry struct {
 // runs off the loop goroutine and must touch no widget.
 type DirSource func(dir string) ([]FileEntry, error)
 
+// StatSource reports whether a path exists by returning nil; like a
+// DirSource it runs off the loop goroutine and must touch no widget.
+type StatSource func(path string) error
+
+func osStatSource(path string) error {
+	_, err := os.Stat(path)
+	return err
+}
+
 const maxChooserListings = 8
 
 // osDirSource is the default listing: os.ReadDir with dot files
@@ -157,7 +167,7 @@ func NewFileChooser(face render.Font, sizePx float64, mode FileMode, startDir st
 	}
 	c := &FileChooser{
 		face: face, sizePx: sizePx, mode: mode,
-		filters: filters, source: osDirSource,
+		filters: filters, source: osDirSource, stat: osStatSource,
 		dir: startDir,
 	}
 	th := Current()
@@ -219,6 +229,23 @@ func (c *FileChooser) SetSource(src DirSource) {
 	}
 	c.source = src
 	c.refresh()
+}
+
+// SetStatSource replaces the existence check ProbeExists runs (tests,
+// portals).
+func (c *FileChooser) SetStatSource(src StatSource) {
+	if src == nil {
+		src = osStatSource
+	}
+	c.stat = src
+}
+
+// ProbeExists checks off the loop whether path exists, as a save asks
+// before replacing a file, and calls done on the loop with the answer.
+func (c *FileChooser) ProbeExists(path string, done func(exists bool)) {
+	stat := c.stat
+	var err error
+	runOffLoop(func() { err = stat(path) }, func() { done(err == nil) })
 }
 
 // SetRecentsSource wires the recents view: paths lists the recent
