@@ -913,3 +913,75 @@ func TestAScrollOfBaseRowsBlitsAndMatchesAWholePaint(t *testing.T) {
 		assertShowsWholePaint(t, h, step)
 	}
 }
+
+func platedScrollWindow(t *testing.T, opaque bool) (*paintHarness, *widget.Scroll) {
+	t.Helper()
+	h, sc, _ := scrollWindow(t)
+	m := widget.NewMorph(h.wnd.router.Root)
+	m.SetRadius(8)
+	m.SetPlate(6, func(cv *render.Canvas, content render.Rect) {
+		cv.RoundedRect(content, 8, render.RGB(30, 34, 40))
+	})
+	m.SetPlateOpaque(opaque)
+	h.wnd.router.Root = m
+	return h, sc
+}
+
+func TestAScrollOnAnOpaquePlateMovesAndMatchesAWholePaint(t *testing.T) {
+	h, sc := platedScrollWindow(t, true)
+	h.frame()
+	y := 0
+	nudge := func() { y += 10; sc.SetOffset(0, y) }
+	h.warm(nudge, 4)
+	for step := range 4 {
+		nudge()
+		painted, _ := h.frame()
+		if limit := 400 * 10 * 3; painted > limit {
+			t.Errorf("step %d on an opaque plate painted %d px, want its strip and the scrollbar, at most %d", step, painted, limit)
+		}
+		assertShowsWholePaint(t, h, step)
+	}
+}
+
+func TestAScrollOnAPlateNotDeclaredOpaqueRepaintsItsView(t *testing.T) {
+	h, sc := platedScrollWindow(t, false)
+	h.frame()
+	y := 0
+	nudge := func() { y += 10; sc.SetOffset(0, y) }
+	h.warm(nudge, 4)
+	nudge()
+	if painted, _ := h.frame(); painted < sc.Bounds().W*sc.Bounds().H {
+		t.Errorf("a step on a plate that may not be flat painted %d px, want the whole view", painted)
+	}
+	assertShowsWholePaint(t, h, 0)
+}
+
+func TestAScrollReachingAnOpaquePlatesCornersMatchesAWholePaint(t *testing.T) {
+	face, err := Font("sans", 14)
+	if err != nil {
+		t.Skip(err)
+	}
+	col := widget.NewBox(widget.Column, 0, 0)
+	for i := range 800 {
+		col.Append(widget.NewLabel(face, 14, fmt.Sprintf("row %d reaching the corner", i), 0), false)
+	}
+	sc := widget.NewScroll(col)
+	m := widget.NewMorph(sc)
+	m.SetRadius(16)
+	m.SetPlate(6, func(cv *render.Canvas, content render.Rect) {
+		cv.RoundedRect(content, 16, render.RGB(30, 34, 40))
+	})
+	m.SetPlateOpaque(true)
+	h := newPaintHarness(m, 400, 300)
+	h.frame()
+	y := 0
+	for step, d := range []int{10, 3, 25, 10, -7, 40, -12, 10} {
+		y += d
+		sc.SetOffset(0, y)
+		painted, _ := h.frame()
+		if limit := 400 * 120; painted > limit {
+			t.Errorf("step %d painted %d px, want the strip and the corners, not the view", step, painted)
+		}
+		assertShowsWholePaint(t, h, step)
+	}
+}

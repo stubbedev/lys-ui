@@ -33,8 +33,12 @@ type Morph struct {
 	// the unrolled part, so the elevation follows the visible shape.
 	inset int
 	plate func(cv *render.Canvas, content render.Rect)
-	layer *render.Layer
-	inner *render.Layer
+	// plateOpaque: the plate fills the content rect with one opaque
+	// color, rounded no more than radius, so a scroll inside it can copy
+	// its pixels.
+	plateOpaque bool
+	layer       *render.Layer
+	inner       *render.Layer
 	// compositorFade leaves the fade to whoever applies Fade to the
 	// surface; see SetCompositorFade.
 	compositorFade bool
@@ -147,6 +151,40 @@ func (m *Morph) SetRadius(r int) {
 func (m *Morph) SetPlate(inset int, plate func(cv *render.Canvas, content render.Rect)) {
 	m.inset, m.plate = inset, plate
 	m.Invalidate()
+}
+
+// SetPlateOpaque declares that the plate fills the content rect with one
+// opaque color, its corners rounded no more than the morph's radius: a
+// Scroll inside it may then move its pixels on a step instead of
+// repainting its view, as it does in a window.
+func (m *Morph) SetPlateOpaque(opaque bool) {
+	m.plateOpaque = opaque
+	m.Invalidate()
+}
+
+// plateCorners reports whether the plate is one flat color under area
+// but for its rounded corners, and appends the corners area overlaps to
+// corners.
+func (m *Morph) plateCorners(area render.Rect, corners []render.Rect) ([]render.Rect, bool) {
+	if m.plate == nil {
+		return corners, true
+	}
+	content := m.content()
+	if !m.plateOpaque || area.Intersect(content) != area {
+		return corners, false
+	}
+	r := m.radius
+	for _, c := range [...]render.Rect{
+		{X: content.X, Y: content.Y, W: r, H: r},
+		{X: content.X + content.W - r, Y: content.Y, W: r, H: r},
+		{X: content.X, Y: content.Y + content.H - r, W: r, H: r},
+		{X: content.X + content.W - r, Y: content.Y + content.H - r, W: r, H: r},
+	} {
+		if c = c.Intersect(area); !c.Empty() {
+			corners = append(corners, c)
+		}
+	}
+	return corners, true
 }
 
 // content is the content rect: the bounds less the plate inset.

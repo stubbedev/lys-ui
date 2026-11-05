@@ -28,6 +28,11 @@ var (
 	walkClipped    bool
 	walkShift      viewShift
 	walkShiftNext  viewShift
+	// walkPlateCorners are the rounded plate corners under the view the
+	// last blittable check passed over: flat everywhere else, so a move
+	// still copies, and owes them where they are and where it carried
+	// their pixels.
+	walkPlateCorners []render.Rect
 )
 
 type viewShift struct{ dx, dy int }
@@ -166,6 +171,23 @@ func (n *node) drainShift(sh *viewShift, view, area render.Rect, blit bool) {
 	}
 }
 
+// takeShift drains a view's shift as drainShift does, and owes the plate
+// corners a copied view carried over.
+func (n *node) takeShift(sh *viewShift, view, area render.Rect, blit bool) {
+	moved := *sh
+	n.drainShift(sh, view, area, blit)
+	if !blit || !moved.moved() {
+		return
+	}
+	for _, c := range walkPlateCorners {
+		n.extras = append(n.extras, c)
+		if to := shifted(c, moved.dx, moved.dy).Intersect(area); !to.Empty() {
+			n.extras = append(n.extras, to)
+		}
+	}
+	walkPlateCorners = walkPlateCorners[:0]
+}
+
 func flatBehind(n *node, w Widget, area render.Rect) bool {
 	v := n.style(w)
 	if n.sharedTag != "" || n.motion != nil || n.anims != nil || n.trCancel != nil || n.pseudo != nil {
@@ -195,7 +217,12 @@ func clearOfSiblings(p Widget, self Widget, area render.Rect) bool {
 	case *Scroll:
 		return true
 	case *Morph:
-		return v.reveal >= 1 && v.plate == nil
+		if v.reveal < 1 {
+			return false
+		}
+		var ok bool
+		walkPlateCorners, ok = v.plateCorners(area, walkPlateCorners)
+		return ok
 	default:
 		return false
 	}
@@ -263,8 +290,10 @@ func (s *Scroll) takeDamage() (bounds render.Rect, extra []render.Rect, dirty bo
 		s.invalid = true
 	}
 	_, both := s.gutterStable()
-	blit := s.shift.moved() && !both && s.overshoot == [2]float64{} && s.blittable(s, s.contentArea())
-	s.drainShift(&s.shift, s.view, s.contentArea(), blit)
+	area := s.contentArea()
+	walkPlateCorners = walkPlateCorners[:0]
+	blit := s.shift.moved() && !both && s.overshoot == [2]float64{} && s.blittable(s, area)
+	s.takeShift(&s.shift, s.view, area, blit)
 	return s.node.takeDamage()
 }
 
@@ -280,8 +309,9 @@ func (b *Box) damageClip() (render.Rect, bool) {
 }
 
 func (l *List) takeDamage() (bounds render.Rect, extra []render.Rect, dirty bool) {
+	walkPlateCorners = walkPlateCorners[:0]
 	blit := l.shift.moved() && l.blittable(l, l.view)
-	l.drainShift(&l.shift, l.view, l.view, blit)
+	l.takeShift(&l.shift, l.view, l.view, blit)
 	return l.node.takeDamage()
 }
 
