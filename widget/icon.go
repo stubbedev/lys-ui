@@ -513,7 +513,7 @@ func preloadThemeBox(box iconBox, fallbacks bool) {
 	if fallbacks {
 		name = cache.FallbackName(name)
 	}
-	cache.Preload(name, box.size, box.frac)
+	_ = cache.Preload(name, box.size, box.frac)
 }
 
 var decodeIcon = icons.DecodeIcon
