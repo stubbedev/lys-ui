@@ -86,6 +86,7 @@ func (w *Window) WhenPresented(fn func()) error {
 func (w *Window) requestFrame() {
 	if hw := w.app.hostWindowOf(w); hw != nil {
 		hw.dirty = true
+		hw.stateOwed = true
 	}
 }
 
@@ -135,6 +136,7 @@ func (a *Application) BackgroundBlurAvailable() bool { return a.sess.BlurAvailab
 func (l *LayerWindow) requestFrame() {
 	if hw := l.app.hostWindowOf(l); hw != nil {
 		hw.dirty = true
+		hw.stateOwed = true
 	}
 }
 
@@ -153,6 +155,20 @@ func (a *Application) ringFor(w widget.Widget) {
 		return
 	}
 	_ = a.sess.Bell(nil)
+}
+
+func (a *Application) fadeSurface(root widget.Widget, alpha float64) bool {
+	hw := a.windowOf(root)
+	if hw == nil || hw.styleRoot != root {
+		return false
+	}
+	switch {
+	case hw.win != nil:
+		return hw.win.SetOpacity(alpha) == nil
+	case hw.layer != nil:
+		return hw.layer.SetOpacity(alpha) == nil
+	}
+	return false
 }
 
 // initialHints applies a config's surface hints before the initial

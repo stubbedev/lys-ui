@@ -174,6 +174,7 @@ type hostWindow struct {
 	// instead of a fresh NewScaled struct each time.
 	canvas       render.Canvas
 	dirty        bool
+	stateOwed    bool
 	frame        wlsession.FrameDone
 	framePending bool
 	shown        bool
@@ -914,6 +915,9 @@ func (w *hostWindow) draw() bool {
 		debug.Log("frame", "draw skipped: nothing damaged")
 		w.paintedPixels = 0
 		w.lastDamage = nil
+		if w.stateOwed && w.pool.Front() != nil {
+			return w.commitState()
+		}
 		return true
 	}
 
@@ -1014,6 +1018,7 @@ func (w *hostWindow) draw() bool {
 		w.drawErr = fmt.Errorf("app: commit: %w", err)
 		return false
 	}
+	w.stateOwed = false
 	// The commit just went to the screen through b: b is current now,
 	// and every other pooled buffer lags by what changed here.
 	w.pool.Presented(b, changed)
@@ -1037,6 +1042,21 @@ func (w *hostWindow) draw() bool {
 }
 
 var errNoPresentation = errors.New("app: compositor has no wp_presentation")
+
+func (w *hostWindow) commitState() bool {
+	if err := w.surf.Frame(&w.frame); err != nil {
+		w.drawErr = fmt.Errorf("app: frame callback: %w", err)
+		return false
+	}
+	if err := w.surf.Commit(); err != nil {
+		w.drawErr = fmt.Errorf("app: commit: %w", err)
+		return false
+	}
+	w.stateOwed = false
+	debug.Log("frame", "surface state committed, waiting for callback")
+	w.framePending = true
+	return true
+}
 
 func (w *hostWindow) takeFrame() {
 	if !w.frame.Ready {

@@ -90,8 +90,10 @@ type Revealer struct {
 	// collapse sizes a slide's slot by its progress (SetCollapse);
 	// full is the child's natural size along the slide at the last
 	// Arrange.
-	collapse bool
-	full     Size
+	collapse     bool
+	full         Size
+	surfaceAlpha bool
+	drawnOpaque  bool
 }
 
 // NewRevealer wraps child hidden, fading over 200ms.
@@ -237,6 +239,9 @@ func (r *Revealer) setProgress(p float64) {
 		return
 	}
 	r.progress = p
+	if r.fadesSurface(p) && r.drawnOpaque {
+		return
+	}
 	if r.collapses() {
 		r.InvalidateLayout()
 	}
@@ -247,6 +252,14 @@ func (r *Revealer) setProgress(p float64) {
 	if ink := r.ink(); !ink.Empty() {
 		r.InvalidateRect(ink)
 	}
+}
+
+func (r *Revealer) fadesSurface(alpha float64) bool {
+	if r.shownTransition() != RevealFade {
+		return false
+	}
+	r.surfaceAlpha = fadeSurface(r, alpha)
+	return r.surfaceAlpha
 }
 
 // Measure is the child's size, nothing for a hidden RevealNone, and
@@ -330,6 +343,11 @@ func (r *Revealer) shows() bool {
 // Paint draws the child through the transition at its progress.
 func (r *Revealer) Paint(cv *render.Canvas) {
 	r.painted = render.Rect{}
+	r.drawnOpaque = false
+	if r.surfaceAlpha && r.shownTransition() != RevealFade {
+		fadeSurface(r, 1)
+		r.surfaceAlpha = false
+	}
 	// Only a transformed frame keeps the layer, a full-canvas buffer:
 	// at rest, hidden or fading, the child paints directly.
 	layer := r.layer
@@ -340,9 +358,10 @@ func (r *Revealer) Paint(cv *render.Canvas) {
 	}
 	p := r.progress
 	switch {
-	case r.shownTransition() == RevealNone || p >= 1:
+	case r.shownTransition() == RevealNone || p >= 1 || r.surfaceAlpha:
 		PaintChild(cv, r.child)
 		r.painted = r.bounds
+		r.drawnOpaque = true
 		return
 	case r.shownTransition() == RevealFade:
 		prev := cv.PushAlpha(p)

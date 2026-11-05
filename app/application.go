@@ -238,6 +238,7 @@ func NewApplication(sess *wlsession.Session) *Application {
 	// Rejected input (a key into a read-only field, a value that does
 	// not parse) rings the system bell for the widget's window.
 	widget.SetErrorBell(a.ringFor)
+	widget.SetSurfaceFade(a.fadeSurface)
 	// A GPUArea arranged on screen asks for its presentation surface: a
 	// subsurface of its window (gpuarea.go).
 	widget.SetGPUHost(a.gpuSurfaceFor)

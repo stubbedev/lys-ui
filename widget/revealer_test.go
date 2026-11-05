@@ -13,14 +13,18 @@ import (
 // solidLeaf fills its rect with one color.
 type solidLeaf struct {
 	node
-	sz  Size
-	col render.Color
+	sz     Size
+	col    render.Color
+	paints int
 }
 
 func (s *solidLeaf) Measure(axis Axis, forSize int) Sizes { return FixedSizes(s.sz.Along(axis)) }
 func (s *solidLeaf) Arrange(r render.Rect)                { s.node.Arrange(r) }
-func (s *solidLeaf) Paint(cv *render.Canvas)              { cv.FillRect(s.bounds, s.col) }
-func (s *solidLeaf) HitTest(p Point) Widget               { return s.HitLeaf(s, p) }
+func (s *solidLeaf) Paint(cv *render.Canvas) {
+	s.paints++
+	cv.FillRect(s.bounds, s.col)
+}
+func (s *solidLeaf) HitTest(p Point) Widget { return s.HitLeaf(s, p) }
 
 var (
 	revealBG   = render.RGB(0, 0, 0)
@@ -399,5 +403,103 @@ func TestHiddenRevealerContentTakesNoFocus(t *testing.T) {
 	r.FocusNext()
 	if r.Focused() != Widget(inner) {
 		t.Error("Tab skipped a shown revealer's content")
+	}
+}
+
+func surfaceFadeFor(t *testing.T, root Widget) *[]float64 {
+	t.Helper()
+	alphas := new([]float64)
+	SetSurfaceFade(func(w Widget, a float64) bool {
+		if w != root {
+			return false
+		}
+		*alphas = append(*alphas, a)
+		return true
+	})
+	t.Cleanup(func() { SetSurfaceFade(nil) })
+	return alphas
+}
+
+func driveFrames(c *animClock, r *Revealer) (frames int) {
+	for c.step() {
+		frames++
+		if _, any := CollectDamage(r); any {
+			paintReveal(r)
+		}
+	}
+	return frames
+}
+
+func TestRevealerFadeAtItsSurfaceRootPaintsNoChild(t *testing.T) {
+	c := pinAnimClock(t)
+	r, leaf := revealerAt(t, RevealFade)
+	alphas := surfaceFadeFor(t, r)
+	r.SetRevealed(true)
+	r.Finish()
+	if red := redAt(paintReveal(r), 30, 30); red != 255 {
+		t.Fatalf("revealed red = %d, want full", red)
+	}
+	CollectDamage(r)
+	leaf.paints = 0
+	*alphas = nil
+
+	r.SetRevealed(false)
+	if frames := driveFrames(c, r); frames < 3 {
+		t.Fatalf("the fade ran %d frames", frames)
+	}
+	if leaf.paints != 0 {
+		t.Errorf("a surface fade out painted the child %d times, want 0", leaf.paints)
+	}
+	if n := len(*alphas); n < 3 || (*alphas)[n-1] != 0 {
+		t.Errorf("surface alphas %v, want a run ending at 0", *alphas)
+	}
+	for i := 1; i < len(*alphas); i++ {
+		if (*alphas)[i] > (*alphas)[i-1] {
+			t.Fatalf("surface alphas %v rise during a fade out", *alphas)
+		}
+	}
+
+	*alphas = nil
+	r.SetRevealed(true)
+	driveFrames(c, r)
+	if leaf.paints != 0 {
+		t.Errorf("a surface fade back in painted the child %d times, want 0", leaf.paints)
+	}
+	if n := len(*alphas); n == 0 || (*alphas)[n-1] != 1 {
+		t.Errorf("surface alphas %v, want a run ending at 1", *alphas)
+	}
+}
+
+func TestRevealerFadeWithoutSurfaceAlphaPaintsTheChild(t *testing.T) {
+	c := pinAnimClock(t)
+	r, leaf := revealerAt(t, RevealFade)
+	SetSurfaceFade(func(Widget, float64) bool { return false })
+	t.Cleanup(func() { SetSurfaceFade(nil) })
+	r.SetRevealed(true)
+	r.Finish()
+	paintReveal(r)
+	CollectDamage(r)
+	leaf.paints = 0
+
+	r.SetRevealed(false)
+	advance(c, 50*time.Millisecond)
+	if red := redAt(paintReveal(r), 30, 30); red < 100 || red > 160 {
+		t.Errorf("half-faded red = %d, want about half", red)
+	}
+	if frames := driveFrames(c, r); leaf.paints < frames {
+		t.Errorf("a fade without surface alpha painted the child %d times over %d frames", leaf.paints, frames)
+	}
+}
+
+func TestRevealerLeavingTheSurfaceFadeRestoresItsAlpha(t *testing.T) {
+	c := pinAnimClock(t)
+	r, _ := revealerAt(t, RevealFade)
+	alphas := surfaceFadeFor(t, r)
+	r.SetRevealed(true)
+	advance(c, 50*time.Millisecond)
+	r.SetTransition(RevealZoom)
+	paintReveal(r)
+	if n := len(*alphas); n == 0 || (*alphas)[n-1] != 1 {
+		t.Errorf("surface alphas %v after the fade gave way to a zoom, want the last at 1", *alphas)
 	}
 }
