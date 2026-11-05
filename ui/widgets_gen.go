@@ -3959,6 +3959,18 @@ func (b *FileChooserBuilder) WatchSource(get func() widget.DirSource) *FileChoos
 	return b
 }
 
+// StatSource calls (*widget.FileChooser).SetStatSource.
+func (b *FileChooserBuilder) StatSource(src widget.StatSource) *FileChooserBuilder {
+	b.do(func(s *Scope, w *widget.FileChooser) { w.SetStatSource(src) })
+	return b
+}
+
+// WatchStatSource re-applies SetStatSource with get's value after every update.
+func (b *FileChooserBuilder) WatchStatSource(get func() widget.StatSource) *FileChooserBuilder {
+	b.watch(func(w *widget.FileChooser) { w.SetStatSource(get()) })
+	return b
+}
+
 // Status calls (*widget.FileChooser).SetStatus.
 func (b *FileChooserBuilder) Status(text string) *FileChooserBuilder {
 	b.do(func(s *Scope, w *widget.FileChooser) { w.SetStatus(text) })
@@ -5684,6 +5696,18 @@ func (b *MorphBuilder) Origin(fx float64, fy float64) *MorphBuilder {
 // Plate calls (*widget.Morph).SetPlate.
 func (b *MorphBuilder) Plate(inset int, plate func(cv *render.Canvas, content render.Rect)) *MorphBuilder {
 	b.do(func(s *Scope, w *widget.Morph) { w.SetPlate(inset, plate) })
+	return b
+}
+
+// PlateOpaque calls (*widget.Morph).SetPlateOpaque.
+func (b *MorphBuilder) PlateOpaque(opaque bool) *MorphBuilder {
+	b.do(func(s *Scope, w *widget.Morph) { w.SetPlateOpaque(opaque) })
+	return b
+}
+
+// WatchPlateOpaque re-applies SetPlateOpaque with get's value after every update.
+func (b *MorphBuilder) WatchPlateOpaque(get func() bool) *MorphBuilder {
+	b.watch(func(w *widget.Morph) { w.SetPlateOpaque(get()) })
 	return b
 }
 
