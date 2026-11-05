@@ -38,18 +38,13 @@ func newAssetQueue() *assetQueue {
 }
 
 func loadAsset(key any, load, done func()) {
-	b := invoker.Load()
-	if b == nil {
+	deliver, ok := loopInvoker()
+	if !ok {
 		load()
 		done()
 		return
 	}
-	b.owed.Add(1)
-	answered := func() {
-		b.owed.Add(-1)
-		done()
-	}
-	if dropped := assets.add(key, load, answered, b.deliver); dropped != nil {
+	if dropped := assets.add(key, load, done, deliver); dropped != nil {
 		answer(dropped)
 	}
 }
@@ -135,3 +130,15 @@ func StopAssetLoads() {
 // next pass then applies it. It is what a test that needs a settled frame
 // waits on; a UI loop must never call it.
 func WaitAssetLoads() { assets.wait() }
+
+func owe(root *node) (settle func()) {
+	root.owedAssets++
+	return func() { root.owedAssets-- }
+}
+
+// TreeAssetsOwed reports whether a widget in root's tree has asked for an
+// icon or image whose answer has yet to land on the loop.
+func TreeAssetsOwed(root Widget) bool {
+	n := nodeOf(root)
+	return n != nil && n.owedAssets > 0
+}

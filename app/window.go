@@ -1173,12 +1173,19 @@ func (w *hostWindow) holdsFirstFrame(now time.Time) bool {
 	if w.showBy.IsZero() {
 		w.showBy = now.Add(firstFrameAssetWait)
 	}
-	return widget.AssetLoadsOwed() && now.Before(w.showBy)
+	return w.assetsOwed() && now.Before(w.showBy)
 }
 
 func (w *hostWindow) firstFrameDeadline() (time.Time, bool) {
-	if w.shown || w.showBy.IsZero() || !widget.AssetLoadsOwed() {
+	if w.shown || w.showBy.IsZero() || !w.assetsOwed() {
 		return time.Time{}, false
 	}
 	return w.showBy, true
+}
+
+func (w *hostWindow) assetsOwed() bool {
+	if w.styleRoot != nil {
+		return widget.TreeAssetsOwed(w.styleRoot)
+	}
+	return w.router != nil && w.router.Root != nil && widget.TreeAssetsOwed(w.router.Root)
 }

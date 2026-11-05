@@ -20,7 +20,7 @@ func SetDeviceScale(root Widget, num, denom int) {
 	}
 	walkOwned(root, func(w Widget) {
 		if p, ok := w.(scalePreparer); ok {
-			p.prepare(frac)
+			p.prepare(frac, n)
 		}
 	})
 }
@@ -36,11 +36,11 @@ func DeviceScaleOf(w Widget) (num, denom int) {
 	return int(styleRootOf(n).deviceScale), iconScaleDenom
 }
 
-type scalePreparer interface{ prepare(frac uint32) }
+type scalePreparer interface{ prepare(frac uint32, root *node) }
 
 var _ scalePreparer = (*Icon)(nil)
 
-func (i *Icon) prepare(frac uint32) {
+func (i *Icon) prepare(frac uint32, root *node) {
 	if i.kind == iconStatic {
 		return
 	}
@@ -60,5 +60,5 @@ func (i *Icon) prepare(frac uint32) {
 	if _, ok := i.peek(box); ok {
 		return
 	}
-	i.request(box)
+	i.request(box, root)
 }

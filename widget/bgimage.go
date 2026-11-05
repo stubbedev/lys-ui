@@ -17,7 +17,12 @@ import (
 type cssImage struct {
 	icon    *render.Icon
 	settled bool
-	waiters []Widget
+	waiters []cssWaiter
+}
+
+type cssWaiter struct {
+	w      Widget
+	settle func()
 }
 
 var cssImages = map[string]*cssImage{}
@@ -45,7 +50,11 @@ func requestCSSImage(path string, w Widget) {
 	if img.settled {
 		return
 	}
-	img.waiters = append(img.waiters, w)
+	waiter := cssWaiter{w: w}
+	if n := nodeOf(w); n != nil {
+		waiter.settle = owe(styleRootOf(n))
+	}
+	img.waiters = append(img.waiters, waiter)
 	if !ok {
 		img.load(path)
 	}
@@ -74,11 +83,16 @@ func (img *cssImage) settle(decoded *render.Icon, failed error, path string) {
 	}
 	waiters := img.waiters
 	img.waiters = nil
+	for _, w := range waiters {
+		if w.settle != nil {
+			w.settle()
+		}
+	}
 	if !hasInvoker() {
 		return
 	}
 	for _, w := range waiters {
-		if inv, ok := w.(interface{ Invalidate() }); ok {
+		if inv, ok := w.w.(interface{ Invalidate() }); ok {
 			inv.Invalidate()
 		}
 	}

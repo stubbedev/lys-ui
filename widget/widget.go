@@ -193,6 +193,7 @@ type node struct {
 	// (SetMediaViewportFor); zero falls back to the global one.
 	viewport    struct{ w, h int }
 	deviceScale uint32
+	owedAssets  int
 
 	// style identity: the element name (a constructor-set override and
 	// the type-derived default, resolved once), the `#id`, the classes

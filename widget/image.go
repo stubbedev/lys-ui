@@ -83,12 +83,7 @@ var memSourceSeq atomic.Uint64
 // only sanctioned bridge (docs/threading.md). Without an invoker there
 // is no loop to deliver to, and file/URL sources settle synchronously
 // at their first paint instead.
-type loopBridge struct {
-	deliver func(func())
-	owed    atomic.Int64
-}
-
-var invoker atomic.Pointer[loopBridge]
+var invoker atomic.Pointer[func(func())]
 
 // SetInvoker installs the function asynchronous image loads use to run
 // their completion on the event-loop goroutine; app calls it with
@@ -99,9 +94,8 @@ func SetInvoker(fn func(func())) (remove func()) {
 		invoker.Store(nil)
 		return func() {}
 	}
-	b := &loopBridge{deliver: fn}
-	invoker.Store(b)
-	return func() { invoker.CompareAndSwap(b, nil) }
+	invoker.Store(&fn)
+	return func() { invoker.CompareAndSwap(&fn, nil) }
 }
 
 func hasInvoker() bool { return invoker.Load() != nil }
@@ -111,28 +105,7 @@ func loopInvoker() (deliver func(func()), ok bool) {
 	if p == nil {
 		return nil, false
 	}
-	return p.deliver, true
-}
-
-func loopAnswer() (deliver func(func()), ok bool) {
-	b := invoker.Load()
-	if b == nil {
-		return nil, false
-	}
-	b.owed.Add(1)
-	return func(fn func()) {
-		b.deliver(func() {
-			b.owed.Add(-1)
-			fn()
-		})
-	}, true
-}
-
-// AssetLoadsOwed reports whether an icon or image load asked for on the
-// current loop has yet to apply its answer there.
-func AssetLoadsOwed() bool {
-	b := invoker.Load()
-	return b != nil && b.owed.Load() > 0
+	return *p, true
 }
 
 // Image paints a raster image - album art, an avatar, a rendered
@@ -456,16 +429,20 @@ func (im *Image) PasteImage(data []byte, mime string) {
 	im.img, im.loadErr = nil, nil
 	im.loaded = false
 	im.InvalidateLayout()
-	deliver, ok := loopAnswer()
+	deliver, ok := loopInvoker()
 	if !ok {
 		img, err := decodeImageData(data, "pasted "+mime)
 		im.applyPaste(gen, img, err)
 		return
 	}
 	im.loading = true
+	settle := owe(styleRootOf(&im.node))
 	go func() {
 		img, err := decodeImageData(data, "pasted "+mime)
-		deliver(func() { im.applyPaste(gen, img, err) })
+		deliver(func() {
+			settle()
+			im.applyPaste(gen, img, err)
+		})
 	}()
 }
 
@@ -507,15 +484,19 @@ func (im *Image) ensureSettled(box render.Rect, fit render.ImageScale) {
 		return
 	}
 	src, gen := im.src, im.gen
-	deliver, ok := loopAnswer()
+	deliver, ok := loopInvoker()
 	if !ok {
 		im.applyLoad(gen, loadImage(src, box, fit))
 		return
 	}
 	im.loading = true
+	settle := owe(styleRootOf(&im.node))
 	go func() {
 		res := loadImage(src, box, fit)
-		deliver(func() { im.applyLoad(gen, res) })
+		deliver(func() {
+			settle()
+			im.applyLoad(gen, res)
+		})
 	}()
 }
 

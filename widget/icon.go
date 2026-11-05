@@ -301,8 +301,8 @@ func (i *Icon) Measure(axis Axis, forSize int) Sizes {
 func (i *Icon) Arrange(r render.Rect) {
 	border, _ := boxRects(boxOf(i.style(i), render.Insets{}), r)
 	i.node.Arrange(border)
-	if frac := styleRootOf(&i.node).deviceScale; frac != 0 {
-		i.prepare(frac)
+	if root := styleRootOf(&i.node); root.deviceScale != 0 {
+		i.prepare(root.deviceScale, root)
 	}
 }
 
@@ -418,7 +418,7 @@ func (i *Icon) resolve(frac uint32, tint Color) {
 	}
 	src, ok := i.peek(box)
 	if !ok {
-		i.request(box)
+		i.request(box, styleRootOf(&i.node))
 		if src, ok = i.peek(box); !ok {
 			i.showNearest(box, tint)
 			return
@@ -481,8 +481,10 @@ func (i *Icon) peek(box iconBox) (icons.Raster, bool) {
 	return icons.Default().Peek(name, box.size, box.frac)
 }
 
-func (i *Icon) request(box iconBox) {
+func (i *Icon) request(box iconBox, root *node) {
+	settle := owe(root)
 	answered := func() {
+		settle()
 		if hasInvoker() {
 			i.Invalidate()
 		}

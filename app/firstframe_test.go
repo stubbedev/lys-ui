@@ -114,3 +114,16 @@ func TestALaterFrameDoesNotWaitForAnIcon(t *testing.T) {
 		t.Errorf("%d commits: a shown window held a later frame for an icon", got)
 	}
 }
+
+func TestAnotherWindowsIconsDoNotHoldAWindowsFirstFrame(t *testing.T) {
+	r := newFirstFrameRig(t)
+	plain := newPaintHarness(widget.NewBox(widget.Column, 0, 0), 64, 48)
+	r.a.windows = append(r.a.windows, plain.wnd)
+	r.tick(0)
+	if got := plain.surf.commits; got != 1 {
+		t.Errorf("a window with no icons made %d commits while another window's icon was owed, want its first frame", got)
+	}
+	if got := r.h.surf.commits; got != 0 {
+		t.Errorf("the window whose icon is owed made %d commits", got)
+	}
+}
