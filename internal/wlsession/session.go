@@ -199,7 +199,8 @@ type Session struct {
 	globalShortcutsMgr    *wlr.GlobalShortcutsManagerV1
 	// comp is the seat's dead-key compose state (compose.go); nil
 	// without a compose file, which disables compose entirely.
-	comp *compose.State
+	comp     *compose.State
+	compLoad <-chan *compose.Table
 
 	// Shell-integration protocols (toplevel.go, activation.go,
 	// idleinhibit.go, shortinhibit.go, xdgoutput.go, dialog.go), each
@@ -404,7 +405,7 @@ func Connect() (*Session, error) {
 		dropHandlers:    make(map[*wl.Surface]SurfaceDropHandler),
 	}
 	d.Context().SetBuffered(true)
-	s.loadCompose()
+	s.loadCompose(compose.Load)
 
 	reg, err := d.GetRegistry()
 	if err != nil {

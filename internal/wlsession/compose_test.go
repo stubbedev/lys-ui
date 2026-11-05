@@ -2,6 +2,7 @@ package wlsession
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/xkb"
@@ -29,6 +30,36 @@ func TestSessionComposeDisabledByDefault(t *testing.T) {
 	}
 	if res, text := s.FeedCompose('e'); res != compose.None || text != "" {
 		t.Fatalf("FeedCompose = %v %q, want none", res, text)
+	}
+}
+
+func TestSessionComposeLoadsOffTheStartupPath(t *testing.T) {
+	release := make(chan struct{})
+	s := &Session{}
+	loaded := make(chan struct{})
+	go func() {
+		s.loadCompose(func() *compose.Table {
+			<-release
+			tb, err := compose.NewTableFile("../compose/testdata/XCompose")
+			if err != nil {
+				t.Errorf("parse fixture: %v", err)
+			}
+			return tb
+		})
+		close(loaded)
+	}()
+	select {
+	case <-loaded:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("loadCompose waited for the compose table to parse")
+	}
+	close(release)
+	if res, _ := s.FeedCompose(xkb.KeyDeadAcute); res != compose.Pending {
+		t.Fatalf("first key dead_acute = %v, want pending", res)
+	}
+	if res, text := s.FeedCompose('e'); res != compose.Done || text != "é" {
+		t.Fatalf("dead_acute+e = %v %q, want done é", res, text)
 	}
 }
 

@@ -14,11 +14,22 @@ import (
 // method here degrades to the disabled machine — dead-key layouts
 // then behave exactly as before this wiring existed.
 
-// loadCompose resolves and parses the active compose file, opening the
-// seat's compose state. Errors (no file, bad file) leave compose
+// loadCompose resolves and parses the active compose file on its own
+// goroutine, off the connection's startup path; the first key fed to
+// compose waits for it. Errors (no file, bad file) leave compose
 // disabled rather than failing the connection.
-func (s *Session) loadCompose() {
-	s.comp = compose.Load().Start()
+func (s *Session) loadCompose(load func() *compose.Table) {
+	ch := make(chan *compose.Table, 1)
+	go func() { ch <- load() }()
+	s.compLoad = ch
+}
+
+func (s *Session) awaitCompose() {
+	if s.compLoad == nil {
+		return
+	}
+	s.comp = (<-s.compLoad).Start()
+	s.compLoad = nil
 }
 
 // ComposePending reports whether a compose sequence is in flight.
@@ -29,6 +40,7 @@ func (s *Session) ComposePending() bool { return s.comp.Composing() }
 // keysym takes no part in compose and normal text handling should
 // proceed; a sequence that was in flight has been cancelled by then.
 func (s *Session) FeedCompose(sym xkb.Keysym) (compose.Result, string) {
+	s.awaitCompose()
 	return s.comp.Feed(sym)
 }
 
