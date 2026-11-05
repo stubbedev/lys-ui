@@ -149,16 +149,23 @@ func (s *Stream) Closed() bool { return s.closed }
 func (s *Stream) Err() error { return s.err }
 
 // Frame returns the frame to show, its RGBA nil before the first is
-// decoded and after Close: a pooled buffer's pixels under the buffer's
-// identity, at a version that changes whenever the frame does. The
+// decoded and after Close, under its raster's identity: a pooled
+// buffer's at a version that moves whenever its pixels do, a
+// StillSource's frame at version 0, since its pixels never change. The
 // image belongs to the stream and stays valid until the next change or
-// Close.
+// Close. FrameSeq tells when the frame changed.
 func (s *Stream) Frame() render.VersionedImage {
-	if s.cur == nil {
-		return render.VersionedImage{Version: s.frameSeq}
+	switch {
+	case s.cur == nil:
+		return render.VersionedImage{}
+	case s.cur.still:
+		return render.VersionedImage{RGBA: s.cur.img, ID: s.cur.id}
 	}
 	return render.VersionedImage{RGBA: s.cur.img, ID: s.cur.id, Version: s.frameSeq}
 }
+
+// FrameSeq moves whenever Frame shows another frame.
+func (s *Stream) FrameSeq() uint64 { return s.frameSeq }
 
 // Subscribe calls fn on the loop after every change; cancel stops it.
 func (s *Stream) Subscribe(fn func()) (cancel func()) {

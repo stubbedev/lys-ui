@@ -30,10 +30,13 @@ const DefaultByteLimit = 64 << 20
 // from (and which frame of an animated source), the source rectangle
 // that was sampled, and the device-pixel size it was resampled into.
 // The device scale is implied by W and H: identical keys want
-// identical pixels. InvalidateSource drops every frame of a source.
+// identical pixels. InvalidateSource drops every frame of a source. A
+// raster that never changes may name its source by Image, its identity,
+// instead of Source and Frame.
 type RasterKey struct {
 	Source string
 	Frame  int
+	Image  render.ImageID
 	Src    image.Rectangle
 	W, H   int
 }

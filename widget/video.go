@@ -6,6 +6,7 @@ import (
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/internal/imgcache"
 	"github.com/stubbedev/lys-ui/media"
 	"github.com/stubbedev/lys-ui/widget/css"
 )
@@ -96,7 +97,7 @@ func (v *Video) SetScale(s ImageScale) {
 func (v *Video) Scale() ImageScale { return v.view.scale }
 
 func (v *Video) changed() {
-	if v.view.stream.Frame().Version != v.view.painted {
+	if v.view.stream.FrameSeq() != v.view.painted {
 		v.view.Invalidate()
 	}
 	v.syncControls()
@@ -142,7 +143,7 @@ func (p *videoView) Paint(cv *render.Canvas) {
 	if frame.RGBA == nil {
 		return
 	}
-	seq := frame.Version
+	seq := p.stream.FrameSeq()
 	box := cv.MapRect(p.bounds)
 	b := frame.Rect
 	srcRect, dst := render.PlaceImage(b.Dx(), b.Dy(), box.W, box.H, p.scale, render.ImageCentered)
@@ -156,6 +157,17 @@ func (p *videoView) Paint(cv *render.Canvas) {
 	p.painted = seq
 	if srcRect.Dx() == dw && srcRect.Dy() == dh {
 		cv.DrawImageDevice(frame.SubImage(srcRect), dx, dy)
+		return
+	}
+	if frame.Version == 0 && frame.ID != 0 {
+		raster, err := imgcache.Default().Raster(imgcache.RasterKey{Image: frame.ID, Src: srcRect, W: dw, H: dh}, func(dst *image.RGBA) error {
+			return render.ResampleTo(dst, frame.RGBA, srcRect)
+		})
+		if err != nil {
+			imageWarn(err)
+			return
+		}
+		cv.DrawImageDevice(raster, dx, dy)
 		return
 	}
 	if p.raster == nil || p.raster.Rect.Dx() != dw || p.raster.Rect.Dy() != dh {

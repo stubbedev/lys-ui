@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/internal/imgcache"
 	"github.com/stubbedev/lys-ui/media"
 )
 
@@ -167,5 +168,27 @@ func TestClockText(t *testing.T) {
 		if got := clockText(c.pos, c.dur); got != c.want {
 			t.Errorf("clockText(%v, %v) = %q, want %q", c.pos, c.dur, got, c.want)
 		}
+	}
+}
+
+func TestAScaledLoopingAnimationResamplesEachFrameOnce(t *testing.T) {
+	const frames = 3
+	s := testStream(t, frames)
+	v := NewVideo(testFace(t), 13, s)
+	pumpUntil(t, func() bool { return s.Frame().RGBA != nil })
+	const w, h = 80, 80
+	cv := render.New(make([]byte, render.Stride(w)*h), render.Stride(w), w, h)
+	SizeWithin(v, Size{W: w, H: h})
+	v.Arrange(render.Rect{W: w, H: h})
+	_, missesBefore := imgcache.Default().Stats()
+	s.SetLoop(true)
+	s.Play()
+	for range 2 * frames {
+		seq := s.FrameSeq()
+		pumpUntil(t, func() bool { return s.FrameSeq() != seq })
+		v.view.Paint(cv)
+	}
+	if _, misses := imgcache.Default().Stats(); misses-missesBefore != frames {
+		t.Errorf("two loops of %d frames resampled %d times, want each frame once", frames, misses-missesBefore)
 	}
 }

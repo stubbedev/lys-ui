@@ -21,6 +21,8 @@ import (
 	"image"
 	"io"
 	"time"
+
+	"github.com/stubbedev/lys-lib/render"
 )
 
 // The PCM layout every Audible track delivers: interleaved signed
@@ -49,6 +51,15 @@ type Source interface {
 	// last frame.
 	ReadFrame(dst *image.RGBA) (time.Duration, error)
 	Close() error
+}
+
+// StillSource is a Source whose frames are rasters it keeps unchanged for
+// its whole life, a decoded animation's: the stream shows them as they
+// are, under their own identity, so each is copied nowhere and a GPU
+// uploads it once however often it plays. ReadStill takes the place of
+// ReadFrame.
+type StillSource interface {
+	ReadStill() (render.StillImage, time.Duration, error)
 }
 
 // Seeker is a Source that can reposition: after Seek(t) the next

@@ -40,19 +40,26 @@ func (s *animationSource) Info() Info {
 	return Info{Width: b.Dx(), Height: b.Dy(), Duration: s.total}
 }
 
-func (s *animationSource) ReadFrame(dst *image.RGBA) (time.Duration, error) {
+func (s *animationSource) ReadStill() (render.StillImage, time.Duration, error) {
 	if s.next >= len(s.frames) {
-		return 0, io.EOF
+		return render.StillImage{}, 0, io.EOF
 	}
-	src := s.frames[s.next]
-	if dst.Rect.Size() != src.Rect.Size() {
-		return 0, fmt.Errorf("media: animation frame is %v, the buffer %v", src.Rect.Size(), dst.Rect.Size())
-	}
-	for y := range src.Rect.Dy() {
-		copy(dst.Pix[y*dst.Stride:y*dst.Stride+4*src.Rect.Dx()], src.Pix[src.PixOffset(src.Rect.Min.X, src.Rect.Min.Y+y):])
-	}
-	pts := s.starts[s.next]
+	frame, pts := s.frames[s.next], s.starts[s.next]
 	s.next++
+	return frame, pts, nil
+}
+
+func (s *animationSource) ReadFrame(dst *image.RGBA) (time.Duration, error) {
+	frame, pts, err := s.ReadStill()
+	if err != nil {
+		return 0, err
+	}
+	if dst.Rect.Size() != frame.Rect.Size() {
+		return 0, fmt.Errorf("media: animation frame is %v, the buffer %v", frame.Rect.Size(), dst.Rect.Size())
+	}
+	for y := range frame.Rect.Dy() {
+		copy(dst.Pix[y*dst.Stride:y*dst.Stride+4*frame.Rect.Dx()], frame.Pix[frame.PixOffset(frame.Rect.Min.X, frame.Rect.Min.Y+y):])
+	}
 	return pts, nil
 }
 

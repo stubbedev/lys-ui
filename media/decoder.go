@@ -20,6 +20,8 @@ const (
 type frameBuf struct {
 	img *image.RGBA
 	id  render.ImageID
+	// still is a StillSource's frame, the source's to keep, never pooled.
+	still bool
 }
 
 type decoded struct {
@@ -40,6 +42,8 @@ type decoder struct {
 	// stream closes rather than when a collection gets to them.
 	pixels   memory.Shared
 	src      Source
+	stills   StillSource
+	held     map[render.ImageID]*frameBuf
 	seeker   Seeker
 	size     image.Rectangle
 	out      chan decoded
@@ -61,6 +65,9 @@ func startDecoder(src Source, seeker Seeker, info Info) *decoder {
 		done: make(chan struct{}),
 
 		closed: make(chan struct{}),
+	}
+	if stills, ok := src.(StillSource); ok {
+		d.stills, d.held = stills, map[render.ImageID]*frameBuf{}
 	}
 	go d.run()
 	return d
@@ -108,6 +115,16 @@ func (d *decoder) run() {
 				return
 			}
 			continue
+		case d.stills != nil:
+			still, pts, err := d.stills.ReadStill()
+			msg := decoded{pts: pts, gen: gen, err: err}
+			if err == nil {
+				msg.img = d.stillFrame(still)
+			} else {
+				atEnd = true
+			}
+			pending = &msg
+			continue
 		case buf == nil && allocated < framePool:
 			var err error
 			if buf, err = d.newFrameBuf(); err != nil {
@@ -151,8 +168,19 @@ func (d *decoder) requestSeek(r seekRequest) {
 	}
 }
 
+// stillFrame is the frame showing still, one per raster for the
+// decoder's life.
+func (d *decoder) stillFrame(still render.StillImage) *frameBuf {
+	if f, ok := d.held[still.ID]; ok {
+		return f
+	}
+	f := &frameBuf{img: still.RGBA, id: still.ID, still: true}
+	d.held[still.ID] = f
+	return f
+}
+
 func (d *decoder) recycle(img *frameBuf) {
-	if img == nil {
+	if img == nil || img.still {
 		return
 	}
 	select {
