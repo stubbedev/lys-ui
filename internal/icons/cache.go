@@ -353,9 +353,10 @@ func (c *Cache) insertLocked(key cacheKey, e *cacheEntry) {
 // Preload resolves and decodes an icon into the cache for a later
 // paint. It holds the lock only to look and to store, never across the
 // read and the decode, so a UI loop painting other icons meanwhile does
-// not wait for it. A failure is remembered as a paint's would be.
-func (c *Cache) Preload(name string, size int, frac120 uint32) {
-	c.ensure(cacheKey{name: name, size: size, frac: frac120})
+// not wait for it. A failure is remembered as a paint's would be, and
+// returned, as it is to a later Preload of the same icon.
+func (c *Cache) Preload(name string, size int, frac120 uint32) error {
+	return c.ensure(cacheKey{name: name, size: size, frac: frac120}).err
 }
 
 // Cached reports whether a paint of this icon would find it decoded. It

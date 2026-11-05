@@ -546,13 +546,18 @@ func fracOf(num, denom int) uint32 {
 // will paint at the device scale num/denom, so its first paint reads and
 // rasterizes nothing. It reads the disk, so it belongs off the UI loop,
 // and it is safe from any goroutine. name may also be an absolute path.
-func PreloadThemeIcon(name string, size, num, denom int) {
+// The error is why the icon will paint nothing (missing, not a regular
+// file, undecodable), and a later preload of it returns the same.
+func PreloadThemeIcon(name string, size, num, denom int) error {
 	cache := icons.Default()
 	frac := fracOf(num, denom)
-	if fallback := cache.FallbackName(name); fallback != name {
-		cache.Preload(fallback, size, frac)
+	fallback := cache.FallbackName(name)
+	if fallback == name {
+		return cache.Preload(name, size, frac)
 	}
-	cache.Preload(name, size, frac)
+	painted := cache.Preload(fallback, size, frac)
+	_ = cache.Preload(name, size, frac)
+	return painted
 }
 
 // ThemeIconPreloaded reports whether PreloadThemeIcon's work is done for

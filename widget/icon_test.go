@@ -9,10 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"syscall"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/internal/assetfile"
 	"github.com/stubbedev/lys-ui/internal/icons"
 )
 
@@ -559,5 +561,45 @@ func TestThemeChangeExpiresOnlyAResolvedIcon(t *testing.T) {
 	}
 	if _, _, dirty := painted.takeDamage(); dirty {
 		t.Error("an expired icon owed a second repaint before painting again")
+	}
+}
+
+func TestPreloadReportsWhyAnIconWillPaintNothing(t *testing.T) {
+	dir := t.TempDir()
+	fifo := filepath.Join(dir, "pipe.svg")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	garbage := filepath.Join(dir, "garbage.svg")
+	if err := os.WriteFile(garbage, []byte("not an image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, path := range map[string]string{
+		"missing":     filepath.Join(dir, "gone.svg"),
+		"a pipe":      fifo,
+		"undecodable": garbage,
+	} {
+		first := PreloadThemeIcon(path, 24, 1, 1)
+		if first == nil {
+			t.Errorf("%s: the preload reported success", name)
+			continue
+		}
+		if again := PreloadThemeIcon(path, 24, 1, 1); !errors.Is(again, first) {
+			t.Errorf("%s: a second preload reported %v, want the remembered %v", name, again, first)
+		}
+	}
+	if err := PreloadThemeIcon(fifo, 24, 1, 1); !errors.Is(err, assetfile.ErrNotRegular) {
+		t.Errorf("a pipe preloaded as %v, want ErrNotRegular", err)
+	}
+}
+
+func TestPreloadOfADecodableIconReportsNoError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "app.svg")
+	svg := `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#f00"/></svg>`
+	if err := os.WriteFile(path, []byte(svg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := PreloadThemeIcon(path, 24, 1, 1); err != nil {
+		t.Errorf("a decodable icon preloaded as %v", err)
 	}
 }
