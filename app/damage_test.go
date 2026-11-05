@@ -1049,3 +1049,29 @@ func TestAStickySectionHeaderThatCatchesTheViewMatchesAWholePaint(t *testing.T) 
 		assertShowsWholePaint(t, h, step)
 	}
 }
+
+func TestANonASCIILabelBesideAScrollKeepsItsBlit(t *testing.T) {
+	face, err := Font("sans", 14)
+	if err != nil {
+		t.Skip(err)
+	}
+	col := widget.NewBox(widget.Column, 2, 4)
+	for i := range 800 {
+		col.Append(widget.NewLabel(face, 14, fmt.Sprintf("row %d of the long list", i), 0), false)
+	}
+	sc := widget.NewScroll(col)
+	title := widget.NewLabel(face, 14, "Åström över ÿ fjärden", 0)
+	h := newPaintHarness(widget.NewBox(widget.Column, 6, 8).Append(title, false).Append(sc, true), 400, 300)
+	h.frame()
+	y := 0
+	nudge := func() { y += 10; sc.SetOffset(0, y) }
+	h.warm(nudge, 4)
+	for step := range 4 {
+		nudge()
+		painted, _ := h.frame()
+		if limit := 400 * 10 * 3; painted > limit {
+			t.Errorf("step %d beside a non-ASCII label painted %d px, want the strip and the scrollbar, at most %d", step, painted, limit)
+		}
+		assertShowsWholePaint(t, h, step)
+	}
+}

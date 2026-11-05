@@ -15,15 +15,27 @@ type inkBounder interface {
 
 type inkClipper interface{ clipsInk() bool }
 
-type inkOverhanger interface{ inkOverhangs() bool }
+type inkOverhanger interface {
+	inkOverhang() (reach render.Insets, known bool)
+}
 
-func (l *Label) inkOverhangs() bool {
+func (l *Label) inkOverhang() (render.Insets, bool) {
+	ascii := true
 	for _, r := range l.shown() {
 		if r >= utf8.RuneSelf {
-			return true
+			ascii = false
+			break
 		}
 	}
-	return false
+	if ascii {
+		return render.Insets{}, true
+	}
+	reach, known := l.shaped.InkOverhang()
+	if short := l.shaped.LineHeight() - l.bounds.H; short > 0 {
+		reach.Top += short
+		reach.Bottom += short
+	}
+	return reach, known
 }
 
 //nolint:unparam
@@ -97,8 +109,12 @@ func (n *node) computeInk() {
 	n.inkClosed = true
 	n.inkBox = focusInk.Grow(n.ink.Grow(reach.Grow(n.bounds)))
 	n.solidBox = n.ink.Grow(n.bounds)
-	if t, ok := self.(inkOverhanger); ok && t.inkOverhangs() {
-		n.solidBox = n.inkBox
+	if t, ok := self.(inkOverhanger); ok {
+		if reach, known := t.inkOverhang(); known {
+			n.solidBox = n.ink.Grow(reach.Grow(n.bounds))
+		} else {
+			n.solidBox = n.inkBox
+		}
 	}
 	if c, ok := self.(inkClipper); ok {
 		n.inkClips = c.clipsInk()
