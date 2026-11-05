@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -23,15 +24,24 @@ import (
 // SetTheme regenerates it, so a palette switch re-derives every named
 // color; an application stylesheet outranks every rule here.
 
-// themeSheet is the installed theme layer (installed at init).
+// themeSheet is the installed theme layer, built on the first style
+// resolution or SetTheme.
 var themeSheet *Stylesheet
+
+func ensureThemeSheet() {
+	if themeSheet == nil {
+		syncThemeSheet(current)
+	}
+}
 
 // syncThemeSheet (re)generates the theme layer from t.
 func syncThemeSheet(t *Theme) {
 	syncSystemColors(t)
 	src := themeCSS(t)
 	if themeSheet == nil {
-		themeSheet = AddStylesheet(src, StylePriorityTheme)
+		themeSheet = &Stylesheet{sheet: ParseStylesheet(src).rules(), priority: StylePriorityTheme, live: true}
+		sheets = slices.Insert(sheets, 0, themeSheet)
+		relayer()
 		return
 	}
 	themeSheet.Load(src)
@@ -489,7 +499,3 @@ func themeCSS(t *Theme) string {
 	}
 	return radii(b.String(), t.Radius)
 }
-
-// init installs the theme layer for the default palette, so the named
-// colors resolve before any SetTheme.
-func init() { syncThemeSheet(current) }
