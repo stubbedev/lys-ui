@@ -3,7 +3,6 @@ package widget
 import (
 	"fmt"
 	"math"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -451,22 +450,49 @@ func motionTokens(t *Theme) [][2]string {
 	}
 }
 
-// radiusToken is a rule's corner radius as an offset from the theme's
-// Radius, {r} itself or {r-2} and {r+6}: the steps below and above it,
-// so a palette with another Radius rounds every rule in proportion.
-var radiusToken = regexp.MustCompile(`\{r([+-]\d+)?\}`)
-
-// radii resolves css's radius tokens against radius, a step never
-// below zero.
+// radii resolves css's radius tokens against radius: a rule's corner
+// radius as an offset from the theme's Radius, {r} itself or {r-2} and
+// {r+6}, the steps below and above it, so a palette with another Radius
+// rounds every rule in proportion; a step never below zero.
 func radii(css string, radius int) string {
-	return radiusToken.ReplaceAllStringFunc(css, func(tok string) string {
-		d := 0
-		if off := radiusToken.FindStringSubmatch(tok)[1]; off != "" {
-			// The pattern admits only a signed integer here.
-			d, _ = strconv.Atoi(off)
+	var b strings.Builder
+	for {
+		i := strings.Index(css, "{r")
+		if i < 0 {
+			if b.Len() == 0 {
+				return css
+			}
+			b.WriteString(css)
+			return b.String()
 		}
-		return strconv.Itoa(max(0, radius+d)) + "px"
-	})
+		d, n, ok := radiusStep(css[i+2:])
+		if !ok {
+			b.WriteString(css[:i+1])
+			css = css[i+1:]
+			continue
+		}
+		b.WriteString(css[:i])
+		b.WriteString(strconv.Itoa(max(0, radius+d)))
+		b.WriteString("px")
+		css = css[i+2+n:]
+	}
+}
+
+func radiusStep(s string) (d, n int, ok bool) {
+	if s != "" && (s[0] == '+' || s[0] == '-') {
+		n = 1
+		for n < len(s) && s[n] >= '0' && s[n] <= '9' {
+			n++
+		}
+		if n == 1 {
+			return 0, 0, false
+		}
+		d, _ = strconv.Atoi(s[:n])
+	}
+	if n >= len(s) || s[n] != '}' {
+		return 0, 0, false
+	}
+	return d, n + 1, true
 }
 
 // themeCSS renders the theme layer for t.

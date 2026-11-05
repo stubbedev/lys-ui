@@ -1,6 +1,9 @@
 package widget
 
 import (
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -145,6 +148,49 @@ func TestThemeRulesRoundFromRadius(t *testing.T) {
 	}{{"card", card, 18}, {"outline button", btn, 12}, {"badge", badge, 9999}} {
 		if got := radiusOr(nodeOf(tc.w).style(tc.w), 0).TopLeft; got != tc.want {
 			t.Errorf("%s radius %d at Radius 12, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestRadiiResolvesItsTokens(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"border-radius: {r};", "border-radius: 8px;"},
+		{"{r-2} {r+6} {r-12}", "6px 14px 0px"},
+		{"{r", "{r"},
+		{"{r-} {r+x} {rr} {r}", "{r-} {r+x} {rr} 8px"},
+		{"{{r}}", "{8px}"},
+		{"a {r-3}b{r+10}", "a 5pxb18px"},
+		{"none", "none"},
+	} {
+		if got := radii(c.in, 8); got != c.want {
+			t.Errorf("radii(%q, 8) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestRadiiMatchesTheTokenPattern(t *testing.T) {
+	token := regexp.MustCompile(`\{r([+-]\d+)?\}`)
+	for _, th := range []*Theme{DarkTheme(), LightTheme(), HighContrastTheme()} {
+		var b strings.Builder
+		for _, r := range classRules {
+			b.WriteString(r[1])
+		}
+		for _, r := range partRules {
+			b.WriteString(r[1])
+		}
+		for _, r := range darkRules {
+			b.WriteString(r[1])
+		}
+		for _, r := range controlRules() {
+			b.WriteString(r[1])
+		}
+		css := b.String()
+		want := token.ReplaceAllStringFunc(css, func(tok string) string {
+			d, _ := strconv.Atoi(token.FindStringSubmatch(tok)[1])
+			return strconv.Itoa(max(0, th.Radius+d)) + "px"
+		})
+		if got := radii(css, th.Radius); got != want {
+			t.Errorf("radius %d: the scanner resolves the theme rules differently from the token pattern", th.Radius)
 		}
 	}
 }
