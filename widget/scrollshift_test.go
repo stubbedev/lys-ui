@@ -246,7 +246,7 @@ func TestListStepAllocatesNothingAcrossRowsItHolds(t *testing.T) {
 	}
 }
 
-func TestAStickyOrOverlappedScrollDoesNotMove(t *testing.T) {
+func TestAnOverlappedScrollDoesNotMove(t *testing.T) {
 	loadCSS(t, `.over { position: absolute; left: 10px; top: 10px; background-color: #ff0000; }
 		.round { border-radius: 12px; background-color: #222222; }
 		.grad { background-image: linear-gradient(red, blue); }`)

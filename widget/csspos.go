@@ -43,16 +43,23 @@ func insetOf(v *style.Values, side int, basis int) (int, bool) {
 // arrangeAt arranges w in r, shifted by its relative or sticky offsets.
 // v is w's computed style, nil for a widget without a node.
 func arrangeAt(w Widget, v *style.Values, r render.Rect) {
+	n := nodeOf(w)
+	if n != nil {
+		n.sticky = false
+	}
 	if v != nil && v.Has(style.PropPosition) {
 		switch v.Layout.Position {
 		case style.PositionRelative:
 			r = relativeRect(w, v, r)
 		case style.PositionSticky:
-			arrangeVolatility++
+			arrangeStickiness++
+			if n != nil {
+				n.stickyFlow, n.sticky = r, true
+			}
 			r = stickyRect(w, v, r)
 		}
 	}
-	if n := nodeOf(w); n != nil {
+	if n != nil {
 		n.slot, n.slotSet = r, true
 	}
 	w.Arrange(r)

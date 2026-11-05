@@ -129,6 +129,10 @@ func (b *Box) shiftTo(r render.Rect) {
 		if !n.slotSet {
 			continue
 		}
+		if n.sticky {
+			restick(c.w, n, dx, dy)
+			continue
+		}
 		n.slot = shifted(n.slot, dx, dy)
 		if arrangeCulling && n.inkClosed && shifted(n.inkBox, dx, dy).Intersect(arrangeCull).Empty() {
 			n.cullBy(dx, dy)
@@ -137,6 +141,21 @@ func (b *Box) shiftTo(r render.Rect) {
 		}
 		c.w.Arrange(n.slot)
 	}
+}
+
+// restick places a sticky widget again after its parent moved by dx, dy:
+// its flow rect moves with the content, the constraint holds it against
+// the view, and it owes its place before and after, which the moved
+// view's damage also owes where the copy carried them.
+func restick(w Widget, n *node, dx, dy int) {
+	before := n.bounds
+	arrangeStickiness++
+	arrangeAt(w, n.style(w), shifted(n.stickyFlow, dx, dy))
+	if n.bounds == shifted(before, dx, dy) {
+		return
+	}
+	n.InvalidateRect(before)
+	n.Invalidate()
 }
 
 func (n *node) drainShift(sh *viewShift, view, area render.Rect, blit bool) {

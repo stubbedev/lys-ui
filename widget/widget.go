@@ -246,11 +246,15 @@ type node struct {
 	trCancel anim.Cancel
 	// anims is the CSS animation state (animations.go), nil while the
 	// node runs no animation.
-	anims       *nodeAnim
-	inkBox      render.Rect
-	solidBox    render.Rect
-	slot        render.Rect
-	slotSet     bool
+	anims    *nodeAnim
+	inkBox   render.Rect
+	solidBox render.Rect
+	slot     render.Rect
+	slotSet  bool
+	// stickyFlow is a sticky widget's flow rect, before the sticky
+	// constraint moved it; sticky reports whether it was arranged so.
+	stickyFlow  render.Rect
+	sticky      bool
 	culled      bool
 	inkClosed   bool
 	inkClips    bool

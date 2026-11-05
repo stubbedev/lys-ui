@@ -105,9 +105,12 @@ type arrangeStamp struct {
 	style    uint64
 	theme    uint64
 	volatile bool
+	// sticky: a sticky widget sits in the subtree; it is placed against
+	// the scrolled view, so the stamp alone does not hold its place.
+	sticky bool
 }
 
-var arrangeVolatility uint64
+var arrangeVolatility, arrangeStickiness uint64
 
 // Children exposes the box's children in append order for focus
 // traversal.
@@ -590,7 +593,7 @@ func (b *Box) Spacing() int { return b.spacing }
 // orders them for paint and hit testing by their stacking keys. r is
 // the margin box; Bounds records the border box.
 func (b *Box) Arrange(r render.Rect) {
-	if !b.arrangeStale && b.arranged == (arrangeStamp{r, styleGen, themeGen, false}) {
+	if !b.arrangeStale && b.arranged == (arrangeStamp{rect: r, style: styleGen, theme: themeGen}) {
 		b.bubbleInk()
 		return
 	}
@@ -603,10 +606,13 @@ func (b *Box) Arrange(r render.Rect) {
 		arrangeShifted = false
 		defer func() { arrangeShifted = true }()
 	}
-	volatility := arrangeVolatility
+	volatility, stickiness := arrangeVolatility, arrangeStickiness
 	b.arrangeStale = false
 	b.arranged = arrangeStamp{rect: r, style: styleGen, theme: themeGen}
-	defer func() { b.arranged.volatile = arrangeVolatility != volatility }()
+	defer func() {
+		b.arranged.volatile = arrangeVolatility != volatility
+		b.arranged.sticky = arrangeStickiness != stickiness
+	}()
 	v := b.style(b)
 	border, inner := boxRects(b.box(v), r)
 	b.ArrangeRoot(border)

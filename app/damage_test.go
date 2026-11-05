@@ -985,3 +985,67 @@ func TestAScrollReachingAnOpaquePlatesCornersMatchesAWholePaint(t *testing.T) {
 		assertShowsWholePaint(t, h, step)
 	}
 }
+
+func TestAScrollHoldingStickyContentCopiesTheRestAndRepaintsTheStickyPart(t *testing.T) {
+	face, err := Font("sans", 14)
+	if err != nil {
+		t.Skip(err)
+	}
+	t.Cleanup(func() { widget.LoadStylesheet("") })
+	widget.LoadStylesheet(`.pinned { position: sticky; top: 0px; background-color: #203040; }`)
+	col := widget.NewBox(widget.Column, 2, 4)
+	header := widget.NewLabel(face, 14, "a header that sticks", 0)
+	header.AddClass("pinned")
+	col.Append(header, false)
+	for i := range 800 {
+		col.Append(widget.NewLabel(face, 14, fmt.Sprintf("row %d under the header", i), 0), false)
+	}
+	sc := widget.NewScroll(col)
+	h := newPaintHarness(widget.NewBox(widget.Column, 0, 8).Append(sc, true), 400, 300)
+	h.frame()
+	y := 0
+	nudge := func() { y += 10; sc.SetOffset(0, y) }
+	h.warm(nudge, 4)
+	for step := range 6 {
+		nudge()
+		painted, _ := h.frame()
+		pinned := header.Bounds()
+		if limit := 400*10*3 + 2*pinned.W*pinned.H; painted > limit {
+			t.Errorf("step %d painted %d px, want the strip, the scrollbar and the sticky header, at most %d", step, painted, limit)
+		}
+		if view := sc.Bounds(); pinned.Y != view.Y+4 && pinned.Y != view.Y {
+			t.Errorf("step %d: the header sits at %d, want it held at the top of the view %d", step, pinned.Y, view.Y)
+		}
+		assertShowsWholePaint(t, h, step)
+	}
+}
+
+func TestAStickySectionHeaderThatCatchesTheViewMatchesAWholePaint(t *testing.T) {
+	face, err := Font("sans", 14)
+	if err != nil {
+		t.Skip(err)
+	}
+	t.Cleanup(func() { widget.LoadStylesheet("") })
+	widget.LoadStylesheet(`.pinned { position: sticky; top: 0px; background-color: #203040; }`)
+	col := widget.NewBox(widget.Column, 2, 4)
+	for section := range 4 {
+		box := widget.NewBox(widget.Column, 2, 0)
+		header := widget.NewLabel(face, 14, fmt.Sprintf("section %d", section), 0)
+		header.AddClass("pinned")
+		box.Append(header, false)
+		for i := range 30 {
+			box.Append(widget.NewLabel(face, 14, fmt.Sprintf("section %d row %d", section, i), 0), false)
+		}
+		col.Append(box, false)
+	}
+	sc := widget.NewScroll(col)
+	h := newPaintHarness(widget.NewBox(widget.Column, 0, 8).Append(sc, true), 400, 300)
+	h.frame()
+	y := 0
+	for step, d := range []int{10, 37, 120, 3, 250, 18, -40, 60, 300, -7, 11} {
+		y += d
+		sc.SetOffset(0, y)
+		h.frame()
+		assertShowsWholePaint(t, h, step)
+	}
+}
