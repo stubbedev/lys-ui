@@ -98,6 +98,7 @@ type Revealer struct {
 	full         Size
 	surfaceAlpha bool
 	drawnOpaque  bool
+	fadeFrom     float64
 	stamp        layerStamp
 }
 
@@ -142,6 +143,16 @@ func (r *Revealer) SetDuration(d time.Duration) { r.duration = max(0, d) }
 // SetGenieEdge picks the edge RevealGenie collapses toward.
 func (r *Revealer) SetGenieEdge(e Edge) { r.edge = e }
 
+// SetFadeFrom sets the opacity a fade in from hidden starts at, 0 (the
+// default) to 1: the child shows at alpha from the reveal's first frame
+// and fades to full over the whole duration. A fade out still runs to
+// hidden, and the other transitions start from hidden whatever this
+// says.
+func (r *Revealer) SetFadeFrom(alpha float64) { r.fadeFrom = min(max(alpha, 0), 1) }
+
+// FadeFrom reports SetFadeFrom.
+func (r *Revealer) FadeFrom() float64 { return r.fadeFrom }
+
 // SetOnTransitionDone runs fn whenever a transition lands, with the
 // state it landed in: the hook for unmapping a surface or dropping a
 // card once its exit has played.
@@ -179,6 +190,10 @@ func (r *Revealer) SetRevealed(reveal bool) {
 		return
 	}
 	from := r.progress
+	if reveal && from == 0 && r.shownTransition() == RevealFade {
+		from = r.fadeFrom
+		r.setProgress(from)
+	}
 	r.cancel = anim.Play(anim.Animate(r.duration, func(t float64) {
 		if t >= 1 {
 			r.cancel = nil

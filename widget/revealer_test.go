@@ -617,3 +617,78 @@ func TestRevealerFadeFromHiddenAtItsSurfaceRootPaintsNoChild(t *testing.T) {
 		t.Errorf("a surface fade in from hidden painted the child %d times, want 0", leaf.paints)
 	}
 }
+
+func TestRevealerFadeInStartsAtItsFadeFrom(t *testing.T) {
+	c := pinAnimClock(t)
+	r, _ := revealerAt(t, RevealFade)
+	r.SetFadeFrom(0.4)
+	r.SetRevealed(true)
+	if p := r.Progress(); p != 0.4 {
+		t.Fatalf("progress = %v as the reveal starts, want 0.4", p)
+	}
+	if red := redAt(paintReveal(r), 30, 30); red < 95 || red > 110 {
+		t.Errorf("first frame red = %d, want about 0.4 of full", red)
+	}
+	advance(c, 50*time.Millisecond)
+	if p := r.Progress(); p < 0.65 || p > 0.75 {
+		t.Errorf("progress = %v halfway, want about 0.7: the fade runs from 0.4 over the whole duration", p)
+	}
+	c.drive()
+	if p := r.Progress(); p != 1 {
+		t.Errorf("progress = %v after the fade, want 1", p)
+	}
+
+	r.SetRevealed(false)
+	advance(c, 80*time.Millisecond)
+	if p := r.Progress(); p <= 0 || p >= 0.4 {
+		t.Errorf("progress = %v late in a fade out, want it below the fade in's start", p)
+	}
+}
+
+func TestRevealerFadeFromStartsASurfaceFade(t *testing.T) {
+	pinAnimClock(t)
+	r, _ := revealerAt(t, RevealFade)
+	alphas := surfaceFadeFor(t, r)
+	r.SetFadeFrom(0.4)
+	r.SetRevealed(true)
+	if len(*alphas) == 0 || (*alphas)[0] != 0.4 {
+		t.Errorf("surface alphas %v, want the fade to start at 0.4", *alphas)
+	}
+}
+
+func TestRevealerFadeFromLeavesTransformsAndReversalsAlone(t *testing.T) {
+	c := pinAnimClock(t)
+	r, _ := revealerAt(t, RevealZoom)
+	r.SetFadeFrom(0.4)
+	r.SetRevealed(true)
+	if p := r.Progress(); p != 0 {
+		t.Errorf("a zoom starts at progress %v, want 0", p)
+	}
+	t.Cleanup(func() { SetReducedMotion(false) })
+	SetReducedMotion(true)
+	r.Finish()
+	r.SetRevealed(false)
+	advance(c, 80*time.Millisecond)
+	mid := r.Progress()
+	r.SetRevealed(true)
+	if p := r.Progress(); p != mid {
+		t.Errorf("a reversal mid fade out jumped from %v to %v", mid, p)
+	}
+	r.Finish()
+	r.SetRevealed(false)
+	r.Finish()
+	r.SetRevealed(true)
+	if p := r.Progress(); p != 0.4 {
+		t.Errorf("a zoom under reduced motion fades in from %v, want 0.4", p)
+	}
+}
+
+func TestRevealerFadeFromClamps(t *testing.T) {
+	r := NewRevealer(nil)
+	if r.SetFadeFrom(-1); r.FadeFrom() != 0 {
+		t.Errorf("FadeFrom = %v after -1, want 0", r.FadeFrom())
+	}
+	if r.SetFadeFrom(2); r.FadeFrom() != 1 {
+		t.Errorf("FadeFrom = %v after 2, want 1", r.FadeFrom())
+	}
+}

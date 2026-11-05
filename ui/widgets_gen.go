@@ -6371,6 +6371,18 @@ func (b *RevealerBuilder) WatchDuration(get func() time.Duration) *RevealerBuild
 	return b
 }
 
+// FadeFrom calls (*widget.Revealer).SetFadeFrom.
+func (b *RevealerBuilder) FadeFrom(alpha float64) *RevealerBuilder {
+	b.do(func(s *Scope, w *widget.Revealer) { w.SetFadeFrom(alpha) })
+	return b
+}
+
+// WatchFadeFrom re-applies SetFadeFrom with get's value after every update.
+func (b *RevealerBuilder) WatchFadeFrom(get func() float64) *RevealerBuilder {
+	b.watch(func(w *widget.Revealer) { w.SetFadeFrom(get()) })
+	return b
+}
+
 // GenieEdge calls (*widget.Revealer).SetGenieEdge.
 func (b *RevealerBuilder) GenieEdge(e widget.Edge) *RevealerBuilder {
 	b.do(func(s *Scope, w *widget.Revealer) { w.SetGenieEdge(e) })
