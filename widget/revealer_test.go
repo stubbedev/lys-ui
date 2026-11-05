@@ -598,3 +598,22 @@ func TestRevealerLayerIsReusedOnlyByItsOwnList(t *testing.T) {
 		t.Error("a List reusing the layer composites differently from one recording it again")
 	}
 }
+
+func TestRevealerFadeFromHiddenAtItsSurfaceRootPaintsNoChild(t *testing.T) {
+	c := pinAnimClock(t)
+	r, leaf := revealerAt(t, RevealFade)
+	alphas := surfaceFadeFor(t, r)
+	paintReveal(r)
+	if n := len(*alphas); n == 0 || (*alphas)[n-1] != 0 {
+		t.Fatalf("surface alphas %v for a hidden revealer, want the last at 0", *alphas)
+	}
+	CollectDamage(r)
+	leaf.paints = 0
+	r.SetRevealed(true)
+	if frames := driveFrames(c, r); frames < 3 {
+		t.Fatalf("the fade ran %d frames", frames)
+	}
+	if leaf.paints != 0 {
+		t.Errorf("a surface fade in from hidden painted the child %d times, want 0", leaf.paints)
+	}
+}

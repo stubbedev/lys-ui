@@ -364,7 +364,15 @@ func (r *Revealer) Paint(cv *render.Canvas) {
 	layer := r.layer
 	r.layer = nil
 	defer keepOrFree(layer, &r.layer)
-	if r.child == nil || !r.shows() {
+	if r.child == nil {
+		return
+	}
+	if !r.shows() {
+		if r.surfaceAlpha || r.fadesSurface(0) {
+			PaintChild(cv, r.child)
+			r.painted = r.bounds
+			r.drawnOpaque = true
+		}
 		return
 	}
 	p := r.progress
