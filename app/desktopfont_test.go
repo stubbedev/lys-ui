@@ -15,14 +15,15 @@ import (
 // fontPortal answers the two interface keys DesktopFontSize reads.
 type fontPortal struct{ font, scale *dbus.Variant }
 
-func (p fontPortal) ReadOne(namespace, key string) (dbus.Variant, *dbus.Error) {
-	switch {
-	case namespace == "org.gnome.desktop.interface" && key == "font-name" && p.font != nil:
-		return *p.font, nil
-	case namespace == "org.gnome.desktop.interface" && key == "text-scaling-factor" && p.scale != nil:
-		return *p.scale, nil
+func (p fontPortal) ReadAll(namespaces []string) (map[string]map[string]dbus.Variant, *dbus.Error) {
+	keys := map[string]dbus.Variant{}
+	if p.font != nil {
+		keys["font-name"] = *p.font
 	}
-	return dbus.Variant{}, dbus.MakeFailedError(os.ErrNotExist)
+	if p.scale != nil {
+		keys["text-scaling-factor"] = *p.scale
+	}
+	return map[string]map[string]dbus.Variant{"org.gnome.desktop.interface": keys}, nil
 }
 
 // desktopFontApp is an Application whose portal is p on a private bus,

@@ -70,20 +70,22 @@ func (s *setting[T]) update(m *Monitor, v T, deliver bool) {
 	}
 }
 
-// readSetting reads one portal key with ReadOne, mapping the value with
-// mapFn: a key the portal refuses or an unreadable value maps to zero.
-// ok is false when the portal gave no answer at all, which says nothing
-// about the preference.
-func readSetting[T any](conn *dbus.Conn, namespace, key string, mapFn func(any) T, zero T) (value T, ok bool) {
+// readAllSettings reads every tracked namespace with one ReadAll. ok is
+// false when the portal gave no answer at all, which says nothing about
+// the preferences; a refusal or an unreadable reply reads as no keys.
+func readAllSettings(conn *dbus.Conn) (values map[string]map[string]dbus.Variant, ok bool) {
 	body, err := call(conn.Object(portalName, portalPath), readTimeout,
-		readOne, namespace, key)
+		readAll, []string{schemeNamespace, interfaceNamespace})
 	switch {
 	case err != nil && !portalAnswered(err):
-		return zero, false
-	case err != nil || len(body) != 1:
-		return zero, true
+		return nil, false
+	case err != nil:
+		return nil, true
 	}
-	return mapFn(body[0]), true
+	if dbus.Store(body, &values) != nil {
+		return nil, true
+	}
+	return values, true
 }
 
 // portalAnswered reports whether err is the portal's own reply rather
@@ -102,12 +104,14 @@ func portalAnswered(err error) bool {
 	return true
 }
 
-// refreshSetting moves one setting to what the portal says, leaving it
-// alone when the portal gave no answer.
-func refreshSetting[T comparable](m *Monitor, s *setting[T], conn *dbus.Conn, namespace, key string, mapFn func(any) T, zero T, deliver bool) {
-	if v, ok := readSetting(conn, namespace, key, mapFn, zero); ok {
-		s.update(m, v, deliver)
+// refreshSetting moves one setting to the value ReadAll returned for
+// it, zero when the portal returned none.
+func refreshSetting[T comparable](m *Monitor, s *setting[T], values map[string]map[string]dbus.Variant, namespace, key string, mapFn func(any) T, zero T, deliver bool) {
+	v := zero
+	if raw, ok := values[namespace][key]; ok {
+		v = mapFn(raw)
 	}
+	s.update(m, v, deliver)
 }
 
 // portalAppeared reports whether sig says the portal's name has just

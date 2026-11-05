@@ -25,7 +25,7 @@ const (
 	portalPath  = dbus.ObjectPath("/org/freedesktop/portal/desktop")
 	portalIface = "org.freedesktop.portal.Settings"
 
-	readOne    = portalIface + ".ReadOne"
+	readAll    = portalIface + ".ReadAll"
 	changedSig = portalIface + ".SettingChanged"
 
 	busName          = "org.freedesktop.DBus"
@@ -54,7 +54,7 @@ const (
 
 	// probeTimeout bounds the is-the-portal-here check against the bus
 	// daemon (which answers fast or is broken); readTimeout bounds the
-	// portal's ReadOne. godbus's default call timeout is 25s — far too
+	// portal's ReadAll. godbus's default call timeout is 25s — far too
 	// long for a startup probe against a missing portal. Both apply to
 	// the startup read and to each reconnect refresh, so New and the
 	// reconnect loop never hang on a stalled peer.
@@ -163,7 +163,7 @@ func startOn(m *Monitor, conn *dbus.Conn) *Monitor {
 	return m
 }
 
-// refresh reads every tracked setting from conn; deliver decides
+// refresh reads every tracked setting from conn in one ReadAll; deliver decides
 // whether a moved value fires its listeners (the startup read is the
 // baseline and never fires; a later refresh is an event). With no portal
 // on the bus there is nothing to read and nothing is known to have
@@ -172,13 +172,17 @@ func (m *Monitor) refresh(conn *dbus.Conn, deliver bool) {
 	if !portalOwned(conn) {
 		return
 	}
-	refreshSetting(m, &m.scheme, conn, schemeNamespace, schemeKey, schemeValue, appearance.Unknown, deliver)
-	refreshSetting(m, &m.icons, conn, interfaceNamespace, iconThemeKey, stringValue, "", deliver)
-	refreshSetting(m, &m.accent, conn, schemeNamespace, accentKey, accentValue, appearance.Accent{}, deliver)
-	refreshSetting(m, &m.contrast, conn, schemeNamespace, contrastKey, contrastValue, appearance.ContrastUnknown, deliver)
-	refreshSetting(m, &m.motion, conn, schemeNamespace, motionKey, motionValue, appearance.MotionUnknown, deliver)
-	refreshSetting(m, &m.font, conn, interfaceNamespace, fontNameKey, stringValue, "", deliver)
-	refreshSetting(m, &m.scale, conn, interfaceNamespace, textScaleKey, scaleValue, 0, deliver)
+	values, ok := readAllSettings(conn)
+	if !ok {
+		return
+	}
+	refreshSetting(m, &m.scheme, values, schemeNamespace, schemeKey, schemeValue, appearance.Unknown, deliver)
+	refreshSetting(m, &m.icons, values, interfaceNamespace, iconThemeKey, stringValue, "", deliver)
+	refreshSetting(m, &m.accent, values, schemeNamespace, accentKey, accentValue, appearance.Accent{}, deliver)
+	refreshSetting(m, &m.contrast, values, schemeNamespace, contrastKey, contrastValue, appearance.ContrastUnknown, deliver)
+	refreshSetting(m, &m.motion, values, schemeNamespace, motionKey, motionValue, appearance.MotionUnknown, deliver)
+	refreshSetting(m, &m.font, values, interfaceNamespace, fontNameKey, stringValue, "", deliver)
+	refreshSetting(m, &m.scale, values, interfaceNamespace, textScaleKey, scaleValue, 0, deliver)
 }
 
 // ColorScheme returns the current color-scheme preference, Unknown when

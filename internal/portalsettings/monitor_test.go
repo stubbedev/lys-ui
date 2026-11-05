@@ -45,6 +45,8 @@ type mockPortal struct {
 	raw any
 	// fails makes ReadOne report an error: the key is absent.
 	fails bool
+	// readOnes and readAlls count the calls of each read method.
+	readOnes, readAlls int
 }
 
 func (p *mockPortal) set(value uint32) {
@@ -85,6 +87,40 @@ func (p *mockPortal) fail() {
 func (p *mockPortal) ReadOne(namespace, key string) (dbus.Variant, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.readOnes++
+	return p.read(namespace, key)
+}
+
+// ReadAll is the portal method: namespaces -> every key they hold.
+func (p *mockPortal) ReadAll(namespaces []string) (map[string]map[string]dbus.Variant, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.readAlls++
+	tracked := map[string][]string{
+		schemeNamespace:    {schemeKey, accentKey, contrastKey, motionKey},
+		interfaceNamespace: {iconThemeKey, fontNameKey, textScaleKey},
+	}
+	out := map[string]map[string]dbus.Variant{}
+	for _, ns := range namespaces {
+		keys := map[string]dbus.Variant{}
+		for _, key := range tracked[ns] {
+			if v, err := p.read(ns, key); err == nil {
+				keys[key] = v
+			}
+		}
+		out[ns] = keys
+	}
+	return out, nil
+}
+
+// reads reports how many ReadOne and ReadAll calls the portal answered.
+func (p *mockPortal) reads() (readOnes, readAlls int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.readOnes, p.readAlls
+}
+
+func (p *mockPortal) read(namespace, key string) (dbus.Variant, error) {
 	if v, ok := p.settings[namespace+"."+key]; ok {
 		return dbus.MakeVariant(v), nil
 	}
@@ -287,6 +323,42 @@ func TestStartupRead(t *testing.T) {
 				t.Fatalf("ColorScheme() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestStartupReadsEverySettingInOneReadAll(t *testing.T) {
+	bus := dbustest.Start(t)
+	mock := publishMockSaying(t, bus, schemeDark)
+	mock.setIconTheme("Papirus")
+	mock.setSetting(schemeNamespace, accentKey, []float64{0.2, 0.4, 0.6})
+	mock.setSetting(schemeNamespace, contrastKey, contrastHigh)
+	mock.setSetting(schemeNamespace, motionKey, motionReduced)
+	mock.setSetting(interfaceNamespace, fontNameKey, "Adwaita Sans 11")
+	mock.setSetting(interfaceNamespace, textScaleKey, 1.25)
+	m := newTestMonitor(t, bus.Address)
+	if ones, alls := mock.reads(); ones != 0 || alls != 1 {
+		t.Fatalf("startup made %d ReadOne and %d ReadAll calls, want 0 and 1", ones, alls)
+	}
+	if got := m.ColorScheme(); got != appearance.Dark {
+		t.Errorf("ColorScheme() = %v, want dark", got)
+	}
+	if got := m.IconTheme(); got != "Papirus" {
+		t.Errorf("IconTheme() = %q, want Papirus", got)
+	}
+	if got := m.Accent(); got != (appearance.Accent{R: 0.2, G: 0.4, B: 0.6, Known: true}) {
+		t.Errorf("Accent() = %+v", got)
+	}
+	if got := m.Contrast(); got != appearance.ContrastHigh {
+		t.Errorf("Contrast() = %v, want high", got)
+	}
+	if got := m.Motion(); got != appearance.MotionReduced {
+		t.Errorf("Motion() = %v, want reduced", got)
+	}
+	if got := m.FontName(); got != "Adwaita Sans 11" {
+		t.Errorf("FontName() = %q", got)
+	}
+	if got := m.TextScale(); got != 1.25 {
+		t.Errorf("TextScale() = %v, want 1.25", got)
 	}
 }
 
