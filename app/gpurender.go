@@ -331,10 +331,14 @@ func (a *Application) reagreeRenderer() error {
 // NewBuffer is a dmabuf buffer of r for a bufW x bufH surface, with a timeline
 // of its own where the compositor takes explicit synchronization.
 func (r *gpuRenderer) NewBuffer(sess *wlsession.Session, bufW, bufH, scale int) (*buffer.Buffer, error) {
+	return r.newBufferIn(sess, bufW, bufH, scale, nil, r.refuse)
+}
+
+func (r *gpuRenderer) newBufferIn(sess *wlsession.Session, bufW, bufH, scale int, mods []fourcc.Modifier, rejected func(error)) (*buffer.Buffer, error) {
 	if r.refused != nil {
 		return nil, fmt.Errorf("app: %s=gpu: %w", rendererEnv, r.refused)
 	}
-	b, err := buffer.NewDmabuf(r.allocate, sess.Dmabuf(), bufW, bufH, scale, r.refuse)
+	b, err := buffer.NewDmabuf(r.allocateIn(mods), sess.Dmabuf(), bufW, bufH, scale, rejected)
 	if err != nil || r.timelines == nil || r.syncMgr == nil {
 		return b, err
 	}
@@ -383,18 +387,23 @@ func (r *gpuRenderer) syncFrame(b *buffer.Buffer, syncFile int) error {
 	return nil
 }
 
-func (r *gpuRenderer) allocate(w, h int, done func(*gpu.Target, error)) {
-	mods := r.modifiers
-	r.workers.Go(func() {
-		t, err := r.prepare(w, h, mods)
-		r.invoke(func() {
-			if r.closed {
-				done(nil, gpu.ErrDeviceClosed)
-				return
-			}
-			done(t, err)
+func (r *gpuRenderer) allocateIn(mods []fourcc.Modifier) buffer.Allocate {
+	return func(w, h int, done func(*gpu.Target, error)) {
+		in := mods
+		if in == nil {
+			in = r.modifiers
+		}
+		r.workers.Go(func() {
+			t, err := r.prepare(w, h, in)
+			r.invoke(func() {
+				if r.closed {
+					done(nil, gpu.ErrDeviceClosed)
+					return
+				}
+				done(t, err)
+			})
 		})
-	})
+	}
 }
 
 const gpuBusyRetry = 4 * time.Millisecond

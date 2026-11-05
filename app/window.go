@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/dmabufwl"
+	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -101,7 +103,10 @@ type hostWindow struct {
 	footprint [2]int
 	// renderer draws the window's frames on the GPU into dmabuf
 	// buffers; nil draws them on the CPU into shared memory.
-	renderer *gpuRenderer
+	renderer       *gpuRenderer
+	feedbackWatch  *dmabufwl.SurfaceFeedback
+	feedback       dmabufwl.Feedback
+	scanoutRefused bool
 	// surf is the wire half of the host surface; production wraps the
 	// wl_surface, tests substitute a recorder.
 	surf surfaceHandle
@@ -291,6 +296,7 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 	w.lastW, w.lastH = w.layoutSize()
 	w.newBuffer = w.create
 	w.pool = buffer.New(w.allocator(), 3)
+	w.watchFeedback()
 	// Wire the scale state before anything can commit: with the
 	// fractional protocols the compositor's preferred_scale events (the
 	// initial one included) land in rescale; without them the window
@@ -370,6 +376,12 @@ func (w *hostWindow) hostRoot() {
 // the destroy (Pool.Reclaim); on a dead connection nothing is held any
 // more.
 func (w *hostWindow) release() {
+	if w.feedbackWatch != nil {
+		if err := w.feedbackWatch.Destroy(); err != nil {
+			debug.Log("gpu", "stop following the surface's dmabuf feedback: %v", err)
+		}
+		w.feedbackWatch = nil
+	}
 	if w.sc != nil {
 		if err := w.sc.Destroy(); err != nil {
 			debug.Log("frame", "destroy the scale objects: %v", err)
@@ -513,9 +525,72 @@ func (w *hostWindow) create() (*buffer.Buffer, error) {
 	bw, bh := w.layoutSize()
 	dw, dh := scale.DeviceSize(bw, w.frac120), scale.DeviceSize(bh, w.frac120)
 	if w.renderer != nil {
-		return w.renderer.NewBuffer(w.sess, dw, dh, w.scale)
+		mods := w.bufferModifiers()
+		rejected := w.renderer.refuse
+		if mods != nil {
+			rejected = w.refuseScanout
+		}
+		return w.renderer.newBufferIn(w.sess, dw, dh, w.scale, mods, rejected)
 	}
 	return buffer.NewFile(w.sess.Shm(), dw, dh, w.scale)
+}
+
+func (w *hostWindow) watchFeedback() {
+	fb, err := w.sess.WatchDmabufFeedback(w.host.HostSurface(), w.dmabufFeedback)
+	if err != nil {
+		debug.Log("gpu", "follow the surface's dmabuf feedback: %v", err)
+		return
+	}
+	w.feedbackWatch = fb
+}
+
+func (w *hostWindow) dmabufFeedback(fb dmabufwl.Feedback, err error) {
+	if err != nil {
+		debug.Log("gpu", "the surface's dmabuf feedback: %v", err)
+		return
+	}
+	if fb.Equal(w.feedback) {
+		return
+	}
+	was := w.bufferModifiers()
+	w.feedback, w.scanoutRefused = fb, false
+	if !slices.Equal(was, w.bufferModifiers()) {
+		w.reallocate()
+	}
+}
+
+func (w *hostWindow) bufferModifiers() []fourcc.Modifier {
+	r := w.renderer
+	if r == nil || w.scanoutRefused {
+		return nil
+	}
+	t, ok := w.feedback.Preferred(fourcc.ARGB8888)
+	if !ok || !t.Scanout() || (r.hasNode && t.Device != r.node) {
+		return nil
+	}
+	var mods []fourcc.Modifier
+	for _, m := range t.Modifiers[fourcc.ARGB8888] {
+		if slices.Contains(r.modifiers, m) {
+			mods = append(mods, m)
+		}
+	}
+	return mods
+}
+
+func (w *hostWindow) refuseScanout(err error) {
+	if w.scanoutRefused {
+		return
+	}
+	debug.Log("gpu", "a scanout buffer failed; back to the renderer's layouts: %v", err)
+	w.scanoutRefused = true
+	w.reallocate()
+}
+
+func (w *hostWindow) reallocate() {
+	w.pool.Resize(w.allocator())
+	bw, bh := w.layoutSize()
+	w.damage.Full(render.Rect{W: bw, H: bh})
+	w.dirty = true
 }
 
 // scaleWire is the surface-scale seam beside surfaceHandle: the requests
@@ -1113,10 +1188,7 @@ func (w *hostWindow) useRenderer(r *gpuRenderer) {
 		return
 	}
 	w.renderer = r
-	w.pool.Resize(w.allocator())
-	bw, bh := w.layoutSize()
-	w.damage.Full(render.Rect{W: bw, H: bh})
-	w.dirty = true
+	w.reallocate()
 }
 
 // dropRenderer turns the window to the CPU after its renderer failed:

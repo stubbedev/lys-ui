@@ -532,7 +532,7 @@ func TestATargetIsAllocatedOffTheLoopAndLandsThroughIt(t *testing.T) {
 	a := &Application{gpu: r}
 	var got *gpu.Target
 	answers := 0
-	r.allocate(64, 32, func(tg *gpu.Target, err error) {
+	r.allocateIn(nil)(64, 32, func(tg *gpu.Target, err error) {
 		answers++
 		if err != nil {
 			t.Error(err)
@@ -552,7 +552,7 @@ func TestATargetIsAllocatedOffTheLoopAndLandsThroughIt(t *testing.T) {
 		t.Fatalf("the worker made %v", got)
 	}
 
-	r.allocate(64, 32, func(tg *gpu.Target, err error) {
+	r.allocateIn(nil)(64, 32, func(tg *gpu.Target, err error) {
 		answers++
 		if !errors.Is(err, gpu.ErrDeviceClosed) || tg != nil {
 			t.Errorf("a target landing after the close: %v, %v; want none and the close", tg, err)

@@ -100,6 +100,17 @@ func (s *Session) DmabufDevice() (dev uint64, ok bool) {
 	return s.dmabufDevice, s.hasDmabufDevice
 }
 
+// WatchDmabufFeedback follows surface's linux-dmabuf feedback, calling
+// update on the loop with the first feedback and each one the
+// compositor sends after it. It is nil, with no error, where the
+// compositor sends no feedback (linux-dmabuf before v4, or none).
+func (s *Session) WatchDmabufFeedback(surface *wl.Surface, update func(dmabufwl.Feedback, error)) (*dmabufwl.SurfaceFeedback, error) {
+	if s.dmabuf == nil || s.dmabufVersion < 4 {
+		return nil, nil
+	}
+	return dmabufwl.WatchSurfaceFeedback(s.dmabuf, s.dmabufVersion, surface, update)
+}
+
 // Subcompositor returns the bound wl_subcompositor, or nil.
 func (s *Session) Subcompositor() *wl.Subcompositor { return s.subcompositor }
 
