@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 func TestBackdropFilterPaints(t *testing.T) {
@@ -173,7 +175,7 @@ func TestFilterBlurPaintsOutsideBox(t *testing.T) {
 }
 
 func TestEffectsFastPathAllocationFree(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	// The no-effect paint stays allocation-free: the stylesheet loads
 	// but declares no rendering effect, so the old PushAlpha path runs.
 	loadCSS(t, `.plain { background-color: #ff0000; }`)

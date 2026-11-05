@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 // A focused entry's caret spans the font's extents and blinks as GTK's
@@ -168,9 +169,12 @@ func TestTypingMovesTheNextFlipAndLaunchesNothing(t *testing.T) {
 	if err := r.SetFocus(e); err != nil {
 		t.Fatal(err)
 	}
-	if allocs := testing.AllocsPerRun(100, e.restartBlink); allocs != 0 {
-		t.Errorf("a keystroke's blink restart allocates %v", allocs)
-	}
+	t.Run("allocations", func(t *testing.T) {
+		testbuild.SkipAllocBudget(t)
+		if allocs := testing.AllocsPerRun(100, e.restartBlink); allocs != 0 {
+			t.Errorf("a keystroke's blink restart allocates %v", allocs)
+		}
+	})
 	start := clock.now()
 	clock.set(start.Add(caretBlinkHalf - time.Millisecond))
 	e.restartBlink()

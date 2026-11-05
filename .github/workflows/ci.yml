@@ -69,6 +69,8 @@ jobs:
         run: nix develop -c just fmt-check
       - name: Release gates (vet, lint, test, build)
         run: nix develop -c just check
+      - name: Tests under the lysdebug tag, as lys-wm builds lys-ui
+        run: nix develop -c just test-lysdebug
       - name: AT-SPI bridge (bus-level)
         run: nix develop -c just atspi
       - name: AT-SPI bridge against real at-spi2-core

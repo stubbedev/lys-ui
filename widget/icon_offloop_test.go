@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/icons"
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 func settleAssets(t *testing.T, f *fakeInvoker) {
@@ -298,7 +299,7 @@ func TestRetintReadsNothingAndAllocatesLittle(t *testing.T) {
 			if got := centerPx(pix, 16); got != want {
 				t.Errorf("center = %v, want %v", got, want)
 			}
-			skipAllocBudget(t)
+			testbuild.SkipAllocBudget(t)
 			if allocs := testing.AllocsPerRun(100, retint); allocs > 2 {
 				t.Errorf("a retint step allocates %v, budget 2", allocs)
 			}

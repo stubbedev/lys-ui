@@ -4,6 +4,8 @@ import (
 	"slices"
 	"sync"
 	"testing"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 func TestPutArmsOnceUntilTake(t *testing.T) {
@@ -63,6 +65,7 @@ func TestConcurrentPutsKeepPerProducerOrder(t *testing.T) {
 }
 
 func TestReleasedBatchCarriesTheNextOne(t *testing.T) {
+	testbuild.SkipAllocBudget(t)
 	var b Box[*int]
 	item := new(int)
 	cycle := func() {

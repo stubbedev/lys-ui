@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 // pseudoCompute is computeTree for one pseudo-element of n, inheriting
@@ -404,6 +406,7 @@ func TestPartPseudoElements(t *testing.T) {
 }
 
 func TestSelectorFormsAllocateNothingPerMatch(t *testing.T) {
+	testbuild.SkipAllocBudget(t)
 	s := parseOne(t, `
 		[data-x="a"]:is(.p, .q):not(.skip):placeholder-shown { color: #000001; }
 		.p:empty:enabled:read-write { background-color: #000002; }

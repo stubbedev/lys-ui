@@ -4,11 +4,11 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/scale"
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -44,9 +44,7 @@ func TestPlan(t *testing.T) {
 // collects and plans its damage allocates nothing. Regression: every
 // drain built a fresh slice of the tree's rects.
 func TestCollectAllocatesNothing(t *testing.T) {
-	if debug.Enabled {
-		t.Skip("lysdebug names every drained rect")
-	}
+	testbuild.SkipAllocBudget(t)
 	root := widget.NewBox(widget.Column, 0, 0)
 	bar := widget.NewProgressBar(0)
 	root.Append(bar, false)

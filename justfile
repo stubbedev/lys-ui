@@ -150,6 +150,10 @@ lint:
 test:
     go test ./...
 
+# Run the test suite as lys-wm builds lys-ui, with the lysdebug tag.
+test-lysdebug:
+    go test -tags lysdebug ./...
+
 # Run every benchmark once, tests skipped: Measure/Arrange/Paint over
 # the showcase tree. CI archives the numbers as an artifact for trend
 # watching - deliberately not a gate, shared runners are too noisy.

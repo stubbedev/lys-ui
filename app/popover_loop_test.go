@@ -10,6 +10,7 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -488,7 +489,7 @@ type quietPopPainter struct{ fakePopPainter }
 func (*quietPopPainter) Collect() bool { return false }
 
 func TestAllocBudgetDrivePopovers(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	face, err := render.LoadFont(goregular.TTF)
 	if err != nil {
 		t.Fatal(err)

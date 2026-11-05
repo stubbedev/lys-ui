@@ -8,8 +8,9 @@ package widget
 import (
 	"testing"
 
-	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 // TestAllocBudgetGalleryFrame pins the steady frame: one full
@@ -18,7 +19,7 @@ import (
 // sweep the frame measures 1 alloc/op (the harness's own rect append),
 // so the budget is ceil(1*1.2).
 func TestAllocBudgetGalleryFrame(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	show := buildShowcase(t)
 	cv := render.New(make([]byte, render.Stride(showW)*showH), render.Stride(showW), showW, showH)
 	stale := render.Rect{W: showW, H: showH}
@@ -37,7 +38,7 @@ func TestAllocBudgetGalleryFrame(t *testing.T) {
 // snapshot buffers (walkTree, styleKids), matching the
 // StyleGalleryFullRestyle benchmark's 0 allocs/op.
 func TestAllocBudgetStyleFullRestyle(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	show := buildShowcase(t)
 	LoadStylesheet(galleryCSS)
 	t.Cleanup(func() { LoadStylesheet("") })
@@ -65,7 +66,7 @@ func TestAllocBudgetStyleFullRestyle(t *testing.T) {
 // with the filtered sibling list memoized on the parent per damage
 // generation instead of rebuilt per restyled widget.
 func TestAllocBudgetSiblingRestyle(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	LoadStylesheet(`spacer + spacer { min-width: 7px; } spacer:first-child { min-height: 5px; }`)
 	t.Cleanup(func() { LoadStylesheet("") })
 	row := NewBox(Row, 0, 0)
@@ -100,7 +101,7 @@ func TestAllocBudgetSiblingRestyle(t *testing.T) {
 // string are memoized across the several reads a frame makes, instead
 // of spliced and converted per read.
 func TestAllocBudgetComposingDisplay(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	e := NewEntry(entryFace(t), 14, 0)
 	e.Insert("hello")
 	arrangeTree(t, e, 200, 32)
@@ -118,18 +119,8 @@ func TestAllocBudgetComposingDisplay(t *testing.T) {
 	}
 }
 
-// skipAllocBudget skips an allocation budget under -race, whose
-// instrumentation allocates, and under the lysdebug tag, whose traces
-// do.
-func skipAllocBudget(t *testing.T) {
-	t.Helper()
-	if raceEnabled || debug.Enabled {
-		t.Skip("allocation budgets do not hold under -race or lysdebug")
-	}
-}
-
 func TestAllocBudgetWrappedLabelRepaint(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	const w, h = 1605, 1391
 	root := settingsTree(t)
 	cv := render.New(make([]byte, render.Stride(w)*h), render.Stride(w), w, h)
@@ -142,7 +133,7 @@ func TestAllocBudgetWrappedLabelRepaint(t *testing.T) {
 }
 
 func TestAllocBudgetResizeDamage(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	const w, h = 1605, 1391
 	root := settingsTree(t)
 	var buf []render.Rect
@@ -164,7 +155,7 @@ func TestAllocBudgetResizeDamage(t *testing.T) {
 }
 
 func TestAllocBudgetSteadyLayout(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	const w, h = 1605, 1391
 	root := settingsTree(t)
 	cv := render.New(make([]byte, render.Stride(w)*h), render.Stride(w), w, h)

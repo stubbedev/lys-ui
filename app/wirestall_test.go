@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wltest"
 
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -248,7 +249,7 @@ func TestWireFrameSendmsgPerPass(t *testing.T) {
 		{"three windows", 3, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			skipAllocBudget(t)
+			testbuild.SkipAllocBudget(t)
 			f := newWireFixture(t, "wayland-sends")
 			f.ctx.SetBuffered(true)
 			a := NewApplication(f.sess)

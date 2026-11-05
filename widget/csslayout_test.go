@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 // cssTree loads css, then measures and arranges root in a w x h rect
@@ -816,7 +818,7 @@ func TestLayoutPropertyChangeRelayouts(t *testing.T) {
 // static flex and flow tree measures and arranges without allocating
 // once the per-depth buffers have grown.
 func TestCSSLayoutSteadyFrameAllocatesNothing(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	inner := cssBox(Row, "f", item(40, 20, "g"), item(40, 20), item(40, 20, "fl"))
 	root := cssBox(Column, "b", item(50, 20), inner, item(50, 20, "ib"), item(50, 20, "ib"))
 	cssTree(t, `.b { display: block; } .f { display: flex; flex-wrap: wrap; gap: 4px; } .g { flex: 1; z-index: 1; }

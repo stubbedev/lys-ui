@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 // capture swaps the warning sink for one test and returns the messages.
@@ -889,6 +891,7 @@ func TestParseEmpty(t *testing.T) {
 }
 
 func TestComputeVarFreeAllocatesNothing(t *testing.T) {
+	testbuild.SkipAllocBudget(t)
 	s := parseOne(t, `
 		button { color: #111111; background-color: #222222; padding: 8px; }
 		button:hover { background-color: #333333; }

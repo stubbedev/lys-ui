@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 func glassTree(t *testing.T) (root, glass *Box, spin *Spinner, c *animClock) {
@@ -40,9 +42,12 @@ func TestBackdropRegionWalksNothingWithoutAChange(t *testing.T) {
 	if got := BackdropWalks() - walks; got != 0 {
 		t.Errorf("%d walks across spinner frames, want 0", got)
 	}
-	if allocs := testing.AllocsPerRun(50, func() { BackdropRegion(root) }); allocs > 0 {
-		t.Errorf("a region nothing moved allocates %v", allocs)
-	}
+	t.Run("allocations", func(t *testing.T) {
+		testbuild.SkipAllocBudget(t)
+		if allocs := testing.AllocsPerRun(50, func() { BackdropRegion(root) }); allocs > 0 {
+			t.Errorf("a region nothing moved allocates %v", allocs)
+		}
+	})
 }
 
 func TestBackdropRegionFollowsWhatItReads(t *testing.T) {

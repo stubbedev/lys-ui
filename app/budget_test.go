@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -45,7 +45,7 @@ func idleBudgetApp(tb testing.TB) *Application {
 // counterpart. The baseline measured 0 allocs/tick, so the budget
 // stays at 0.
 func TestAllocBudgetIdleLoopTick(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	a := idleBudgetApp(t)
 	tick := func() {
 		if err := a.tick(a.step, budgetNow); err != nil {
@@ -65,7 +65,7 @@ func TestAllocBudgetIdleLoopTick(t *testing.T) {
 // the pair is precomputed at install, so the delivery itself must
 // allocate nothing.
 func TestAllocBudgetKeyDelivery(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	a := idleBudgetApp(t)
 	a.windows[0].cfg.onKey = func(*widget.Router, uint32, wlsession.Mods) {}
 	a.OnKey(func(*widget.Router, uint32, wlsession.Mods) {})
@@ -82,7 +82,7 @@ func TestAllocBudgetKeyDelivery(t *testing.T) {
 // application with no icons configured: with nothing to reap the pass
 // must early out, maps included.
 func TestAllocBudgetIconReap(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	a := idleBudgetApp(t)
 	for range 29 {
 		a.windows = append(a.windows, &hostWindow{
@@ -101,7 +101,7 @@ func TestAllocBudgetIconReap(t *testing.T) {
 // watch: the inotify buffer lives on the watch, so draining one
 // event's worth of writes allocates nothing.
 func TestAllocBudgetFileWatchDrain(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	path := filepath.Join(t.TempDir(), "watched")
 	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
@@ -139,7 +139,7 @@ func TestAllocBudgetFileWatchDrain(t *testing.T) {
 // tree wrapped by a visible toast layer: the layer's Children view is
 // cached, so a walk with a toast on screen allocates nothing.
 func TestAllocBudgetToastDamageWalk(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	layer := &toastLayer{root: widget.NewBox(widget.Row, 0, 0)}
 	layer.add(widget.NewToast(testFace(t), "Saved", 0))
 	widget.CollectDamage(layer)
@@ -154,7 +154,7 @@ func TestAllocBudgetToastDamageWalk(t *testing.T) {
 // the paint harness (a nudge and the draw it owes): the device-rect
 // scratch is per window, so the frame allocates nothing.
 func TestAllocBudgetWindowFrame(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	root := widget.NewBox(widget.Column, 8, 8)
 	progress := widget.NewProgressBar(0)
 	root.Append(widget.NewBox(widget.Row, 0, 0).Append(progress, false), false)
@@ -241,20 +241,8 @@ func TestAllocBudgetTooltipPainterPass(t *testing.T) {
 	}
 }
 
-// skipAllocBudget skips an allocation budget under the lysdebug tag,
-// whose traces allocate.
-func skipAllocBudget(t *testing.T) {
-	t.Helper()
-	if debug.Enabled {
-		t.Skip("allocation budgets do not hold under lysdebug")
-	}
-	if raceEnabled {
-		t.Skip("allocation budgets do not hold under -race, whose instrumentation allocates")
-	}
-}
-
 func TestAllocBudgetFocusedTextAreaTick(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	a := idleBudgetApp(t)
 	wire := &fakeIMEWire{available: true}
 	a.ime = newIMEController(wire)

@@ -3,6 +3,8 @@ package widget
 import (
 	"slices"
 	"testing"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 func TestKidStackClearsEachLevelWhenItsLoopEnds(t *testing.T) {
@@ -37,6 +39,7 @@ func TestKidStackClearsEachLevelWhenItsLoopEnds(t *testing.T) {
 }
 
 func TestKidStackKeepsItsBuffersAcrossWalks(t *testing.T) {
+	testbuild.SkipAllocBudget(t)
 	var s kidStack
 	box := NewBox(Row, 0, 0)
 	fill := func(kids []Widget) []Widget { return append(kids, box) }

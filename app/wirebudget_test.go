@@ -9,6 +9,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/sysfont"
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -50,7 +51,7 @@ func (f *wireFixture) answerFrames() {
 }
 
 func TestAllocBudgetWireFrame(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	f := newWireFixture(t, "wayland-budget")
 	f.ctx.SetBuffered(true)
 	sysfont.Warm()
@@ -109,7 +110,7 @@ func spinnerRig(t *testing.T) (*Application, *paintHarness, *time.Time) {
 }
 
 func TestAllocBudgetSpinnerTick(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	a, h, clk := spinnerRig(t)
 	tick := func() {
 		*clk = clk.Add(16 * time.Millisecond)
@@ -136,7 +137,7 @@ func TestAllocBudgetSpinnerTick(t *testing.T) {
 }
 
 func TestAllocBudgetWithheldWindowTick(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	a, h, clk := spinnerRig(t)
 	h.surf.withholdFrames = true
 	tick := func() {
@@ -156,7 +157,7 @@ func TestAllocBudgetWithheldWindowTick(t *testing.T) {
 }
 
 func TestAllocBudgetBlurredWindowTick(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	a := idleBudgetApp(t)
 	entry := widget.NewEntry(imeBudgetFace(t), 14, 0)
 	entry.SetText("a field that lost the keyboard")

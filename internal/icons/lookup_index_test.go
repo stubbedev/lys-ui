@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 var (
@@ -180,7 +182,7 @@ func TestIndexedLookupMatchesWalkOnFixtures(t *testing.T) {
 // The same over the icon themes installed under XDG_DATA_DIRS, in the
 // default chain: every icon name they hold.
 func TestIndexedLookupMatchesWalkOnInstalledThemes(t *testing.T) {
-	if raceEnabled {
+	if testbuild.Race {
 		t.Skip("the reference walk over every installed icon takes minutes under -race; the fixtures cover the race build")
 	}
 	paths := defaultSearchPaths()
@@ -251,12 +253,12 @@ func TestRepeatLookupReadsNothing(t *testing.T) {
 	if fsys.n() != before {
 		t.Errorf("a new size of an indexed name read the file system %d times, want 0", fsys.n()-before)
 	}
-	if raceEnabled {
-		return
-	}
-	if allocs := testing.AllocsPerRun(100, func() { _, _ = c.Lookup("flag", 24, 240) }); allocs != 0 {
-		t.Errorf("a warm hit allocates %v times, want 0: it did not come from the memo", allocs)
-	}
+	t.Run("allocations", func(t *testing.T) {
+		testbuild.SkipAllocBudget(t)
+		if allocs := testing.AllocsPerRun(100, func() { _, _ = c.Lookup("flag", 24, 240) }); allocs != 0 {
+			t.Errorf("a warm hit allocates %v times, want 0: it did not come from the memo", allocs)
+		}
+	})
 }
 
 // Every reset drops memoized resolutions: a changed theme or search

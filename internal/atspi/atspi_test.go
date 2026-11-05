@@ -21,6 +21,7 @@ import (
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -1031,6 +1032,7 @@ func TestStuckBusHoldsUpNoLoopPass(t *testing.T) {
 }
 
 func TestPassReusesRetiredNodes(t *testing.T) {
+	testbuild.SkipAllocBudget(t)
 	scene := &countingScene{}
 	br, _ := serveLabel(t, scene, nil)
 	br.Refresh()

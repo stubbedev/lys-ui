@@ -6,6 +6,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 const dropCSS = `
@@ -339,12 +340,15 @@ func TestSettledDropDoesNoWork(t *testing.T) {
 	}
 	cv := render.New(make([]byte, render.Stride(r.w)*r.h), render.Stride(r.w), r.w, r.h)
 	r.segs.Paint(cv)
-	if allocs := testing.AllocsPerRun(50, func() {
-		r.drop.follow(r.segs.Segment(3))
-		r.segs.Paint(cv)
-	}); allocs != 0 {
-		t.Errorf("a settled drop allocates %v per frame", allocs)
-	}
+	t.Run("allocations", func(t *testing.T) {
+		testbuild.SkipAllocBudget(t)
+		if allocs := testing.AllocsPerRun(50, func() {
+			r.drop.follow(r.segs.Segment(3))
+			r.segs.Paint(cv)
+		}); allocs != 0 {
+			t.Errorf("a settled drop allocates %v per frame", allocs)
+		}
+	})
 	r.settled()
 }
 

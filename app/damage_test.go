@@ -17,6 +17,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/scale"
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -852,7 +853,7 @@ func TestAGPUScrollStepCarriesItsPixels(t *testing.T) {
 }
 
 func TestAllocBudgetScrollFrame(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	h, sc, _ := scrollWindow(t)
 	h.frame()
 	y := 0

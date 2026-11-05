@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 func arrSum(ws []*Label) int {
@@ -88,7 +90,7 @@ func TestScrollStepOwesOnlyTheStripWhenItCanMove(t *testing.T) {
 }
 
 func TestScrollStepAllocatesNothing(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	sc, _ := longScroll(t, 2000)
 	r := render.Rect{W: 800, H: 600}
 	SizeWithin(sc, Size{W: 800, H: 600})
@@ -220,7 +222,7 @@ func TestListStepOwesItsStripAndKeepsRowsInOrder(t *testing.T) {
 }
 
 func TestListStepAllocatesNothingAcrossRowsItHolds(t *testing.T) {
-	skipAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	made := 0
 	l := NewList[*Label](recycledRows{face: entryFace(t), made: &made}, 24)
 	r := render.Rect{W: 600, H: 600}
