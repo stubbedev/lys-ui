@@ -706,6 +706,7 @@ type keyRepeater struct {
 	rate, delay time.Duration
 	held        *heldKey
 	next        time.Time
+	now         func() time.Time
 }
 
 type heldKey struct {
@@ -725,6 +726,7 @@ func newKeyRepeater(rate, delayMs uint32) *keyRepeater {
 	return &keyRepeater{
 		rate:  time.Second / time.Duration(rate),
 		delay: time.Duration(delayMs) * time.Millisecond,
+		now:   time.Now,
 	}
 }
 
@@ -732,7 +734,7 @@ func newKeyRepeater(rate, delayMs uint32) *keyRepeater {
 // previous one, matching physical repeat behavior.
 func (r *keyRepeater) press(code uint32, mods wlsession.Mods) {
 	r.held = &heldKey{code: code, mods: mods}
-	r.next = time.Now().Add(r.delay)
+	r.next = r.now().Add(r.delay)
 }
 
 // release stops repeating when the held key comes up.
@@ -747,12 +749,18 @@ func (r *keyRepeater) release(code uint32) {
 func (r *keyRepeater) stop() { r.held = nil }
 
 // tick fires the next repeat when one is due and reports whether a key
-// press should be delivered.
+// press should be delivered. The next deadline follows the previous one,
+// so handling time does not slow the rate; repeats that fell behind are
+// skipped rather than delivered in a burst.
 func (r *keyRepeater) tick() (code uint32, mods wlsession.Mods, ok bool) {
-	if r.held == nil || time.Now().Before(r.next) {
+	now := r.now()
+	if r.held == nil || now.Before(r.next) {
 		return 0, 0, false
 	}
-	r.next = time.Now().Add(r.rate)
+	r.next = r.next.Add(r.rate)
+	if !r.next.After(now) {
+		r.next = r.next.Add((now.Sub(r.next)/r.rate + 1) * r.rate)
+	}
 	return r.held.code, r.held.mods, true
 }
 

@@ -70,6 +70,45 @@ func TestKeyRepeater(t *testing.T) {
 		}
 	})
 
+	t.Run("late handling keeps the configured rate", func(t *testing.T) {
+		clock := time.Unix(1000, 0)
+		r := newKeyRepeater(20, 400)
+		r.now = func() time.Time { return clock }
+		start := clock
+		r.press(30, 0)
+		const n = 10
+		for i := range n {
+			due, _ := r.nextDeadline()
+			clock = due.Add(7 * time.Millisecond)
+			if _, _, ok := r.tick(); !ok {
+				t.Fatalf("repeat %d did not fire", i)
+			}
+		}
+		due, _ := r.nextDeadline()
+		if want := start.Add(r.delay + n*r.rate); !due.Equal(want) {
+			t.Errorf("after %d late repeats the next is due %v after the press, want %v", n, due.Sub(start), want.Sub(start))
+		}
+	})
+
+	t.Run("repeats that fell behind are skipped, not burst", func(t *testing.T) {
+		clock := time.Unix(1000, 0)
+		r := newKeyRepeater(20, 400)
+		r.now = func() time.Time { return clock }
+		start := clock
+		r.press(30, 0)
+		clock = start.Add(r.delay + 3*r.rate + r.rate/2)
+		if _, _, ok := r.tick(); !ok {
+			t.Fatal("an overdue repeat did not fire")
+		}
+		if _, _, ok := r.tick(); ok {
+			t.Error("the repeats that fell behind fired in a burst")
+		}
+		due, _ := r.nextDeadline()
+		if want := start.Add(r.delay + 4*r.rate); !due.Equal(want) {
+			t.Errorf("next repeat due %v after the press, want %v", due.Sub(start), want.Sub(start))
+		}
+	})
+
 	t.Run("repeats carry the mods held at press time", func(t *testing.T) {
 		r := newKeyRepeater(20, 400)
 		r.press(30, wlsession.ModCtrl)
