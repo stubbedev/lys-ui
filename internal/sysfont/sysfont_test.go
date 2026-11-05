@@ -2,6 +2,7 @@ package sysfont
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"runtime"
 	"strings"
@@ -386,7 +387,7 @@ func TestMonospaceNeverResolvesProportional(t *testing.T) {
 // three cells, is the monospace answer itself: the generic keeps it
 // instead of parsing it and swapping in the embedded mono (#428).
 func TestMonospaceKeepsADualWidthFace(t *testing.T) {
-	fm, err := fontmap()
+	fm, err := fontmap(context.Background())
 	if err != nil {
 		t.Skipf("no system font store: %v", err)
 	}

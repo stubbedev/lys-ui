@@ -10,6 +10,7 @@
 package sysfont
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -40,10 +41,10 @@ var regAspect = font.Aspect{Style: font.StyleNormal, Weight: font.WeightNormal}
 // for concurrent use, so every lookup holds the mutex; like
 // render.Typeface, the resolved fonts are for single-threaded UI use.
 var (
-	storeOnce sync.Once
-	storeFM   *fontscan.FontMap
-	storeErr  error
-	storeMu   sync.Mutex
+	storeInitMu sync.Mutex
+	storeFM     *fontscan.FontMap
+	storeErr    error
+	storeMu     sync.Mutex
 	// typefaces holds the typeface of every face the store has handed
 	// out, keyed by its file location, whichever path loaded it: a
 	// family resolved by name, the matcher, or a fallback chain. A
@@ -96,33 +97,46 @@ func embeddedFamily(family string) (embeddedFont, bool) {
 	return embeddedFont{}, false
 }
 
-// fontmap builds the shared store once; the first error sticks.
-func fontmap() (*fontscan.FontMap, error) {
-	storeOnce.Do(func() {
-		fm := fontscan.NewFontMap(quietLogger{})
-		// An empty cache path lets fontscan pick its platform default.
-		err := fm.UseSystemFonts("")
-		if err != nil && !errors.Is(err, fontscan.ErrNoFontDirectories) {
-			storeErr = fmt.Errorf("sysfont: scan system fonts: %w", err)
-			return
+// fontmap builds the shared store once; the first error sticks. A build
+// cancelled through ctx records nothing, so the next caller builds it.
+func fontmap(ctx context.Context) (*fontscan.FontMap, error) {
+	storeInitMu.Lock()
+	defer storeInitMu.Unlock()
+	if storeFM != nil || storeErr != nil {
+		return storeFM, storeErr
+	}
+	fm, err := buildStore(ctx)
+	if err != nil {
+		if ctx.Err() == nil {
+			storeErr = err
 		}
-		if err == nil {
-			footprints, err := fontscan.SystemFonts(quietLogger{}, "")
-			if err != nil {
-				storeErr = fmt.Errorf("sysfont: index system fonts: %w", err)
-				return
-			}
-			installed = indexFamilies(footprints)
+		return nil, err
+	}
+	storeFM = fm
+	return fm, nil
+}
+
+var buildStore = scanStore
+
+func scanStore(ctx context.Context) (*fontscan.FontMap, error) {
+	fm := fontscan.NewFontMap(quietLogger{})
+	err := fm.UseSystemFonts(ctx, "")
+	if err != nil && !errors.Is(err, fontscan.ErrNoFontDirectories) {
+		return nil, fmt.Errorf("sysfont: scan system fonts: %w", err)
+	}
+	if err == nil {
+		footprints, err := fontscan.SystemFonts(ctx, quietLogger{}, "")
+		if err != nil {
+			return nil, fmt.Errorf("sysfont: index system fonts: %w", err)
 		}
-		for _, e := range []embeddedFont{embeddedSans, embeddedMono} {
-			if err := fm.AddFont(opentype.NewMapped(e.data), e.location().File, e.family); err != nil {
-				storeErr = fmt.Errorf("sysfont: register embedded %s: %w", e.family, err)
-				return
-			}
+		installed = indexFamilies(footprints)
+	}
+	for _, e := range []embeddedFont{embeddedSans, embeddedMono} {
+		if err := fm.AddFont(opentype.NewMapped(e.data), e.location().File, e.family); err != nil {
+			return nil, fmt.Errorf("sysfont: register embedded %s: %w", e.family, err)
 		}
-		storeFM = fm
-	})
-	return storeFM, storeErr
+	}
+	return fm, nil
 }
 
 // indexFamilies groups footprints by their family.
@@ -148,7 +162,7 @@ func lookup(family string, aspect font.Aspect) (*render.Typeface, error) {
 	if e, ok := embeddedFamily(family); ok {
 		return embeddedTypeface(e)
 	}
-	fm, err := fontmap()
+	fm, err := fontmap(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -368,10 +382,12 @@ func PeekFaceFile(path string) (*render.Typeface, bool) {
 
 // Warm scans the system font store and parses the embedded faces, so the
 // UI loop's first look at a font finds them ready. It belongs off the
-// loop; a scan cannot be interrupted, and the goroutine running it ends
-// with the scan. An error sticks for whoever asks next, who reports it.
-func Warm() {
-	_, _ = fontmap()
+// loop, and returns soon after ctx is done, leaving the store to whoever
+// asks next. An error sticks for whoever asks next, who reports it.
+func Warm(ctx context.Context) {
+	if _, err := fontmap(ctx); ctx.Err() != nil || err != nil {
+		return
+	}
 	_, _ = UI()
 	_, _ = UIMono()
 }
@@ -494,7 +510,7 @@ var storeFallback = fallbackFace
 // r's script as the matcher's hint. The face need not cover r: the
 // matcher returns an arbitrary face when nothing does.
 func fallbackFace(families []string, r rune) (*render.Typeface, error) {
-	fm, err := fontmap()
+	fm, err := fontmap(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +530,7 @@ func fallbackFace(families []string, r rune) (*render.Typeface, error) {
 // preference order. Diagnostics (the doctor block) use it to show
 // what mixed-script text falls back to; it loads no face.
 func FallbackFamilies() []string {
-	if _, err := fontmap(); err != nil {
+	if _, err := fontmap(context.Background()); err != nil {
 		return nil
 	}
 	storeMu.Lock()
@@ -547,11 +563,11 @@ func FamilyKey(name string) string { return font.NormalizeFamily(name) }
 // the disk index this reads.
 func Families() ([]string, error) {
 	familiesOnce.Do(func() {
-		if _, err := fontmap(); err != nil {
+		if _, err := fontmap(context.Background()); err != nil {
 			familiesErr = err
 			return
 		}
-		footprints, err := fontscan.SystemFonts(quietLogger{}, "")
+		footprints, err := fontscan.SystemFonts(context.Background(), quietLogger{}, "")
 		if err != nil {
 			familiesErr = fmt.Errorf("sysfont: enumerate families: %w", err)
 			return

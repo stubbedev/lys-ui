@@ -88,7 +88,10 @@ func TestTheDefaultLookScansNoFontDirectory(t *testing.T) {
 	if _, err := Weighted(uifont.MonoFamily, 14, 500, false); err != nil {
 		t.Fatal(err)
 	}
-	if storeFM != nil {
+	storeInitMu.Lock()
+	built := storeFM != nil
+	storeInitMu.Unlock()
+	if built {
 		t.Error("resolving the embedded families built the system font store")
 	}
 }

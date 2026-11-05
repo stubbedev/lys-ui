@@ -1,6 +1,8 @@
 package sysfont
 
 import (
+	"context"
+
 	"github.com/stubbedev/lys-lib/third_party/typesetting/font"
 	"github.com/stubbedev/lys-lib/third_party/typesetting/fontscan"
 )
@@ -28,7 +30,7 @@ var (
 func aliasFaces(family string) []systemFace {
 	if !aliasIndexBuilt {
 		aliasIndexBuilt = true
-		footprints, err := fontscan.SystemFonts(quietLogger{}, "")
+		footprints, err := fontscan.SystemFonts(context.Background(), quietLogger{}, "")
 		if err == nil {
 			aliasIndex = buildAliasIndex(footprints)
 		}

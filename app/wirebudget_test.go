@@ -54,7 +54,7 @@ func TestAllocBudgetWireFrame(t *testing.T) {
 	testbuild.SkipAllocBudget(t)
 	f := newWireFixture(t, "wayland-budget")
 	f.ctx.SetBuffered(true)
-	sysfont.Warm()
+	sysfont.Warm(t.Context())
 	animclock.Reset()
 	a := NewApplication(f.sess)
 	h := f.window(t, a)
