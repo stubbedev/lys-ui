@@ -495,8 +495,27 @@ func TestCancelAndDropPerformedConclude(t *testing.T) {
 	})
 }
 
-func TestReadPayloadShortCircuitsSelfDrops(t *testing.T) {
+// loopController is a test controller whose invoke queues onto a loop
+// the test runs, as the application's loop runs the controller.
+func loopController() (*Controller, chan func()) {
 	c := newTestController()
+	loop := make(chan func(), 4)
+	c.invoke = func(fn func()) { loop <- fn }
+	return c, loop
+}
+
+func runLoopOnce(t *testing.T, loop chan func()) {
+	t.Helper()
+	select {
+	case fn := <-loop:
+		fn()
+	case <-time.After(10 * time.Second):
+		t.Fatal("nothing reached the loop")
+	}
+}
+
+func TestReadPayloadShortCircuitsSelfDrops(t *testing.T) {
+	c, loop := loopController()
 	offer := &fakeOffer{}
 	c.dragOffer = offer
 	c.accepted = "application/x-lys-ui-tile"
@@ -510,7 +529,9 @@ func TestReadPayloadShortCircuitsSelfDrops(t *testing.T) {
 		},
 	}
 
-	r := readPayload(t, c, "application/x-lys-ui-tile")
+	var r receiveResult
+	c.ReadPayload("application/x-lys-ui-tile", func(data []byte, err error) { r = receiveResult{data, err} })
+	runLoopOnce(t, loop)
 	if r.err != nil {
 		t.Fatalf("ReadPayload: %v", r.err)
 	}
@@ -521,12 +542,33 @@ func TestReadPayloadShortCircuitsSelfDrops(t *testing.T) {
 	if len(offer.received) != 0 || offer.finished != 0 {
 		t.Errorf("self-drop used the pipe (receive=%v finish=%d)", offer.received, offer.finished)
 	}
-	// …and the source concludes immediately, dropped=true.
+	// …and the source concludes right after, dropped=true.
 	if done != 1 {
 		t.Errorf("OnDone(dropped=%d), want 1", done)
 	}
 	if c.Dragging() {
 		t.Error("source survived its own drop")
+	}
+}
+
+// A self-drop reaches its destination before the source hears the
+// drag ended, as dnd_finished follows the destination's finish across
+// processes: a source that forgets its payload on OnDone (a ChipBox's
+// chip in flight) still has it when the drop lands.
+func TestASelfDropIsDeliveredBeforeTheSourceConcludes(t *testing.T) {
+	c, loop := loopController()
+	c.dragOffer = &fakeOffer{}
+	c.accepted = "application/x-lys-ui-chip"
+	c.src, c.srcReq = &wl.DataSource{}, &fakeSource{}
+	var order []string
+	c.srcData = transfer.Drag{
+		Mimes: []string{"application/x-lys-ui-chip"}, Write: fakeWriter,
+		OnDone: func(transfer.Action) { order = append(order, "source done") },
+	}
+	c.ReadPayload("application/x-lys-ui-chip", func([]byte, error) { order = append(order, "delivered") })
+	runLoopOnce(t, loop)
+	if len(order) != 2 || order[0] != "delivered" || order[1] != "source done" {
+		t.Errorf("order %v, want the drop delivered before the source concludes", order)
 	}
 }
 

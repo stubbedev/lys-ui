@@ -116,6 +116,22 @@ func TestChipBoxReorders(t *testing.T) {
 	}
 }
 
+// A chip dropped back on its own place, either half of itself or the
+// gap after it, reports no move.
+func TestAChipDroppedWhereItWasReportsNoMove(t *testing.T) {
+	b := newChipBox(t, "one", "two", "three")
+	arrangeTree(t, b, 400, 100)
+	moves := 0
+	b.OnMoved = func(*ChipBox, int, int) { moves++ }
+	two := b.ChipAt(1).Bounds()
+	for _, p := range []Point{{X: two.X + 1, Y: two.Y + two.H/2}, {X: two.X + two.W - 1, Y: two.Y + two.H/2}} {
+		dragChip(t, b.ChipAt(1), b, p)
+	}
+	if got := chipTexts(b); moves != 0 || got[1] != "two" {
+		t.Errorf("%d moves reported, order %v; want none and the order kept", moves, got)
+	}
+}
+
 // A drop whose payload is not the chip in flight moves nothing.
 func TestChipBoxIgnoresForeignPayloads(t *testing.T) {
 	b := newChipBox(t, "one", "two")

@@ -266,7 +266,8 @@ func (b *ChipBox) DragLeave() {
 }
 
 // Drop implements Dropper: the chip in flight moves to the indicated
-// place. A payload that is not the chip in flight's is ignored.
+// place. A payload that is not the chip in flight's is ignored, and a
+// chip dropped back where it was neither moves nor reports a move.
 func (b *ChipBox) Drop(_ string, data []byte, p Point) {
 	to := b.dropPosition(p)
 	b.DragLeave()
@@ -280,6 +281,9 @@ func (b *ChipBox) Drop(_ string, data []byte, p Point) {
 	if src == b {
 		if from < to {
 			to--
+		}
+		if from == to {
+			return
 		}
 		b.flow.Move(from, to)
 	} else {

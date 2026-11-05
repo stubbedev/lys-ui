@@ -521,14 +521,14 @@ func (c *Controller) readOwn(mime string, done func([]byte, error)) {
 	err := c.xf.Go(func() {
 		data, err := content.Bytes(mime)
 		c.invoke(func() {
-			conclude()
 			done(data, err)
+			conclude()
 		})
 	})
 	if err != nil {
 		c.invoke(func() {
-			conclude()
 			done(nil, fmt.Errorf("dragdrop: read own %s drag: %w", mime, err))
+			conclude()
 		})
 	}
 }
