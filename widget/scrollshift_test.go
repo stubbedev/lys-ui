@@ -285,3 +285,78 @@ func TestAStickyOrOverlappedScrollDoesNotMove(t *testing.T) {
 		}
 	}
 }
+
+type baseRow struct {
+	Base
+	arranges *int
+}
+
+func (r *baseRow) Measure(axis Axis, _ int) Sizes {
+	if axis == Row {
+		return FixedSizes(200)
+	}
+	return FixedSizes(20)
+}
+
+func (r *baseRow) Arrange(rect render.Rect) {
+	*r.arranges++
+	r.ArrangeSelf(rect)
+}
+
+func (r *baseRow) Paint(cv *render.Canvas) { cv.FillRect(r.Bounds(), render.RGB(40, 60, 80)) }
+
+func (r *baseRow) HitTest(p Point) Widget { return r.HitLeaf(r, p) }
+
+func baseRowScroll(declared bool) (*Scroll, *int) {
+	arranges := 0
+	col := NewBox(Column, 0, 0)
+	for range 2000 {
+		row := &baseRow{arranges: &arranges}
+		if declared {
+			row.SetInkBounds(render.Insets{})
+		}
+		col.Append(row, false)
+	}
+	return NewScroll(col), &arranges
+}
+
+func TestAScrollOfBaseRowsThatDeclareTheirInkMovesAndArrangesWhatShows(t *testing.T) {
+	sc, arranges := baseRowScroll(true)
+	r := render.Rect{W: 400, H: 300}
+	SizeWithin(sc, Size{W: 400, H: 300})
+	sc.Arrange(r)
+	CollectFrameDamageInto(nil, nil, sc)
+	visible := (300+2*scrollOverscan)/20 + 3
+	for step := 1; step <= 10; step++ {
+		sc.SetOffset(0, step*10)
+		before := *arranges
+		sc.Arrange(r)
+		if got := *arranges - before; got > visible {
+			t.Fatalf("step %d arranged %d of 2000 rows, want at most %d", step, got, visible)
+		}
+		rects, moves, _ := CollectFrameDamageInto(nil, nil, sc)
+		if len(moves) != 1 || moves[0].DY != -10 {
+			t.Fatalf("step %d: moves %+v, want the view copied up by 10", step, moves)
+		}
+		if got, want := DamageArea(rects), 400*10; got > want {
+			t.Fatalf("step %d owed %d px, want the 10 px strip %d", step, got, want)
+		}
+	}
+}
+
+func TestAScrollOfBaseRowsThatDeclareNothingRepaintsItsView(t *testing.T) {
+	sc, _ := baseRowScroll(false)
+	r := render.Rect{W: 400, H: 300}
+	SizeWithin(sc, Size{W: 400, H: 300})
+	sc.Arrange(r)
+	CollectFrameDamageInto(nil, nil, sc)
+	sc.SetOffset(0, 10)
+	sc.Arrange(r)
+	rects, moves, _ := CollectFrameDamageInto(nil, nil, sc)
+	if len(moves) != 0 {
+		t.Errorf("rows that may paint anywhere were copied: %+v", moves)
+	}
+	if got := render.UnionAll(rects); got.Intersect(sc.Bounds()) != sc.Bounds() {
+		t.Errorf("owed %+v, want the whole view %+v", got, sc.Bounds())
+	}
+}

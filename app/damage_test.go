@@ -870,3 +870,46 @@ func TestAllocBudgetScrollFrame(t *testing.T) {
 		t.Errorf("a scroll frame through draw allocates %v, budget %d", allocs, budget)
 	}
 }
+
+type stripedRow struct {
+	widget.Base
+	shade uint8
+}
+
+func (r *stripedRow) Measure(axis widget.Axis, _ int) widget.Sizes {
+	if axis == widget.Row {
+		return widget.FixedSizes(360)
+	}
+	return widget.FixedSizes(18)
+}
+
+func (r *stripedRow) Paint(cv *render.Canvas) {
+	b := r.Bounds()
+	cv.FillRect(b, render.RGB(r.shade, 80, 120))
+	cv.FillRect(render.Rect{X: b.X + 4, Y: b.Y + 4, W: int(r.shade) % 200, H: 6}, render.RGB(240, 240, 240))
+}
+
+func (r *stripedRow) HitTest(p widget.Point) widget.Widget { return r.HitLeaf(r, p) }
+
+func TestAScrollOfBaseRowsBlitsAndMatchesAWholePaint(t *testing.T) {
+	col := widget.NewBox(widget.Column, 0, 0)
+	for i := range 2000 {
+		row := &stripedRow{shade: uint8(i * 37)}
+		row.SetInkBounds(render.Insets{})
+		col.Append(row, false)
+	}
+	sc := widget.NewScroll(col)
+	h := newPaintHarness(widget.NewBox(widget.Column, 0, 8).Append(sc, true), 400, 300)
+	h.frame()
+	y := 0
+	nudge := func() { y += 10; sc.SetOffset(0, y) }
+	h.warm(nudge, 4)
+	for step := range 6 {
+		nudge()
+		painted, _ := h.frame()
+		if limit := 400 * 10 * 3; painted > limit {
+			t.Errorf("step %d painted %d px, want its strip and the scrollbar, at most %d", step, painted, limit)
+		}
+		assertShowsWholePaint(t, h, step)
+	}
+}

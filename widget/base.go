@@ -9,6 +9,8 @@ import "github.com/stubbedev/lys-lib/render"
 // route leaf hit tests through HitLeaf.
 type Base struct {
 	node
+	inkReach    render.Insets
+	inkDeclared bool
 }
 
 // NewBase returns a zero Base for embedding:
@@ -18,6 +20,22 @@ type Base struct {
 //	    ...
 //	}
 func NewBase() Base { return Base{} }
+
+// SetInkBounds declares that the widget paints nothing outside its
+// bounds grown by reach, and its children nothing outside theirs. A
+// widget that declares it joins the kit's culling: a paint whose clip
+// misses that ink skips it, a Scroll copies its pixels on a step instead
+// of repainting it, and rows far outside a scrolled view are not
+// arranged. Without it the widget may paint anywhere, and is always
+// visited.
+func (b *Base) SetInkBounds(reach render.Insets) {
+	b.inkReach, b.inkDeclared = reach, true
+	b.settleInk()
+}
+
+func (b *Base) ownInk() (Widget, render.Insets, bool) {
+	return b.self, b.inkReach, b.inkDeclared
+}
 
 // ArrangeSelf records the widget's own rect. A container defined
 // outside the kit shadows the promoted node.Arrange with its child
