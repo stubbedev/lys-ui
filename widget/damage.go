@@ -81,6 +81,14 @@ func DamageWalks() uint64 { return damageWalks.Load() }
 // window can skip past a dirty tree.
 func markDamage() { damageGen.Add(1) }
 
+var keptLayerGen atomic.Uint64
+
+// RepaintKeptLayers makes every layer a widget keeps across frames
+// repaint at its next frame instead of compositing again: a host calls
+// it after a frame that failed or went out incomplete, whose layers may
+// not hold what was recorded into them.
+func RepaintKeptLayers() { keptLayerGen.Add(1) }
+
 // CollectDamage drains every pending invalidation in the tree and
 // returns the repaint rects in root coordinates plus whether anything
 // is owed. Rects may overlap; the caller can clip painting to their

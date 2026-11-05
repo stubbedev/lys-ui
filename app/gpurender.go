@@ -23,6 +23,7 @@ import (
 	"github.com/stubbedev/lys-ui/internal/popup"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
+	"github.com/stubbedev/lys-ui/widget"
 )
 
 // rendererEnv picks how windows draw: "cpu" on the CPU into shared
@@ -423,6 +424,9 @@ func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, carry []gpu.Carry, paint 
 	drawn, err := r.render(cv.Recording(), b.Target, carry, b.Timeline != nil)
 	if err == nil && b.Timeline != nil {
 		err = r.syncFrame(b, drawn.syncFile)
+	}
+	if drawn.incomplete || (err != nil && !errors.Is(err, gpu.ErrBusy)) {
+		widget.RepaintKeptLayers()
 	}
 	// The recording is done once drawn: ending it now releases the
 	// rasters retired while it was open (render.Retire), which an idle

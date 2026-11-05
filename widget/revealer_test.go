@@ -503,3 +503,98 @@ func TestRevealerLeavingTheSurfaceFadeRestoresItsAlpha(t *testing.T) {
 		t.Errorf("surface alphas %v after the fade gave way to a zoom, want the last at 1", *alphas)
 	}
 }
+
+func stepTransform(c *animClock, r *Revealer) (frames int) {
+	for c.step() && r.Progress() < 1 {
+		frames++
+		if _, any := CollectDamage(r); any {
+			paintReveal(r)
+		}
+	}
+	return frames
+}
+
+func TestRevealerTransformPaintsItsChildOnce(t *testing.T) {
+	for _, tr := range []RevealTransition{RevealZoom, RevealFlip, RevealSlideUp} {
+		c := pinAnimClock(t)
+		r, leaf := revealerAt(t, tr)
+		r.SetRevealed(true)
+		if frames := stepTransform(c, r); frames < 3 {
+			t.Fatalf("transition %d ran %d frames", tr, frames)
+		}
+		if leaf.paints != 1 {
+			t.Errorf("transition %d painted the child %d times, want once", tr, leaf.paints)
+		}
+	}
+}
+
+func TestRevealerReusedLayerCompositesAsRepainted(t *testing.T) {
+	c := pinAnimClock(t)
+	r, leaf := revealerAt(t, RevealZoom)
+	r.SetRevealed(true)
+	advance(c, 30*time.Millisecond)
+	paintReveal(r)
+	advance(c, 30*time.Millisecond)
+	reused := paintReveal(r)
+	if leaf.paints != 1 {
+		t.Fatalf("the second frame painted the child %d times in all, want once", leaf.paints)
+	}
+	RepaintKeptLayers()
+	repainted := paintReveal(r)
+	if leaf.paints != 2 {
+		t.Errorf("after RepaintKeptLayers the child painted %d times in all, want twice", leaf.paints)
+	}
+	if lit(reused, render.Rect{W: 80, H: 60}) == 0 || string(reused) != string(repainted) {
+		t.Error("the reused layer composites differently from a repainted one")
+	}
+}
+
+func TestRevealerChildDamageRecordsItsLayerAgain(t *testing.T) {
+	c := pinAnimClock(t)
+	r, leaf := revealerAt(t, RevealZoom)
+	r.SetRevealed(true)
+	advance(c, 50*time.Millisecond)
+	paintReveal(r)
+	CollectDamage(r)
+	leaf.col = render.RGB(0, 0, 255)
+	leaf.Invalidate()
+	advance(c, 10*time.Millisecond)
+	CollectDamage(r)
+	shot := paintReveal(r)
+	if leaf.paints != 2 {
+		t.Errorf("a damaged child painted %d times in all, want twice", leaf.paints)
+	}
+	if red := redAt(shot, 40, 30); red != 0 {
+		t.Errorf("red = %d after the child turned blue, want the new color composited", red)
+	}
+}
+
+func TestRevealerLayerIsReusedOnlyByItsOwnList(t *testing.T) {
+	c := pinAnimClock(t)
+	r, leaf := revealerAt(t, RevealZoom)
+	r.SetRevealed(true)
+	advance(c, 30*time.Millisecond)
+	a, b := render.NewRecorder(80, 60, 1, 1), render.NewRecorder(80, 60, 1, 1)
+	frame := func(rec *render.Canvas) shot {
+		rec.ResetRecorder(80, 60, 1, 1)
+		rec.Clear(rec.Rect(), revealBG)
+		r.Paint(rec)
+		data := make([]byte, render.Stride(80)*60)
+		rec.Recording().Paint(render.New(data, render.Stride(80), 80, 60))
+		return data
+	}
+	frame(a)
+	advance(c, 30*time.Millisecond)
+	leaf.paints = 0
+	got := frame(a)
+	if leaf.paints != 0 {
+		t.Errorf("the List that last played the layer repainted the child %d times", leaf.paints)
+	}
+	want := frame(b)
+	if leaf.paints != 1 {
+		t.Errorf("another List painted the child %d times, want it recorded again", leaf.paints)
+	}
+	if lit(want, render.Rect{W: 80, H: 60}) == 0 || string(got) != string(want) {
+		t.Error("a List reusing the layer composites differently from one recording it again")
+	}
+}

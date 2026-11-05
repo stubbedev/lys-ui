@@ -148,6 +148,7 @@ type node struct {
 	arranges       int
 	arrangeStale   bool
 	damageStale    bool
+	subDamaged     bool
 	damageVolatile bool
 	damageIcons    uint64
 	restyles       int
@@ -566,7 +567,7 @@ func (n *node) markBranchStale() {
 	n.arrangeStale, n.damageStale = true, true
 	for p := n.parent; p != nil; p = parentOf(p) {
 		if a := nodeOf(p); a != nil {
-			a.arrangeStale, a.damageStale = true, true
+			a.arrangeStale, a.damageStale, a.subDamaged = true, true, true
 		}
 	}
 }

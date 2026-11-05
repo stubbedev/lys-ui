@@ -2365,7 +2365,7 @@ func (n *node) markStyleDirty() {
 	n.arrangeStale, n.damageStale = true, true
 	for p := parentNodeOf(n); p != nil; p = parentNodeOf(p) {
 		p.subStyle = true
-		p.arrangeStale, p.damageStale = true, true
+		p.arrangeStale, p.damageStale, p.subDamaged = true, true, true
 	}
 }
 

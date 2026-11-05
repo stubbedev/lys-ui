@@ -6,6 +6,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/anim"
+	"github.com/stubbedev/lys-ui/internal/icons"
 )
 
 // RevealTransition is how a Revealer brings its child in and out.
@@ -65,6 +66,9 @@ const defaultRevealDuration = 200 * time.Millisecond
 // bounce, rotate, flip, swing, genie) drawn through an offscreen layer
 // with its opacity. Progress runs linearly in time toward the target;
 // each transition shapes it with its own curve, the bounce overshooting.
+// A transformed composite records the child into its layer once and
+// composites that layer again on later frames while nothing below the
+// revealer is damaged.
 //
 // Every transition but RevealNone reserves the child's full size for
 // the whole run, hidden included, and moves the child within it, so a
@@ -94,6 +98,13 @@ type Revealer struct {
 	full         Size
 	surfaceAlpha bool
 	drawnOpaque  bool
+	stamp        layerStamp
+}
+
+type layerStamp struct {
+	dev                       render.Rect
+	list                      *render.List
+	style, theme, icons, kept uint64
 }
 
 // NewRevealer wraps child hidden, fading over 200ms.
@@ -379,8 +390,14 @@ func (r *Revealer) Paint(cv *render.Canvas) {
 	}
 	dev := cv.MapRect(r.bounds)
 	m, alpha, clip := r.transform(dev, p)
-	r.layer = cv.Layer(layer, dev)
-	r.child.Paint(r.layer.Canvas())
+	stamp := layerStamp{dev: dev, list: cv.Recording(), style: styleGen, theme: themeGen, icons: icons.Default().Generation(), kept: keptLayerGen.Load()}
+	if layer != nil && !r.subDamaged && r.stamp == stamp && cv.ReuseLayer(layer, dev) {
+		r.layer = layer
+	} else {
+		r.subDamaged, r.stamp = false, stamp
+		r.layer = cv.Layer(layer, dev)
+		r.child.Paint(r.layer.Canvas())
+	}
 	if clip {
 		prev := cv.PushClipDevice(dev)
 		cv.Composite(r.layer, dev, m, alpha)
