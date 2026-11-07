@@ -97,3 +97,48 @@ func TestCenterBoxCSSInsets(t *testing.T) {
 		t.Errorf("the child got %d px, want its natural 34", got)
 	}
 }
+
+// A hidden slot takes no room: the box measures as if it were not
+// there, and the slot arranges to nothing, so its updates owe no repaint.
+func TestCenterBoxHiddenSlotsTakeNoRoom(t *testing.T) {
+	tall := NewLabel(entryFace(t), 24, "tall", 0)
+	start := NewBox(Row, 0, 0)
+	start.Append(tall, false)
+	cb := NewCenterBox(start, nil, nil)
+	if h := cb.Measure(Column, Unknown).Nat; h == 0 {
+		t.Fatal("a shown slot measures nothing")
+	}
+	start.SetVisible(false)
+	if w, h := cb.Measure(Row, Unknown).Nat, cb.Measure(Column, Unknown).Nat; w != 0 || h != 0 {
+		t.Errorf("hidden slot measures %dx%d, want nothing", w, h)
+	}
+	arrangeTree(t, cb, 200, 30)
+	if b := start.Bounds(); b.W != 0 {
+		t.Errorf("hidden slot arranged %v, want no width", b)
+	}
+}
+
+// A bar keeps its minimum thickness across its edge, whatever its
+// zones hold, and gains nothing along it.
+func TestBarMinThicknessFloorsTheExtentAcrossItsEdge(t *testing.T) {
+	for _, edge := range []BarEdge{BarTop, BarLeft} {
+		b := NewBar(edge)
+		b.Start().Append(NewLabel(entryFace(t), 10, "clock", 0), false)
+		across, along := Column, Row
+		if edge.Vertical() {
+			across, along = Row, Column
+		}
+		before, alongBefore := b.Measure(across, Unknown).Nat, b.Measure(along, Unknown).Nat
+		b.SetMinThickness(before + 50)
+		if got := b.Measure(across, Unknown).Nat; got != before+50 {
+			t.Errorf("%v: %d thick, want the %d floor", edge, got, before+50)
+		}
+		if got := b.Measure(along, Unknown).Nat; got != alongBefore {
+			t.Errorf("%v: %d along the edge, want %d as before", edge, got, alongBefore)
+		}
+		b.SetMinThickness(0)
+		if got := b.Measure(across, Unknown).Nat; got != before {
+			t.Errorf("%v: floor lifted, %d thick, want %d", edge, got, before)
+		}
+	}
+}

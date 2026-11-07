@@ -46,6 +46,8 @@ type Bar struct {
 	box                *CenterBox
 	start, center, end *Box
 	edge               BarEdge
+	// minThickness floors the bar's extent across its edge.
+	minThickness int
 }
 
 // NewBar returns an empty bar along edge.
@@ -527,4 +529,25 @@ func (s *SegmentIndicator) appendStyleKids(buf []Widget) []Widget {
 		buf = append(buf, s.drop)
 	}
 	return buf
+}
+
+// SetMinThickness keeps the bar at least px thick across its edge
+// whatever its zones hold: an auto-hiding bar's reveal strip while its
+// zones are hidden. Zero lifts the floor.
+func (b *Bar) SetMinThickness(px int) {
+	px = max(px, 0)
+	if px != b.minThickness {
+		b.minThickness = px
+		b.InvalidateLayout()
+	}
+}
+
+// Measure is the composite's, floored at the minimum thickness across
+// the edge.
+func (b *Bar) Measure(axis Axis, forSize int) Sizes {
+	s := b.composite.Measure(axis, forSize)
+	if (axis == Row) == b.edge.Vertical() {
+		return s.atLeast(b.minThickness)
+	}
+	return s
 }
