@@ -23,6 +23,12 @@ type SpinButton struct {
 	min, max, step float64
 	digits         int
 	value          float64
+	// optional lets the field hold no value; empty is that state, the
+	// text cleared and the placeholder showing.
+	optional, empty bool
+
+	// OnCleared fires when the user empties an optional field.
+	OnCleared func()
 
 	// OnValueChanged fires when the user changed the value: a step
 	// or a commit that moved it. SetValue does not fire it, so a
@@ -70,16 +76,17 @@ func (s *SpinButton) Range() (min, max float64) { return s.min, s.max }
 // SetValue sets the value (clamped, rounded) and shows it, discarding
 // uncommitted text; it does not fire OnValueChanged.
 func (s *SpinButton) SetValue(v float64) {
+	s.empty = false
 	s.value = s.clamp(v)
 	s.SetText(s.format(s.value))
 }
 
-// SetRange changes the bounds, re-clamping the value (silently, like
-// SetValue).
+// SetRange changes the bounds, re-clamping the value silently; an empty
+// field stays empty.
 func (s *SpinButton) SetRange(min, max float64) {
 	s.min, s.max = min, max
 	s.fitRange()
-	s.SetValue(s.value)
+	s.reclamp()
 }
 
 // KeyAction steps on Up/Down and PageUp/PageDown; every other key
@@ -133,8 +140,40 @@ func (s *SpinButton) stepBy(n int) {
 	s.set(s.value + float64(float64(n)*s.step))
 }
 
+// SetOptional lets the field hold no value: emptying it fires OnCleared
+// and shows the placeholder, and a step from there starts at the last
+// value. Turning it off fills an empty field with that value again.
+func (s *SpinButton) SetOptional(on bool) {
+	s.optional = on
+	if !on && s.empty {
+		s.SetValue(s.value)
+	}
+}
+
+// Clear empties an optional field without firing OnCleared, the value it
+// held kept as where a step starts; a field that is not optional ignores it.
+func (s *SpinButton) Clear() {
+	if !s.optional {
+		return
+	}
+	s.empty = true
+	s.SetText("")
+}
+
+// Empty reports whether an optional field holds no value.
+func (s *SpinButton) Empty() bool { return s.empty }
+
 // commit takes the typed text as the value, or reverts it.
 func (s *SpinButton) commit() {
+	if s.optional && strings.TrimSpace(s.Text()) == "" {
+		if !s.empty {
+			s.empty = true
+			if s.OnCleared != nil {
+				s.OnCleared()
+			}
+		}
+		return
+	}
 	v, err := strconv.ParseFloat(strings.TrimSpace(s.Text()), 64)
 	if err != nil || math.IsNaN(v) {
 		if text := strings.TrimSpace(s.Text()); text != s.format(s.value) {
@@ -149,7 +188,8 @@ func (s *SpinButton) commit() {
 // set applies a user-driven value: shown always, fired on a change.
 func (s *SpinButton) set(v float64) {
 	v = s.clamp(v)
-	changed := v != s.value
+	changed := v != s.value || s.empty
+	s.empty = false
 	s.value = v
 	if text := s.format(v); text != s.Text() {
 		s.SetText(text)
@@ -182,9 +222,18 @@ func (s *SpinButton) SetStep(step float64) {
 }
 
 // SetDigits changes the shown decimals, re-rounding the value
-// (silently, like SetValue).
+// silently; an empty field stays empty.
 func (s *SpinButton) SetDigits(digits int) {
 	s.digits = max0(digits)
 	s.fitRange()
-	s.SetValue(s.value)
+	s.reclamp()
+}
+
+// reclamp fits the value to new bounds or digits, silently, an empty
+// field staying empty.
+func (s *SpinButton) reclamp() {
+	s.value = s.clamp(s.value)
+	if !s.empty {
+		s.SetText(s.format(s.value))
+	}
 }
