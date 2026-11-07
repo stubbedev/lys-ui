@@ -139,11 +139,20 @@ func (s *ffmpegSource) Seek(t time.Duration) error {
 	return nil
 }
 
-func (s *ffmpegSource) ReadFrame(dst *image.RGBA) (time.Duration, error) {
+func (s *ffmpegSource) decoder() *y4mStream {
 	s.mu.Lock()
-	dec := s.dec
-	s.mu.Unlock()
-	return dec.ReadFrame(dst)
+	defer s.mu.Unlock()
+	return s.dec
+}
+
+func (s *ffmpegSource) ReadFrame(dst *image.RGBA) (time.Duration, error) {
+	return s.decoder().ReadFrame(dst)
+}
+
+func (s *ffmpegSource) YUV() (YUVColor, bool) { return s.decoder().YUV() }
+
+func (s *ffmpegSource) ReadFrameYUV(dst *YUVFrame) (time.Duration, error) {
+	return s.decoder().ReadFrameYUV(dst)
 }
 
 func (s *ffmpegSource) Close() error {

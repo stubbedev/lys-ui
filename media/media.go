@@ -75,7 +75,10 @@ type Audible interface {
 	OpenAudio(t time.Duration) (io.ReadCloser, error)
 }
 
-var errClosed = errors.New("media: the source is closed")
+var (
+	errClosed = errors.New("media: the source is closed")
+	errNoYUV  = errors.New("media: the source decodes no 4:2:0 YUV")
+)
 
 type muted struct{ Source }
 

@@ -160,9 +160,40 @@ func (s *Stream) Frame() render.VersionedImage {
 		return render.VersionedImage{}
 	case s.cur.still:
 		return render.VersionedImage{RGBA: s.cur.img, ID: s.cur.id}
+	case !s.cur.rgba:
+		if err := s.dec.convert(s.cur); err != nil {
+			s.fail(err)
+			return render.VersionedImage{}
+		}
 	}
 	return render.VersionedImage{RGBA: s.cur.img, ID: s.cur.id, Version: s.frameSeq}
 }
+
+// YUV reports the colour of the frames FrameYUV returns, false when
+// the source decodes no YUV and FrameYUV returns nil.
+func (s *Stream) YUV() (YUVColor, bool) {
+	if s.dec.yuv == nil {
+		return YUVColor{}, false
+	}
+	return s.dec.yuv.YUV()
+}
+
+// FrameYUV returns the frame to show as its decoded YUV planes, nil
+// before the first is decoded, after Close and for a source decoding
+// no YUV. It belongs to the stream and stays valid until the next
+// change or Close; FrameSeq tells when it changed.
+func (s *Stream) FrameYUV() *YUVFrame {
+	if s.cur == nil {
+		return nil
+	}
+	return s.cur.yuv
+}
+
+// SkipRGBA stops converting the frames of a source decoding YUV to
+// RGBA as they are decoded, for a viewer that shows FrameYUV; off
+// resumes it. Frame keeps working either way: it converts the frame
+// it returns when the decoder did not.
+func (s *Stream) SkipRGBA(on bool) { s.dec.skipRGBA.Store(on) }
 
 // FrameSeq moves whenever Frame shows another frame.
 func (s *Stream) FrameSeq() uint64 { return s.frameSeq }
@@ -171,9 +202,9 @@ func (s *Stream) FrameSeq() uint64 { return s.frameSeq }
 func (s *Stream) Subscribe(fn func()) (cancel func()) {
 	s.nextSub++
 	id := s.nextSub
-	s.subs = append(s.subs, subscription{id: id, fn: fn})
+	s.subs = append(slices.Clip(s.subs), subscription{id: id, fn: fn})
 	return func() {
-		s.subs = slices.DeleteFunc(s.subs, func(sub subscription) bool { return sub.id == id })
+		s.subs = slices.DeleteFunc(slices.Clone(s.subs), func(sub subscription) bool { return sub.id == id })
 	}
 }
 
@@ -414,19 +445,18 @@ func (s *Stream) advanceClock(now time.Time) {
 }
 
 func (s *Stream) present() bool {
-	changed := false
-	for len(s.queue) > 0 {
-		d := s.queue[0]
+	shown := 0
+	for _, d := range s.queue {
 		if s.curGen == s.gen && d.pts > s.pos {
 			break
 		}
 		s.dec.recycle(s.cur)
 		s.cur, s.curGen = d.img, s.gen
 		s.frameSeq++
-		s.queue = s.queue[1:]
-		changed = true
+		shown++
 	}
-	return changed
+	s.queue = s.queue[:copy(s.queue, s.queue[shown:])]
+	return shown > 0
 }
 
 func (s *Stream) advance(now time.Time) {
@@ -482,7 +512,7 @@ func (s *Stream) launchTicker() {
 }
 
 func (s *Stream) notify() {
-	for _, sub := range slices.Clone(s.subs) {
+	for _, sub := range s.subs {
 		sub.fn()
 	}
 }

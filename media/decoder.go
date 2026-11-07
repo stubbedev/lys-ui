@@ -3,6 +3,7 @@ package media
 import (
 	"fmt"
 	"image"
+	"sync/atomic"
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -18,8 +19,15 @@ const (
 // identity a GPU renderer keeps its texture by: the buffer's for its
 // whole life, while the stream's sequence number versions its pixels.
 type frameBuf struct {
+	// img is the frame as RGBA, nil until a frame of a YUV source is
+	// first converted.
 	img *image.RGBA
-	id  render.ImageID
+	// yuv is the frame as decoded, nil for a source decoding no YUV.
+	yuv *YUVFrame
+	// rgba reports that img holds this frame: always for a source
+	// decoding no YUV, once converted for one that does.
+	rgba bool
+	id   render.ImageID
 	// still is a StillSource's frame, the source's to keep, never pooled.
 	still bool
 }
@@ -40,9 +48,14 @@ type decoder struct {
 	// pixels holds the frame buffers off the Go heap: a stream's frames
 	// cost the GC nothing, and the pages go back to the system when the
 	// stream closes rather than when a collection gets to them.
-	pixels   memory.Shared
-	src      Source
-	stills   StillSource
+	pixels memory.Shared
+	src    Source
+	stills StillSource
+	// yuv is src decoding YUV frames, nil when it decodes none.
+	yuv YUVSource
+	// skipRGBA stops the conversion of YUV frames to RGBA as they are
+	// decoded.
+	skipRGBA atomic.Bool
 	held     map[render.ImageID]*frameBuf
 	seeker   Seeker
 	size     image.Rectangle
@@ -69,6 +82,7 @@ func startDecoder(src Source, seeker Seeker, info Info) *decoder {
 	if stills, ok := src.(StillSource); ok {
 		d.stills, d.held = stills, map[render.ImageID]*frameBuf{}
 	}
+	d.yuv = yuvOf(src)
 	go d.run()
 	return d
 }
@@ -80,27 +94,28 @@ func (d *decoder) run() {
 		atEnd     bool
 		buf       *frameBuf
 		allocated int
-		pending   *decoded
+		pending   decoded
+		owed      bool
 	)
 	applySeek := func(r seekRequest) {
 		gen, atEnd = r.gen, false
-		if pending != nil && pending.img != nil && buf == nil {
+		if owed && pending.img != nil && buf == nil {
 			buf = pending.img
-		} else if pending != nil && pending.img != nil {
+		} else if owed && pending.img != nil {
 			d.recycle(pending.img)
 		}
-		pending = nil
+		owed = false
 		if err := d.seeker.Seek(r.t); err != nil {
 			atEnd = true
-			pending = &decoded{gen: gen, err: err}
+			pending, owed = decoded{gen: gen, err: err}, true
 		}
 	}
 	for {
 		switch {
-		case pending != nil:
+		case owed:
 			select {
-			case d.out <- *pending:
-				pending = nil
+			case d.out <- pending:
+				owed = false
 			case r := <-d.seek:
 				applySeek(r)
 			case <-d.quit:
@@ -117,19 +132,18 @@ func (d *decoder) run() {
 			continue
 		case d.stills != nil:
 			still, pts, err := d.stills.ReadStill()
-			msg := decoded{pts: pts, gen: gen, err: err}
+			pending, owed = decoded{pts: pts, gen: gen, err: err}, true
 			if err == nil {
-				msg.img = d.stillFrame(still)
+				pending.img = d.stillFrame(still)
 			} else {
 				atEnd = true
 			}
-			pending = &msg
 			continue
 		case buf == nil && allocated < framePool:
 			var err error
 			if buf, err = d.newFrameBuf(); err != nil {
 				atEnd = true
-				pending = &decoded{gen: gen, err: err}
+				pending, owed = decoded{gen: gen, err: err}, true
 				continue
 			}
 			allocated++
@@ -143,15 +157,44 @@ func (d *decoder) run() {
 				return
 			}
 		}
-		pts, err := d.src.ReadFrame(buf.img)
-		msg := decoded{pts: pts, gen: gen, err: err}
+		pts, err := d.read(buf)
+		pending, owed = decoded{pts: pts, gen: gen, err: err}, true
 		if err == nil {
-			msg.img, buf = buf, nil
+			pending.img, buf = buf, nil
 		} else {
 			atEnd = true
 		}
-		pending = &msg
 	}
+}
+
+// read decodes the next frame into f: as RGBA from a source decoding
+// no YUV, as YUV otherwise, converted to RGBA too unless skipRGBA.
+func (d *decoder) read(f *frameBuf) (time.Duration, error) {
+	if d.yuv == nil {
+		return d.src.ReadFrame(f.img)
+	}
+	f.rgba = false
+	pts, err := d.yuv.ReadFrameYUV(f.yuv)
+	if err != nil || d.skipRGBA.Load() {
+		return pts, err
+	}
+	return pts, d.convert(f)
+}
+
+// convert fills f's RGBA from its YUV, allocating the RGBA buffer the
+// first time. Whoever holds f calls it: the decoder before handing f
+// over, the stream after.
+func (d *decoder) convert(f *frameBuf) error {
+	if f.img == nil {
+		pix, err := d.alloc(4 * d.size.Dx() * d.size.Dy())
+		if err != nil {
+			return err
+		}
+		f.img = &image.RGBA{Pix: pix, Stride: 4 * d.size.Dx(), Rect: d.size}
+	}
+	f.yuv.toRGBA(f.img)
+	f.rgba = true
+	return nil
 }
 
 func (d *decoder) requestSeek(r seekRequest) {
@@ -174,7 +217,7 @@ func (d *decoder) stillFrame(still render.StillImage) *frameBuf {
 	if f, ok := d.held[still.ID]; ok {
 		return f
 	}
-	f := &frameBuf{img: still.RGBA, id: still.ID, still: true}
+	f := &frameBuf{img: still.RGBA, rgba: true, id: still.ID, still: true}
 	d.held[still.ID] = f
 	return f
 }
@@ -189,15 +232,33 @@ func (d *decoder) recycle(img *frameBuf) {
 	}
 }
 
-// newFrameBuf allocates one frame buffer of the stream's size off the
-// Go heap.
-func (d *decoder) newFrameBuf() (*frameBuf, error) {
-	stride := 4 * d.size.Dx()
-	pix, err := memory.MakeSlice[byte](&d.pixels, stride*d.size.Dy())
+func (d *decoder) alloc(n int) ([]byte, error) {
+	pix, err := memory.MakeSlice[byte](&d.pixels, n)
 	if err != nil {
 		return nil, fmt.Errorf("media: a %dx%d frame buffer: %w", d.size.Dx(), d.size.Dy(), err)
 	}
-	return &frameBuf{img: &image.RGBA{Pix: pix.Elems(), Stride: stride, Rect: d.size}, id: render.NewImageID()}, nil
+	return pix.Elems(), nil
+}
+
+// newFrameBuf allocates one frame buffer of the stream's size off the
+// Go heap: YUV planes for a source decoding YUV, RGBA for any other.
+func (d *decoder) newFrameBuf() (*frameBuf, error) {
+	f := &frameBuf{id: render.NewImageID()}
+	w, h := d.size.Dx(), d.size.Dy()
+	if d.yuv == nil {
+		pix, err := d.alloc(4 * w * h)
+		if err != nil {
+			return nil, err
+		}
+		f.img, f.rgba = &image.RGBA{Pix: pix, Stride: 4 * w, Rect: d.size}, true
+		return f, nil
+	}
+	pix, err := d.alloc(YUVFrameBytes(w, h))
+	if err != nil {
+		return nil, err
+	}
+	f.yuv = &YUVFrame{Width: w, Height: h, Pix: pix}
+	return f, nil
 }
 
 // close stops the decoder and returns at once: closing the source and

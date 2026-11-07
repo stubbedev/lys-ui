@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"math/bits"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -16,12 +17,18 @@ import (
 
 const maxY4MLine = 4096
 
+// planeLayout is how a frame's YUV planes lie: their size, the
+// chroma subsampling as shifts, no chroma at all, and the range.
+type planeLayout struct {
+	width, height int
+	mono          bool
+	xs, ys        uint
+	full          bool
+}
+
 type y4mHeader struct {
-	width, height    int
+	planeLayout
 	rateNum, rateDen int64
-	mono             bool
-	xs, ys           uint
-	full             bool
 }
 
 var y4mChroma = map[string]struct{ xs, ys uint }{
@@ -34,7 +41,8 @@ func parseY4MHeader(line []byte) (y4mHeader, error) {
 	if len(fields) == 0 || fields[0] != "YUV4MPEG2" {
 		return y4mHeader{}, errors.New("media: not a YUV4MPEG2 stream")
 	}
-	h := y4mHeader{xs: 1, ys: 1}
+	h := y4mHeader{}
+	h.xs, h.ys = 1, 1
 	for _, f := range fields[1:] {
 		key, val := f[0], f[1:]
 		var err error
@@ -93,14 +101,14 @@ func parseRatio(s string) (int64, int64, error) {
 	return num, den, err
 }
 
-func (h y4mHeader) chromaSize() (w, ht int) {
+func (h planeLayout) chromaSize() (w, ht int) {
 	if h.mono {
 		return 0, 0
 	}
 	return (h.width + 1<<h.xs - 1) >> h.xs, (h.height + 1<<h.ys - 1) >> h.ys
 }
 
-func (h y4mHeader) frameBytes() int {
+func (h planeLayout) frameBytes() int {
 	cw, ch := h.chromaSize()
 	return h.width*h.height + 2*cw*ch
 }
@@ -187,7 +195,7 @@ func openY4MStream(r io.Reader) (*y4mStream, int64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	s := &y4mStream{h: h, br: br, planes: make([]byte, h.frameBytes())}
+	s := &y4mStream{h: h, br: br}
 	if c, ok := r.(io.Closer); ok {
 		s.closer = c
 	}
@@ -195,23 +203,24 @@ func openY4MStream(r io.Reader) (*y4mStream, int64, error) {
 }
 
 func readLine(br *bufio.Reader) ([]byte, error) {
-	var line []byte
-	for {
-		chunk, err := br.ReadSlice('\n')
+	chunk, err := br.ReadSlice('\n')
+	if err == nil {
+		return chunk[:len(chunk)-1], nil
+	}
+	line := slices.Clone(chunk)
+	for errors.Is(err, bufio.ErrBufferFull) && len(line) <= maxY4MLine {
+		chunk, err = br.ReadSlice('\n')
 		line = append(line, chunk...)
-		if len(line) > maxY4MLine {
-			return nil, fmt.Errorf("a header line runs past %d bytes", maxY4MLine)
-		}
-		switch {
-		case err == nil:
-			return line[:len(line)-1], nil
-		case errors.Is(err, bufio.ErrBufferFull):
-			continue
-		case errors.Is(err, io.EOF) && len(line) > 0:
-			return nil, io.ErrUnexpectedEOF
-		default:
-			return nil, err
-		}
+	}
+	switch {
+	case len(line) > maxY4MLine:
+		return nil, fmt.Errorf("a header line runs past %d bytes", maxY4MLine)
+	case err == nil:
+		return line[:len(line)-1], nil
+	case errors.Is(err, io.EOF) && len(line) > 0:
+		return nil, io.ErrUnexpectedEOF
+	default:
+		return nil, err
 	}
 }
 
@@ -221,6 +230,41 @@ func (s *y4mStream) ReadFrame(dst *image.RGBA) (time.Duration, error) {
 	if dst.Rect.Dx() != s.h.width || dst.Rect.Dy() != s.h.height {
 		return 0, fmt.Errorf("media: y4m frame is %dx%d, the buffer %v", s.h.width, s.h.height, dst.Rect)
 	}
+	if s.planes == nil {
+		s.planes = make([]byte, s.h.frameBytes())
+	}
+	pts, err := s.readPlanes(s.planes)
+	if err != nil {
+		return 0, err
+	}
+	yuvToRGBA(dst, s.planes, s.h.planeLayout)
+	return pts, nil
+}
+
+func (s *y4mStream) YUV() (YUVColor, bool) {
+	if s.h.mono || s.h.xs != 1 || s.h.ys != 1 {
+		return YUVColor{}, false
+	}
+	c := YUVColor{Matrix: BT601, Range: LimitedRange}
+	if s.h.full {
+		c.Range = FullRange
+	}
+	return c, true
+}
+
+func (s *y4mStream) ReadFrameYUV(dst *YUVFrame) (time.Duration, error) {
+	c, ok := s.YUV()
+	if !ok {
+		return 0, fmt.Errorf("%w: the y4m stream is not 4:2:0", errNoYUV)
+	}
+	if err := dst.check(s.h.width, s.h.height); err != nil {
+		return 0, err
+	}
+	dst.Color = c
+	return s.readPlanes(dst.Pix)
+}
+
+func (s *y4mStream) readPlanes(planes []byte) (time.Duration, error) {
 	line, err := readLine(s.br)
 	if errors.Is(err, io.EOF) {
 		return 0, io.EOF
@@ -231,10 +275,9 @@ func (s *y4mStream) ReadFrame(dst *image.RGBA) (time.Duration, error) {
 	if !bytes.HasPrefix(line, []byte("FRAME")) || s.bare && len(line) != len("FRAME") {
 		return 0, fmt.Errorf("media: y4m frame %d header %.40q, want a bare FRAME line", s.n, line)
 	}
-	if _, err := io.ReadFull(s.br, s.planes); err != nil {
+	if _, err := io.ReadFull(s.br, planes); err != nil {
 		return 0, fmt.Errorf("media: y4m frame %d is truncated: %w", s.n, err)
 	}
-	yuvToRGBA(dst, s.planes, s.h)
 	pts := s.base + s.h.pts(s.n)
 	s.n++
 	return pts, nil
@@ -287,7 +330,7 @@ func clamp8(v int32) uint8 {
 	return uint8(v)
 }
 
-func yuvToRGBA(dst *image.RGBA, planes []byte, h y4mHeader) {
+func yuvToRGBA(dst *image.RGBA, planes []byte, h planeLayout) {
 	m := bt601Limited
 	if h.full {
 		m = bt601Full
