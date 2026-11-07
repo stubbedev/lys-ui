@@ -258,3 +258,43 @@ func TestHitChildSkipsAHiddenWidget(t *testing.T) {
 		t.Errorf("a hidden leaf hit itself: %T", got)
 	}
 }
+
+// Focus moved on from a ringed widget keeps the ring, from a widget a
+// pointer focused it takes none, and from nothing it takes none.
+func TestSetFocusLikeCarriesTheRing(t *testing.T) {
+	face := goldenFace(t)
+	for _, keyboard := range []bool{false, true} {
+		anchor := NewButton(NewLabel(face, 14, "anchor", 0), 4, 4)
+		bar := NewBox(Row, 0, 0)
+		bar.Append(anchor, false)
+		arrangeTree(t, bar, 100, 40)
+		barRouter := &Router{Root: bar}
+		if keyboard {
+			barRouter.FocusNext()
+		} else {
+			p := Point{X: anchor.Bounds().X + 2, Y: anchor.Bounds().Y + 2}
+			barRouter.Press(BTNLeft, p, 0)
+			barRouter.Release(BTNLeft, p)
+		}
+		first := NewButton(NewLabel(face, 14, "first", 0), 4, 4)
+		popover := NewBox(Column, 0, 0)
+		popover.Append(first, false)
+		arrangeTree(t, popover, 100, 40)
+		r := &Router{Root: popover}
+		if err := r.SetFocusLike(first, anchor); err != nil {
+			t.Fatal(err)
+		}
+		if r.Focused() != Widget(first) {
+			t.Fatalf("keyboard %v: focus on %T, want the first control", keyboard, r.Focused())
+		}
+		if got := FocusVisible(first); got != keyboard {
+			t.Errorf("keyboard %v: the first control shows a ring %v", keyboard, got)
+		}
+		if err := r.SetFocusLike(first, nil); err != nil {
+			t.Fatal(err)
+		}
+		if FocusVisible(first) {
+			t.Errorf("keyboard %v: focus moved from nothing kept a ring", keyboard)
+		}
+	}
+}

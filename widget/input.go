@@ -1173,7 +1173,18 @@ var ErrNotInTree = errors.New("widget: not in the focused tree")
 // surface maps is focused this way. A w that cannot take focus fails
 // with ErrNotFocusable and one outside this router's tree with
 // ErrNotInTree, leaving focus where it was; nil clears focus.
-func (r *Router) SetFocus(w Widget) error {
+func (r *Router) SetFocus(w Widget) error { return r.setFocus(w, false) }
+
+// SetFocusLike moves keyboard focus to w as SetFocus does, showing its
+// ring (:focus-visible) when from shows one: focus a program moves on
+// from a keyboard-focused widget stays keyboard focus, as browsers
+// decide :focus-visible, so a popover opened from a ringed button
+// rings its first control at once.
+func (r *Router) SetFocusLike(w, from Widget) error {
+	return r.setFocus(w, FocusVisible(from))
+}
+
+func (r *Router) setFocus(w Widget, visible bool) error {
 	if w == nil {
 		setFocusStyle(r.focus, nil, false)
 		r.focus = nil
@@ -1185,7 +1196,7 @@ func (r *Router) SetFocus(w Widget) error {
 	if !inTree(r.Root, w) {
 		return fmt.Errorf("widget: focus %T: %w", w, ErrNotInTree)
 	}
-	setFocusStyle(r.focus, w, false)
+	setFocusStyle(r.focus, w, visible)
 	r.focus = w
 	return nil
 }
@@ -1369,8 +1380,8 @@ func clickWithinOf(w Widget) func() {
 }
 
 // FocusVisible reports whether w holds a focus that should show
-// (:focus-visible): one that arrived by keyboard traversal, not by a
-// pointer press or SetFocus.
+// (:focus-visible): one that arrived by keyboard traversal, or by
+// SetFocusLike from a ringed widget, not by a pointer press or SetFocus.
 func FocusVisible(w Widget) bool {
 	n := nodeOf(w)
 	return n != nil && n.focused && n.focusVisible

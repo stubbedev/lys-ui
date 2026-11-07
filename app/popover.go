@@ -53,6 +53,8 @@ type PopoverConfig struct {
 	// Focus, when set, is the widget inside Content that takes keyboard
 	// focus as the popover opens (a form's first Entry, as GTK focuses
 	// a popover's first input): typing then reaches it without a click.
+	// It shows its focus ring when the anchor shows one, so a popover
+	// opened from the keyboard is still walked by keyboard.
 	Focus widget.Widget
 	// Parent, when set, nests the popover under that open popover (an
 	// xdg_popup child of its surface, GTK's nested PopoverMenu): Anchor
@@ -564,7 +566,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	}
 	router := &widget.Router{Root: keyRoot}
 	if cfg.Focus != nil {
-		if err := router.SetFocus(cfg.Focus); err != nil {
+		if err := router.SetFocusLike(cfg.Focus, styleAnchor); err != nil {
 			pop.Close()
 			restoreKeys()
 			unanchor()
