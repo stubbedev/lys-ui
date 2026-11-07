@@ -52,6 +52,11 @@ linters:
           - errcheck
           - gosec
           - unparam
+      # package atspitest is test support: it starts the at-spi2-core
+      # daemons a test names and reads /proc for any left behind.
+      - path: ^atspitest/
+        linters:
+          - gosec
 
 issues:
   max-issues-per-linter: 0

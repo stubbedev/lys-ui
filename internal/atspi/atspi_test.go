@@ -21,6 +21,7 @@ import (
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/stubbedev/lys-ui/internal/atspi/proto"
 	"github.com/stubbedev/lys-ui/internal/testbuild"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -98,11 +99,11 @@ type fakeRegistry struct {
 func startFakeRegistry(t *testing.T, a11y *dbustest.Bus) *fakeRegistry {
 	t.Helper()
 	conn := a11y.Conn(t)
-	if _, err := conn.RequestName("org.a11y.atspi.Registry", dbus.NameFlagDoNotQueue); err != nil {
+	if _, err := conn.RequestName(proto.RegistryName, dbus.NameFlagDoNotQueue); err != nil {
 		t.Fatalf("registry name: %v", err)
 	}
 	r := &fakeRegistry{conn: conn, signal: make(chan *dbus.Signal, 256)}
-	if err := conn.ExportAll(r, RootPath, "org.a11y.atspi.Socket"); err != nil {
+	if err := conn.ExportAll(r, proto.RootPath, "org.a11y.atspi.Socket"); err != nil {
 		t.Fatalf("registry socket export: %v", err)
 	}
 	for _, iface := range []string{"org.a11y.atspi.Event.Object", "org.a11y.atspi.Event.Focus", "org.a11y.atspi.Cache"} {
@@ -127,7 +128,7 @@ func (r *fakeRegistry) record() {
 // fakeDesktop is the desktop the fake registry answers Embed with, by
 // the unique name a real registry answers with rather than its
 // well-known one.
-var fakeDesktop = objRef{Name: ":1.999", Path: RootPath}
+var fakeDesktop = objRef{Name: ":1.999", Path: proto.RootPath}
 
 // Embed implements org.a11y.atspi.Socket: record the plug, answer with
 // the registry's root.
@@ -285,7 +286,7 @@ func (f *fixture) walk(t *testing.T) map[dbus.ObjectPath]widget.Widget {
 			}
 		}
 	}
-	refs := f.childrenOf(t, RootPath)
+	refs := f.childrenOf(t, proto.RootPath)
 	if len(refs) != 1 || refs[0].Name != f.name {
 		t.Fatalf("root children = %v, want one window under our name", refs)
 	}
@@ -301,20 +302,20 @@ func TestRegistrationAndEmbed(t *testing.T) {
 	f.bus.mu.Lock()
 	plug := f.bus.plug
 	f.bus.mu.Unlock()
-	if plug.Name != f.name || plug.Path != RootPath {
-		t.Fatalf("Embed plug = %+v, want (%s, %s)", plug, f.name, RootPath)
+	if plug.Name != f.name || plug.Path != proto.RootPath {
+		t.Fatalf("Embed plug = %+v, want (%s, %s)", plug, f.name, proto.RootPath)
 	}
 
 	// The application node answers Application and Properties.
 	var toolkit string
-	if err := f.obj(RootPath).Call("org.a11y.atspi.Application.GetToolkitName", 0).Store(&toolkit); err != nil {
+	if err := f.obj(proto.RootPath).Call("org.a11y.atspi.Application.GetToolkitName", 0).Store(&toolkit); err != nil {
 		t.Fatalf("GetToolkitName: %v", err)
 	}
 	if toolkit != "lys-ui" {
 		t.Errorf("toolkit = %q, want lys-ui", toolkit)
 	}
 	var props map[string]dbus.Variant
-	if err := f.obj(RootPath).Call("org.freedesktop.DBus.Properties.GetAll", 0,
+	if err := f.obj(proto.RootPath).Call("org.freedesktop.DBus.Properties.GetAll", 0,
 		"org.a11y.atspi.Accessible").Store(&props); err != nil {
 		t.Fatalf("GetAll on root: %v", err)
 	}
@@ -327,7 +328,7 @@ func TestRegistrationAndEmbed(t *testing.T) {
 
 	// Introspection names the interfaces the root serves.
 	var xml string
-	if err := f.obj(RootPath).Call("org.freedesktop.DBus.Introspectable.Introspect", 0).Store(&xml); err != nil {
+	if err := f.obj(proto.RootPath).Call("org.freedesktop.DBus.Introspectable.Introspect", 0).Store(&xml); err != nil {
 		t.Fatalf("Introspect: %v", err)
 	}
 	for _, iface := range []string{
@@ -816,7 +817,7 @@ func TestBusDiscovery(t *testing.T) {
 	t.Cleanup(br.Stop)
 	br.Refresh()
 	var v dbus.Variant
-	if err := br.conn.Object(br.name, RootPath).Call(
+	if err := br.conn.Object(br.name, proto.RootPath).Call(
 		"org.freedesktop.DBus.Properties.Get", 0,
 		"org.a11y.atspi.Accessible", "ChildCount").Store(&v); err != nil {
 		t.Fatalf("root ChildCount over discovery: %v", err)
@@ -868,7 +869,7 @@ func TestCacheGetItems(t *testing.T) {
 		t.Fatalf("cache holds %d items, the tree %d objects plus the root", len(items), len(walked))
 	}
 	root := items[0]
-	if root.Path.Path != RootPath || root.Role != roleApplication || root.Parent != fakeDesktop {
+	if root.Path.Path != proto.RootPath || root.Role != roleApplication || root.Parent != fakeDesktop {
 		t.Errorf("root item = %+v", root)
 	}
 	for _, it := range items[1:] {
@@ -1120,7 +1121,7 @@ func TestRemovedWidgetsLeaveNothingBehind(t *testing.T) {
 	}
 	defer func() { _ = at.Close() }()
 	var role uint32
-	if err := at.Object(br.name, widgetPath(last)).Call(ifaceAccessible+".GetRole", 0).Store(&role); err == nil {
+	if err := at.Object(br.name, widgetPath(last)).Call(proto.IfaceAccessible+".GetRole", 0).Store(&role); err == nil {
 		t.Errorf("a removed widget still answers: role %d", role)
 	}
 }
@@ -1128,7 +1129,7 @@ func TestRemovedWidgetsLeaveNothingBehind(t *testing.T) {
 func TestTheApplicationOffersNoPeerToPeerBus(t *testing.T) {
 	f := newFixture(t)
 	var address string
-	if err := f.obj(RootPath).Call(ifaceApplication+".GetApplicationBusAddress", 0).Store(&address); err != nil {
+	if err := f.obj(proto.RootPath).Call(proto.IfaceApplication+".GetApplicationBusAddress", 0).Store(&address); err != nil {
 		t.Fatal(err)
 	}
 	if address != "" {

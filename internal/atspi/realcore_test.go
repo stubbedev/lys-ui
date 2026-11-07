@@ -1,97 +1,37 @@
 package atspi
 
 import (
-	"os"
-	"os/exec"
-	"path/filepath"
-	"slices"
-	"strings"
-	"syscall"
 	"testing"
 	"time"
 
-	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/render"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
+	"github.com/stubbedev/lys-ui/atspitest"
+	"github.com/stubbedev/lys-ui/internal/atspi/proto"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
 // TestRealAtSpi2Core verifies the bridge against real at-spi2-core
-// (`just atspi-verify`): at-spi-bus-launcher on a private session bus
-// starts the accessibility bus, the bridge discovers it through
-// org.a11y.Bus and embeds with the real registryd, and a client playing
-// the assistive technology finds the application under the registry's
-// desktop, walks to the entry, reads it, and moves its caret - what
-// accerciser does by hand. ATSPI_LIBEXEC names at-spi2-core's libexec
-// directory; without it the test skips.
+// (`just atspi-verify`): atspitest brings up the accessibility bus and
+// the registry on a private session bus, the bridge discovers it
+// through org.a11y.Bus and embeds with the real registryd, and a client
+// playing the assistive technology finds the application under the
+// registry's desktop, walks to the entry, reads it, and moves its caret
+// - what accerciser does by hand. Without ATSPI_LIBEXEC the test skips.
 func TestRealAtSpi2Core(t *testing.T) {
-	libexec := os.Getenv("ATSPI_LIBEXEC")
-	if libexec == "" {
-		t.Skip("ATSPI_LIBEXEC unset; `just atspi-verify` runs this against real at-spi2-core")
-	}
-	bus := dbustest.Session(t)
-	session := bus.Address
-	runtime := t.TempDir()
-	// dbus-daemon, not dbus-broker: under a systemd user session the
-	// launcher prefers the broker, which only runs with systemd's
-	// socket activation and so dies on this private bus ("No listener
-	// socket inherited").
-	launcher := exec.Command(filepath.Join(libexec, "at-spi-bus-launcher"), "--launch-immediately")
-	launcher.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtime, "ATSPI_DBUS_IMPLEMENTATION=dbus-daemon")
-	// The launcher spawns the accessibility bus's dbus-daemon, which
-	// outlives a killed launcher: the launcher leads a process group of
-	// its own, and the whole group goes at cleanup.
-	launcher.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := launcher.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { killGroup(t, launcher, runtime) })
-
-	// The launcher owns org.a11y.Bus once the accessibility bus runs.
-	sess := bus.Conn(t)
-	var a11yAddr string
-	eventually(t, "org.a11y.Bus", func() bool {
-		return sess.Object(busName, busPath).Call("org.a11y.Bus.GetAddress", 0).Store(&a11yAddr) == nil
-	})
-	// Start the registry daemon directly: on a host running a systemd
-	// user manager the accessibility bus activates it through systemd
-	// (SystemdService=), which serves the desktop session's unit, not
-	// this private bus - the activation fails ("unit failed"). The
-	// daemon finds the accessibility bus through org.a11y.Bus, as on a
-	// desktop.
-	registryd := exec.Command(filepath.Join(libexec, "at-spi2-registryd"))
-	registryd.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtime, "DBUS_SESSION_BUS_ADDRESS="+session)
-	if err := registryd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = registryd.Process.Kill()
-		_ = registryd.Wait()
-	})
-	at, err := dbus.Connect(a11yAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = at.Close() })
-	// The bridge embeds once, at Serve: the registry must own its name
-	// by then, as it does long before any application on a desktop.
-	eventually(t, "the registry on the accessibility bus", func() bool {
-		var has bool
-		return at.BusObject().Call("org.freedesktop.DBus.NameHasOwner", 0, "org.a11y.atspi.Registry").Store(&has) == nil && has
-	})
+	core := atspitest.Start(t)
+	at := core.AT
 
 	// The desktop switch: turning IsEnabled on reaches WatchStatus.
 	got := make(chan bool, 4)
-	stopWatch, err := WatchStatus(bus.Conn(t), func(on bool) { got <- on })
+	stopWatch, err := WatchStatus(core.Session.Conn(t), func(on bool) { got <- on })
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer stopWatch()
 	<-got
-	if err := sess.Object(busName, busPath).SetProperty(ifaceStatus+".IsEnabled", dbus.MakeVariant(true)); err != nil {
-		t.Fatalf("set IsEnabled: %v", err)
-	}
+	core.Enable(t)
 	select {
 	case on := <-got:
 		if !on {
@@ -122,31 +62,19 @@ func TestRealAtSpi2Core(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The real registry lists the application under its desktop.
-	desktop := at.Object("org.a11y.atspi.Registry", RootPath)
-	var apps []ref
-	eventually(t, "the application under the registry's desktop", func() bool {
-		apps = nil
-		if err := desktop.Call(ifaceAccessible+".GetChildren", 0).Store(&apps); err != nil {
-			return false
-		}
-		return slices.ContainsFunc(apps, func(r ref) bool { return r.Name == owner || r.Name == br.name })
-	})
-
-	app := at.Object(owner, RootPath)
-	var toolkit string
-	if v, err := app.GetProperty(ifaceApplication + ".ToolkitName"); err != nil {
-		t.Fatalf("ToolkitName: %v", err)
-	} else if toolkit, _ = v.Value().(string); toolkit != "lys-ui" {
-		t.Errorf("toolkit = %q, want lys-ui", toolkit)
+	if listed := core.Application(t, "lys-ui"); listed.Bus != owner && listed.Bus != br.name {
+		t.Fatalf("the desktop lists the application as %s, want %s or %s", listed.Bus, owner, br.name)
 	}
+
+	app := at.Object(owner, proto.RootPath)
 	var registry string
-	if err := at.BusObject().Call("org.freedesktop.DBus.GetNameOwner", 0, "org.a11y.atspi.Registry").Store(&registry); err != nil {
+	if err := at.BusObject().Call("org.freedesktop.DBus.GetNameOwner", 0, proto.RegistryName).Store(&registry); err != nil {
 		t.Fatal(err)
 	}
-	if v, err := app.GetProperty(ifaceAccessible + ".Parent"); err != nil {
+	if v, err := app.GetProperty(proto.IfaceAccessible + ".Parent"); err != nil {
 		t.Fatalf("the root's Parent: %v", err)
-	} else if parent, ok := v.Value().([]any); !ok || len(parent) != 2 || parent[0] != registry || parent[1] != RootPath {
-		t.Errorf("the root's parent is %v, want the registry's desktop (%s, %s), which libatspi recognizes", v.Value(), registry, RootPath)
+	} else if parent, ok := v.Value().([]any); !ok || len(parent) != 2 || parent[0] != registry || parent[1] != proto.RootPath {
+		t.Errorf("the root's parent is %v, want the registry's desktop (%s, %s), which libatspi recognizes", v.Value(), registry, proto.RootPath)
 	}
 	var items []cacheItem
 	if err := at.Object(owner, CachePath).Call(ifaceCache+".GetItems", 0).Store(&items); err != nil {
@@ -205,59 +133,5 @@ func TestRealAtSpi2Core(t *testing.T) {
 			t.Errorf("a second announcement %v", s.Body)
 		}
 	case <-time.After(200 * time.Millisecond):
-	}
-}
-
-// eventually polls cond for up to five seconds.
-// killGroup kills the process group cmd leads, and fails the test if
-// any process still names dir (the bus's runtime directory) once the
-// group is reaped: a daemon left behind.
-func killGroup(t *testing.T, cmd *exec.Cmd, dir string) {
-	t.Helper()
-	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-	_ = cmd.Process.Kill()
-	_ = cmd.Wait()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		left := processesNaming(t, dir)
-		if len(left) == 0 {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Errorf("%s left running: %v", cmd.Path, left)
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-// processesNaming lists the command lines that mention s.
-func processesNaming(t *testing.T, s string) []string {
-	t.Helper()
-	cmdlines, err := filepath.Glob("/proc/[0-9]*/cmdline")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out []string
-	for _, path := range cmdlines {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			continue // exited since the glob
-		}
-		if line := strings.ReplaceAll(string(raw), "\x00", " "); strings.Contains(line, s) {
-			out = append(out, line)
-		}
-	}
-	return out
-}
-
-func eventually(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(20 * time.Millisecond)
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
+	"github.com/stubbedev/lys-ui/internal/atspi/proto"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -36,8 +37,6 @@ func rectOf(r render.Rect) atspiRect {
 
 // Interface names.
 const (
-	ifaceAccessible     = "org.a11y.atspi.Accessible"
-	ifaceApplication    = "org.a11y.atspi.Application"
 	ifaceComponent      = "org.a11y.atspi.Component"
 	ifaceText           = "org.a11y.atspi.Text"
 	ifaceAction         = "org.a11y.atspi.Action"
@@ -51,18 +50,18 @@ const nullPath dbus.ObjectPath = "/org/a11y/atspi/null"
 
 // desktopRef is the registry's desktop object — the AT-SPI tree root
 // above applications; the application root's parent.
-var desktopRef = objRef{Name: "org.a11y.atspi.Registry", Path: RootPath}
+var desktopRef = objRef{Name: proto.RegistryName, Path: proto.RootPath}
 
 // exportNode wires one object's interfaces on the bus. id 0 is the
 // application root; text/action/value select the subinterfaces; app
 // adds the Application interface (root only). Called under the bridge
 // mutex (exportNew) or from Serve.
 func (b *Bridge) exportNode(id int32, text, action, value, app bool) {
-	path := RootPath
+	path := proto.RootPath
 	if id != 0 {
 		path = widgetPath(id)
 	}
-	mustExport(b, path, ifaceAccessible, &accessibleIface{b: b, id: id})
+	mustExport(b, path, proto.IfaceAccessible, &accessibleIface{b: b, id: id})
 	mustExport(b, path, ifaceComponent, &componentIface{b: b, id: id})
 	if text {
 		mustExport(b, path, ifaceText, &textIface{b: b, id: id})
@@ -74,7 +73,7 @@ func (b *Bridge) exportNode(id int32, text, action, value, app bool) {
 		mustExport(b, path, ifaceValue, &valueIface{b: b, id: id})
 	}
 	if app {
-		mustExport(b, path, ifaceApplication, &applicationIface{b: b})
+		mustExport(b, path, proto.IfaceApplication, &applicationIface{b: b})
 	}
 	mustExport(b, path, ifaceProperties, &propertiesIface{b: b, id: id})
 	mustExport(b, path, ifaceIntrospectable, &introspectIface{text: text, action: action, value: value, app: app})
@@ -82,7 +81,7 @@ func (b *Bridge) exportNode(id int32, text, action, value, app bool) {
 
 func (b *Bridge) unexportNode(id int32) {
 	path := widgetPath(id)
-	for _, iface := range []string{ifaceAccessible, ifaceComponent, ifaceText, ifaceAction, ifaceValue, ifaceProperties, ifaceIntrospectable} {
+	for _, iface := range []string{proto.IfaceAccessible, ifaceComponent, ifaceText, ifaceAction, ifaceValue, ifaceProperties, ifaceIntrospectable} {
 		if err := b.conn.Export(nil, path, iface); err != nil {
 			debug.Log("a11y", "unexport %s on %s: %v", iface, path, err)
 		}
@@ -112,7 +111,9 @@ func (o *accessibleIface) GetRoleName() string                { return o.b.roleN
 func (o *accessibleIface) GetLocalizedRoleName() string       { return o.b.roleNameOf(o.id) }
 func (o *accessibleIface) GetState() []uint32                 { return o.b.stateOf(o.id) }
 func (o *accessibleIface) GetAttributes() map[string]string   { return map[string]string{} }
-func (o *accessibleIface) GetApplication() objRef             { return objRef{Name: o.b.name, Path: RootPath} }
+func (o *accessibleIface) GetApplication() objRef {
+	return objRef{Name: o.b.name, Path: proto.RootPath}
+}
 
 func (o *accessibleIface) GetInterfaces() []string {
 	return o.b.interfacesOf(o.id)
@@ -440,7 +441,7 @@ func (o *propertiesIface) GetAll(iface string) map[string]dbus.Variant {
 }
 
 func (o *propertiesIface) Set(iface, prop string, val dbus.Variant) *dbus.Error {
-	if iface == ifaceApplication && prop == "Id" {
+	if iface == proto.IfaceApplication && prop == "Id" {
 		if v, ok := val.Value().(int32); ok {
 			o.b.mu.Lock()
 			o.b.appID = v

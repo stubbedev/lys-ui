@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-lib/intconv"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
+	"github.com/stubbedev/lys-ui/internal/atspi/proto"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -169,7 +170,7 @@ func (b *Bridge) interfacesOf(id int32) []string {
 
 // ifacesOf is interfacesOf for a node in hand.
 func ifacesOf(n *anode) []string {
-	out := []string{ifaceAccessible, ifaceComponent}
+	out := []string{proto.IfaceAccessible, ifaceComponent}
 	if n == nil {
 		return out
 	}
@@ -183,7 +184,7 @@ func ifacesOf(n *anode) []string {
 		out = append(out, ifaceValue)
 	}
 	if n.id == 0 {
-		out = append(out, ifaceApplication)
+		out = append(out, proto.IfaceApplication)
 	}
 	return out
 }
@@ -265,7 +266,7 @@ func (b *Bridge) property(id int32, iface, prop string) (dbus.Variant, bool) {
 // properties answers a Properties GetAll for one interface.
 func (b *Bridge) properties(id int32, iface string) map[string]dbus.Variant {
 	switch iface {
-	case ifaceAccessible:
+	case proto.IfaceAccessible:
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		n := b.cur.nodes[id]
@@ -283,7 +284,7 @@ func (b *Bridge) properties(id int32, iface string) map[string]dbus.Variant {
 			"HelpText":     dbus.MakeVariant(""),
 			"version":      dbus.MakeVariant(uint32(1)),
 		}
-	case ifaceApplication:
+	case proto.IfaceApplication:
 		b.mu.Lock()
 		appID := b.appID
 		b.mu.Unlock()

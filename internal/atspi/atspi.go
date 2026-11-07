@@ -34,6 +34,7 @@ import (
 	"github.com/stubbedev/lys-lib/intconv"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
+	"github.com/stubbedev/lys-ui/internal/atspi/proto"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -178,11 +179,6 @@ const (
 	busTimeout  = 5 * time.Second
 	stopTimeout = 3 * time.Second
 )
-
-// RootPath is the application root's object path, fixed by the AT-SPI
-// spec ("An application must have a single root object, called
-// /org/a11y/atspi/accessible/root").
-const RootPath dbus.ObjectPath = "/org/a11y/atspi/accessible/root"
 
 // Bridge is a served scene. Serve starts it; Stop tears it down.
 // Every method is safe from any goroutine; snapshots are immutable and
@@ -344,10 +340,10 @@ func Serve(scene Scene, opts Options) (*Bridge, error) {
 	// error (it watches for names and probes the root itself). The
 	// socket lives at the desktop root path, where at-spi2-core's
 	// registryd and GTK's bridge both speak it.
-	registry := conn.Object("org.a11y.atspi.Registry", RootPath)
+	registry := conn.Object(proto.RegistryName, proto.RootPath)
 	var socket objRef
 	if err := registry.CallWithContext(ctx, "org.a11y.atspi.Socket.Embed", 0,
-		objRef{Name: name, Path: RootPath}).Store(&socket); err != nil {
+		objRef{Name: name, Path: proto.RootPath}).Store(&socket); err != nil {
 		debug.Log("a11y", "registry embed: %v (older registry probes roots itself)", err)
 	} else {
 		b.mu.Lock()
@@ -648,13 +644,13 @@ func (b *Bridge) exportNew(nt *tree) []exportJob {
 // widgetPath is a widget node's object path: the root plus its stable
 // id.
 func widgetPath(id int32) dbus.ObjectPath {
-	return dbus.ObjectPath(string(RootPath) + "/" + strconv.FormatInt(int64(id), 10))
+	return dbus.ObjectPath(string(proto.RootPath) + "/" + strconv.FormatInt(int64(id), 10))
 }
 
-// pathOf returns n's object path (the application node's is RootPath).
+// pathOf returns n's object path (the application node's is proto.RootPath).
 func pathOf(n *anode) dbus.ObjectPath {
 	if n.id == 0 {
-		return RootPath
+		return proto.RootPath
 	}
 	return widgetPath(n.id)
 }

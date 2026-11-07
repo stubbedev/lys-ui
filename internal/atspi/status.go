@@ -6,6 +6,8 @@ import (
 	"sync"
 
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
+
+	"github.com/stubbedev/lys-ui/internal/atspi/proto"
 )
 
 // The desktop's accessibility switch: org.a11y.Status on the session
@@ -16,12 +18,6 @@ import (
 // true, so an application on a desktop without assistive technologies
 // never walks its tree.
 
-const (
-	busName     = "org.a11y.Bus"
-	busPath     = dbus.ObjectPath("/org/a11y/bus")
-	ifaceStatus = "org.a11y.Status"
-)
-
 // WatchStatus reports the switch to fn: once before returning, then on
 // every change, from the watch's goroutine, over the session bus conn,
 // which stays the caller's. A bus without org.a11y.Bus is an error.
@@ -30,12 +26,12 @@ const (
 func WatchStatus(conn *dbus.Conn, fn func(enabled bool)) (stop func(), err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), busTimeout)
 	defer cancel()
-	obj := conn.Object(busName, busPath)
+	obj := conn.Object(proto.BusName, proto.BusPath)
 	props := map[string]bool{}
 	for _, prop := range []string{"IsEnabled", "ScreenReaderEnabled"} {
 		var v dbus.Variant
-		if err := obj.CallWithContext(ctx, "org.freedesktop.DBus.Properties.Get", 0, ifaceStatus, prop).Store(&v); err != nil {
-			return nil, fmt.Errorf("atspi: %s.%s: %w", ifaceStatus, prop, err)
+		if err := obj.CallWithContext(ctx, "org.freedesktop.DBus.Properties.Get", 0, proto.IfaceStatus, prop).Store(&v); err != nil {
+			return nil, fmt.Errorf("atspi: %s.%s: %w", proto.IfaceStatus, prop, err)
 		}
 		props[prop], _ = v.Value().(bool)
 	}
@@ -58,7 +54,7 @@ func WatchStatus(conn *dbus.Conn, fn func(enabled bool)) (stop func(), err error
 				if !ok {
 					return
 				}
-				if sig.Path != busPath || len(sig.Body) < 2 || sig.Body[0] != ifaceStatus {
+				if sig.Path != proto.BusPath || len(sig.Body) < 2 || sig.Body[0] != proto.IfaceStatus {
 					continue
 				}
 				changed, _ := sig.Body[1].(map[string]dbus.Variant)
@@ -84,7 +80,7 @@ func WatchStatus(conn *dbus.Conn, fn func(enabled bool)) (stop func(), err error
 
 func statusMatch() []dbus.MatchOption {
 	return []dbus.MatchOption{
-		dbus.WithMatchObjectPath(busPath),
+		dbus.WithMatchObjectPath(proto.BusPath),
 		dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
 		dbus.WithMatchMember("PropertiesChanged"),
 	}

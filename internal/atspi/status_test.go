@@ -7,6 +7,8 @@ import (
 
 	"github.com/stubbedev/lys-lib/dbustest"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
+
+	"github.com/stubbedev/lys-ui/internal/atspi/proto"
 )
 
 // fakeStatus plays at-spi-bus-launcher's org.a11y.Status properties.
@@ -37,11 +39,11 @@ func TestWatchStatus(t *testing.T) {
 		t.Fatal("a bus without org.a11y.Bus watched")
 	}
 	conn := bus.Conn(t)
-	if _, err := conn.RequestName(busName, dbus.NameFlagDoNotQueue); err != nil {
+	if _, err := conn.RequestName(proto.BusName, dbus.NameFlagDoNotQueue); err != nil {
 		t.Fatal(err)
 	}
 	status := &fakeStatus{}
-	if err := conn.ExportAll(status, busPath, "org.freedesktop.DBus.Properties"); err != nil {
+	if err := conn.ExportAll(status, proto.BusPath, "org.freedesktop.DBus.Properties"); err != nil {
 		t.Fatal(err)
 	}
 	got := make(chan bool, 4)
@@ -67,7 +69,7 @@ func TestWatchStatus(t *testing.T) {
 		status.mu.Lock()
 		status.screenReader = screenReader
 		status.mu.Unlock()
-		if err := conn.Emit(busPath, "org.freedesktop.DBus.Properties.PropertiesChanged", ifaceStatus,
+		if err := conn.Emit(proto.BusPath, "org.freedesktop.DBus.Properties.PropertiesChanged", proto.IfaceStatus,
 			map[string]dbus.Variant{"ScreenReaderEnabled": dbus.MakeVariant(screenReader)}, []string{}); err != nil {
 			t.Fatal(err)
 		}
@@ -85,11 +87,11 @@ func TestWatchStatus(t *testing.T) {
 func TestAStoppedWatchHandsItsConnectionBack(t *testing.T) {
 	bus := dbustest.Start(t)
 	conn := bus.Conn(t)
-	if _, err := conn.RequestName(busName, dbus.NameFlagDoNotQueue); err != nil {
+	if _, err := conn.RequestName(proto.BusName, dbus.NameFlagDoNotQueue); err != nil {
 		t.Fatal(err)
 	}
 	status := &fakeStatus{}
-	if err := conn.ExportAll(status, busPath, "org.freedesktop.DBus.Properties"); err != nil {
+	if err := conn.ExportAll(status, proto.BusPath, "org.freedesktop.DBus.Properties"); err != nil {
 		t.Fatal(err)
 	}
 	shared := bus.Conn(t)
