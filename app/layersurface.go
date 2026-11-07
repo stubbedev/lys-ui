@@ -57,6 +57,9 @@ type Mods = wlsession.Mods
 // Locks is which lock keys are on: Caps, Num and Scroll Lock.
 type Locks = wlsession.Locks
 
+// KeyboardLayout is the keymap's layouts by name and the active one.
+type KeyboardLayout = wlsession.KeyboardLayout
+
 // Modifier bits of Mods.
 const (
 	ModShift = wlsession.ModShift

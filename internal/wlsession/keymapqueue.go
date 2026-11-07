@@ -114,6 +114,7 @@ func (s *Session) installKeymap(compiled compiledKeymap) {
 		return
 	}
 	s.xkbKeymap, s.xkbState = compiled.keymap, compiled.state
+	s.syncLayoutNames()
 }
 
 // KeymapPending reports whether a keymap the compositor sent is still on

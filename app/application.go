@@ -113,7 +113,8 @@ type Application struct {
 	gtkIni           gtksettings.Settings
 	stopMotionFollow func()
 	removeInvoker    func()
-	lockWatchers     []*func(Locks)
+	lockWatchers     watchers[Locks]
+	layoutWatchers   watchers[KeyboardLayout]
 	toplevelWatchers []*func()
 	stopIconFollow   func()
 	// windowIcons (windowicon.go): per-window overrides and the app
@@ -870,6 +871,7 @@ func (a *Application) wireSession() {
 	a.sess.OnIME = a.imeEvent
 	a.sess.OnIMEFocus = a.ime.reset
 	a.sess.OnLocks = a.locksChanged
+	a.sess.OnKeyboardLayout = a.layoutChanged
 	a.sess.OnToplevelAdded = a.toplevelsChanged
 	a.sess.OnToplevelRemoved = a.toplevelsChanged
 	a.sess.OnToplevelUpdated = a.toplevelsChanged
@@ -1578,18 +1580,40 @@ func (a *Application) Locks() Locks { return a.sess.Locks() }
 // already on at startup, which arrives with the first keyboard focus. The
 // returned stop ends the calls.
 func (a *Application) OnLocks(fn func(Locks)) (stop func()) {
-	w := &fn
-	a.lockWatchers = append(a.lockWatchers, w)
-	fn(a.Locks())
+	return a.lockWatchers.add(fn, a.Locks())
+}
+
+func (a *Application) locksChanged(l Locks) { notifyWatchers(a, &a.lockWatchers, l) }
+
+// KeyboardLayout returns the keymap's layouts and the one keys type in.
+func (a *Application) KeyboardLayout() KeyboardLayout { return a.sess.KeyboardLayout() }
+
+// OnKeyboardLayout calls fn with the keyboard layouts now and on the loop
+// whenever a keymap brings others or keys move to another layout. The
+// returned stop ends the calls.
+func (a *Application) OnKeyboardLayout(fn func(KeyboardLayout)) (stop func()) {
+	return a.layoutWatchers.add(fn, a.KeyboardLayout())
+}
+
+func (a *Application) layoutChanged(l KeyboardLayout) { notifyWatchers(a, &a.layoutWatchers, l) }
+
+type watchers[T any] struct {
+	fns []*func(T)
+}
+
+func (w *watchers[T]) add(fn func(T), now T) (stop func()) {
+	p := &fn
+	w.fns = append(w.fns, p)
+	fn(now)
 	return func() {
-		a.lockWatchers = slices.DeleteFunc(a.lockWatchers, func(o *func(Locks)) bool { return o == w })
+		w.fns = slices.DeleteFunc(w.fns, func(o *func(T)) bool { return o == p })
 	}
 }
 
-func (a *Application) locksChanged(l Locks) {
+func notifyWatchers[T any](a *Application, w *watchers[T], v T) {
 	gen := widget.DamageGeneration()
-	for _, w := range slices.Clone(a.lockWatchers) {
-		(*w)(l)
+	for _, fn := range slices.Clone(w.fns) {
+		(*fn)(v)
 	}
 	a.markDirtyIfDamaged(gen)
 }

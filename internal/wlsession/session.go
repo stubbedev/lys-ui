@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -99,6 +100,13 @@ type Locks struct {
 	Caps, Num, Scroll bool
 }
 
+// KeyboardLayout is the keymap's layouts by name and the one keys type in.
+// Names belongs to the session and is never modified.
+type KeyboardLayout struct {
+	Names  []string
+	Active uint32
+}
+
 // Session is a connected display with the globals lys-ui needs bound.
 type Session struct {
 	Display *wl.Display
@@ -175,6 +183,7 @@ type Session struct {
 	ifaceNames          map[uint32]string
 	mods                uint32
 	locks               Locks
+	layout              KeyboardLayout
 	repeatRate          uint32
 	repeatDelay         uint32
 	xkbContext          *xkb.Context
@@ -292,6 +301,9 @@ type Session struct {
 	// first modifiers event after the keyboard's enter included: Caps
 	// Lock already on at startup arrives this way.
 	OnLocks func(Locks)
+
+	OnKeyboardLayout func(KeyboardLayout)
+
 	// OnKeyUp fires on key releases with the evdev keycode.
 	OnKeyUp func(keycode uint32)
 
@@ -1243,6 +1255,7 @@ func (s *Session) dropKeymap(err error) {
 	logutil.L().Error("wlsession: keyboard input is untranslated until a keymap compiles", slog.Any("err", err))
 	s.xkbKeymap, s.xkbState = nil, nil
 	s.syncLocks()
+	s.syncLayoutNames()
 }
 
 // HandleKeyboardEnter implements wl.KeyboardEnterHandler: the named
@@ -1314,6 +1327,45 @@ func (s *Session) deliverKeyboardModifiers(ev wl.KeyboardModifiersEvent) {
 		s.xkbState.UpdateMask(xkb.ModMask(ev.ModsDepressed), xkb.ModMask(ev.ModsLatched), xkb.ModMask(ev.ModsLocked), 0, 0, ev.Group)
 	}
 	s.syncLocks()
+	s.syncActiveLayout()
+}
+
+func (s *Session) activeLayout() uint32 {
+	if s.xkbState == nil {
+		return 0
+	}
+	return s.xkbState.SerializeLayout(xkb.StateLayoutEffective)
+}
+
+func (s *Session) syncLayoutNames() {
+	var names []string
+	if s.xkbKeymap != nil {
+		names = make([]string, s.xkbKeymap.NumLayouts())
+		for i := range names {
+			names[i] = s.xkbKeymap.LayoutName(uint32(i))
+		}
+	}
+	now := KeyboardLayout{Names: names, Active: s.activeLayout()}
+	if slices.Equal(now.Names, s.layout.Names) && now.Active == s.layout.Active {
+		return
+	}
+	s.layout = now
+	s.notifyLayout()
+}
+
+func (s *Session) syncActiveLayout() {
+	active := s.activeLayout()
+	if active == s.layout.Active {
+		return
+	}
+	s.layout.Active = active
+	s.notifyLayout()
+}
+
+func (s *Session) notifyLayout() {
+	if s.OnKeyboardLayout != nil {
+		s.OnKeyboardLayout(s.layout)
+	}
 }
 
 func lockActive(state *xkb.State, mod, led string) bool {
@@ -1373,6 +1425,10 @@ func (s *Session) Mods() Mods {
 // Locks returns which lock keys are on. It reads all off until the
 // compositor has sent a keymap and a modifiers event.
 func (s *Session) Locks() Locks { return s.locks }
+
+// KeyboardLayout returns the keymap's layouts and the active one; no
+// names until the compositor has sent a keymap.
+func (s *Session) KeyboardLayout() KeyboardLayout { return s.layout }
 
 // HandleKeyboardRepeatInfo implements wl.KeyboardRepeatInfoHandler: the
 // compositor's rate (keys per second) and delay (milliseconds).

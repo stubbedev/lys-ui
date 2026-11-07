@@ -206,3 +206,40 @@ func TestLocksFollowTheCompositor(t *testing.T) {
 		t.Errorf("after unlocking: Locks = %+v, reported %v", got, seen)
 	}
 }
+
+func TestKeyboardLayoutFollowsTheKeymapAndTheGroup(t *testing.T) {
+	t.Setenv("XKB_CONFIG_ROOT", findXKBData(t))
+	km, err := xkb.NewContext(os.Getenv).NewKeymapFromNames(xkb.Names{Layout: "us,de"})
+	if err != nil {
+		t.Fatalf("compile us,de: %v", err)
+	}
+	s := &Session{}
+	var seen []KeyboardLayout
+	s.OnKeyboardLayout = func(l KeyboardLayout) { seen = append(seen, l) }
+	s.installKeymap(compiledKeymap{keymap: km, state: km.NewState()})
+	if got := s.KeyboardLayout(); len(got.Names) != 2 || got.Names[0] != "English (US)" || got.Names[1] != "German" || got.Active != 0 {
+		t.Fatalf("after the keymap: %+v", got)
+	}
+	if len(seen) != 1 {
+		t.Fatalf("the keymap reported %d changes, want 1", len(seen))
+	}
+	s.HandleKeyboardModifiers(wl.KeyboardModifiersEvent{ModsDepressed: 1})
+	if len(seen) != 1 {
+		t.Errorf("Shift alone reported a layout change: %v", seen)
+	}
+	s.HandleKeyboardModifiers(wl.KeyboardModifiersEvent{Group: 1})
+	if got := s.KeyboardLayout(); got.Active != 1 || len(seen) != 2 {
+		t.Errorf("group 1: %+v, reported %v", got, seen)
+	}
+	if got := s.KeyUTF8(21); got != "z" {
+		t.Errorf("the Y key in group 1 typed %q, want z", got)
+	}
+	s.installKeymap(compiledKeymap{keymap: km, state: km.NewState()})
+	if got := s.KeyboardLayout(); got.Active != 0 || len(seen) != 3 {
+		t.Errorf("a fresh keymap: %+v, reported %v", got, seen)
+	}
+	s.dropKeymap(os.ErrInvalid)
+	if got := s.KeyboardLayout(); len(got.Names) != 0 || len(seen) != 4 {
+		t.Errorf("a dropped keymap: %+v, reported %v", got, seen)
+	}
+}
