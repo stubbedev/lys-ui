@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/xdg"
 )
@@ -73,17 +74,17 @@ func TestParseIgnoresWhatGTKCannotUse(t *testing.T) {
 }
 
 func TestPathsLoadSystemDirsLeastImportantFirstThenTheUser(t *testing.T) {
-	got := paths(env(map[string]string{"XDG_CONFIG_DIRS": "/a:relative:/b", "XDG_CONFIG_HOME": "/home/u/cfg", "HOME": "/home/u"}))
+	got := Paths(env(map[string]string{"XDG_CONFIG_DIRS": "/a:relative:/b", "XDG_CONFIG_HOME": "/home/u/cfg", "HOME": "/home/u"}))
 	want := []string{"/b/gtk-4.0/settings.ini", "/a/gtk-4.0/settings.ini", "/home/u/cfg/gtk-4.0/settings.ini"}
 	if !slices.Equal(got, want) {
 		t.Errorf("paths = %q, want %q", got, want)
 	}
-	got = paths(env(map[string]string{"XDG_CONFIG_DIRS": "relative", "XDG_CONFIG_HOME": "relative", "HOME": "/home/u"}))
+	got = Paths(env(map[string]string{"XDG_CONFIG_DIRS": "relative", "XDG_CONFIG_HOME": "relative", "HOME": "/home/u"}))
 	want = []string{"/etc/xdg/gtk-4.0/settings.ini", "/home/u/.config/gtk-4.0/settings.ini"}
 	if !slices.Equal(got, want) {
 		t.Errorf("default paths = %q, want %q", got, want)
 	}
-	got = paths(env(nil))
+	got = Paths(env(nil))
 	want = []string{"/etc/xdg/gtk-4.0/settings.ini"}
 	if !slices.Equal(got, want) {
 		t.Errorf("paths without a home = %q, want %q", got, want)
@@ -151,15 +152,87 @@ func TestLoadReportsAnUnreadableFileAndKeepsTheRest(t *testing.T) {
 }
 
 func TestParseReadsEnableAnimations(t *testing.T) {
-	for value, want := range map[string]Animations{"false": AnimationsOff, "0": AnimationsOff, "FALSE": AnimationsOff, "true": AnimationsOn, "1": AnimationsOn, "maybe": AnimationsUnset} {
+	for value, want := range map[string]Toggle{"false": ToggleOff, "0": ToggleOff, "FALSE": ToggleOff, "true": ToggleOn, "1": ToggleOn, "maybe": ToggleUnset} {
 		if got := Parse("[Settings]\ngtk-enable-animations=" + value + "\n").Animations; got != want {
 			t.Errorf("%q: %v, want %v", value, got, want)
 		}
 	}
-	if got := Parse("[Settings]\ngtk-font-name=Sans 10\n").Animations; got != AnimationsUnset {
+	if got := Parse("[Settings]\ngtk-font-name=Sans 10\n").Animations; got != ToggleUnset {
 		t.Errorf("no key: %v", got)
 	}
-	if got := (Settings{Animations: AnimationsOff}).merge(Settings{Animations: AnimationsOn}).Animations; got != AnimationsOn {
+	if got := (Settings{Animations: ToggleOff}).merge(Settings{Animations: ToggleOn}).Animations; got != ToggleOn {
 		t.Errorf("a later file does not override: %v", got)
+	}
+}
+
+func TestParseReadsTheToolkitKeys(t *testing.T) {
+	got := Parse(`[Settings]
+gtk-decoration-layout = :minimize,maximize,close
+gtk-xft-antialias=1
+gtk-xft-hinting=0
+gtk-xft-hintstyle=hintslight
+gtk-xft-rgba=bgr
+gtk-cursor-blink=false
+gtk-cursor-blink-time=1000
+gtk-cursor-blink-timeout=7
+gtk-double-click-time=250
+gtk-dnd-drag-threshold=12
+gtk-enable-primary-paste=0
+gtk-overlay-scrolling=false
+gtk-show-status-shapes=true
+gtk-sound-theme-name="freedesktop"
+gtk-enable-event-sounds=no
+`)
+	want := Settings{
+		DecorationLayout:   ":minimize,maximize,close",
+		XftAntialias:       ToggleOn,
+		XftHinting:         ToggleOff,
+		XftHintStyle:       HintSlight,
+		XftRGBA:            SubpixelBGR,
+		CursorBlink:        ToggleOff,
+		CursorBlinkTime:    time.Second,
+		CursorBlinkTimeout: 7 * time.Second,
+		DoubleClickTime:    250 * time.Millisecond,
+		DndDragThreshold:   12,
+		EnablePrimaryPaste: ToggleOff,
+		OverlayScrolling:   ToggleOff,
+		ShowStatusShapes:   ToggleOn,
+		SoundThemeName:     "freedesktop",
+		EnableEventSounds:  ToggleOff,
+	}
+	if got != want {
+		t.Errorf("Parse = %+v, want %+v", got, want)
+	}
+	if got := (Settings{DoubleClickTime: time.Second, XftRGBA: SubpixelRGB}).merge(Settings{XftRGBA: SubpixelVBGR}); got.DoubleClickTime != time.Second || got.XftRGBA != SubpixelVBGR {
+		t.Errorf("merge = %+v, want the first file's double-click and the second's rgba", got)
+	}
+}
+
+func TestParseReadsEveryXftEnum(t *testing.T) {
+	for value, want := range map[string]HintStyle{"hintnone": HintNone, "hintslight": HintSlight, "hintmedium": HintMedium, "hintfull": HintFull, "full": HintStyleUnset, "": HintStyleUnset} {
+		if got := Parse("[Settings]\ngtk-xft-hintstyle=" + value + "\n").XftHintStyle; got != want {
+			t.Errorf("hintstyle %q = %v, want %v", value, got, want)
+		}
+	}
+	for value, want := range map[string]SubpixelOrder{"none": SubpixelNone, "rgb": SubpixelRGB, "bgr": SubpixelBGR, "vrgb": SubpixelVRGB, "vbgr": SubpixelVBGR, "rgba": SubpixelUnset, "RGB": SubpixelUnset} {
+		if got := Parse("[Settings]\ngtk-xft-rgba=" + value + "\n").XftRGBA; got != want {
+			t.Errorf("rgba %q = %v, want %v", value, got, want)
+		}
+	}
+	for value, want := range map[string]Toggle{"1": ToggleOn, "0": ToggleOff, "-1": ToggleUnset, "true": ToggleUnset} {
+		if got := Parse("[Settings]\ngtk-xft-antialias=" + value + "\n").XftAntialias; got != want {
+			t.Errorf("antialias %q = %v, want %v", value, got, want)
+		}
+	}
+}
+
+func TestParseIgnoresUnusableToolkitNumbers(t *testing.T) {
+	for _, line := range []string{
+		"gtk-cursor-blink-time=0", "gtk-cursor-blink-time=-5", "gtk-cursor-blink-timeout=soon",
+		"gtk-double-click-time=4294967296", "gtk-dnd-drag-threshold=-1", "gtk-cursor-blink=maybe",
+	} {
+		if got := Parse("[Settings]\n" + line + "\n"); got != (Settings{}) {
+			t.Errorf("%s: Parse = %+v, want nothing", line, got)
+		}
 	}
 }

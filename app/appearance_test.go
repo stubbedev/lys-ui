@@ -59,14 +59,14 @@ func TestAccentColor(t *testing.T) {
 func TestReducedMotionComesFromThePortalThenSettingsIni(t *testing.T) {
 	for _, c := range []struct {
 		portal appearance.Motion
-		ini    gtksettings.Animations
+		ini    gtksettings.Toggle
 		want   bool
 	}{
-		{appearance.MotionUnknown, gtksettings.AnimationsUnset, false},
-		{appearance.MotionUnknown, gtksettings.AnimationsOn, false},
-		{appearance.MotionUnknown, gtksettings.AnimationsOff, true},
-		{appearance.MotionReduced, gtksettings.AnimationsUnset, true},
-		{appearance.MotionReduced, gtksettings.AnimationsOn, true},
+		{appearance.MotionUnknown, gtksettings.ToggleUnset, false},
+		{appearance.MotionUnknown, gtksettings.ToggleOn, false},
+		{appearance.MotionUnknown, gtksettings.ToggleOff, true},
+		{appearance.MotionReduced, gtksettings.ToggleUnset, true},
+		{appearance.MotionReduced, gtksettings.ToggleOn, true},
 	} {
 		if got := resolveReducedMotion(c.portal, c.ini); got != c.want {
 			t.Errorf("portal %v, ini %v: %v", c.portal, c.ini, got)

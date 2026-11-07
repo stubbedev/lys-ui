@@ -16,12 +16,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/stubbedev/lys-lib/xdg"
 )
 
 // Settings are the settings.ini keys a desktop's GTK apps take their
-// look from. A zero field is one no file sets.
+// look and feel from. A zero field is one no file sets.
 type Settings struct {
 	// ThemeName is gtk-theme-name.
 	ThemeName string
@@ -36,21 +37,95 @@ type Settings struct {
 	// XftDPI is gtk-xft-dpi.
 	XftDPI XftDPI
 	// Animations is gtk-enable-animations.
-	Animations Animations
+	Animations Toggle
+	// DecorationLayout is gtk-decoration-layout, the buttons of a
+	// client-side titlebar ("icon:minimize,maximize,close").
+	DecorationLayout string
+	// XftAntialias is gtk-xft-antialias.
+	XftAntialias Toggle
+	// XftHinting is gtk-xft-hinting.
+	XftHinting Toggle
+	// XftHintStyle is gtk-xft-hintstyle.
+	XftHintStyle HintStyle
+	// XftRGBA is gtk-xft-rgba.
+	XftRGBA SubpixelOrder
+	// CursorBlink is gtk-cursor-blink.
+	CursorBlink Toggle
+	// CursorBlinkTime is gtk-cursor-blink-time, one whole blink cycle.
+	CursorBlinkTime time.Duration
+	// CursorBlinkTimeout is gtk-cursor-blink-timeout, how long the
+	// caret keeps blinking after the last keypress.
+	CursorBlinkTimeout time.Duration
+	// DoubleClickTime is gtk-double-click-time.
+	DoubleClickTime time.Duration
+	// DndDragThreshold is gtk-dnd-drag-threshold, in logical pixels.
+	DndDragThreshold uint32
+	// EnablePrimaryPaste is gtk-enable-primary-paste.
+	EnablePrimaryPaste Toggle
+	// OverlayScrolling is gtk-overlay-scrolling.
+	OverlayScrolling Toggle
+	// ShowStatusShapes is gtk-show-status-shapes.
+	ShowStatusShapes Toggle
+	// SoundThemeName is gtk-sound-theme-name.
+	SoundThemeName string
+	// EnableEventSounds is gtk-enable-event-sounds.
+	EnableEventSounds Toggle
 }
 
-// Animations is gtk-enable-animations: unset when no file sets it, as
-// GTK's default is on.
-type Animations uint8
+// Toggle is a boolean key: unset when no file sets it, so GTK's own
+// default stands.
+type Toggle uint8
 
 const (
-	// AnimationsUnset means no file sets gtk-enable-animations.
-	AnimationsUnset Animations = iota
-	// AnimationsOn is gtk-enable-animations = true.
-	AnimationsOn
-	// AnimationsOff is gtk-enable-animations = false.
-	AnimationsOff
+	// ToggleUnset means no file sets the key.
+	ToggleUnset Toggle = iota
+	// ToggleOn is the key set true.
+	ToggleOn
+	// ToggleOff is the key set false.
+	ToggleOff
 )
+
+// HintStyle is gtk-xft-hintstyle.
+type HintStyle uint8
+
+const (
+	// HintStyleUnset means no file sets gtk-xft-hintstyle.
+	HintStyleUnset HintStyle = iota
+	// HintNone is hintnone.
+	HintNone
+	// HintSlight is hintslight.
+	HintSlight
+	// HintMedium is hintmedium.
+	HintMedium
+	// HintFull is hintfull.
+	HintFull
+)
+
+// SubpixelOrder is gtk-xft-rgba, the layout of a pixel's subpixels.
+type SubpixelOrder uint8
+
+const (
+	// SubpixelUnset means no file sets gtk-xft-rgba.
+	SubpixelUnset SubpixelOrder = iota
+	// SubpixelNone is none: grayscale antialiasing.
+	SubpixelNone
+	// SubpixelRGB is rgb.
+	SubpixelRGB
+	// SubpixelBGR is bgr.
+	SubpixelBGR
+	// SubpixelVRGB is vrgb.
+	SubpixelVRGB
+	// SubpixelVBGR is vbgr.
+	SubpixelVBGR
+)
+
+var hintStyles = map[string]HintStyle{
+	"hintnone": HintNone, "hintslight": HintSlight, "hintmedium": HintMedium, "hintfull": HintFull,
+}
+
+var subpixelOrders = map[string]SubpixelOrder{
+	"none": SubpixelNone, "rgb": SubpixelRGB, "bgr": SubpixelBGR, "vrgb": SubpixelVRGB, "vbgr": SubpixelVBGR,
+}
 
 // XftDPI is gtk-xft-dpi: the text resolution in 1024ths of a dot per
 // inch, 0 when unset (GTK's -1, "default", reads as unset).
@@ -67,7 +142,7 @@ func (d XftDPI) DotsPerInch() float64 { return float64(d) / 1024 }
 func Load(env xdg.Env) (Settings, error) {
 	var s Settings
 	var errs []error
-	for _, path := range paths(env) {
+	for _, path := range Paths(env) {
 		data, err := os.ReadFile(path) //nolint:gosec // the XDG settings.ini locations GTK itself reads
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
@@ -81,10 +156,10 @@ func Load(env xdg.Env) (Settings, error) {
 	return s, errors.Join(errs...)
 }
 
-// paths lists the settings.ini files in load order: the system config
-// dirs from least to most important ($XDG_CONFIG_DIRS lists the most
-// important first), then the user's.
-func paths(env xdg.Env) []string {
+// Paths lists the settings.ini files Load reads, in load order: the
+// system config dirs from least to most important ($XDG_CONFIG_DIRS
+// lists the most important first), then the user's.
+func Paths(env xdg.Env) []string {
 	dirs := env.ConfigDirs()
 	slices.Reverse(dirs)
 	if home, ok := env.ConfigHome(); ok {
@@ -106,6 +181,21 @@ func (s Settings) merge(next Settings) Settings {
 	overlay(&s.FontName, next.FontName)
 	overlay(&s.XftDPI, next.XftDPI)
 	overlay(&s.Animations, next.Animations)
+	overlay(&s.DecorationLayout, next.DecorationLayout)
+	overlay(&s.XftAntialias, next.XftAntialias)
+	overlay(&s.XftHinting, next.XftHinting)
+	overlay(&s.XftHintStyle, next.XftHintStyle)
+	overlay(&s.XftRGBA, next.XftRGBA)
+	overlay(&s.CursorBlink, next.CursorBlink)
+	overlay(&s.CursorBlinkTime, next.CursorBlinkTime)
+	overlay(&s.CursorBlinkTimeout, next.CursorBlinkTimeout)
+	overlay(&s.DoubleClickTime, next.DoubleClickTime)
+	overlay(&s.DndDragThreshold, next.DndDragThreshold)
+	overlay(&s.EnablePrimaryPaste, next.EnablePrimaryPaste)
+	overlay(&s.OverlayScrolling, next.OverlayScrolling)
+	overlay(&s.ShowStatusShapes, next.ShowStatusShapes)
+	overlay(&s.SoundThemeName, next.SoundThemeName)
+	overlay(&s.EnableEventSounds, next.EnableEventSounds)
 	return s
 }
 
@@ -156,17 +246,73 @@ func (s *Settings) set(key, value string) {
 	case "gtk-font-name":
 		s.FontName = value
 	case "gtk-enable-animations":
-		switch strings.ToLower(value) {
-		case "1", "true", "yes":
-			s.Animations = AnimationsOn
-		case "0", "false", "no":
-			s.Animations = AnimationsOff
-		}
+		s.Animations = parseToggle(value)
 	case "gtk-xft-dpi":
 		if n, err := strconv.ParseInt(value, 10, 32); err == nil && n > 0 {
 			s.XftDPI = XftDPI(n)
 		}
+	case "gtk-decoration-layout":
+		s.DecorationLayout = value
+	case "gtk-xft-antialias":
+		s.XftAntialias = parseXftToggle(value)
+	case "gtk-xft-hinting":
+		s.XftHinting = parseXftToggle(value)
+	case "gtk-xft-hintstyle":
+		s.XftHintStyle = hintStyles[value]
+	case "gtk-xft-rgba":
+		s.XftRGBA = subpixelOrders[value]
+	case "gtk-cursor-blink":
+		s.CursorBlink = parseToggle(value)
+	case "gtk-cursor-blink-time":
+		s.CursorBlinkTime = time.Duration(parsePositive(value)) * time.Millisecond
+	case "gtk-cursor-blink-timeout":
+		s.CursorBlinkTimeout = time.Duration(parsePositive(value)) * time.Second
+	case "gtk-double-click-time":
+		s.DoubleClickTime = time.Duration(parsePositive(value)) * time.Millisecond
+	case "gtk-dnd-drag-threshold":
+		s.DndDragThreshold = parsePositive(value)
+	case "gtk-enable-primary-paste":
+		s.EnablePrimaryPaste = parseToggle(value)
+	case "gtk-overlay-scrolling":
+		s.OverlayScrolling = parseToggle(value)
+	case "gtk-show-status-shapes":
+		s.ShowStatusShapes = parseToggle(value)
+	case "gtk-sound-theme-name":
+		s.SoundThemeName = value
+	case "gtk-enable-event-sounds":
+		s.EnableEventSounds = parseToggle(value)
 	}
+}
+
+func parseToggle(value string) Toggle {
+	switch strings.ToLower(value) {
+	case "1", "true", "yes":
+		return ToggleOn
+	case "0", "false", "no":
+		return ToggleOff
+	}
+	return ToggleUnset
+}
+
+// parseXftToggle reads gtk-xft-antialias and gtk-xft-hinting, integers
+// whose -1 is GTK's "default".
+func parseXftToggle(value string) Toggle {
+	switch value {
+	case "1":
+		return ToggleOn
+	case "0":
+		return ToggleOff
+	}
+	return ToggleUnset
+}
+
+// parsePositive is value as a positive int32, 0 when it is not one.
+func parsePositive(value string) uint32 {
+	n, err := strconv.ParseInt(value, 10, 32)
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return uint32(n)
 }
 
 func unquote(value string) string {

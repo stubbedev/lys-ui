@@ -59,8 +59,8 @@ func (a *Application) OnReducedMotionChange(fn func(bool)) (off func()) {
 	return onLoop(a, a.portal.OnMotionChange, func(appearance.Motion) { fn(a.ReducedMotion()) })
 }
 
-func resolveReducedMotion(portal appearance.Motion, ini gtksettings.Animations) bool {
-	return portal == appearance.MotionReduced || ini == gtksettings.AnimationsOff
+func resolveReducedMotion(portal appearance.Motion, ini gtksettings.Toggle) bool {
+	return portal == appearance.MotionReduced || ini == gtksettings.ToggleOff
 }
 
 func (a *Application) followReducedMotion() {
