@@ -839,6 +839,18 @@ func (b *BarBuilder) WatchEdge(get func() widget.BarEdge) *BarBuilder {
 	return b
 }
 
+// MinThickness calls (*widget.Bar).SetMinThickness.
+func (b *BarBuilder) MinThickness(px int) *BarBuilder {
+	b.do(func(s *Scope, w *widget.Bar) { w.SetMinThickness(px) })
+	return b
+}
+
+// WatchMinThickness re-applies SetMinThickness with get's value after every update.
+func (b *BarBuilder) WatchMinThickness(get func() int) *BarBuilder {
+	b.watch(func(w *widget.Bar) { w.SetMinThickness(get()) })
+	return b
+}
+
 // BarButtonBuilder builds a widget.BarButton.
 type BarButtonBuilder struct {
 	base[*widget.BarButton, *BarButtonBuilder]
@@ -1548,6 +1560,12 @@ func (b *CalendarBuilder) OnSelect(fn func(widget.Date)) *CalendarBuilder {
 // OnRangeSelect sets the widget's OnRangeSelect field.
 func (b *CalendarBuilder) OnRangeSelect(fn func(from widget.Date, to widget.Date)) *CalendarBuilder {
 	b.do(func(_ *Scope, w *widget.Calendar) { w.OnRangeSelect = fn })
+	return b
+}
+
+// OnMonth sets the widget's OnMonth field.
+func (b *CalendarBuilder) OnMonth(fn func(first widget.Date)) *CalendarBuilder {
+	b.do(func(_ *Scope, w *widget.Calendar) { w.OnMonth = fn })
 	return b
 }
 
@@ -7069,6 +7087,62 @@ func (b *SheetBuilder) WatchWidth(get func() int) *SheetBuilder {
 // OnClosed sets the widget's OnClosed field.
 func (b *SheetBuilder) OnClosed(fn func()) *SheetBuilder {
 	b.do(func(_ *Scope, w *widget.Sheet) { w.OnClosed = fn })
+	return b
+}
+
+// ShortcutRecorderBuilder builds a widget.ShortcutRecorder.
+type ShortcutRecorderBuilder struct {
+	base[*widget.ShortcutRecorder, *ShortcutRecorderBuilder]
+	face render.Font
+	size float64
+}
+
+// ShortcutRecorder builds a widget.ShortcutRecorder with widget.NewShortcutRecorder.
+func ShortcutRecorder(accel string) *ShortcutRecorderBuilder {
+	b := &ShortcutRecorderBuilder{}
+	b.init(b, func(s *Scope) *widget.ShortcutRecorder { return widget.NewShortcutRecorder(s.face(b.face), accel) })
+	return b
+}
+
+// Font overrides the environment's typeface and size for this widget; zero values keep the environment's.
+func (b *ShortcutRecorderBuilder) Font(face render.Font, sizePx float64) *ShortcutRecorderBuilder {
+	b.face, b.size = face, sizePx
+	return b
+}
+
+// Accel calls (*widget.ShortcutRecorder).SetAccel.
+func (b *ShortcutRecorderBuilder) Accel(accel string) *ShortcutRecorderBuilder {
+	b.do(func(s *Scope, w *widget.ShortcutRecorder) { w.SetAccel(accel) })
+	return b
+}
+
+// WatchAccel re-applies SetAccel with get's value after every update.
+func (b *ShortcutRecorderBuilder) WatchAccel(get func() string) *ShortcutRecorderBuilder {
+	b.watch(func(w *widget.ShortcutRecorder) { w.SetAccel(get()) })
+	return b
+}
+
+// Error calls (*widget.ShortcutRecorder).SetError.
+func (b *ShortcutRecorderBuilder) Error(msg string) *ShortcutRecorderBuilder {
+	b.do(func(s *Scope, w *widget.ShortcutRecorder) { w.SetError(msg) })
+	return b
+}
+
+// WatchError re-applies SetError with get's value after every update.
+func (b *ShortcutRecorderBuilder) WatchError(get func() string) *ShortcutRecorderBuilder {
+	b.watch(func(w *widget.ShortcutRecorder) { w.SetError(get()) })
+	return b
+}
+
+// OnChanged sets the widget's OnChanged field.
+func (b *ShortcutRecorderBuilder) OnChanged(fn func(accel string)) *ShortcutRecorderBuilder {
+	b.do(func(_ *Scope, w *widget.ShortcutRecorder) { w.OnChanged = fn })
+	return b
+}
+
+// Validate sets the widget's Validate field.
+func (b *ShortcutRecorderBuilder) Validate(fn func(accel string) error) *ShortcutRecorderBuilder {
+	b.do(func(_ *Scope, w *widget.ShortcutRecorder) { w.Validate = fn })
 	return b
 }
 
