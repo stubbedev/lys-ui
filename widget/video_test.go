@@ -192,3 +192,22 @@ func TestAScaledLoopingAnimationResamplesEachFrameOnce(t *testing.T) {
 		t.Errorf("two loops of %d frames resampled %d times, want each frame once", frames, misses-missesBefore)
 	}
 }
+
+// Controls the video hides stop following a playing stream, so the
+// window is not repainted for them, and catch up when they show.
+func TestHiddenControlsDoNotFollowAPlayingStream(t *testing.T) {
+	s := testStream(t, 20)
+	v := NewVideo(testFace(t), 13, s)
+	SizeWithin(v, Size{W: 300, H: 200})
+	pumpUntil(t, func() bool { return s.Frame().RGBA != nil })
+	v.SetAutoplay(true)
+	clock := v.controls.clock.Text()
+	pumpUntil(t, func() bool { return s.Position() >= 1100*time.Millisecond })
+	if got := v.controls.clock.Text(); got != clock {
+		t.Errorf("hidden controls followed the stream to %q", got)
+	}
+	setHoverChain(nil, v.view)
+	if got := v.controls.clock.Text(); got != "0:01 / 0:02" {
+		t.Errorf("shown controls read %q, want the position", got)
+	}
+}

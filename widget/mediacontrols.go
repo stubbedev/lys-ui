@@ -32,6 +32,10 @@ type MediaControls struct {
 	stream   *media.Stream
 	unsub    func()
 	syncing  bool
+	// hidden stops the controls following the stream while their Video
+	// hides them, so a playing stream does not repaint controls nobody
+	// sees; showing them catches up.
+	hidden bool
 }
 
 // NewMediaControls returns controls for stream, which may be nil.
@@ -107,7 +111,20 @@ func (m *MediaControls) check(err error) {
 	}
 }
 
+func (m *MediaControls) setHidden(on bool) {
+	if on == m.hidden {
+		return
+	}
+	m.hidden = on
+	if !on {
+		m.sync()
+	}
+}
+
 func (m *MediaControls) sync() {
+	if m.hidden {
+		return
+	}
 	s := m.stream
 	live := s != nil && !s.Closed() && s.Err() == nil
 	m.row.SetEnabled(live)

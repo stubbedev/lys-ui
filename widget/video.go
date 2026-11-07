@@ -105,7 +105,9 @@ func (v *Video) changed() {
 
 func (v *Video) syncControls() {
 	s := v.view.stream
-	v.reveal.SetRevealed(s != nil && (v.hovered || !s.Playing()))
+	show := s != nil && (v.hovered || !s.Playing())
+	v.controls.setHidden(!show)
+	v.reveal.SetRevealed(show)
 }
 
 type videoView struct {
