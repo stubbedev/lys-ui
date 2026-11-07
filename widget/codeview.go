@@ -72,6 +72,10 @@ var schemeFallback = map[string]string{
 	"def:list-marker":          "def:statement",
 	"def:blockquote-marker":    "def:statement",
 	"def:thematic-break":       "def:statement",
+	// The diff ids: a scheme without them still sets added and removed
+	// lines apart.
+	"def:inserted": "def:type",
+	"def:deleted":  "def:error",
 }
 
 // Style is class's style, following the def.lang map to the nearest

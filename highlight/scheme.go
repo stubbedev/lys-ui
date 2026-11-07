@@ -33,6 +33,8 @@ var (
 		styleListMarker:   {Color: render.RGB(0xe6, 0x61, 0x00), Bold: true},
 		styleQuoteMarker:  {Color: render.RGB(0x77, 0x76, 0x7b)},
 		styleBreak:        {Color: render.RGB(0x77, 0x76, 0x7b)},
+		styleInserted:     {Color: render.RGB(0x26, 0xa2, 0x69)},
+		styleDeleted:      {Color: render.RGB(0xc0, 0x1c, 0x28)},
 	}
 	AdwaitaDark = widget.TextScheme{
 		styleComment:      {Color: render.RGB(0x9a, 0x99, 0x96), Italic: true},
@@ -55,6 +57,8 @@ var (
 		styleListMarker:   {Color: render.RGB(0xff, 0xbe, 0x6f), Bold: true},
 		styleQuoteMarker:  {Color: render.RGB(0x9a, 0x99, 0x96)},
 		styleBreak:        {Color: render.RGB(0x9a, 0x99, 0x96)},
+		styleInserted:     {Color: render.RGB(0x8f, 0xf0, 0xa4)},
+		styleDeleted:      {Color: render.RGB(0xff, 0x7b, 0x63)},
 	}
 )
 

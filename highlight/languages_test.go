@@ -191,7 +191,7 @@ func TestRegistry(t *testing.T) {
 			t.Errorf("Lookup(%q) = %v %v", name, h, ok)
 		}
 	}
-	for path, want := range map[string]widget.Highlighter{"/src/main.go": Go{}, "a/b.yml": YAML{}, "Cargo.lock": TOML{}, "README.md": Markdown{}, "x.jsonc": JSON{}} {
+	for path, want := range map[string]widget.Highlighter{"/src/main.go": Go{}, "a/b.yml": YAML{}, "Cargo.lock": TOML{}, "README.md": Markdown{}, "x.jsonc": JSON{}, "a/b.h": langC, "x.hpp": langCPP, ".zshrc": langShell, "app.service": INI{}, "fix.patch": Diff{}, "Dockerfile": langDockerfile, "icon.svg": Tags{}} {
 		if h, ok := ForFile(path); !ok || h != want {
 			t.Errorf("ForFile(%q) = %v %v", path, h, ok)
 		}
@@ -205,7 +205,7 @@ func TestRegistry(t *testing.T) {
 	if h, _ := Lookup("json"); h != (TOML{}) || !slices.Equal(Languages(), before) {
 		t.Error("an override did not replace the language in place")
 	}
-	if !slices.Equal(before, []string{"go", "json", "markdown", "toml", "yaml"}) {
+	if !slices.Equal(before, []string{"c", "cpp", "csharp", "css", "diff", "dockerfile", "go", "html", "ini", "java", "javascript", "json", "lua", "makefile", "markdown", "nix", "python", "ruby", "rust", "sh", "sql", "toml", "typescript", "xml", "yaml"}) {
 		t.Errorf("Languages() = %v", before)
 	}
 }
