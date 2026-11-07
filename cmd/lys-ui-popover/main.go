@@ -49,6 +49,8 @@ func run() error {
 	root.Append(menuButton, false)
 	dropButton := widget.NewButton(widget.NewLabel(tf, 13, "drop", t.Text), 8, 6)
 	root.Append(dropButton, false)
+	peekButton := widget.NewButton(widget.NewLabel(tf, 13, "peek", t.Text), 8, 6)
+	root.Append(peekButton, false)
 
 	// Popovers parent to layer surfaces (a bar's dropdowns): a top-left
 	// anchored layer keeps the traced coordinates compositor ones. It
@@ -181,6 +183,29 @@ func run() error {
 		app.Trace("demo", "dropdown open")
 	}
 
+	// The peek: a passive popover, a hover preview's kind, so the suite
+	// sees a click elsewhere reach its target and the keys stay put.
+	var peek *app.Popover
+	peekButton.OnClick = func() {
+		if peek != nil && !peek.Closed() {
+			peek.Dismiss()
+			return
+		}
+		var err error
+		peek, err = application.OpenPopover(w, app.PopoverConfig{
+			Anchor:    peekButton,
+			Gravity:   app.GravityRight,
+			Content:   widget.NewLabel(tf, 13, "a peek", t.Text),
+			Dismissal: app.PopoverPassive,
+			OnClosed:  func() { app.Trace("demo", "peek closed") },
+		})
+		if err != nil {
+			app.Trace("demo", "peek error %v", err)
+			return
+		}
+		app.Trace("demo", "peek open")
+	}
+
 	// The nested menu: a submenu row and a leaf inside it, so the suite
 	// drives a popover nested under a popover from the keyboard.
 	var menu *app.MenuPopover
@@ -231,6 +256,8 @@ func run() error {
 		app.Trace("demo", "control menu center (%d,%d)", mb.X+mb.W/2, mb.Y+mb.H/2)
 		db := dropButton.Bounds()
 		app.Trace("demo", "control drop center (%d,%d)", db.X+db.W/2, db.Y+db.H/2)
+		pb := peekButton.Bounds()
+		app.Trace("demo", "control peek center (%d,%d)", pb.X+pb.W/2, pb.Y+pb.H/2)
 	})
 	return application.Run()
 }

@@ -354,3 +354,20 @@ func TestClickAwayFollowsOutputs(t *testing.T) {
 		t.Errorf("sync after close armed a catcher: err=%v made=%d", err, len(made))
 	}
 }
+
+func TestPassivePopoverNeverTakesTheKeyboardNorAPress(t *testing.T) {
+	if got := popoverKeyboard(PopoverConfig{Dismissal: PopoverPassive}); got != KeyboardNone {
+		t.Errorf("passive popover holds %v, want none", got)
+	}
+	if PopoverPassive.autohides() {
+		t.Error("a press elsewhere closes a passive popover")
+	}
+	a := &Application{}
+	_, err := a.OpenPopover(&fakeHost{w: 10, h: 10}, PopoverConfig{
+		Anchor: AnchorAt(0, 0), Content: widget.NewBox(widget.Row, 0, 0),
+		Dismissal: PopoverPassive, Focus: widget.NewBox(widget.Row, 0, 0),
+	})
+	if err == nil {
+		t.Error("a passive popover opened with a Focus widget")
+	}
+}

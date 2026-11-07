@@ -102,18 +102,28 @@ const (
 	// Dismiss closes it (a re-click on its button, a click in its own
 	// empty area).
 	PopoverSticky
+	// PopoverPassive is a tooltip's way: no seat grab, no click catcher
+	// and never the keyboard, so a click elsewhere reaches its target and
+	// the focused window keeps its keys. Only Dismiss closes it (the
+	// pointer leaving, a timeout); its own content still takes the
+	// pointer. For hover previews; it takes no Focus.
+	PopoverPassive
 )
+
+// autohides reports whether a press anywhere else closes the popover.
+func (d PopoverDismissal) autohides() bool { return d == PopoverGrabs || d == PopoverClickAway }
 
 // popoverKeyboard is the keyboard mode a bar-style host holds as a root
 // popover opens: exclusive when the popover must have the keys from the
 // start (a grab's Esc and menus, a Focus widget), on demand when sticky,
 // and none for a click-away popover: a compositor may focus an on-demand
 // layer the moment it asks (sway does), so that one asks at the press.
+// A passive popover never holds it.
 func popoverKeyboard(cfg PopoverConfig) KeyboardMode {
 	switch {
 	case cfg.Dismissal == PopoverSticky:
 		return KeyboardOnDemand
-	case cfg.Dismissal == PopoverClickAway && cfg.Focus == nil:
+	case cfg.Dismissal == PopoverPassive, cfg.Dismissal == PopoverClickAway && cfg.Focus == nil:
 		return KeyboardNone
 	}
 	return KeyboardExclusive
@@ -151,7 +161,7 @@ type Popover struct {
 	parent   *Popover
 	children []*Popover
 	// autohide closes the popover on a press anywhere else, the parent
-	// window included (any PopoverDismissal but PopoverSticky).
+	// window included (PopoverDismissal.autohides).
 	autohide bool
 	// noGrab is a popover without the seat grab: keys reach it only
 	// while the compositor focuses its surfaces or its host's.
@@ -431,6 +441,9 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	if cfg.Anchor == nil || cfg.Content == nil {
 		return nil, errors.New("app: popover needs an anchor and content")
 	}
+	if cfg.Dismissal == PopoverPassive && cfg.Focus != nil {
+		return nil, errors.New("app: a passive popover never takes the keyboard, so it takes no Focus")
+	}
 	if m, ok := cfg.Content.(interface {
 		SetLayoutMotion(widget.LayoutMotion)
 		LayoutMotion() widget.LayoutMotion
@@ -483,7 +496,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	if parent != nil {
 		noGrab = parent.noGrab
 	}
-	p := &Popover{host: host, parent: parent, autohide: cfg.Dismissal != PopoverSticky, noGrab: noGrab}
+	p := &Popover{host: host, parent: parent, autohide: cfg.Dismissal.autohides(), noGrab: noGrab}
 	keyRoot := &popoverKeyRoot{
 		onDismiss: p.Dismiss,
 		content:   cfg.Content,
