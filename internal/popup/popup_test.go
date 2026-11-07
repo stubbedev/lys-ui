@@ -381,7 +381,7 @@ func TestDetachReachesTheDestroyedSurface(t *testing.T) {
 	surf := &wl.Surface{}
 	p := &Popup{WLSurface: surf}
 	rec := &recordedInput{attached: map[*wl.Surface]bool{}}
-	detach := p.AttachInput(rec, &widget.Router{}, nil)
+	detach, _ := p.AttachInput(rec, &widget.Router{}, nil)
 	if !rec.attached[surf] {
 		t.Fatal("the input never attached")
 	}

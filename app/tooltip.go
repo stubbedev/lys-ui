@@ -6,6 +6,7 @@ import (
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
+	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/popup"
 	"github.com/stubbedev/lys-ui/internal/surfx"
@@ -84,6 +85,7 @@ type tooltipSurfacer interface {
 type tooltipWindow interface {
 	Dismissed() bool
 	Dismiss()
+	Close()
 }
 
 // tooltipPainter is the frame pipeline slice the tooltip state
@@ -231,7 +233,8 @@ func tooltipAnchor(hover widget.Widget, pointerX, pointerY int, window render.Re
 }
 
 // openTooltip maps a tooltip popup under the widget it describes, parented like a
-// popover (a window's xdg surface, a panel's layer surface). The popup
+// popover (a window's xdg surface, a panel's layer surface), or on the
+// popover the widget sits in. The popup
 // surface scales with the host window: frac120 is the window's current
 // 120-based device scale. Frames are painted by the application loop
 // through the returned Painter — the enter fade, the rest state, and
@@ -239,10 +242,9 @@ func tooltipAnchor(hover widget.Widget, pointerX, pointerY int, window render.Re
 // use, without a second wayland dispatcher. Tooltips are ungrabbed
 // (NoGrab), so the fades never hold input hostage. A hovered widget
 // with markup (SetTooltipMarkup) renders through a RichLabel.
-func openTooltip(sess *wlsession.Session, gpu popup.Renderer, host Host, face *render.Typeface, opts TooltipOptions, frac120 uint32, pointerX, pointerY int, hover widget.Widget, text string) (*popup.Popup, *popup.Painter) {
-	xdgParent, layerParent, ok := popupParentOf(host)
-	if !ok || face == nil {
-		debug.Log("input", "tooltip unavailable: host %T or nil face", host)
+func openTooltip(sess *wlsession.Session, gpu popup.Renderer, parent tooltipParent, face *render.Typeface, opts TooltipOptions, frac120 uint32, pointerX, pointerY int, hover widget.Widget, text string) (*popup.Popup, *popup.Painter) {
+	if face == nil {
+		debug.Log("input", "tooltip unavailable: no face")
 		return nil, nil
 	}
 	markup := false
@@ -255,11 +257,10 @@ func openTooltip(sess *wlsession.Session, gpu popup.Renderer, host Host, face *r
 	maxW, maxH := opts.maxSize()
 	size := widget.SizeWithin(box, widget.Size{W: maxW, H: maxH})
 	gutter := widget.InkOutset(box).Max()
-	winW, winH := host.Size()
-	anchor := tooltipAnchor(hover, pointerX, pointerY, render.Rect{W: winW, H: winH})
+	anchor := tooltipAnchor(hover, pointerX, pointerY, render.Rect{W: parent.w, H: parent.h})
 	tp, err := popup.New(sess, popup.Config{
-		Parent:      xdgParent,
-		LayerParent: layerParent,
+		Parent:      parent.xdg,
+		LayerParent: parent.layer,
 		AnchorRect:  anchor,
 		Gap:         opts.gap(),
 		Width:       size.W + 2*gutter, Height: size.H + 2*gutter,
@@ -281,4 +282,28 @@ func openTooltip(sess *wlsession.Session, gpu popup.Renderer, host Host, face *r
 	painter := tp.NewPainter(sess, gpu, frac120, box, widget.Current().Surface)
 	debug.Log("input", "tooltip open %q under %+v", text, anchor)
 	return tp, painter
+}
+
+type tooltipParent struct {
+	xdg   *xdg.Surface
+	layer *wlr.ZwlrLayerSurfaceV1
+	w, h  int
+}
+
+func hostTooltipParent(host Host) (tooltipParent, bool) {
+	xdgParent, layerParent, ok := popupParentOf(host)
+	if !ok {
+		debug.Log("input", "tooltip unavailable: host %T carries no popups", host)
+		return tooltipParent{}, false
+	}
+	w, h := host.Size()
+	return tooltipParent{xdg: xdgParent, layer: layerParent, w: w, h: h}, true
+}
+
+func (t *tooltipCtl) close() {
+	if t.open != nil {
+		t.open.Close()
+		t.open, t.painter = nil, nil
+	}
+	t.hover, t.text = nil, ""
 }

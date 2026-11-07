@@ -125,6 +125,7 @@ func run() error {
 	dropBox := widget.NewBox(widget.Column, 6, 8)
 	dropBox.Append(dropEntry, false)
 	dropSub := widget.NewButton(widget.NewLabel(tf, 13, "more", t.Text), 8, 6)
+	dropSub.SetTooltip("opens the dropdown menu")
 	dropBox.Append(dropSub, false)
 	var drop *app.Popover
 	dropSub.OnClick = func() {

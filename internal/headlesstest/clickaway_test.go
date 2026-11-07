@@ -165,3 +165,59 @@ func TestHeadlessClickAwayEscapeBesideItWithoutTheProtocol(t *testing.T) {
 		}
 	}
 }
+
+func TestHeadlessADropdownButtonShowsItsTooltip(t *testing.T) {
+	_, in, drop, x, y := startDropdownBesideWindow(t)
+	var entryY, moreY int
+	if err := clickUntil(drop, in, "demo", x, y, BTNLeft, "dropdown open"); err != nil {
+		t.Fatalf("the dropdown never opened: %v\n%s", err, tailTraces(drop, 25))
+	}
+	tr, err := drop.Wait("demo", "dropdown controls ", traceTimeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fmt.Sscanf(tr.Message, "dropdown controls entry y %d more y %d", &entryY, &moreY); err != nil {
+		t.Fatalf("bad trace %q: %v", tr.Message, err)
+	}
+	if err := in.ClickAt(x, entryY, BTNLeft); err != nil {
+		t.Fatal(err)
+	}
+	if err := in.MoveOnto(x, moreY); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(dwellTime)
+	if _, err := drop.Wait("input", `tooltip open "opens the dropdown menu"`, traceTimeout); err != nil {
+		t.Fatalf("a dwell on the dropdown's button never opened its tooltip: %v\n%s", err, tailTraces(drop, 25))
+	}
+
+	if err := in.MoveTo(x, entryY); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := drop.Wait("input", "tooltip closed", traceTimeout); err != nil {
+		t.Errorf("moving off the button left its tooltip open: %v\n%s", err, tailTraces(drop, 25))
+	}
+
+	if err := in.MoveOnto(x, moreY); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(dwellTime)
+	if _, err := drop.Wait("input", `tooltip open "opens the dropdown menu"`, traceTimeout); err != nil {
+		t.Fatalf("a second dwell never opened the tooltip: %v\n%s", err, tailTraces(drop, 25))
+	}
+	if err := in.Tap(KeyEscape); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"dropdown exit", "dropdown exit done", "dropdown closed"} {
+		if _, err := drop.Wait("demo", want, traceTimeout); err != nil {
+			t.Fatalf("closing the dropdown under its tooltip never saw %q: %v\n%s", want, err, tailTraces(drop, 25))
+		}
+	}
+	for _, tr := range drop.Tail(500) {
+		if strings.Contains(tr.Message, "compositor fatal") {
+			t.Fatalf("closing the dropdown under its tooltip broke the protocol: %s", tr)
+		}
+	}
+	if err := clickUntil(drop, in, "demo", x, y, BTNLeft, "dropdown open"); err != nil {
+		t.Fatalf("the dropdown never reopened after closing under its tooltip: %v\n%s", err, tailTraces(drop, 25))
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
@@ -87,10 +88,14 @@ func (t *tipTarget) HitTest(p widget.Point) widget.Widget {
 func (t *tipTarget) TooltipText() string { return t.tooltip }
 
 // stub is a popup double recording dismissals.
-type stub struct{ closed int }
+type stub struct {
+	closed int
+	torn   bool
+}
 
 func (s *stub) Dismissed() bool { return s.closed > 0 }
 func (s *stub) Dismiss()        { s.closed++ }
+func (s *stub) Close()          { s.closed++; s.torn = true }
 
 func TestTooltipCtlUpdate(t *testing.T) {
 	target := newTipTarget("hover text")
@@ -384,3 +389,57 @@ type anchorAt struct {
 }
 
 func (a anchorAt) TooltipAnchor() render.Rect { return a.r }
+
+func TestAPopoverTooltipGoesAtOnceWithItsPopover(t *testing.T) {
+	target := newTipTarget("hover text")
+	target.Arrange(render.Rect{W: 100, H: 20})
+	op, surf, _, _ := newLoopPopover(target)
+	op.router = &widget.Router{Root: target}
+	op.router.Move(widget.Point{X: 5, Y: 5})
+	op.tip.hover, op.tip.text = target, "hover text"
+	tip := &stub{}
+	op.tip.open = tip
+	a := &Application{openPopovers: []*openPopover{op}}
+	a.updateTips(time.Now())
+	if tip.closed != 0 {
+		t.Fatalf("an open popover's tooltip closed %d times", tip.closed)
+	}
+	surf.dismissed = true
+	a.updateTips(time.Now())
+	if !tip.torn || op.tip.open != nil {
+		t.Errorf("a dismissed popover kept its tooltip: torn %v, open %v", tip.torn, op.tip.open)
+	}
+}
+
+func TestAPopoverTooltipParentsOnThePopoverAtItsSize(t *testing.T) {
+	op, surf, _, _ := newLoopPopover(newTipTarget("hover text"))
+	surf.w, surf.h = 120, 80
+	if _, ok := op.tooltipParent(); ok {
+		t.Error("a popover without its xdg surface offered itself as a tooltip parent")
+	}
+	op.tipSurface = &xdg.Surface{}
+	p, ok := op.tooltipParent()
+	if !ok || p.xdg != op.tipSurface || p.layer != nil || p.w != 120 || p.h != 80 {
+		t.Errorf("tooltip parent %+v, %v; want the popover's surface at 120x80", p, ok)
+	}
+}
+
+func TestAPopoverTooltipWaitsForItsDwell(t *testing.T) {
+	target := newTipTarget("hover text")
+	target.Arrange(render.Rect{W: 100, H: 20})
+	op, _, _, _ := newLoopPopover(target)
+	op.router = &widget.Router{Root: target}
+	op.router.Move(widget.Point{X: 5, Y: 5})
+	op.pointer = func() widget.Point { return widget.Point{X: 5, Y: 5} }
+	a := &Application{openPopovers: []*openPopover{op}}
+	start := time.Now()
+	a.updateTips(start)
+	at, ok := op.tip.next()
+	if !ok || !at.Equal(start.Add(tooltipDelay)) {
+		t.Errorf("a hovered popover widget's tooltip is due %v, %v; want one dwell after %v", at, ok, start)
+	}
+	op.tip.press()
+	if _, ok := op.tip.next(); ok {
+		t.Error("a press in the popover left its tooltip due")
+	}
+}

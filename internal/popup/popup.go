@@ -565,7 +565,7 @@ func (p *Popup) MarkFrame() {
 // (press, release, motion, leave), each one marking the popup for a
 // repaint, until the returned detach. Run attaches its own; the
 // application loop attaches one for the popovers it drives.
-func (p *Popup) AttachInput(sess inputSession, router *widget.Router, onPress func()) (detach func()) {
+func (p *Popup) AttachInput(sess inputSession, router *widget.Router, onPress func()) (detach func(), pointerAt func() widget.Point) {
 	var pointer struct{ x, y float64 }
 	input := &popupInput{
 		onPress:   onPress,
@@ -575,15 +575,16 @@ func (p *Popup) AttachInput(sess inputSession, router *widget.Router, onPress fu
 		mods:      func() widget.Mods { return widget.Mods(sess.Mods()) },
 		markDirty: func() { p.dirty.Store(true) },
 	}
+	pointerAt = func() widget.Point { return widget.Point{X: int(pointer.x), Y: int(pointer.y)} }
 	input.Input = touchinput.Input{
 		Tracker: widget.TouchTracker{Router: router},
-		Pointer: func() widget.Point { return widget.Point{X: int(pointer.x), Y: int(pointer.y)} },
+		Pointer: pointerAt,
 		Blocked: p.Dismissed,
 		Changed: input.markDirty,
 	}
 	surf := p.WLSurface
 	sess.SetSurfaceInput(surf, input)
-	return func() { sess.SetSurfaceInput(surf, nil) }
+	return func() { sess.SetSurfaceInput(surf, nil) }, pointerAt
 }
 
 // inputSession is what a popup's input needs from its session.

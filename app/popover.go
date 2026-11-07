@@ -599,7 +599,11 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	}
 	p.teardown = pop.Close
 	p.pop = pop
+	var op *openPopover
 	fireClosed := func() {
+		if op != nil {
+			op.tip.close()
+		}
 		p.dropCatchers()
 		// Whatever closed this popover (Esc, a click away, the
 		// compositor's popup_done, Dismiss) closes what nests under it.
@@ -626,9 +630,11 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 	widget.SetSurfaceHost(cfg.Content, surfaceHost{a: a, host: host, parent: p, router: router})
 	p.frac = a.fracFor(host)
 	widget.SetDeviceScale(cfg.Content, int(p.frac), scale.Denom)
-	op := &openPopover{
+	op = &openPopover{
 		host:       host,
 		pop:        pop,
+		tipSurface: pop.XdgSurface,
+		frac:       p.frac,
 		painter:    pop.NewPainter(a.sess, a.popupRenderer(), p.frac, keyRoot, widget.Current().Surface),
 		router:     router,
 		keyRoot:    keyRoot,
@@ -643,7 +649,12 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		op.pop.MarkFrame()
 		return nil
 	}
-	op.detach = pop.AttachInput(a.sess, router, p.takeKeys)
+	op.detach, op.pointer = pop.AttachInput(a.sess, router, func() {
+		op.tip.press()
+		if p.takeKeys != nil {
+			p.takeKeys()
+		}
+	})
 	a.openPopovers = append(a.openPopovers, op)
 	return p, nil
 }
@@ -716,7 +727,11 @@ type openPopover struct {
 	fireClosed func()
 	// unanchor ends the content's style anchoring, unless a newer open
 	// re-anchored it.
-	unanchor func()
+	unanchor   func()
+	tip        tooltipCtl
+	tipSurface *xdg.Surface
+	frac       uint32
+	pointer    func() widget.Point
 	// origin is where the popup's surface sits in its toplevel's
 	// coordinates, placed once the compositor placed it and its parent
 	// is placed too (shared-element morphs cross surfaces through it).
@@ -759,6 +774,7 @@ func (op *openPopover) release() {
 	if op.popover != nil {
 		op.popover.dropCatchers()
 	}
+	op.tip.close()
 	op.painter.Close()
 	op.detach()
 	op.unanchor()
@@ -948,4 +964,9 @@ func popupParentOf(host Host) (xdgParent *xdg.Surface, layerParent *wlr.ZwlrLaye
 		return h.TooltipSurface(), nil, true
 	}
 	return nil, nil, false
+}
+
+func (op *openPopover) tooltipParent() (tooltipParent, bool) {
+	w, h := op.pop.RequestedSize()
+	return tooltipParent{xdg: op.tipSurface, w: w, h: h}, op.tipSurface != nil
 }

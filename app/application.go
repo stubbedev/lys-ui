@@ -1010,6 +1010,11 @@ func (a *Application) tick(step func() error, now time.Time) error {
 			windowNext = t
 		}
 	}
+	for _, op := range a.openPopovers {
+		if t, ok := op.tip.next(); ok && (windowNext.IsZero() || t.Before(windowNext)) {
+			windowNext = t
+		}
+	}
 	if t, ok := a.rep.nextDeadline(); ok {
 		repNext = t
 	}
@@ -1070,6 +1075,14 @@ func (a *Application) framePacing() (pace animclock.Pace, arrived bool, ms uint3
 		} else if pending {
 			pace = animclock.Fallback
 		}
+		if op.tip.painter == nil {
+			continue
+		}
+		if got, ok, pending := op.tip.painter.TakeFrame(); ok {
+			arrived, ms = true, got
+		} else if pending {
+			pace = animclock.Fallback
+		}
 	}
 	return pace, arrived, ms
 }
@@ -1120,22 +1133,41 @@ func (a *Application) trimBuffers() {
 	}
 }
 
-// updateTips advances every window's tooltip state machine.
+// updateTips advances the tooltip state machine of every window and
+// of every popover still taking input.
 func (a *Application) updateTips(now time.Time) {
 	for _, w := range a.windows {
-		w.tip.delay = a.tooltipOpts.Delay
-		w.tip.stalled = a.stalled
-		w.tip.update(w.router, now, func(h widget.Widget, text string) (tooltipWindow, tooltipPainter) {
-			// A nil *popup.Popup must not be wrapped: the interface
-			// would carry a typed nil that the nil checks below let
-			// through to a dereference.
-			tp, pc := openTooltip(w.sess, a.popupRenderer(), w.host, a.resolveFace(nil), a.tooltipOpts, w.frac120, int(w.input.x), int(w.input.y), h, text)
-			if tp == nil {
-				return nil, nil
-			}
-			return tp, pc
+		a.updateTip(w.tip, w.router, now, func() (tooltipParent, bool) { return hostTooltipParent(w.host) }, w.frac120, func() widget.Point {
+			return widget.Point{X: int(w.input.x), Y: int(w.input.y)}
 		})
 	}
+	for _, op := range a.openPopovers {
+		if op.pop.Dismissed() {
+			op.tip.close()
+			continue
+		}
+		a.updateTip(&op.tip, op.router, now, op.tooltipParent, op.frac, op.pointer)
+	}
+}
+
+func (a *Application) updateTip(tip *tooltipCtl, router *widget.Router, now time.Time, parent func() (tooltipParent, bool), frac120 uint32, pointer func() widget.Point) {
+	tip.delay = a.tooltipOpts.Delay
+	tip.stalled = a.stalled
+	tip.update(router, now, func(h widget.Widget, text string) (tooltipWindow, tooltipPainter) {
+		p, ok := parent()
+		if !ok {
+			return nil, nil
+		}
+		at := pointer()
+		// A nil *popup.Popup must not be wrapped: the interface
+		// would carry a typed nil that the nil checks below let
+		// through to a dereference.
+		tp, pc := openTooltip(a.sess, a.popupRenderer(), p, a.resolveFace(nil), a.tooltipOpts, frac120, at.X, at.Y, h, text)
+		if tp == nil {
+			return nil, nil
+		}
+		return tp, pc
+	})
 }
 
 // routeKey dispatches one key press to the window holding keyboard
