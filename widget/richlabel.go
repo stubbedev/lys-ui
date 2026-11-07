@@ -479,17 +479,27 @@ func (l *RichLabel) wrapSpans(w int) (rows [][]MarkupRun, starts []int) {
 				add(seg, span.Style, advance(seg))
 				continue
 			}
+			// One segmentation and one shaping of the word give every
+			// cluster's boundary and x, so the word splits into a piece
+			// per row in a single pass.
 			rs := []rune(seg)
-			for i := 0; i < len(rs); {
-				j := text.NextCluster(rs, i)
-				g := string(rs[i:j])
-				gw := advance(g)
-				if lineW+gw > float64(w) && len(row) > 0 {
+			sh := face.Shape(seg, px)
+			starts := text.ClusterStarts(rs)
+			from := 0
+			width := func(a, b int) float64 { return math.Abs(sh.CaretX(b) - sh.CaretX(a)) }
+			for k := 1; k < len(starts); {
+				i, j := starts[k-1], starts[k]
+				if lineW+width(from, j) > float64(w) && (len(row) > 0 || i > from) {
+					if i > from {
+						add(string(rs[from:i]), span.Style, width(from, i))
+					}
 					flush()
+					from = i
+					continue
 				}
-				add(g, span.Style, gw)
-				i = j
+				k++
 			}
+			add(string(rs[from:]), span.Style, width(from, len(rs)))
 		}
 	}
 	if len(row) > 0 {

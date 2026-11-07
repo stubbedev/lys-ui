@@ -170,3 +170,41 @@ func TestRichLabelPaintsTheCascadeColor(t *testing.T) {
 		t.Error("the stylesheet's ink overrode a programmatic color")
 	}
 }
+
+// A word wider than a row breaks between clusters into a piece per row,
+// shaped once: an unbroken run of thousands of characters (a hash, a
+// minified line) wraps in time and allocations linear in its rows, and
+// no row runs past the width.
+func TestRichLabelWrapsALongWordPerRow(t *testing.T) {
+	word := strings.Repeat("x", 2000)
+	l := NewRichLabel(entryFace(t), 14, "ab "+word+" cd", 0)
+	l.SetWrap(true)
+	const w = 200
+	sz := SizeWithin(l, Size{W: w, H: 4000})
+	arrangeTree(t, l, w, sz.H)
+	var got strings.Builder
+	for i, line := range l.lines {
+		var row strings.Builder
+		for _, r := range line.runs {
+			row.WriteString(r.sh.Text())
+		}
+		if line.advance > w {
+			t.Errorf("row %d is %.0fpx, past the %dpx width", i, line.advance, w)
+		}
+		got.WriteString(row.String())
+	}
+	if want := "ab" + word + "cd"; strings.ReplaceAll(got.String(), " ", "") != want {
+		t.Errorf("the rows lost text: %d runes of %d", len(got.String()), len(want))
+	}
+	if len(l.lines) < 10 {
+		t.Fatalf("%d rows for a 2000-rune word in %dpx", len(l.lines), w)
+	}
+	rows := float64(len(l.lines))
+	allocs := testing.AllocsPerRun(5, func() {
+		l.fitW = -2
+		l.reflow(w)
+	})
+	if allocs > 12*rows {
+		t.Errorf("wrapping allocates %.0f times for %.0f rows, want at most %.0f", allocs, rows, 12*rows)
+	}
+}
