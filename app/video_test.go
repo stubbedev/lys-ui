@@ -357,7 +357,7 @@ func TestVideoPlaysOnAYUVSubsurface(t *testing.T) {
 	if d := after.windowCommits - before.windowCommits; d != 0 {
 		t.Errorf("the window committed %d times over %d video frames, want none", d, frames)
 	}
-	if !testbuild.Race && allocs/uint64(frames) > 0 {
+	if testbuild.AllocBudgetsHold && allocs/uint64(frames) > 0 {
 		t.Errorf("%d heap allocations over %d steady video frames, want none per frame", allocs, frames)
 	}
 
