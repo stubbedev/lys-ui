@@ -18,6 +18,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/gtksettings"
@@ -127,6 +128,8 @@ type Application struct {
 	// a11y runs the AT-SPI bridge; a11yMode is SetAccessibility's choice.
 	a11y     a11yRunner
 	a11yMode A11yMode
+	// sessionBus is WithSessionBus's connection, nil to dial our own.
+	sessionBus *dbus.Conn
 	// reconnect is SetReconnect's policy (nil: clean exit);
 	// rebuildPlan holds the windows a disconnect planned to rebuild.
 	reconnect   *ReconnectOptions
@@ -200,8 +203,19 @@ func (a *Application) InhibitIdle(host Host) (func(), error) {
 	return inhibitor.Destroy, nil
 }
 
+// Option configures an Application at NewApplication.
+type Option func(*Application)
+
+// WithSessionBus has the application read the desktop's settings and
+// accessibility switch over conn, a session bus connection the caller
+// already holds and keeps: the application opens no session bus
+// connection of its own for them, and never closes conn.
+func WithSessionBus(conn *dbus.Conn) Option {
+	return func(a *Application) { a.sessionBus = conn }
+}
+
 // NewApplication binds an application to a connected session.
-func NewApplication(sess *wlsession.Session) *Application {
+func NewApplication(sess *wlsession.Session, opts ...Option) *Application {
 	a := &Application{
 		sess:         sess,
 		accels:       newAccelTable(),
@@ -255,7 +269,14 @@ func NewApplication(sess *wlsession.Session) *Application {
 	// moves, so live themed icons re-resolve. Any cache reset (that switch, new search
 	// paths, a refresh) is bridged into the loop as the repaint that
 	// walks the damage and picks the change up.
-	a.portal = portalsettings.New()
+	for _, opt := range opts {
+		opt(a)
+	}
+	if a.sessionBus != nil {
+		a.portal = portalsettings.NewOn(a.sessionBus)
+	} else {
+		a.portal = portalsettings.New()
+	}
 	if name := a.gtkSettings().IconThemeName; name != "" {
 		icons.Default().ApplyIconTheme(name)
 	}

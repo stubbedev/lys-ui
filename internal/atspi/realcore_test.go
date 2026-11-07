@@ -83,7 +83,7 @@ func TestRealAtSpi2Core(t *testing.T) {
 
 	// The desktop switch: turning IsEnabled on reaches WatchStatus.
 	got := make(chan bool, 4)
-	stopWatch, err := WatchStatus("", func(on bool) { got <- on })
+	stopWatch, err := WatchStatus(bus.Conn(t), func(on bool) { got <- on })
 	if err != nil {
 		t.Fatal(err)
 	}

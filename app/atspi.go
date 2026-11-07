@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
+	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-ui/internal/atspi"
 	"github.com/stubbedev/lys-ui/internal/worker"
@@ -83,7 +84,7 @@ func (a *Application) startAccessibility() {
 		a.ServeAccessibility(A11YOptions{}, nil)
 	case A11yAuto:
 		a.postA11y("watch the accessibility switch", func() error {
-			stop, err := atspi.WatchStatus("", a.followA11yStatus)
+			stop, err := a.watchA11yStatus()
 			if err != nil {
 				return err
 			}
@@ -202,4 +203,22 @@ func (a *Application) SetFocus(w widget.Widget) error {
 	}
 	hw.dirty = true
 	return nil
+}
+
+func (a *Application) watchA11yStatus() (stop func(), err error) {
+	if a.sessionBus != nil {
+		return atspi.WatchStatus(a.sessionBus, a.followA11yStatus)
+	}
+	conn, err := dbus.ConnectSessionBus()
+	if err != nil {
+		return nil, fmt.Errorf("atspi: session bus: %w", err)
+	}
+	stopWatch, err := atspi.WatchStatus(conn, a.followA11yStatus)
+	if err != nil {
+		return nil, errors.Join(err, conn.Close())
+	}
+	return func() {
+		stopWatch()
+		_ = conn.Close()
+	}, nil
 }

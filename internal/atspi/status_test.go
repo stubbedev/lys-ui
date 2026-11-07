@@ -32,8 +32,8 @@ func (f *fakeStatus) Get(iface, prop string) (dbus.Variant, *dbus.Error) {
 // starting and stopping; a bus without org.a11y.Bus is an error.
 func TestWatchStatus(t *testing.T) {
 	bus := dbustest.Start(t)
-	address := bus.Address
-	if _, err := WatchStatus(address, func(bool) {}); err == nil {
+	watcher := bus.Conn(t)
+	if _, err := WatchStatus(watcher, func(bool) {}); err == nil {
 		t.Fatal("a bus without org.a11y.Bus watched")
 	}
 	conn := bus.Conn(t)
@@ -45,7 +45,7 @@ func TestWatchStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := make(chan bool, 4)
-	stop, err := WatchStatus(address, func(on bool) { got <- on })
+	stop, err := WatchStatus(watcher, func(on bool) { got <- on })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,4 +80,35 @@ func TestWatchStatus(t *testing.T) {
 	if next() {
 		t.Error("a screen reader stopping did not disable")
 	}
+}
+
+func TestAStoppedWatchHandsItsConnectionBack(t *testing.T) {
+	bus := dbustest.Start(t)
+	conn := bus.Conn(t)
+	if _, err := conn.RequestName(busName, dbus.NameFlagDoNotQueue); err != nil {
+		t.Fatal(err)
+	}
+	status := &fakeStatus{}
+	if err := conn.ExportAll(status, busPath, "org.freedesktop.DBus.Properties"); err != nil {
+		t.Fatal(err)
+	}
+	shared := bus.Conn(t)
+	reports := 0
+	stop, err := WatchStatus(shared, func(bool) { reports++ })
+	if err != nil {
+		t.Fatal(err)
+	}
+	stop()
+	stop()
+	if err := shared.BusObject().Call("org.freedesktop.DBus.GetId", 0).Err; err != nil {
+		t.Fatalf("stop closed the shared connection: %v", err)
+	}
+	if reports != 1 {
+		t.Errorf("%d reports, want the one before WatchStatus returned", reports)
+	}
+	again, err := WatchStatus(shared, func(bool) {})
+	if err != nil {
+		t.Fatalf("a second watch on the same connection: %v", err)
+	}
+	again()
 }

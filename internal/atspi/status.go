@@ -2,9 +2,8 @@ package atspi
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
+	"sync"
 
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 )
@@ -24,65 +23,69 @@ const (
 )
 
 // WatchStatus reports the switch to fn: once before returning, then on
-// every change, from the watch's goroutine. address is the session
-// bus; empty reads DBUS_SESSION_BUS_ADDRESS. No session bus, or none
-// with org.a11y.Bus, is an error. stop ends the watch. It waits on the
-// bus, so call it off the loop goroutine.
-func WatchStatus(address string, fn func(enabled bool)) (stop func(), err error) {
-	if address == "" {
-		address = os.Getenv("DBUS_SESSION_BUS_ADDRESS")
-	}
-	if address == "" {
-		return nil, errors.New("atspi: no session bus")
-	}
+// every change, from the watch's goroutine, over the session bus conn,
+// which stays the caller's. A bus without org.a11y.Bus is an error.
+// stop ends the watch and takes back its match. It waits on the bus, so
+// call it off the loop goroutine.
+func WatchStatus(conn *dbus.Conn, fn func(enabled bool)) (stop func(), err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), busTimeout)
 	defer cancel()
-	conn, err := dbus.Connect(address)
-	if err != nil {
-		return nil, fmt.Errorf("atspi: session bus: %w", err)
-	}
 	obj := conn.Object(busName, busPath)
 	props := map[string]bool{}
 	for _, prop := range []string{"IsEnabled", "ScreenReaderEnabled"} {
 		var v dbus.Variant
 		if err := obj.CallWithContext(ctx, "org.freedesktop.DBus.Properties.Get", 0, ifaceStatus, prop).Store(&v); err != nil {
-			_ = conn.Close()
 			return nil, fmt.Errorf("atspi: %s.%s: %w", ifaceStatus, prop, err)
 		}
 		props[prop], _ = v.Value().(bool)
 	}
 	enabled := props["IsEnabled"] || props["ScreenReaderEnabled"]
-	if err := conn.AddMatchSignalContext(ctx,
-		dbus.WithMatchObjectPath(busPath),
-		dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
-		dbus.WithMatchMember("PropertiesChanged"),
-	); err != nil {
-		_ = conn.Close()
+	match := statusMatch()
+	if err := conn.AddMatchSignalContext(ctx, match...); err != nil {
 		return nil, fmt.Errorf("atspi: watch status: %w", err)
 	}
 	signals := make(chan *dbus.Signal, 8)
 	conn.Signal(signals)
 	fn(enabled)
-	go func() {
-		// The signal carries the new values: reading them there, not
-		// re-reading the properties, keeps every transition in order
-		// (a launcher that cannot persist the setting flips it back at
-		// once).
-		for sig := range signals {
-			if len(sig.Body) < 2 || sig.Body[0] != ifaceStatus {
-				continue
-			}
-			changed, _ := sig.Body[1].(map[string]dbus.Variant)
-			for prop := range props {
-				if v, ok := changed[prop]; ok {
-					props[prop], _ = v.Value().(bool)
+	done := make(chan struct{})
+	var follow sync.WaitGroup
+	follow.Go(func() {
+		for {
+			select {
+			case <-done:
+				return
+			case sig, ok := <-signals:
+				if !ok {
+					return
+				}
+				if sig.Path != busPath || len(sig.Body) < 2 || sig.Body[0] != ifaceStatus {
+					continue
+				}
+				changed, _ := sig.Body[1].(map[string]dbus.Variant)
+				for prop := range props {
+					if v, ok := changed[prop]; ok {
+						props[prop], _ = v.Value().(bool)
+					}
+				}
+				if now := props["IsEnabled"] || props["ScreenReaderEnabled"]; now != enabled {
+					enabled = now
+					fn(enabled)
 				}
 			}
-			if now := props["IsEnabled"] || props["ScreenReaderEnabled"]; now != enabled {
-				enabled = now
-				fn(enabled)
-			}
 		}
-	}()
-	return func() { _ = conn.Close() }, nil
+	})
+	return sync.OnceFunc(func() {
+		conn.RemoveSignal(signals)
+		_ = conn.RemoveMatchSignal(match...)
+		close(done)
+		follow.Wait()
+	}), nil
+}
+
+func statusMatch() []dbus.MatchOption {
+	return []dbus.MatchOption{
+		dbus.WithMatchObjectPath(busPath),
+		dbus.WithMatchInterface("org.freedesktop.DBus.Properties"),
+		dbus.WithMatchMember("PropertiesChanged"),
+	}
 }
