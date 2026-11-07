@@ -59,7 +59,7 @@ func (b *CenterBox) along(s Size) (main, cross int) {
 }
 
 // Measure sizes to the three naturals end to end along the axis, as
-// thick as the thickest.
+// thick as the thickest; a hidden slot takes no room, as in GTK.
 func (b *CenterBox) Measure(axis Axis, forSize int) Sizes {
 	if sz, ok := b.measureHit(axis, forSize); ok {
 		return sz
@@ -68,6 +68,9 @@ func (b *CenterBox) Measure(axis Axis, forSize int) Sizes {
 	return b.measureStore(axis, forSize, measureBox(v, boxOf(v, render.Insets{}), axis, forSize, func(axis Axis, forSize int) Sizes {
 		var req Sizes
 		for _, c := range b.Children() {
+			if !IsVisible(c) {
+				continue
+			}
 			if axis == b.axis {
 				req = req.plus(measureChild(b, c, axis, forSize))
 				continue
@@ -89,7 +92,7 @@ func (b *CenterBox) Arrange(r render.Rect) {
 	b.ArrangeRoot(border)
 	size, cross := b.along(Size{W: inner.W, H: inner.H})
 	extent := func(w Widget) int {
-		if w == nil {
+		if w == nil || !IsVisible(w) {
 			return 0
 		}
 		return min(measureChild(b, w, b.axis, cross).Nat, size)
