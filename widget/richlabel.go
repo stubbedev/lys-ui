@@ -201,15 +201,20 @@ func (l *RichLabel) runPx(st TextStyle) float64 {
 }
 
 // faceFor resolves the face a run shapes with: a run in another family
-// resolves that family at its weight; bold and italic runs use the
-// variants when one is installed, and every other run - and any
-// variant the provider cannot supply - uses the base face. The run's
-// weight, letter spacing and features then apply.
+// resolves that family at its weight, as every run does when the
+// cascade names a font-family (a plain label's rule); otherwise bold
+// and italic runs use the variants when one is installed, and every
+// other run - and any variant the provider cannot supply - uses the
+// base face. The run's weight, letter spacing and features then apply.
 func (l *RichLabel) faceFor(st TextStyle) render.Font {
 	f := l.base
 	family := false
-	if st.Family != "" {
-		if rf, ok := resolveFace(st.Family, st.Weight, f); ok {
+	name := st.Family
+	if v := l.style(l); name == "" && v.Has(style.PropFontFamily) {
+		name = v.FontFamily
+	}
+	if name != "" {
+		if rf, ok := resolveFace(name, st.Weight, f); ok {
 			f, family = rf, true
 		}
 	}
@@ -236,9 +241,9 @@ func runFace(f render.Font, st TextStyle) render.Font {
 }
 
 // styleRestyled implements styleRestyler: a changed letter spacing or
-// face setting reshapes the runs.
+// face setting or font family reshapes the runs.
 func (l *RichLabel) styleRestyled(old, new style.Values) {
-	if old.LetterSpacing != new.LetterSpacing || old.Variations != new.Variations || old.Features != new.Features {
+	if old.LetterSpacing != new.LetterSpacing || old.Variations != new.Variations || old.Features != new.Features || old.FontFamily != new.FontFamily {
 		l.retext()
 		l.InvalidateLayout()
 	}

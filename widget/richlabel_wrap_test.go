@@ -208,3 +208,31 @@ func TestRichLabelWrapsALongWordPerRow(t *testing.T) {
 		t.Errorf("wrapping allocates %.0f times for %.0f rows, want at most %.0f", allocs, rows, 12*rows)
 	}
 }
+
+// A rich label shapes in the cascade's font-family, as a plain label
+// does: under a rule naming a family the resolver serves, it measures as
+// a label built with that family's face.
+func TestRichLabelTakesTheCascadeFontFamily(t *testing.T) {
+	other, err := render.NewFixtureTypeface()
+	if err != nil {
+		t.Fatal(err)
+	}
+	SetFaceResolver(func(family string, _ int) (render.Font, bool) { return other, family == "Other" })
+	t.Cleanup(func() { SetFaceResolver(nil) })
+	root := NewBox(Column, 0, 0)
+	root.AttachStylesheet(NewStylesheet(".other { font-family: Other; }", StylePriorityUser))
+	styled := NewRichLabel(entryFace(t), 14, "Wide words <b>here</b>", 0)
+	styled.AddClass("other")
+	plain := NewRichLabel(entryFace(t), 14, "Wide words <b>here</b>", 0)
+	root.Append(styled, false)
+	root.Append(plain, false)
+	SetStyleRoot(root)
+	SizeWithin(root, Size{W: 600, H: 100})
+	want := NewRichLabel(other, 14, "Wide words <b>here</b>", 0)
+	if got, w := styled.Measure(Row, -1).Nat, want.Measure(Row, -1).Nat; got != w {
+		t.Errorf("the styled label is %dpx wide, the family's own %dpx", got, w)
+	}
+	if plain.Measure(Row, -1).Nat == want.Measure(Row, -1).Nat {
+		t.Fatal("the two faces measure alike: the test proves nothing")
+	}
+}
