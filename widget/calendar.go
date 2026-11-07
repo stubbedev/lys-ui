@@ -202,6 +202,10 @@ type Calendar struct {
 	// OnRangeSelect fires in range mode on every pick: the start and,
 	// once picked, the end (zero until then).
 	OnRangeSelect func(from, to Date)
+	// OnMonth fires with the first shown month's first day whenever the
+	// view moves to another month: the arrows, the keyboard, ShowMonth, or
+	// a Select outside the shown months.
+	OnMonth func(first Date)
 }
 
 // NewCalendar returns a single-mode calendar showing initial's month
@@ -311,8 +315,18 @@ func (c *Calendar) ShowMonth(d Date) { c.showMonth(d) }
 
 // showMonth moves the view to d's month.
 func (c *Calendar) showMonth(d Date) {
-	c.view = d.FirstOfMonth()
+	c.setView(d.FirstOfMonth())
 	c.Invalidate()
+}
+
+func (c *Calendar) setView(first Date) {
+	if first == c.view {
+		return
+	}
+	c.view = first
+	if c.OnMonth != nil {
+		c.OnMonth(first)
+	}
 }
 
 // Shown returns the first day of the first shown month.
@@ -405,7 +419,7 @@ func (c *Calendar) reveal(d Date) {
 	first := c.view
 	last := c.view.AddMonths(c.months - 1)
 	if d.FirstOfMonth().Before(first) || last.Before(d.FirstOfMonth()) {
-		c.view = d.FirstOfMonth()
+		c.setView(d.FirstOfMonth())
 	}
 }
 

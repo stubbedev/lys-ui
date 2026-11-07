@@ -56,3 +56,26 @@ func TestGoldenCalendarMarks(t *testing.T) {
 	}
 	NewGolden(t, cal, "calendar-marks", goldenTheme(th))
 }
+
+func TestCalendarOnMonthFollowsTheView(t *testing.T) {
+	day := func(m time.Month, d int) Date { return Date{2026, m, d} }
+	c := NewCalendar(chromeFace(t), 13, day(time.September, 14))
+	var months []Date
+	c.OnMonth = func(first Date) { months = append(months, first) }
+
+	c.nav[1].OnClick()
+	c.nav[0].OnClick()
+	c.ShowMonth(day(time.September, 30))
+	c.Select(day(time.September, 2))
+	c.Select(day(time.December, 24))
+	c.KeyAction(KeyNextPage, 0)
+	want := []Date{day(time.October, 1), day(time.September, 1), day(time.December, 1), {2027, time.January, 1}}
+	if len(months) != len(want) {
+		t.Fatalf("OnMonth fired with %v, want %v", months, want)
+	}
+	for i := range want {
+		if months[i] != want[i] {
+			t.Errorf("OnMonth %d = %v, want %v", i, months[i], want[i])
+		}
+	}
+}
