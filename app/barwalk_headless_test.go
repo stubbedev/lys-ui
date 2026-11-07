@@ -84,10 +84,17 @@ func TestHeadlessBarWalksItsControlsByKeyboard(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer kb.Close()
-	ended := make(chan struct{}, 1)
-	onLoop(func() { err = s.w.WalkKeyboard(func() { ended <- struct{}{} }) })
-	if err != nil {
-		t.Fatal(err)
+	first, ended := make(chan struct{}, 1), make(chan struct{}, 1)
+	for _, done := range []chan struct{}{first, ended} {
+		onLoop(func() { err = s.w.WalkKeyboard(func() { done <- struct{}{} }) })
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	select {
+	case <-first:
+	default:
+		t.Fatal("a second walk left the first one's done unrun")
 	}
 	wltest.Eventually(t, "the first control ringed", ringed(0))
 	onLoop(func() {
