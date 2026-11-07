@@ -692,3 +692,76 @@ func TestRevealerFadeFromClamps(t *testing.T) {
 		t.Errorf("FadeFrom = %v after 2, want 1", r.FadeFrom())
 	}
 }
+
+func TestRevealerTransformLandsWithoutPaintingItsChildAgain(t *testing.T) {
+	for _, tr := range []RevealTransition{RevealZoom, RevealFlip, RevealSlideUp} {
+		c := pinAnimClock(t)
+		r, leaf := revealerAt(t, tr)
+		r.SetRevealed(true)
+		var landed shot
+		for c.step() {
+			if _, any := CollectDamage(r); any {
+				landed = paintReveal(r)
+			}
+		}
+		if r.Progress() != 1 {
+			t.Fatalf("transition %d stopped at %v", tr, r.Progress())
+		}
+		if leaf.paints != 1 {
+			t.Errorf("transition %d painted the child %d times through its landing, want once", tr, leaf.paints)
+		}
+		rest, _ := revealerAt(t, tr)
+		rest.SetRevealed(true)
+		rest.Finish()
+		if want := paintReveal(rest); lit(want, render.Rect{W: 80, H: 60}) == 0 || string(landed) != string(want) {
+			t.Errorf("transition %d landed differently from a revealer at rest", tr)
+		}
+		if r.layer != nil {
+			t.Errorf("transition %d kept its layer after landing", tr)
+		}
+	}
+}
+
+func TestRevealerLandingInAListCompositesBeforeItsLayerIsFreed(t *testing.T) {
+	c := pinAnimClock(t)
+	r, leaf := revealerAt(t, RevealZoom)
+	r.SetRevealed(true)
+	rec := render.NewRecorder(80, 60, 1, 1)
+	var got shot
+	for c.step() {
+		if _, any := CollectDamage(r); !any {
+			continue
+		}
+		rec.ResetRecorder(80, 60, 1, 1)
+		rec.Clear(rec.Rect(), revealBG)
+		r.Paint(rec)
+		got = make([]byte, render.Stride(80)*60)
+		rec.Recording().Paint(render.New(got, render.Stride(80), 80, 60))
+	}
+	rec.Recording().End()
+	if leaf.paints != 1 {
+		t.Errorf("a recorded zoom painted the child %d times through its landing, want once", leaf.paints)
+	}
+	rest, _ := revealerAt(t, RevealZoom)
+	rest.SetRevealed(true)
+	rest.Finish()
+	if want := paintReveal(rest); string(got) != string(want) {
+		t.Error("the List of the landing frame composites differently from a revealer at rest")
+	}
+}
+
+func TestRevealerRootFadeInFromHiddenPaintsItsChildOnce(t *testing.T) {
+	c := pinAnimClock(t)
+	r, leaf := revealerAt(t, RevealFade)
+	alphas := surfaceFadeFor(t, r)
+	CollectDamage(r)
+	paintReveal(r)
+	r.SetRevealed(true)
+	driveFrames(c, r)
+	if leaf.paints != 1 {
+		t.Errorf("a surface fade in from a fresh hidden revealer painted the child %d times, want once", leaf.paints)
+	}
+	if n := len(*alphas); n == 0 || (*alphas)[0] != 0 || (*alphas)[n-1] != 1 {
+		t.Errorf("surface alphas %v, want a run from 0 to 1", *alphas)
+	}
+}

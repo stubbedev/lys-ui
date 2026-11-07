@@ -67,8 +67,8 @@ const defaultRevealDuration = 200 * time.Millisecond
 // with its opacity. Progress runs linearly in time toward the target;
 // each transition shapes it with its own curve, the bounce overshooting.
 // A transformed composite records the child into its layer once and
-// composites that layer again on later frames while nothing below the
-// revealer is damaged.
+// composites that layer again on later frames, the one it lands on
+// included, while nothing below the revealer is damaged.
 //
 // Every transition but RevealNone reserves the child's full size for
 // the whole run, hidden included, and moves the child within it, so a
@@ -375,10 +375,15 @@ func (r *Revealer) Paint(cv *render.Canvas) {
 		r.surfaceAlpha = false
 	}
 	// Only a transformed frame keeps the layer, a full-canvas buffer:
-	// at rest, hidden or fading, the child paints directly.
+	// at rest, hidden or fading, the child paints directly, but for the
+	// frame a transform lands on, which composites the layer once more.
 	layer := r.layer
 	r.layer = nil
-	defer keepOrFree(layer, &r.layer)
+	defer func() {
+		if layer != nil {
+			keepOrFree(layer, &r.layer)
+		}
+	}()
 	if r.child == nil {
 		return
 	}
@@ -393,7 +398,11 @@ func (r *Revealer) Paint(cv *render.Canvas) {
 	p := r.progress
 	switch {
 	case r.shownTransition() == RevealNone || p >= 1 || r.surfaceAlpha:
-		PaintChild(cv, r.child)
+		if p >= 1 && r.landLayer(cv, layer) {
+			layer = nil
+		} else {
+			PaintChild(cv, r.child)
+		}
 		r.painted = r.bounds
 		r.drawnOpaque = true
 		return
@@ -413,11 +422,10 @@ func (r *Revealer) Paint(cv *render.Canvas) {
 	}
 	dev := cv.MapRect(r.bounds)
 	m, alpha, clip := r.transform(dev, p)
-	stamp := layerStamp{dev: dev, list: cv.Recording(), style: styleGen, theme: themeGen, icons: icons.Default().Generation(), kept: keptLayerGen.Load()}
-	if layer != nil && !r.subDamaged && r.stamp == stamp && cv.ReuseLayer(layer, dev) {
+	if r.reuses(cv, layer, dev) {
 		r.layer = layer
 	} else {
-		r.subDamaged, r.stamp = false, stamp
+		r.subDamaged, r.stamp = false, r.stampOf(cv, dev)
 		r.layer = cv.Layer(layer, dev)
 		r.child.Paint(r.layer.Canvas())
 	}
@@ -571,3 +579,28 @@ func (r *Revealer) appendStyleKids(buf []Widget) []Widget {
 
 // showing reports a child that is shown, or on its way in or out.
 func (r *Revealer) showing() bool { return r.child != nil && (r.reveal || r.progress > 0) }
+
+// stampOf is what a layer recorded for dev on cv depends on.
+func (r *Revealer) stampOf(cv *render.Canvas, dev render.Rect) layerStamp {
+	return layerStamp{dev: dev, list: cv.Recording(), style: styleGen, theme: themeGen, icons: icons.Default().Generation(), kept: keptLayerGen.Load()}
+}
+
+// reuses reports whether layer still holds the child as cv would paint
+// it at dev, and readies it to composite again.
+func (r *Revealer) reuses(cv *render.Canvas, layer *render.Layer, dev render.Rect) bool {
+	return layer != nil && !r.subDamaged && r.stamp == r.stampOf(cv, dev) && cv.ReuseLayer(layer, dev)
+}
+
+// landLayer draws the frame a transform lands on from the layer its last
+// frame kept, untransformed, rather than painting the child again, and
+// retires the layer once the List compositing it has ended. It reports
+// false, drawing nothing, when the layer no longer holds the child.
+func (r *Revealer) landLayer(cv *render.Canvas, layer *render.Layer) bool {
+	dev := cv.MapRect(r.bounds)
+	if !r.reuses(cv, layer, dev) {
+		return false
+	}
+	cv.Composite(layer, dev, render.Identity, 1)
+	render.Retire(layer.Free)
+	return true
+}
