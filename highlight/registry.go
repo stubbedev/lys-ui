@@ -2,6 +2,7 @@ package highlight
 
 import (
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -23,6 +24,9 @@ type Language struct {
 	// Interpreters are the programs a script's #! line names to run
 	// it: "python3", "bash".
 	Interpreters []string
+	// FirstLine matches a text's first line when it gives the language
+	// away without a name or #! line: "package main", "<?xml", "diff --git".
+	FirstLine *regexp.Regexp
 	// Highlighter styles the language.
 	Highlighter widget.Highlighter
 }
@@ -115,11 +119,11 @@ func languageAt(id int) widget.Highlighter {
 // builtinLanguages are the languages this package registers.
 var builtinLanguages = []Language{
 	{Name: "toml", Globs: []string{"*.toml", "Cargo.lock", "Pipfile"}, Highlighter: TOML{}},
-	{Name: "go", Aliases: []string{"golang"}, Globs: []string{"*.go"}, Highlighter: Go{}},
-	{Name: "json", Aliases: []string{"jsonc", "geojson"}, Globs: []string{"*.json", "*.geojson", "*.jsonc"}, Highlighter: JSON{}},
+	{Name: "go", Aliases: []string{"golang"}, Globs: []string{"*.go"}, FirstLine: regexp.MustCompile(`^package\s+[A-Za-z_]\w*\s*(//.*)?$`), Highlighter: Go{}},
+	{Name: "json", Aliases: []string{"jsonc", "geojson"}, Globs: []string{"*.json", "*.geojson", "*.jsonc"}, FirstLine: regexp.MustCompile(`^\s*\{\s*"[^"]*"\s*:`), Highlighter: JSON{}},
 	{Name: "yaml", Aliases: []string{"yml"}, Globs: []string{"*.yaml", "*.yml"}, Highlighter: YAML{}},
 	{Name: "markdown", Aliases: []string{"md"}, Globs: []string{"*.md", "*.markdown"}, Highlighter: Markdown{}},
-	{Name: "c", Aliases: []string{"h"}, Globs: []string{"*.c", "*.h"}, Highlighter: langC},
+	{Name: "c", Aliases: []string{"h"}, Globs: []string{"*.c", "*.h"}, FirstLine: regexp.MustCompile(`^#include\s*[<"]`), Highlighter: langC},
 	{Name: "cpp", Aliases: []string{"c++", "cxx", "cc", "hpp"}, Globs: []string{"*.cpp", "*.cc", "*.cxx", "*.c++", "*.hpp", "*.hh", "*.hxx", "*.h++", "*.ino"}, Highlighter: langCPP},
 	{Name: "rust", Aliases: []string{"rs"}, Globs: []string{"*.rs"}, Highlighter: langRust},
 	{Name: "javascript", Aliases: []string{"js", "jsx", "mjs", "cjs", "node"}, Globs: []string{"*.js", "*.mjs", "*.cjs", "*.jsx"}, Interpreters: []string{"node", "nodejs", "bun"}, Highlighter: langJavaScript},
@@ -133,12 +137,12 @@ var builtinLanguages = []Language{
 	{Name: "lua", Globs: []string{"*.lua"}, Interpreters: []string{"lua", "luajit"}, Highlighter: langLua},
 	{Name: "sql", Aliases: []string{"psql", "sqlite", "mysql", "postgresql"}, Globs: []string{"*.sql"}, Highlighter: langSQL},
 	{Name: "makefile", Aliases: []string{"make", "mk"}, Globs: []string{"Makefile", "makefile", "GNUmakefile", "*.mk", "*.mak"}, Interpreters: []string{"make"}, Highlighter: langMake},
-	{Name: "dockerfile", Aliases: []string{"docker", "containerfile"}, Globs: []string{"Dockerfile", "Containerfile", "*.dockerfile", "Dockerfile.*"}, Highlighter: langDockerfile},
-	{Name: "html", Aliases: []string{"htm", "xhtml"}, Globs: []string{"*.html", "*.htm", "*.xhtml"}, Highlighter: Tags{}},
-	{Name: "xml", Aliases: []string{"svg", "xsl", "plist"}, Globs: []string{"*.xml", "*.svg", "*.xsd", "*.xsl", "*.xslt", "*.plist", "*.ui", "*.glade", "*.rss", "*.atom"}, Highlighter: Tags{}},
+	{Name: "dockerfile", Aliases: []string{"docker", "containerfile"}, Globs: []string{"Dockerfile", "Containerfile", "*.dockerfile", "Dockerfile.*"}, FirstLine: regexp.MustCompile(`^FROM\s+\S`), Highlighter: langDockerfile},
+	{Name: "html", Aliases: []string{"htm", "xhtml"}, Globs: []string{"*.html", "*.htm", "*.xhtml"}, FirstLine: regexp.MustCompile(`(?i)^\s*(<!DOCTYPE\s+html|<html[\s>])`), Highlighter: Tags{}},
+	{Name: "xml", Aliases: []string{"svg", "xsl", "plist"}, Globs: []string{"*.xml", "*.svg", "*.xsd", "*.xsl", "*.xslt", "*.plist", "*.ui", "*.glade", "*.rss", "*.atom"}, FirstLine: regexp.MustCompile(`^<\?xml\s`), Highlighter: Tags{}},
 	{Name: "css", Globs: []string{"*.css"}, Highlighter: CSS{}},
 	{Name: "ini", Aliases: []string{"dosini", "conf", "desktop", "systemd", "gitconfig", "editorconfig"}, Globs: []string{"*.ini", "*.cfg", "*.conf", "*.desktop", "*.service", "*.socket", "*.timer", "*.target", "*.mount", "*.path", "*.network", ".gitconfig", ".editorconfig", "*.inf"}, Highlighter: INI{}},
-	{Name: "diff", Aliases: []string{"patch", "udiff"}, Globs: []string{"*.diff", "*.patch"}, Highlighter: Diff{}},
+	{Name: "diff", Aliases: []string{"patch", "udiff"}, Globs: []string{"*.diff", "*.patch"}, FirstLine: regexp.MustCompile(`^(diff --git |diff -|Index: |--- \S)`), Highlighter: Diff{}},
 }
 
 func init() {

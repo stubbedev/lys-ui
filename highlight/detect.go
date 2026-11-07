@@ -24,7 +24,8 @@ var (
 
 // Detect finds text's highlighter the way bat does: by the file's name
 // (name may be "" for text from no file), then the interpreter its #!
-// line names, then a vim or Emacs modeline in its first or last lines.
+// line names, then what its first line gives away ("package main",
+// "<?xml"), then a vim or Emacs modeline in its first or last lines.
 func Detect(name, text string) (widget.Highlighter, bool) {
 	if name != "" {
 		if h, ok := ForFile(name); ok {
@@ -36,6 +37,9 @@ func Detect(name, text string) (widget.Highlighter, bool) {
 		if h, ok := forInterpreter(interp); ok {
 			return h, true
 		}
+	}
+	if h, ok := forFirstLine(first); ok {
+		return h, true
 	}
 	return forModeline(text)
 }
@@ -71,6 +75,18 @@ func forInterpreter(interp string) (widget.Highlighter, bool) {
 	defer registry.RUnlock()
 	for _, l := range registry.langs {
 		if slices.Contains(l.Interpreters, interp) || slices.Contains(l.Interpreters, bare) {
+			return l.Highlighter, true
+		}
+	}
+	return nil, false
+}
+
+// forFirstLine finds the language whose first-line pattern line matches.
+func forFirstLine(line string) (widget.Highlighter, bool) {
+	registry.RLock()
+	defer registry.RUnlock()
+	for _, l := range registry.langs {
+		if l.FirstLine != nil && l.FirstLine.MatchString(line) {
 			return l.Highlighter, true
 		}
 	}
