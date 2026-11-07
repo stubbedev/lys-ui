@@ -127,7 +127,9 @@ func monitorOutput(name string, cursor bool, frames int, pattern string) error {
 	info := stream.Info()
 	log.Printf("lys-ui-capture: streaming %dx%d", info.Width, info.Height)
 	n := 0
-	var last *capture.StreamFrame
+	var latest capture.StreamFrame
+	var last uint64
+	seen := false
 	tick := time.NewTicker(50 * time.Millisecond)
 	defer tick.Stop()
 	for {
@@ -135,11 +137,10 @@ func monitorOutput(name string, cursor bool, frames int, pattern string) error {
 		case <-stream.Done():
 			return stream.Err()
 		case <-tick.C:
-			latest := stream.Latest()
-			if latest == nil || latest == last {
+			if !stream.Latest(&latest) || (seen && latest.Seq == last) {
 				continue
 			}
-			last = latest
+			last, seen = latest.Seq, true
 			frame, err := latest.Frame()
 			if err != nil {
 				return err
