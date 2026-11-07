@@ -45,8 +45,14 @@ func (w *Window) SetContentType(ct ContentType) error {
 // applies with the next frame; fails when the compositor lacks the
 // protocol.
 func (w *Window) SetOpacity(alpha float64) error {
-	w.alpha = alpha
-	err := w.app.sess.SetSurfaceAlpha(w.win.WLSurface, alpha)
+	w.opacity.setApp(alpha)
+	return w.sendOpacity(w.opacity)
+}
+
+// sendOpacity sends o, the app's opacity times the fade.
+func (w *Window) sendOpacity(o surfaceOpacity) error {
+	v, _ := o.value()
+	err := w.app.sess.SetSurfaceAlpha(w.win.WLSurface, v)
 	w.requestFrame()
 	return err
 }
@@ -101,8 +107,14 @@ func (l *LayerWindow) SetContentType(ct ContentType) error {
 // SetOpacity sets the opacity the compositor applies to the layer
 // surface (a panel fading out, no repaint).
 func (l *LayerWindow) SetOpacity(alpha float64) error {
-	l.alpha = alpha
-	err := l.app.sess.SetSurfaceAlpha(l.ls.WLSurface, alpha)
+	l.opacity.setApp(alpha)
+	return l.sendOpacity(l.opacity)
+}
+
+// sendOpacity sends o, the app's opacity times the fade.
+func (l *LayerWindow) sendOpacity(o surfaceOpacity) error {
+	v, _ := o.value()
+	err := l.app.sess.SetSurfaceAlpha(l.ls.WLSurface, v)
 	l.requestFrame()
 	return err
 }
@@ -164,9 +176,9 @@ func (a *Application) fadeSurface(root widget.Widget, alpha float64) bool {
 	}
 	switch {
 	case hw.win != nil:
-		return hw.win.SetOpacity(alpha) == nil
+		return fadeOpacity(&hw.win.opacity, alpha, hw.win.sendOpacity)
 	case hw.layer != nil:
-		return hw.layer.SetOpacity(alpha) == nil
+		return fadeOpacity(&hw.layer.opacity, alpha, hw.layer.sendOpacity)
 	}
 	return false
 }

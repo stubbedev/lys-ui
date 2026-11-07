@@ -282,8 +282,8 @@ func (a *Application) rebuildToplevel(old *hostWindow) error {
 	if state.Fullscreen {
 		w.Fullscreen()
 	}
-	if w.alpha > 0 {
-		_ = w.SetOpacity(w.alpha)
+	if _, set := w.opacity.value(); set {
+		_ = w.sendOpacity(w.opacity)
 	}
 	return nil
 }
@@ -305,8 +305,8 @@ func (a *Application) rebuildLayer(old *hostWindow) error {
 	if err := a.carryOver(old, hw); err != nil {
 		return fmt.Errorf("app: rebuild layer %q: %w", cfg.Namespace, err)
 	}
-	if l.alpha > 0 {
-		_ = l.SetOpacity(l.alpha)
+	if _, set := l.opacity.value(); set {
+		_ = l.sendOpacity(l.opacity)
 	}
 	return nil
 }

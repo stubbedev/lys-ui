@@ -1268,11 +1268,11 @@ type Window struct {
 	win    *window.Window
 	closed bool
 	// cfg and kind are what the window was opened from, the base a
-	// rebuild on a new connection starts from (reconnect.go); alpha is
-	// the SetOpacity in effect (0: none).
-	cfg   WindowConfig
-	kind  surfx.Kind
-	alpha float64
+	// rebuild on a new connection starts from (reconnect.go); opacity is
+	// the compositor opacity in effect.
+	cfg     WindowConfig
+	kind    surfx.Kind
+	opacity surfaceOpacity
 }
 
 // Close closes the window from the client side; the close-request veto
@@ -1389,10 +1389,10 @@ func (w *Window) SetFocus(target widget.Widget) error {
 type LayerWindow struct {
 	app *Application
 	ls  *layersurface.Surface
-	// cfg is what the surface was opened from (reconnect.go); alpha is
-	// the SetOpacity in effect.
-	cfg   LayerConfig
-	alpha float64
+	// cfg is what the surface was opened from (reconnect.go); opacity is
+	// the compositor opacity in effect.
+	cfg     LayerConfig
+	opacity surfaceOpacity
 	// req is the size the app asked for (zero axes automatic); fit is
 	// which of its axes follow the content.
 	req [2]uint32

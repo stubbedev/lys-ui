@@ -18,8 +18,8 @@ func TestSurfaceFadeTakesOnlyASurfaceRootTheCompositorCanFade(t *testing.T) {
 	if a.fadeSurface(root, 0.5) {
 		t.Error("a widget wrapping the app's tree took the surface fade")
 	}
-	if win.alpha != 0 {
-		t.Errorf("a refused fade set the window opacity to %v", win.alpha)
+	if v, set := win.opacity.value(); set {
+		t.Errorf("a refused fade set the window opacity to %v", v)
 	}
 	hw.styleRoot = root
 	if a.fadeSurface(root, 0.5) {
