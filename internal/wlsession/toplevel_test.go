@@ -20,6 +20,9 @@ type fakeToplevelHandle struct {
 	stateH  wlr.ZwlrForeignToplevelHandleV1StateHandler
 	doneH   wlr.ZwlrForeignToplevelHandleV1DoneHandler
 	closedH wlr.ZwlrForeignToplevelHandleV1ClosedHandler
+	enterH  wlr.ZwlrForeignToplevelHandleV1OutputEnterHandler
+	leaveH  wlr.ZwlrForeignToplevelHandleV1OutputLeaveHandler
+	rect    [4]int32
 }
 
 func (f *fakeToplevelHandle) do(name string) { f.requests = append(f.requests, name) }
@@ -35,6 +38,20 @@ func (f *fakeToplevelHandle) Activate(seat *wl.Seat) error {
 }
 func (f *fakeToplevelHandle) Close() error   { f.do("close"); return nil }
 func (f *fakeToplevelHandle) Destroy() error { f.do("destroy"); return nil }
+
+func (f *fakeToplevelHandle) SetRectangle(_ *wl.Surface, x, y, width, height int32) error {
+	f.rect = [4]int32{x, y, width, height}
+	f.do("set_rectangle")
+	return nil
+}
+
+func (f *fakeToplevelHandle) AddOutputEnterHandler(h wlr.ZwlrForeignToplevelHandleV1OutputEnterHandler) {
+	f.enterH = h
+}
+
+func (f *fakeToplevelHandle) AddOutputLeaveHandler(h wlr.ZwlrForeignToplevelHandleV1OutputLeaveHandler) {
+	f.leaveH = h
+}
 
 func (f *fakeToplevelHandle) AddTitleHandler(h wlr.ZwlrForeignToplevelHandleV1TitleHandler) {
 	f.titleH = h
@@ -183,5 +200,38 @@ func TestDecodeToplevelState(t *testing.T) {
 	max, min, act, full = decodeToplevelState(nil)
 	if max || min || act || full {
 		t.Errorf("empty decode = %v/%v/%v/%v, want all false", max, min, act, full)
+	}
+}
+
+// A toplevel lists the session outputs it entered, from its next done,
+// and drops one it left; a wl_output the session does not know is left
+// out. SetRectangle reaches the handle only with a surface.
+func TestForeignToplevelOutputsAndRectangle(t *testing.T) {
+	dp, hdmi := &Output{WL: &wl.Output{}, Name: "DP-1"}, &Output{WL: &wl.Output{}, Name: "HDMI-A-1"}
+	s := &Session{outputs: []*Output{dp, hdmi}}
+	fake := &fakeToplevelHandle{}
+	tl := s.addToplevel(fake)
+	fake.enterH.HandleZwlrForeignToplevelHandleV1OutputEnter(wlr.ZwlrForeignToplevelHandleV1OutputEnterEvent{Output: hdmi.WL})
+	fake.enterH.HandleZwlrForeignToplevelHandleV1OutputEnter(wlr.ZwlrForeignToplevelHandleV1OutputEnterEvent{Output: &wl.Output{}})
+	fake.enterH.HandleZwlrForeignToplevelHandleV1OutputEnter(wlr.ZwlrForeignToplevelHandleV1OutputEnterEvent{Output: dp.WL})
+	if len(tl.Outputs) != 0 {
+		t.Fatalf("outputs before done = %v", tl.Outputs)
+	}
+	fake.doneH.HandleZwlrForeignToplevelHandleV1Done(wlr.ZwlrForeignToplevelHandleV1DoneEvent{})
+	if !slices.Equal(tl.Outputs, []*Output{hdmi, dp}) {
+		t.Fatalf("outputs = %v, want HDMI-A-1 then DP-1", tl.Outputs)
+	}
+	fake.leaveH.HandleZwlrForeignToplevelHandleV1OutputLeave(wlr.ZwlrForeignToplevelHandleV1OutputLeaveEvent{Output: hdmi.WL})
+	fake.doneH.HandleZwlrForeignToplevelHandleV1Done(wlr.ZwlrForeignToplevelHandleV1DoneEvent{})
+	if !slices.Equal(tl.Outputs, []*Output{dp}) {
+		t.Fatalf("outputs after leaving HDMI-A-1 = %v", tl.Outputs)
+	}
+	tl.SetRectangle(nil, 1, 2, 3, 4)
+	if len(fake.requests) != 0 {
+		t.Fatalf("a rectangle without a surface sent %v", fake.requests)
+	}
+	tl.SetRectangle(&wl.Surface{}, 1, 2, 3, 4)
+	if !slices.Equal(fake.requests, []string{"set_rectangle"}) || fake.rect != [4]int32{1, 2, 3, 4} {
+		t.Fatalf("requests %v rect %v", fake.requests, fake.rect)
 	}
 }

@@ -36,6 +36,10 @@ type Toplevel struct {
 	// State flags from the latest state batch.
 	Maximized, Minimized, Activated, Fullscreen bool
 
+	// Outputs are the outputs the window is on, as the latest batch left
+	// them, in the order it entered them.
+	Outputs []*Output
+
 	// req is the wire handle, seen through the narrow interface below
 	// so tests can record the requests; nil on the no-protocol path.
 	req toplevelHandleAPI
@@ -54,12 +58,15 @@ type toplevelHandleAPI interface {
 	UnsetMinimized() error
 	Activate(seat *wl.Seat) error
 	Close() error
+	SetRectangle(surface *wl.Surface, x, y, width, height int32) error
 	Destroy() error
 	AddTitleHandler(h wlr.ZwlrForeignToplevelHandleV1TitleHandler)
 	AddAppIdHandler(h wlr.ZwlrForeignToplevelHandleV1AppIdHandler)
 	AddStateHandler(h wlr.ZwlrForeignToplevelHandleV1StateHandler)
 	AddDoneHandler(h wlr.ZwlrForeignToplevelHandleV1DoneHandler)
 	AddClosedHandler(h wlr.ZwlrForeignToplevelHandleV1ClosedHandler)
+	AddOutputEnterHandler(h wlr.ZwlrForeignToplevelHandleV1OutputEnterHandler)
+	AddOutputLeaveHandler(h wlr.ZwlrForeignToplevelHandleV1OutputLeaveHandler)
 }
 
 // foreignToplevelManagerAPI is the manager side the session drives:
@@ -123,6 +130,8 @@ func (s *Session) addToplevel(req toplevelHandleAPI) *Toplevel {
 	req.AddStateHandler(ev)
 	req.AddDoneHandler(ev)
 	req.AddClosedHandler(ev)
+	req.AddOutputEnterHandler(ev)
+	req.AddOutputLeaveHandler(ev)
 	s.toplevels = append(s.toplevels, tl)
 	if s.OnToplevelAdded != nil {
 		s.OnToplevelAdded(tl)
@@ -203,9 +212,10 @@ type toplevelEvents struct {
 	// pending batch: the fields keep the last applied values, so a
 	// done that only carries a fresh state batch preserves the last
 	// known title and app-id.
-	title  string
-	appID  string
-	states []int32
+	title   string
+	appID   string
+	states  []int32
+	outputs []*wl.Output
 }
 
 // HandleZwlrForeignToplevelHandleV1Title implements
@@ -234,6 +244,7 @@ func (e *toplevelEvents) HandleZwlrForeignToplevelHandleV1Done(wlr.ZwlrForeignTo
 	tl := e.tl
 	tl.Title, tl.AppID = e.title, e.appID
 	tl.Maximized, tl.Minimized, tl.Activated, tl.Fullscreen = decodeToplevelState(e.states)
+	tl.Outputs = e.sess.outputsOf(e.outputs)
 	if e.sess.OnToplevelUpdated != nil {
 		e.sess.OnToplevelUpdated(tl)
 	}
@@ -264,4 +275,39 @@ func decodeToplevelState(states []int32) (maximized, minimized, activated, fulls
 		}
 	}
 	return maximized, minimized, activated, fullscreen
+}
+
+// SetRectangle names where the window's entry sits on surface, in its
+// surface-local logical pixels, for the compositor's minimize animation;
+// a zero width and height withdraw it. No-op without the protocol.
+func (t *Toplevel) SetRectangle(surface *wl.Surface, x, y, width, height int32) {
+	if t != nil && t.req != nil && surface != nil {
+		_ = t.req.SetRectangle(surface, x, y, width, height)
+	}
+}
+
+// HandleZwlrForeignToplevelHandleV1OutputEnter implements
+// wlr.ZwlrForeignToplevelHandleV1OutputEnterHandler.
+func (e *toplevelEvents) HandleZwlrForeignToplevelHandleV1OutputEnter(ev wlr.ZwlrForeignToplevelHandleV1OutputEnterEvent) {
+	if ev.Output != nil && !slices.Contains(e.outputs, ev.Output) {
+		e.outputs = append(e.outputs, ev.Output)
+	}
+}
+
+// HandleZwlrForeignToplevelHandleV1OutputLeave implements
+// wlr.ZwlrForeignToplevelHandleV1OutputLeaveHandler.
+func (e *toplevelEvents) HandleZwlrForeignToplevelHandleV1OutputLeave(ev wlr.ZwlrForeignToplevelHandleV1OutputLeaveEvent) {
+	e.outputs = slices.DeleteFunc(e.outputs, func(o *wl.Output) bool { return o == ev.Output })
+}
+
+// outputsOf is the session's outputs behind the wl_outputs a toplevel
+// entered, in that order; one the session does not list is left out.
+func (s *Session) outputsOf(wls []*wl.Output) []*Output {
+	out := make([]*Output, 0, len(wls))
+	for _, w := range wls {
+		if i := slices.IndexFunc(s.outputs, func(o *Output) bool { return o.WL == w }); i >= 0 {
+			out = append(out, s.outputs[i])
+		}
+	}
+	return out
 }

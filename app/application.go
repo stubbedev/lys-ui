@@ -114,6 +114,7 @@ type Application struct {
 	stopMotionFollow func()
 	removeInvoker    func()
 	lockWatchers     []*func(Locks)
+	toplevelWatchers []*func()
 	stopIconFollow   func()
 	// windowIcons (windowicon.go): per-window overrides and the app
 	// default posted through xdg-toplevel-icon-v1, plus the icons
@@ -869,6 +870,9 @@ func (a *Application) wireSession() {
 	a.sess.OnIME = a.imeEvent
 	a.sess.OnIMEFocus = a.ime.reset
 	a.sess.OnLocks = a.locksChanged
+	a.sess.OnToplevelAdded = a.toplevelsChanged
+	a.sess.OnToplevelRemoved = a.toplevelsChanged
+	a.sess.OnToplevelUpdated = a.toplevelsChanged
 }
 
 // stepFn is the dispatch step: the test seam when set, else the
