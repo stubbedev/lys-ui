@@ -228,3 +228,28 @@ func TestAccelLabel(t *testing.T) {
 		t.Error("IsModifierKeysym misclassifies")
 	}
 }
+
+func TestShortcutRecorderCancelKeepsTheCallersMessage(t *testing.T) {
+	r := NewShortcutRecorder(chromeFace(t), "Ctrl+Alt+P")
+	r.SetError("Another shortcut already uses Ctrl+Alt+P.")
+	r.Validate = func(a string) error {
+		if a == "P" {
+			return errors.New("needs a modifier")
+		}
+		return nil
+	}
+	r.StartRecording()
+	r.RecordPress(xkb.Keysym('p'), 0)
+	if r.Error() != "needs a modifier" {
+		t.Fatalf("while recording the message is %q", r.Error())
+	}
+	r.RecordPress(xkb.KeyEscape, 0)
+	if r.Error() != "Another shortcut already uses Ctrl+Alt+P." || r.Accel() != "Ctrl+Alt+P" {
+		t.Errorf("a cancel left %q on %q, want the refusal back on the old value", r.Error(), r.Accel())
+	}
+	r.StartRecording()
+	r.RecordPress(xkb.KeyF9, ModSuper)
+	if r.Error() != "" || r.Accel() != "Super+F9" {
+		t.Errorf("a new key left %q on %q, want no message", r.Error(), r.Accel())
+	}
+}

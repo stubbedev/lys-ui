@@ -18,8 +18,8 @@ const shortcutRecorderSize = 14
 // button. Activated (a click, Enter or Space) it records: it takes the
 // window's raw key stream as a KeyRecorder, previews held modifiers
 // live, and commits the first non-modifier key with its modifiers.
-// Escape cancels and keeps the old value, Backspace alone clears it,
-// and losing focus cancels. A Validate error shows under the control
+// Escape cancels, keeping the old value and the message shown under it,
+// Backspace alone clears it, and losing focus cancels. A Validate error shows under the control
 // while it keeps recording. It styles as the `shortcutrecorder`
 // element, the button .recording while it records, the message an
 // .error label.
@@ -35,6 +35,9 @@ type ShortcutRecorder struct {
 	value     string
 	recording bool
 	held      Mods
+	// shown is the message under the control when recording started,
+	// back on a cancel.
+	shown string
 
 	// OnChanged fires when a press, Backspace or the clear button
 	// changed the accelerator, with the new one in the label form
@@ -64,13 +67,13 @@ func NewShortcutRecorder(face render.Font, accel string) *ShortcutRecorder {
 	r.button.SetAccessibleName(Tr("Shortcut"))
 	r.button.SetOnFocusChanged(func(focused bool) {
 		if !focused && r.recording {
-			r.stop()
+			r.cancel()
 		}
 	})
 	r.clear = NewButton(NewThemeIcon("edit-clear-symbolic", 16), 6, 4)
 	r.clear.SetAccessibleName(Tr("Clear shortcut"))
 	r.clear.OnClick = func() {
-		r.stop()
+		r.stop("")
 		r.commit("")
 	}
 	r.err = NewLabel(face, shortcutRecorderSize, "", 0)
@@ -91,7 +94,7 @@ func (r *ShortcutRecorder) Accel() string { return r.value }
 // OnChanged: the caller's own value, not the user's edit.
 func (r *ShortcutRecorder) SetAccel(accel string) {
 	r.value = accel
-	r.stop()
+	r.stop("")
 }
 
 // SetAccessibleName names the control for assistive technology; the
@@ -124,7 +127,7 @@ func (r *ShortcutRecorder) StartRecording() {
 	if r.recording || !IsEnabled(r.button) {
 		return
 	}
-	r.recording, r.held = true, 0
+	r.recording, r.held, r.shown = true, 0, r.err.Text()
 	r.refresh()
 }
 
@@ -142,10 +145,10 @@ func (r *ShortcutRecorder) RecordPress(sym xkb.Keysym, mods Mods) {
 	}
 	switch {
 	case sym == xkb.KeyEscape && mods == 0:
-		r.stop()
+		r.cancel()
 		return
 	case sym == xkb.KeyBackSpace && mods == 0:
-		r.stop()
+		r.stop("")
 		r.commit("")
 		return
 	}
@@ -156,7 +159,7 @@ func (r *ShortcutRecorder) RecordPress(sym xkb.Keysym, mods Mods) {
 			return
 		}
 	}
-	r.stop()
+	r.stop("")
 	r.commit(accel)
 }
 
@@ -171,12 +174,16 @@ func (r *ShortcutRecorder) RecordRelease(sym xkb.Keysym) {
 	r.refresh()
 }
 
-// stop leaves recording and clears the inline message.
-func (r *ShortcutRecorder) stop() {
+// stop leaves recording, showing msg under the control.
+func (r *ShortcutRecorder) stop(msg string) {
 	r.recording, r.held = false, 0
-	r.SetError("")
+	r.SetError(msg)
 	r.refresh()
 }
+
+// cancel leaves recording with the value and the message it started
+// with.
+func (r *ShortcutRecorder) cancel() { r.stop(r.shown) }
 
 // commit makes accel the value, firing OnChanged when it differs.
 func (r *ShortcutRecorder) commit(accel string) {
