@@ -7363,6 +7363,18 @@ func (b *SpinButtonBuilder) WatchDigits(get func() int) *SpinButtonBuilder {
 	return b
 }
 
+// Optional calls (*widget.SpinButton).SetOptional.
+func (b *SpinButtonBuilder) Optional(placeholder string) *SpinButtonBuilder {
+	b.do(func(s *Scope, w *widget.SpinButton) { w.SetOptional(placeholder) })
+	return b
+}
+
+// WatchOptional re-applies SetOptional with get's value after every update.
+func (b *SpinButtonBuilder) WatchOptional(get func() string) *SpinButtonBuilder {
+	b.watch(func(w *widget.SpinButton) { w.SetOptional(get()) })
+	return b
+}
+
 // Range calls (*widget.SpinButton).SetRange.
 func (b *SpinButtonBuilder) Range(min float64, max float64) *SpinButtonBuilder {
 	b.do(func(s *Scope, w *widget.SpinButton) { w.SetRange(min, max) })
@@ -7528,6 +7540,12 @@ func (b *SpinButtonBuilder) TrailingIcon(name string, px float64, onClick func()
 // WidthChars calls (*widget.SpinButton).SetWidthChars.
 func (b *SpinButtonBuilder) WidthChars(minChars int, maxChars int) *SpinButtonBuilder {
 	b.do(func(s *Scope, w *widget.SpinButton) { w.SetWidthChars(minChars, maxChars) })
+	return b
+}
+
+// OnCleared sets the widget's OnCleared field.
+func (b *SpinButtonBuilder) OnCleared(fn func()) *SpinButtonBuilder {
+	b.do(func(_ *Scope, w *widget.SpinButton) { w.OnCleared = fn })
 	return b
 }
 
