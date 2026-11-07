@@ -163,7 +163,11 @@ type Session struct {
 	// The per-surface hints and the bell (surfacehints.go).
 	contentTypeMgr *wlr.WpContentTypeManagerV1
 	contentTypes   map[*wl.Surface]*wlr.WpContentTypeV1
-	alphaMgr       *wlr.WpAlphaModifierV1
+	// colorRepMgr tags YUV surfaces with their matrix and range, one of
+	// the pairs in colorReps (colorrep.go).
+	colorRepMgr *wlr.WpColorRepresentationManagerV1
+	colorReps   map[ColorRepresentation]bool
+	alphaMgr    *wlr.WpAlphaModifierV1
 	// blurMgr is ext_background_effect_manager_v1; blurCapable is its
 	// last capabilities event's blur bit, and blurSurfaces the
 	// per-surface effect objects.
@@ -587,6 +591,8 @@ func (s *Session) HandleRegistryGlobal(ev wl.RegistryGlobalEvent) {
 		s.bindRelativePointer(ev)
 	case "ext_idle_notifier_v1":
 		s.bindIdleNotifier(ev)
+	case "wp_color_representation_manager_v1":
+		s.bindColorRepresentation(ev)
 	case "wp_content_type_manager_v1", "wp_alpha_modifier_v1", "xdg_system_bell_v1", "ext_background_effect_manager_v1":
 		s.bindSurfaceHint(ev)
 	case "zwp_keyboard_shortcuts_inhibit_manager_v1":

@@ -52,6 +52,7 @@ var optionalGlobals = []string{
 	"zxdg_exporter_v2",
 	"wl_subcompositor",
 	"zwp_linux_dmabuf_v1",
+	"wp_color_representation_manager_v1",
 	"xdg_toplevel_icon_manager_v1",
 	"ext_data_control_manager_v1",
 	"zwlr_data_control_manager_v1",
