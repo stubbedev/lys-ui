@@ -681,7 +681,8 @@ func (r *Router) Press(button uint32, p Point, mods Mods) {
 // focus and restyles both — the router is the one writer of focus, so
 // the bits stay in step with r.focus by construction. visible marks a
 // keyboard-driven focus (:focus-visible); the :focus-within count moves
-// along both ancestor chains.
+// along both ancestor chains, onto the new chain before off the old, so
+// the ancestors the two share keep their bit and restyle nothing.
 func setFocusStyle(old, new Widget, visible bool) {
 	if old == new {
 		if n := nodeOf(new); n != nil && n.focused && n.focusVisible != visible {
@@ -690,27 +691,37 @@ func setFocusStyle(old, new Widget, visible bool) {
 		}
 		return
 	}
-	if n := nodeOf(old); n != nil && n.focused {
-		n.focused, n.focusVisible = false, false
+	off := nodeOf(old)
+	if off != nil && !off.focused {
+		off = nil
+	}
+	on := nodeOf(new)
+	if on != nil && on.focused {
+		on = nil
+	}
+	if off != nil {
+		off.focused, off.focusVisible = false, false
 		if b, ok := old.(caretBlinker); ok {
 			b.stopBlink()
 		}
-		n.invalidateState(style.Focus | style.FocusVisible)
-		shiftFocusWithin(old, -1)
-		if n.onFocus != nil {
-			n.onFocus(false)
-		}
+		off.invalidateState(style.Focus | style.FocusVisible)
 	}
-	if n := nodeOf(new); n != nil && !n.focused {
-		n.focused, n.focusVisible = true, visible
+	if on != nil {
+		on.focused, on.focusVisible = true, visible
 		if b, ok := new.(caretBlinker); ok {
 			b.restartBlink()
 		}
-		n.invalidateState(style.Focus | style.FocusVisible)
+		on.invalidateState(style.Focus | style.FocusVisible)
 		shiftFocusWithin(new, 1)
-		if n.onFocus != nil {
-			n.onFocus(true)
+	}
+	if off != nil {
+		shiftFocusWithin(old, -1)
+		if off.onFocus != nil {
+			off.onFocus(false)
 		}
+	}
+	if on != nil && on.onFocus != nil {
+		on.onFocus(true)
 	}
 	notifyFocusObservers(old, new)
 }
