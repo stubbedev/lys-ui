@@ -64,6 +64,9 @@ func max0(n int) int { return max(n, 0) }
 // steppers.
 func (s *SpinButton) fitRange() {
 	n := max(len([]rune(s.format(s.min))), len([]rune(s.format(s.max))))
+	if s.optional {
+		n = max(n, len([]rune(s.Placeholder())))
+	}
 	s.SetWidthChars(n, n)
 }
 
@@ -140,12 +143,15 @@ func (s *SpinButton) stepBy(n int) {
 	s.set(s.value + float64(float64(n)*s.step))
 }
 
-// SetOptional lets the field hold no value: emptying it fires OnCleared
-// and shows the placeholder, and a step from there starts at the last
-// value. Turning it off fills an empty field with that value again.
-func (s *SpinButton) SetOptional(on bool) {
-	s.optional = on
-	if !on && s.empty {
+// SetOptional lets the field hold no value, shown as placeholder, which
+// the field widens to fit: emptying it fires OnCleared, and a step from
+// there starts at the last value. An empty placeholder makes the field
+// required again, filling an empty one with that value.
+func (s *SpinButton) SetOptional(placeholder string) {
+	s.optional = placeholder != ""
+	s.SetPlaceholder(placeholder)
+	s.fitRange()
+	if !s.optional && s.empty {
 		s.SetValue(s.value)
 	}
 }

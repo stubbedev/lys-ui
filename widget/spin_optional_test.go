@@ -4,8 +4,7 @@ import "testing"
 
 func TestAnOptionalSpinButtonHoldsNoValueUntilOneIsGiven(t *testing.T) {
 	s := NewSpinButton(testFace(t), 12, 0, 0, 100, 5, 0)
-	s.SetOptional(true)
-	s.SetPlaceholder("Inherited")
+	s.SetOptional("Inherited")
 	s.SetValue(20)
 	s.Clear()
 	if !s.Empty() || s.Text() != "" {
@@ -34,7 +33,7 @@ func TestAnOptionalSpinButtonHoldsNoValueUntilOneIsGiven(t *testing.T) {
 	if cleared != 1 {
 		t.Error("committing an empty field again fired OnCleared again")
 	}
-	s.SetOptional(false)
+	s.SetOptional("")
 	if s.Empty() || s.Text() != "25" {
 		t.Errorf("no longer optional: empty %v text %q", s.Empty(), s.Text())
 	}
@@ -52,5 +51,18 @@ func TestASpinButtonThatIsNotOptionalRevertsAnEmptyCommit(t *testing.T) {
 	s.KeyAction(KeyEnter, 0)
 	if s.Empty() || s.Value() != 7 || s.Text() != "7" {
 		t.Errorf("an empty commit: empty %v value %v text %q", s.Empty(), s.Value(), s.Text())
+	}
+}
+
+func TestAnOptionalSpinButtonFitsItsPlaceholder(t *testing.T) {
+	s := NewSpinButton(testFace(t), 12, 0, 0, 9, 1, 0)
+	before := s.widthChars
+	s.SetOptional("Inherited")
+	if s.widthChars != len("Inherited") || before >= s.widthChars {
+		t.Errorf("width %d chars after %d, want the placeholder's %d", s.widthChars, before, len("Inherited"))
+	}
+	s.SetDigits(0)
+	if s.widthChars != len("Inherited") {
+		t.Errorf("new digits narrowed it to %d chars", s.widthChars)
 	}
 }
