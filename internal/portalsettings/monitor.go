@@ -21,7 +21,7 @@ import (
 // value is a variant around uint32: 0 no preference, 1 prefer-dark,
 // 2 prefer-light.
 const (
-	portalName  = "org.freedesktop.portal.Settings"
+	portalName  = "org.freedesktop.portal.Desktop"
 	portalPath  = dbus.ObjectPath("/org/freedesktop/portal/desktop")
 	portalIface = "org.freedesktop.portal.Settings"
 

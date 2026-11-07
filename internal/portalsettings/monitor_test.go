@@ -19,6 +19,8 @@ import (
 	"github.com/stubbedev/lys-ui/internal/icons"
 )
 
+const xdgDesktopPortal = "org.freedesktop.portal.Desktop"
+
 // The mock: a real dbus daemon on a private unix socket (never the
 // session bus), with a test-owned connection that claims the portal's
 // well-known name, exports a scripted ReadOne, and emits raw
@@ -161,12 +163,12 @@ func publishMockSaying(t *testing.T, bus *dbustest.Bus, value uint32) *mockPorta
 	if err := conn.ExportAll(p, portalPath, portalIface); err != nil {
 		t.Fatalf("mock portal: export: %v", err)
 	}
-	reply, err := conn.RequestName(portalName, dbus.NameFlagDoNotQueue)
+	reply, err := conn.RequestName(xdgDesktopPortal, dbus.NameFlagDoNotQueue)
 	if err != nil {
 		t.Fatalf("mock portal: request name: %v", err)
 	}
 	if reply != dbus.RequestNameReplyPrimaryOwner {
-		t.Fatalf("mock portal: %s already owned", portalName)
+		t.Fatalf("mock portal: %s already owned", xdgDesktopPortal)
 	}
 	return p
 }

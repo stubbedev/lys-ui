@@ -47,7 +47,7 @@ func desktopFontApp(t *testing.T, p fontPortal, ini string) *Application {
 	if err := portalConn.Export(p, "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := portalConn.RequestName("org.freedesktop.portal.Settings", dbus.NameFlagDoNotQueue); err != nil {
+	if _, err := portalConn.RequestName("org.freedesktop.portal.Desktop", dbus.NameFlagDoNotQueue); err != nil {
 		t.Fatal(err)
 	}
 	m := portalsettings.NewOn(bus.Conn(t))
