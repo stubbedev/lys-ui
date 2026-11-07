@@ -13,9 +13,10 @@ import (
 )
 
 // A window another client maps is listed on the application's own
-// connection with its title, app id and output, a rectangle on one of
-// the application's surfaces is accepted for it, and its close takes it
-// off the list, each change heard through OnToplevelsChanged.
+// connection with its title, app id and output, and as fullscreen once
+// it asks to be, a rectangle on one of the application's surfaces is
+// accepted for it, and its close takes it off the list, each change heard
+// through OnToplevelsChanged.
 func TestHeadlessToplevelsListAnotherClientsWindow(t *testing.T) {
 	wltest.Require(t)
 	var (
@@ -64,7 +65,9 @@ func TestHeadlessToplevelsListAnotherClientsWindow(t *testing.T) {
 			return errors.New("not listed")
 		}
 		onOutput := make(chan bool, 1)
-		a.Invoke(func() { onOutput <- tl.Title() == "listed" && tl.OnOutput(output) && !tl.OnOutput("nowhere") })
+		a.Invoke(func() {
+			onOutput <- tl.Title() == "listed" && tl.OnOutput(output) && !tl.OnOutput("nowhere") && !tl.Fullscreen()
+		})
 		if !<-onOutput {
 			return errors.New("listed without its title or output")
 		}
@@ -73,6 +76,19 @@ func TestHeadlessToplevelsListAnotherClientsWindow(t *testing.T) {
 	if len(changes) == 0 {
 		t.Fatal("OnToplevelsChanged heard nothing while the window appeared")
 	}
+	b.Invoke(window.Fullscreen)
+	wltest.Eventually(t, "the other client's window listed fullscreen", func() error {
+		tl, ok := find()
+		if !ok {
+			return errors.New("not listed")
+		}
+		full := make(chan bool, 1)
+		a.Invoke(func() { full <- tl.Fullscreen() })
+		if !<-full {
+			return errors.New("listed, not fullscreen")
+		}
+		return nil
+	})
 	tl, _ := find()
 	a.Invoke(func() { tl.SetRectangle(panel, render.Rect{X: 4, Y: 4, W: 32, H: 32}) })
 	b.Invoke(window.Close)

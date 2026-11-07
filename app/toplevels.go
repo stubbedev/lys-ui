@@ -62,6 +62,10 @@ func (t Toplevel) Minimized() bool { return t.t.Minimized }
 // Activated reports whether the window has the focus.
 func (t Toplevel) Activated() bool { return t.t.Activated }
 
+// Fullscreen reports whether the window is fullscreen: a video, a game
+// or a presentation a shell keeps its notifications from covering.
+func (t Toplevel) Fullscreen() bool { return t.t.Fullscreen }
+
 // OnOutput reports whether the window is on the output with this
 // xdg-output name.
 func (t Toplevel) OnOutput(name string) bool {
