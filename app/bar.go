@@ -2,8 +2,10 @@ package app
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/stubbedev/lys-lib/intconv"
+	"github.com/stubbedev/lys-lib/xkb"
 
 	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/widget"
@@ -36,6 +38,9 @@ type BarConfig struct {
 type BarWindow struct {
 	*LayerWindow
 	cfg BarConfig
+	// walkDone ends the keyboard walk WalkKeyboard began, nil while
+	// none runs.
+	walkDone func()
 }
 
 // NewBar shows cfg.Bar along its edge: anchored to that edge and
@@ -50,6 +55,7 @@ func (a *Application) NewBar(cfg BarConfig) (*BarWindow, error) {
 		Output: cfg.Output, Layer: cfg.Layer, Anchor: barAnchor(edge), Margin: barMargins(edge, cfg.Margin),
 		Namespace: cfg.Namespace, Root: cfg.Bar,
 		OnResize:    func(width, height int) { w.reserve(width, height) },
+		KeyCapture:  w.walkKey,
 		OnPresented: cfg.OnPresented,
 	})
 	if err != nil {
@@ -130,4 +136,73 @@ func barMargins(edge widget.BarEdge, m int32) Margins {
 		out.Left = 0
 	}
 	return out
+}
+
+// WalkKeyboard hands the bar the keyboard so its controls are reached
+// without a pointer: the bar takes the keyboard exclusively (a
+// compositor need not focus a surface turning on demand), and its
+// first control takes the focus with its ring. The arrows along the
+// edge (Left and Right, Up and Down on a vertical bar) and Tab move
+// between the controls, and Enter and Space press the focused one.
+// Esc ends the walk: the focus clears, the bar gives the keyboard
+// back, and done runs. Walking a bar that walks restarts at its first
+// control, and the earlier walk's done never runs.
+func (w *BarWindow) WalkKeyboard(done func()) error {
+	hw := w.app.hostWindowOf(w.LayerWindow)
+	if hw == nil {
+		return fmt.Errorf("app: walk the bar's keyboard: %w", ErrClosed)
+	}
+	if err := w.holdKeyboard(KeyboardExclusive); err != nil {
+		return fmt.Errorf("app: walk the bar's keyboard: %w", err)
+	}
+	w.walkDone = done
+	_ = hw.router.SetFocus(nil)
+	hw.router.FocusNext()
+	w.requestFrame()
+	return nil
+}
+
+// Walking reports whether a WalkKeyboard walk runs.
+func (w *BarWindow) Walking() bool { return w.walkDone != nil }
+
+// walkKey is the bar's key capture: during a walk the arrows along the
+// edge move the focus and Esc ends it; every other press, and every
+// press outside a walk, routes as usual.
+func (w *BarWindow) walkKey(a Accel) bool {
+	if w.walkDone == nil || a.Mods != 0 {
+		return false
+	}
+	hw := w.app.hostWindowOf(w.LayerWindow)
+	if hw == nil {
+		return false
+	}
+	prev, next := xkb.KeyLeft, xkb.KeyRight
+	if w.cfg.Bar.Edge().Vertical() {
+		prev, next = xkb.KeyUp, xkb.KeyDown
+	}
+	switch a.Sym {
+	case prev:
+		hw.router.FocusPrev()
+	case next:
+		hw.router.FocusNext()
+	case xkb.KeyEscape:
+		w.endWalk(hw)
+	default:
+		return false
+	}
+	hw.dirty = true
+	return true
+}
+
+// endWalk clears the walk's focus, returns the keyboard to the bar's
+// declared mode, and runs the walk's done.
+func (w *BarWindow) endWalk(hw *hostWindow) {
+	done := w.walkDone
+	w.walkDone = nil
+	_ = hw.router.SetFocus(nil)
+	if err := w.holdKeyboard(w.LayerWindow.cfg.Keyboard); err != nil {
+		logutil.L().Warn("app: bar: give the keyboard back", "err", err)
+	}
+	w.requestFrame()
+	done()
 }
