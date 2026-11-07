@@ -1551,8 +1551,10 @@ func TestHeadlessToplevelExport(t *testing.T) {
 // TestHeadlessVideoPlays pins #149 on a real compositor: the video
 // demo's generated clip autoplays and its picture advances frame by
 // frame off the media frame clock, and Space pauses it, after which no
-// later frame is painted. It asserts on the frames the client reports
-// painting, each within a bounded deadline, not on a frame rate: a
+// later frame is shown. It asserts on the frames the client reports
+// showing, painted into the window or on the video's own YUV subsurface
+// where the compositor imports YUV dmabufs (#460), each within a
+// bounded deadline, not on a frame rate: a
 // software renderer under load presents slowly but must still progress.
 // The clip loops, so its three seconds cannot run out mid-check.
 func TestHeadlessVideoPlays(t *testing.T) {
@@ -1604,7 +1606,7 @@ func TestHeadlessVideoPlays(t *testing.T) {
 	time.Sleep(time.Second)
 	for _, tr := range w.Since(after) {
 		if n, ok := videoFrame(tr); ok && n > at {
-			t.Fatalf("frame %d painted after pausing at frame %d", n, at)
+			t.Fatalf("frame %d shown after pausing at frame %d", n, at)
 		}
 	}
 }
@@ -1614,7 +1616,7 @@ func videoFrame(tr Trace) (int, bool) {
 	if tr.Category != "frame" {
 		return 0, false
 	}
-	if _, err := fmt.Sscanf(tr.Message, "video frame %d painted", &n); err != nil {
+	if _, err := fmt.Sscanf(tr.Message, "video frame %d shown", &n); err != nil {
 		return 0, false
 	}
 	return n, true

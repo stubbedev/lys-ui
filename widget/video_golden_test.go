@@ -2,6 +2,7 @@ package widget
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -56,4 +57,18 @@ func TestGoldenVideoPaintsYUVFramesInTheWindow(t *testing.T) {
 	v := NewVideo(goldenFace(t), 13, s)
 	pumpUntil(t, func() bool { return s.Frame().RGBA != nil })
 	NewGolden(t, v, "video-yuv-window", goldenFrame(96, 64))
+}
+
+func TestGoldenVideoRefusedASurfacePaintsAsBefore(t *testing.T) {
+	SetVideoHost(func(*Video, VideoFormat, func()) (VideoSurface, error) {
+		return nil, errors.New("no YUV formats")
+	})
+	t.Cleanup(func() { SetVideoHost(nil) })
+	s := y4mStream(t, 32, 16, 1)
+	v := NewVideo(goldenFace(t), 13, s)
+	pumpUntil(t, func() bool { return s.Frame().RGBA != nil })
+	NewGolden(t, v, "video-yuv-window", goldenFrame(96, 64))
+	if v.OffloadErr() == nil {
+		t.Error("the refusal left no reason")
+	}
 }

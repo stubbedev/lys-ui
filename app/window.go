@@ -202,6 +202,9 @@ type hostWindow struct {
 	// gpu are the GPUArea surfaces under this window, in creation
 	// order; their bounds are the opaque region's holes.
 	gpu []*gpuSurface
+	// video are the Video surfaces under this window; their bounds are
+	// holes too.
+	video []*videoSurface
 	// blur is the compositor blur behind the window's style root.
 	blur blursync.Sync
 }
@@ -896,7 +899,7 @@ func (w *hostWindow) syncOpaque(bw, bh int) {
 	if !w.cfg.opaque || bw <= 0 || bh <= 0 {
 		return
 	}
-	holes := w.gpuHoles()
+	holes := w.subsurfaceHoles()
 	if w.opaqueSet && bw == w.opaqueW && bh == w.opaqueH && slices.Equal(holes, w.opaqueHoles) {
 		return
 	}

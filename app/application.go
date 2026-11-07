@@ -48,12 +48,14 @@ type Application struct {
 	// gpu is the windows' GPU renderer (renderer), nil drawing on the
 	// CPU; gpuTried marks the one attempt to open it, gpuErr its
 	// failure under LYS_UI_RENDERER=gpu.
-	gpu         *gpuRenderer
-	gpuTried    bool
-	gpuErr      error
-	gpuOpening  sync.WaitGroup
-	gpuLanding  atomic.Pointer[gpuRenderer]
-	gpuOpen     func(rendererPlan) (*gpuRenderer, error)
+	gpu        *gpuRenderer
+	gpuTried   bool
+	gpuErr     error
+	gpuOpening sync.WaitGroup
+	gpuLanding atomic.Pointer[gpuRenderer]
+	gpuOpen    func(rendererPlan) (*gpuRenderer, error)
+	// videoMemory allocates a Video surface's buffers (video.go).
+	videoMemory func(size int) (videoMemory, error)
 	gpuLosses   gpu.Losses
 	tooltipFace *render.Typeface
 	// tooltipOpts tunes tooltips (SetTooltipOptions).
@@ -234,6 +236,7 @@ func NewApplication(sess *wlsession.Session, opts ...Option) *Application {
 		windowIcons:  make(map[*Window]*postedIcon),
 		appliedIcons: make(map[*hostWindow]*postedIcon),
 		launchState:  launcher{openPortal: portalOpen, openExternal: xdgOpen},
+		videoMemory:  newUdmabufMemory,
 	}
 	a.dnd = dragdrop.New(sess, a.Invoke)
 	a.OnStop(func() { a.dnd.Stop() })
@@ -262,6 +265,9 @@ func NewApplication(sess *wlsession.Session, opts ...Option) *Application {
 	// A GPUArea arranged on screen asks for its presentation surface: a
 	// subsurface of its window (gpuarea.go).
 	widget.SetGPUHost(a.gpuSurfaceFor)
+	// A Video of a YUV stream arranged on screen asks for a subsurface of
+	// its window its frames go to as YUV dmabufs (video.go).
+	widget.SetVideoHost(a.videoSurfaceFor)
 	widget.SetSurfaceOriginResolver(a.surfaceOrigin)
 	widget.SetRemovedHook(func(w widget.Widget) {
 		for _, win := range a.windows {

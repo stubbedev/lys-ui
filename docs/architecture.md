@@ -297,7 +297,7 @@ pipeline (app/window.go `syncOpaque`):
   panel exists for.
 - **Background alpha == 255 — opaque.** The pipeline promises that to
   the compositor once per size change: `wl_surface.set_opaque_region`
-  over the logical surface rect less any GPUArea holes (region created
+  over the logical surface rect less any GPUArea or Video holes (region created
   from the compositor, destroyed right after the set), re-sent when the
   size or the holes change, never per frame. The compositor can then skip blending behind the
   window entirely. An explicit `WindowConfig.Opaque` forces the promise —
@@ -387,23 +387,36 @@ applies; a theme is never rejected for its colors.
   palette, not even on a system dark/light change. The preference is
   offered as a signal (`Application.OnColorSchemeChange`), and the app
   decides whether to call `SetTheme` ([appearance.md](appearance.md)).
-- **One kind of subsurface: GPUArea's. No single-pixel buffers.** lys-ui
+- **Two kinds of subsurface: GPUArea's and Video's. No single-pixel
+  buffers.** lys-ui
   draws each window into one buffer per surface. Overlays (popover
   shadows, the fader) are painted into that buffer, a drag icon is its
   own `start_drag` surface, and
   spacers are rectangle fills inside the damage, so damage and pacing
-  stay one problem per window. The one exception is `widget.GPUArea`,
-  whose pixels the application renders outside lys-ui. Each area gets one
+  stay one problem per window. The exceptions are `widget.GPUArea`,
+  whose pixels the application renders outside lys-ui, and
+  `widget.Video`, whose frames are YUV the compositor samples as
+  decoded. Each area gets one
   desynchronized subsurface placed *below* its window, so everything
   lys-ui draws over the area stays on top. The surface shows through a
   transparent hole the area paints, which is also cut out of the opaque
   region. It has an empty input region, so the window keeps routing
   input, and a viewport sized to the area's bounds. Its frames pace
   themselves by the subsurface's own frame callbacks and leave the
-  window's damage and pacing alone. No other widget gets a subsurface.
+  window's damage and pacing alone. A Video of a 4:2:0 stream gets the
+  same kind of subsurface where the compositor imports linear YUV420 or
+  NV12 dmabufs and has wp_viewporter and wp_color_representation_v1:
+  each frame's planes are copied into one of a fixed ring of three
+  udmabufs, the viewport scales them to the fitted rect, the surface is
+  opaque, tagged with the stream's matrix and range and with the video
+  content type, and a frame finding no buffer released is dropped. The
+  window is not repainted while only the video advances; its controls
+  paint above the hole as before. Without that support the frames are
+  painted into the window (`Video.OffloadErr` says why). No other
+  widget gets a subsurface.
 - **No commit timing** (wp_commit_timing_v1, wp_fifo_v1). Frame
   callbacks pace every commit (rule 3), and video presents on the
-  frame clock like any other repaint; commit timing matters only to a
+  frame clock, as a repaint or on its own subsurface; commit timing matters only to a
   presentation path that targets exact display times.
 - **No security context and no toplevel drag.** Security context is
   for sandbox launchers, which lys-ui does not ship. Toplevel drag only

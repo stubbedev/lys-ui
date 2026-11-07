@@ -53,61 +53,27 @@ func (a *Application) gpuSurfaceFor(area *widget.GPUArea) (widget.GPUSurface, er
 		return nil, ErrNoSubsurfaces
 	}
 	parent := hw.host.HostSurface()
-	surf, err := a.sess.Compositor().CreateSurface()
+	ss, err := a.newSubsurface(sub, parent)
 	if err != nil {
-		return nil, fmt.Errorf("app: GPUArea surface: %w", err)
+		return nil, fmt.Errorf("app: GPUArea: %w", err)
 	}
-	s := &gpuSurface{app: a, hw: hw, area: area, surf: surf}
-	if err := s.init(sub, parent); err != nil {
-		s.Close()
-		return nil, err
-	}
+	s := &gpuSurface{app: a, hw: hw, area: area, subsurface: ss}
 	hw.gpu = append(hw.gpu, s)
-	debug.Log("frame", "GPUArea surface %d below %d", surf.Id(), parent.Id())
+	debug.Log("frame", "GPUArea surface %d below %d", ss.surf.Id(), parent.Id())
 	return s, nil
 }
 
 type gpuSurface struct {
-	app     *Application
-	hw      *hostWindow
-	area    *widget.GPUArea
-	surf    *wl.Surface
-	sub     *wl.Subsurface
-	vp      *wlr.WpViewport
+	app  *Application
+	hw   *hostWindow
+	area *widget.GPUArea
+	subsurface
 	bounds  render.Rect
 	armed   bool
 	owed    bool
 	waiting *gpuBuffer
 	buffers []*gpuBuffer
 	closed  bool
-}
-
-func (s *gpuSurface) init(sub *wl.Subcompositor, parent *wl.Surface) error {
-	var err error
-	if s.sub, err = sub.GetSubsurface(s.surf, parent); err != nil {
-		return fmt.Errorf("app: get_subsurface: %w", err)
-	}
-	if err := s.sub.PlaceBelow(parent); err != nil {
-		return fmt.Errorf("app: subsurface place_below: %w", err)
-	}
-	if err := s.sub.SetDesync(); err != nil {
-		return fmt.Errorf("app: subsurface set_desync: %w", err)
-	}
-	region, err := s.app.sess.Compositor().CreateRegion()
-	if err != nil {
-		return fmt.Errorf("app: GPUArea input region: %w", err)
-	}
-	err = s.surf.SetInputRegion(region)
-	_ = region.Destroy()
-	if err != nil {
-		return fmt.Errorf("app: GPUArea set_input_region: %w", err)
-	}
-	if vp := s.app.sess.Viewporter(); vp != nil {
-		if s.vp, err = vp.GetViewport(s.surf); err != nil {
-			return fmt.Errorf("app: GPUArea viewport: %w", err)
-		}
-	}
-	return nil
 }
 
 func (s *gpuSurface) deviceSize() widget.Size {
@@ -293,25 +259,9 @@ func (s *gpuSurface) Close() {
 		b.drop()
 	}
 	s.buffers, s.waiting = nil, nil
-	if s.vp != nil {
-		_ = s.vp.Destroy()
-	}
-	if s.sub != nil {
-		_ = s.sub.Destroy()
-	}
-	_ = s.surf.Destroy()
+	s.destroy()
 	s.hw.gpu = slices.DeleteFunc(s.hw.gpu, func(o *gpuSurface) bool { return o == s })
 	s.hw.dirty = true
-}
-
-func (w *hostWindow) gpuHoles() []render.Rect {
-	var holes []render.Rect
-	for _, s := range w.gpu {
-		if !s.bounds.Empty() {
-			holes = append(holes, s.bounds)
-		}
-	}
-	return holes
 }
 
 type gpuBuffer struct {

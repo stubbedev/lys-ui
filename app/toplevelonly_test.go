@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -63,7 +64,13 @@ type fakeCompositor struct {
 	mapped    chan struct{}
 	syncs     atomic.Int64
 	onRequest func(iface string, obj, opcode uint32, body []byte)
+	onBind    func(iface string, id uint32)
 	onFds     func(fds []int) bool
+	// scratch is the buffer send builds events in, so a steady stream
+	// of events allocates nothing; sendMu guards it against a test
+	// sending beside the serving goroutine.
+	scratch []byte
+	sendMu  sync.Mutex
 }
 
 func startFakeCompositor(t *testing.T, globals []fakeGlobal, setup ...func(*fakeCompositor)) *fakeCompositor {
@@ -188,6 +195,9 @@ func (f *fakeCompositor) bind(body []byte) {
 	if iface == "wl_shm" {
 		f.send(id, shmEventFormat, shmFormatArgb8888)
 	}
+	if f.onBind != nil {
+		f.onBind(iface, id)
+	}
 }
 
 func (f *fakeCompositor) configureXdg(xdgSurface uint32) {
@@ -215,11 +225,14 @@ func (f *fakeCompositor) commit(surface uint32) {
 }
 
 func (f *fakeCompositor) send(obj, opcode uint32, args ...uint32) {
-	msg := make([]byte, headerSize, headerSize+4*len(args))
+	f.sendMu.Lock()
+	defer f.sendMu.Unlock()
+	msg := append(f.scratch[:0], make([]byte, headerSize)...)
 	for _, a := range args {
 		msg = binary.NativeEndian.AppendUint32(msg, a)
 	}
 	f.write(obj, opcode, msg)
+	f.scratch = msg
 }
 
 func (f *fakeCompositor) sendString(obj, opcode uint32, s string) {
