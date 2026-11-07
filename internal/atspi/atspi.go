@@ -190,7 +190,6 @@ const RootPath dbus.ObjectPath = "/org/a11y/atspi/accessible/root"
 type Bridge struct {
 	conn  *dbus.Conn
 	name  string
-	addr  string
 	scene Scene
 	poll  time.Duration
 
@@ -304,7 +303,6 @@ func Serve(scene Scene, opts Options) (*Bridge, error) {
 	b := &Bridge{
 		conn:     conn,
 		name:     name,
-		addr:     address,
 		scene:    scene,
 		poll:     poll,
 		ids:      make(map[widget.Widget]int32),

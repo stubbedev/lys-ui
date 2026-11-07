@@ -418,7 +418,7 @@ func (o *applicationIface) GetToolkitName() string           { return "lys-ui" }
 func (o *applicationIface) GetVersion() string               { return toolkitVersion }
 func (o *applicationIface) GetAtspiVersion() string          { return "2.1" }
 func (o *applicationIface) GetLocale(lctype uint32) string   { return "" }
-func (o *applicationIface) GetApplicationBusAddress() string { return o.b.addr }
+func (o *applicationIface) GetApplicationBusAddress() string { return "" }
 
 // propertiesIface is org.freedesktop.DBus.Properties.
 type propertiesIface struct {

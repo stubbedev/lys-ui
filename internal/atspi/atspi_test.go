@@ -901,6 +901,12 @@ func goroutineName() string {
 
 func serveLabel(t *testing.T, scene *countingScene, emit func(event) error) (*Bridge, *widget.Label) {
 	t.Helper()
+	br, lbl, _ := serveLabelOn(t, scene, emit)
+	return br, lbl
+}
+
+func serveLabelOn(t *testing.T, scene *countingScene, emit func(event) error) (*Bridge, *widget.Label, string) {
+	t.Helper()
 	a11y := dbustest.Start(t)
 	lbl := widget.NewLabel(faceOf(t), 13, "before", render.RGB(0, 0, 0))
 	root := widget.NewBox(widget.Column, 0, 0)
@@ -913,7 +919,7 @@ func serveLabel(t *testing.T, scene *countingScene, emit func(event) error) (*Br
 	}
 	t.Cleanup(br.Stop)
 	br.settle()
-	return br, lbl
+	return br, lbl, a11y.Address
 }
 
 func TestUndamagedSceneBuildsNothing(t *testing.T) {
@@ -1086,7 +1092,7 @@ func TestStopDoesNotWaitOnAStuckBus(t *testing.T) {
 
 func TestRemovedWidgetsLeaveNothingBehind(t *testing.T) {
 	scene := &countingScene{}
-	br, _ := serveLabel(t, scene, nil)
+	br, _, address := serveLabelOn(t, scene, nil)
 	root := scene.roots[0].(*widget.Box)
 	live := len(br.ids)
 	exported := len(br.exported)
@@ -1108,7 +1114,7 @@ func TestRemovedWidgetsLeaveNothingBehind(t *testing.T) {
 			t.Fatalf("pass %d: %d exported paths after removal, want %d", i, len(br.exported), exported)
 		}
 	}
-	at, err := dbus.Connect(br.addr)
+	at, err := dbus.Connect(address)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1116,5 +1122,16 @@ func TestRemovedWidgetsLeaveNothingBehind(t *testing.T) {
 	var role uint32
 	if err := at.Object(br.name, widgetPath(last)).Call(ifaceAccessible+".GetRole", 0).Store(&role); err == nil {
 		t.Errorf("a removed widget still answers: role %d", role)
+	}
+}
+
+func TestTheApplicationOffersNoPeerToPeerBus(t *testing.T) {
+	f := newFixture(t)
+	var address string
+	if err := f.obj(RootPath).Call(ifaceApplication+".GetApplicationBusAddress", 0).Store(&address); err != nil {
+		t.Fatal(err)
+	}
+	if address != "" {
+		t.Errorf("GetApplicationBusAddress = %q: libatspi would dial it as the application's own server and send to it before Hello", address)
 	}
 }
