@@ -191,10 +191,13 @@ type Sensitivity struct {
 	// combinators anywhere: a sibling's add, removal, reorder or
 	// visibility can then restyle its neighbors.
 	Structural bool
-	// SiblingFacts reports sibling combinators or an :nth-*(... of S)
-	// anywhere: a sibling's class or state can then restyle its
-	// neighbors. Position alone (:last-child) reads neither.
-	SiblingFacts bool
+	// SiblingStates are the state bits some selector tests on a
+	// compound read on a sibling: left of a sibling combinator, or in
+	// an :nth-*(... of S). Position alone (:last-child) reads none.
+	SiblingStates State
+	// SiblingClasses are the classes some selector tests on a compound
+	// read on a sibling.
+	SiblingClasses map[string]bool
 	// HasRelational reports a :has() anywhere: a descendant or
 	// following sibling's facts then feed an ancestor's match, so class
 	// and state changes restyle up the tree too.
@@ -1448,24 +1451,7 @@ func (p *parser) add(sel selector, block, start *Block) {
 	if r.pseudo != "" {
 		s.sens.Pseudo = true
 	}
-	for i := range sel.parts {
-		part := &sel.parts[i]
-		if part.structs != 0 || len(part.nths) > 0 {
-			s.sens.Structural = true
-		}
-		for _, n := range part.nths {
-			if n.of != nil {
-				s.sens.SiblingFacts = true
-			}
-		}
-		s.noteCompound(part, i == len(sel.parts)-1)
-	}
-	for _, c := range sel.combs {
-		if c == '+' || c == '~' {
-			s.sens.Structural = true
-			s.sens.SiblingFacts = true
-		}
-	}
+	s.noteSelector(&sel, readSelf)
 	for i := range block.decls {
 		if d := &block.decls[i]; d.meta {
 			if d.name == "counter-reset" || d.name == "counter-increment" || counterContent(d.val) {
@@ -1500,18 +1486,100 @@ func (p *parser) add(sel selector, block, start *Block) {
 	}
 }
 
-// noteCompound records the facts one compound tests: its own facts
-// for a non-rightmost compound (the ancestor sensitivity), and any
-// :has() anywhere (a descendant's facts feed this node's match).
-func (s *Sheet) noteCompound(c *compound, rightmost bool) {
-	if len(c.has) > 0 {
+// factRead is where a compound's facts are read relative to the node a
+// rule styles: the node itself, an ancestor (a flip there restyles the
+// flipped widget's subtree) or a sibling of the node or of an ancestor
+// (a flip there restyles the flipped widget's parent's subtree).
+type factRead uint8
+
+const (
+	readSelf factRead = iota
+	readAncestor
+	readSibling
+)
+
+// combRead is where the compound left of comb is read. An ancestor of
+// a sibling is an ancestor and a sibling of an ancestor a sibling, so
+// it never depends on where the compound right of comb is read.
+func combRead(comb byte) factRead {
+	if comb == '+' || comb == '~' {
+		return readSibling
+	}
+	return readAncestor
+}
+
+// noteSelector records the facts sel's compounds test, its rightmost
+// compound read at right.
+func (s *Sheet) noteSelector(sel *selector, right factRead) {
+	last := len(sel.parts) - 1
+	s.noteCompound(&sel.parts[last], right)
+	for i := last - 1; i >= 0; i-- {
+		read := combRead(sel.combs[i])
+		if read == readSibling {
+			s.sens.Structural = true
+		}
+		s.noteCompound(&sel.parts[i], read)
+	}
+}
+
+// noteCompound records the facts c tests where they are read, and its
+// functional pseudo-classes' arguments: a :not() or :is() argument is
+// read where c is, an :nth-*(of S) argument on c's siblings, and a
+// :has() argument on c's following siblings or below c, where the
+// :has() sensitivity covers it.
+func (s *Sheet) noteCompound(c *compound, read factRead) {
+	if c.structs != 0 || len(c.nths) > 0 {
+		s.sens.Structural = true
+	}
+	switch read {
+	case readAncestor:
+		s.sens.AncestorStates |= c.state
+		s.sens.AncestorClasses = addClasses(s.sens.AncestorClasses, c.classes)
+	case readSibling:
+		s.sens.SiblingStates |= c.state
+		s.sens.SiblingClasses = addClasses(s.sens.SiblingClasses, c.classes)
+	}
+	for _, lists := range [...][]isList{c.not, c.isLists} {
+		for i := range lists {
+			for j := range lists[i].sels {
+				s.noteSelector(&lists[i].sels[j], read)
+			}
+		}
+	}
+	for i := range c.nths {
+		for j := range c.nths[i].of {
+			s.noteSelector(&c.nths[i].of[j], readSibling)
+		}
+	}
+	for i := range c.has {
 		s.sens.HasRelational = true
+		for j := range c.has[i] {
+			arg := &c.has[i][j]
+			s.noteSelector(&arg.sel, hasRead(arg.comb))
+		}
 	}
-	if rightmost {
-		s.noteNested(c)
-		return
+}
+
+// hasRead is where a :has() argument's rightmost compound is read
+// relative to the node it anchors on: a sibling for a sibling
+// relation; below it otherwise, which the :has() sensitivity restyles
+// up from, so nothing more is recorded.
+func hasRead(comb byte) factRead {
+	if comb == '+' || comb == '~' {
+		return readSibling
 	}
-	s.noteAncestor(c)
+	return readSelf
+}
+
+// addClasses adds classes to set, allocating it on the first one.
+func addClasses(set map[string]bool, classes []string) map[string]bool {
+	for _, cl := range classes {
+		if set == nil {
+			set = map[string]bool{}
+		}
+		set[cl] = true
+	}
+	return set
 }
 
 // counterContent reports a content value reading counters.
@@ -1522,36 +1590,6 @@ func counterContent(ts []token) bool {
 		}
 	}
 	return false
-}
-
-// noteAncestor records the facts a non-rightmost compound tests.
-func (s *Sheet) noteAncestor(c *compound) {
-	s.sens.AncestorStates |= c.state
-	for _, cl := range c.classes {
-		if s.sens.AncestorClasses == nil {
-			s.sens.AncestorClasses = map[string]bool{}
-		}
-		s.sens.AncestorClasses[cl] = true
-	}
-	c.eachNested(func(sel *selector) {
-		for k := range sel.parts {
-			s.noteAncestor(&sel.parts[k])
-		}
-	})
-}
-
-// noteNested records the ancestor facts inside a rightmost compound's
-// functional pseudo-classes: an argument's non-rightmost compounds
-// test the node's ancestors (`:is(.a > .b)` reads its parent's
-// class), and its rightmost compound the node itself, recursively.
-func (s *Sheet) noteNested(c *compound) {
-	c.eachNested(func(sel *selector) {
-		last := len(sel.parts) - 1
-		for k := range sel.parts[:last] {
-			s.noteAncestor(&sel.parts[k])
-		}
-		s.noteNested(&sel.parts[last])
-	})
 }
 
 // badText truncates a source excerpt for a warning message.

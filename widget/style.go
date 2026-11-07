@@ -90,11 +90,12 @@ var (
 
 // sensitivity is the union of the loaded sheets' selector summaries.
 type sensitivity struct {
-	states  style.State
-	classes map[string]bool
-	// structural and siblingFacts are style.Sensitivity's Structural
-	// and SiblingFacts.
-	structural, siblingFacts bool
+	// ancestor and sibling are the facts some selector reads on an
+	// ancestor and on a sibling: a flip of one restyles the flipped
+	// widget's subtree, or its parent's.
+	ancestor, sibling factSet
+	// structural is style.Sensitivity's Structural.
+	structural bool
 	// media reports whether any loaded sheet carries @media or
 	// @container rules or anything names a viewport or container unit:
 	// the viewport and preference setters restyle only then (containers
@@ -113,6 +114,29 @@ type sensitivity struct {
 	// counters reports counter-reset/counter-increment in play: restyle
 	// then chains the previous sibling's counter scope.
 	counters bool
+}
+
+// factSet is the state bits and classes some selector reads in one
+// relation to the node it styles.
+type factSet struct {
+	states  style.State
+	classes map[string]bool
+}
+
+// add folds a sheet's states and classes into the set.
+func (f *factSet) add(states style.State, classes map[string]bool) {
+	f.states |= states
+	for c := range classes {
+		if f.classes == nil {
+			f.classes = map[string]bool{}
+		}
+		f.classes[c] = true
+	}
+}
+
+// readsClass reports whether the set holds any of classes.
+func (f *factSet) readsClass(classes []string) bool {
+	return slices.ContainsFunc(classes, func(c string) bool { return f.classes[c] })
 }
 
 // noteUnits folds what a value's units depend on into the union.
@@ -240,18 +264,12 @@ func resensitize() {
 		if s.sheet.MediaQueries() > 0 {
 			sensNow.media = true
 		}
-		sensNow.states |= sn.AncestorStates
+		sensNow.ancestor.add(sn.AncestorStates, sn.AncestorClasses)
+		sensNow.sibling.add(sn.SiblingStates, sn.SiblingClasses)
 		sensNow.structural = sensNow.structural || sn.Structural
-		sensNow.siblingFacts = sensNow.siblingFacts || sn.SiblingFacts
 		sensNow.has = sensNow.has || sn.HasRelational
 		sensNow.pseudo = sensNow.pseudo || sn.Pseudo
 		sensNow.counters = sensNow.counters || sn.Counters
-		for c := range sn.AncestorClasses {
-			if sensNow.classes == nil {
-				sensNow.classes = map[string]bool{}
-			}
-			sensNow.classes[c] = true
-		}
 	}
 	loadFontFaces()
 }
@@ -2380,12 +2398,11 @@ func (n *node) invalidateStyle() {
 
 // invalidateState restyles after the state bits in changed flipped:
 // the widget, plus its subtree when a selector reads one of them on an
-// ancestor, plus its siblings when a selector reads a sibling's facts
-// (style.Sensitivity.SiblingFacts). The
-// widget repaints: its own paint may read the state (a theme hover
-// shade).
+// ancestor, plus its siblings when a selector reads one of them on a
+// sibling. The widget repaints: its own paint may read the state (a
+// theme hover shade).
 func (n *node) invalidateState(changed style.State) {
-	n.invalidateScope(sensNow.states&changed != 0 || sensNow.has, sensNow.siblingFacts)
+	n.invalidateScope(stateScope(changed))
 }
 
 // restyleState is invalidateState for the propagated states — the
@@ -2398,19 +2415,20 @@ func (n *node) restyleState(changed style.State) {
 		return
 	}
 	markDamage()
-	n.scope(sensNow.states&changed != 0 || sensNow.has, sensNow.siblingFacts)
+	n.scope(stateScope(changed))
+}
+
+// stateScope is what a flip of the state bits in changed restyles
+// beyond the flipped widget: its subtree when a selector reads one of
+// them on an ancestor (or a :has() reads anything), its parent's
+// subtree when one reads them on a sibling.
+func stateScope(changed style.State) (sub, sib bool) {
+	return sensNow.ancestor.states&changed != 0 || sensNow.has, sensNow.sibling.states&changed != 0
 }
 
 // invalidateClasses is invalidateState for a class-list change.
 func (n *node) invalidateClasses(changed []string) {
-	anc := sensNow.has
-	for _, c := range changed {
-		if sensNow.classes[c] {
-			anc = true
-			break
-		}
-	}
-	n.invalidateScope(anc, sensNow.siblingFacts)
+	n.invalidateScope(sensNow.ancestor.readsClass(changed) || sensNow.has, sensNow.sibling.readsClass(changed))
 }
 
 // invalidateScope marks n stale, and its subtree when sub, and its

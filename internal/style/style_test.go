@@ -859,23 +859,35 @@ func TestSensitivity(t *testing.T) {
 			t.Errorf("ancestor class %q missing", c)
 		}
 	}
-	if sens.AncestorClasses["icon"] || sens.Structural || sens.SiblingFacts {
+	if sens.AncestorClasses["icon"] || sens.Structural || sens.SiblingStates != 0 || sens.SiblingClasses != nil {
 		t.Error("rightmost class or siblings recorded")
 	}
 	for _, tc := range []struct {
-		css               string
-		structural, facts bool
+		css            string
+		structural     bool
+		states         State
+		classes        string
+		ancestorStates State
 	}{
-		{"a + b { color: red; }", true, true},
-		{"a ~ b { color: red; }", true, true},
-		{"a:first-child { color: red; }", true, false},
-		{"a:last-child { color: red; }", true, false},
-		{"a:nth-child(2n) { color: red; }", true, false},
-		{"a:nth-child(2n of .x) { color: red; }", true, true},
+		{"a + b { color: red; }", true, 0, "", 0},
+		{"a:hover.x ~ b { color: red; }", true, Hover, "x", 0},
+		{"a:first-child { color: red; }", true, 0, "", 0},
+		{"a:last-child { color: red; }", true, 0, "", 0},
+		{"a:nth-child(2n) { color: red; }", true, 0, "", 0},
+		{"a:nth-child(2n of .x:checked) { color: red; }", true, Checked, "x", 0},
+		{"a:focus-within + b c { color: red; }", true, FocusWithin, "", 0},
+		{"a:focus-within b + c { color: red; }", true, 0, "", FocusWithin},
+		{"c:is(.x:hover + .y) { color: red; }", true, Hover, "x", 0},
+		{"a:has(+ .x:checked) { color: red; }", false, Checked, "x", 0},
 	} {
 		got := parseOne(t, tc.css).Sensitivity()
-		if got.Structural != tc.structural || got.SiblingFacts != tc.facts {
-			t.Errorf("%s: structural %v facts %v, want %v %v", tc.css, got.Structural, got.SiblingFacts, tc.structural, tc.facts)
+		var classes []string
+		for c := range got.SiblingClasses {
+			classes = append(classes, c)
+		}
+		if got.Structural != tc.structural || got.SiblingStates != tc.states || strings.Join(classes, " ") != tc.classes || got.AncestorStates != tc.ancestorStates {
+			t.Errorf("%s: structural %v sibling states %b classes %q ancestor states %b, want %v %b %q %b",
+				tc.css, got.Structural, got.SiblingStates, classes, got.AncestorStates, tc.structural, tc.states, tc.classes, tc.ancestorStates)
 		}
 	}
 }

@@ -220,32 +220,6 @@ func (c *compound) spec() spec {
 	return s
 }
 
-// eachNested calls f on every selector of the compound's functional
-// pseudo-class arguments: :not(), :is()/:where(), :has() and the
-// :nth-child(of S) lists.
-func (c *compound) eachNested(f func(sel *selector)) {
-	for i := range c.not {
-		for j := range c.not[i].sels {
-			f(&c.not[i].sels[j])
-		}
-	}
-	for i := range c.isLists {
-		for j := range c.isLists[i].sels {
-			f(&c.isLists[i].sels[j])
-		}
-	}
-	for i := range c.has {
-		for j := range c.has[i] {
-			f(&c.has[i][j].sel)
-		}
-	}
-	for i := range c.nths {
-		for j := range c.nths[i].of {
-			f(&c.nths[i].of[j])
-		}
-	}
-}
-
 // best is the specificity of the list's most specific member.
 func (l isList) best() spec {
 	var best spec
