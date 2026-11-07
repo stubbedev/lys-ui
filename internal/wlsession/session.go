@@ -223,10 +223,12 @@ type Session struct {
 	idleInhibitMgr      idleInhibitAPI
 	shortcutsInhibitMgr shortcutsInhibitAPI
 	escapeMgr           escapeManagerAPI
-	xdgOutputMgr        xdgOutputMaker
-	dialogMgr           *wlr.WmDialogV1
-	exporter            *wlr.ZxdgExporterV2
-	importer            *wlr.ZxdgImporterV2
+	// hotkeyGlobal is the advertised xx_hotkey_manager_v1, nil without one.
+	hotkeyGlobal hotkeyGlobal
+	xdgOutputMgr xdgOutputMaker
+	dialogMgr    *wlr.WmDialogV1
+	exporter     *wlr.ZxdgExporterV2
+	importer     *wlr.ZxdgImporterV2
 	// toplevelIconMgr (toplevelicon.go) posts window icons; iconSizes
 	// are the compositor's preferred sizes, complete at iconSizesDone.
 	toplevelIconMgr *wlr.ToplevelIconManagerV1
@@ -591,6 +593,8 @@ func (s *Session) HandleRegistryGlobal(ev wl.RegistryGlobalEvent) {
 		s.bindShortcutsInhibitManager(ev)
 	case "lys_escape_manager_v1":
 		s.bindEscapeManager(ev)
+	case "xx_hotkey_manager_v1":
+		s.hotkeyGlobal = wireHotkeyGlobal{registry: s.registry, ev: ev}
 	case "zxdg_output_manager_v1":
 		s.bindXdgOutputManager(ev)
 	case "xdg_wm_dialog_v1":
@@ -656,6 +660,9 @@ func (s *Session) HandleRegistryGlobalRemove(ev wl.RegistryGlobalRemoveEvent) {
 			s.notifyOutputRemoved(out)
 			return
 		}
+	}
+	if iface == "xx_hotkey_manager_v1" {
+		s.hotkeyGlobal = nil
 	}
 	delete(s.globals, iface)
 	delete(s.globalVersions, iface)
