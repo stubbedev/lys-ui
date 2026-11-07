@@ -1,6 +1,9 @@
 package app
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 
@@ -94,4 +97,48 @@ func (w *Window) SetTransientFor(parent *Window) {
 		return
 	}
 	w.win.SetParent(parent.win)
+	w.cfg.ForeignParent = ""
+}
+
+// SetForeignParent makes the window transient for another client's
+// toplevel, named by its xdg-foreign handle, as WindowConfig's
+// ForeignParent does at open: a window reused between requests moves to
+// the next one's parent. It replaces the previous parent, foreign or
+// not, and "" leaves none. A compositor that cannot import a handle
+// fails it with ErrForeignParentUnsupported.
+func (w *Window) SetForeignParent(handle string) error {
+	if w.win == nil || w.Closed() {
+		return errors.New("app: SetForeignParent on a closed window")
+	}
+	imp := w.app.sess.Importer()
+	if handle != "" && imp == nil {
+		return ErrForeignParentUnsupported
+	}
+	if err := w.win.SetForeignParent(imp, handle, w.parentLost); err != nil {
+		return fmt.Errorf("app: %w", err)
+	}
+	w.cfg.ForeignParent = handle
+	if handle != "" {
+		w.cfg.Parent = nil
+	}
+	return nil
+}
+
+// ExportHandle is the xdg-foreign handle the window is exported as, for
+// another client (a portal backend) to parent a surface to; "" until the
+// compositor sent it, or on a compositor that exports nothing.
+func (w *Window) ExportHandle() string {
+	if w.win == nil {
+		return ""
+	}
+	return w.win.ExportHandle()
+}
+
+// parentLost forgets a foreign parent the compositor ended and tells
+// OnParentLost.
+func (w *Window) parentLost() {
+	w.cfg.ForeignParent = ""
+	if w.cfg.OnParentLost != nil {
+		w.cfg.OnParentLost()
+	}
 }

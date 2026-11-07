@@ -226,6 +226,7 @@ type Session struct {
 	xdgOutputMgr        xdgOutputMaker
 	dialogMgr           *wlr.WmDialogV1
 	exporter            *wlr.ZxdgExporterV2
+	importer            *wlr.ZxdgImporterV2
 	// toplevelIconMgr (toplevelicon.go) posts window icons; iconSizes
 	// are the compositor's preferred sizes, complete at iconSizesDone.
 	toplevelIconMgr *wlr.ToplevelIconManagerV1
@@ -596,6 +597,8 @@ func (s *Session) HandleRegistryGlobal(ev wl.RegistryGlobalEvent) {
 		s.bindDialogManager(ev)
 	case "zxdg_exporter_v2":
 		s.bindExporter(ev)
+	case "zxdg_importer_v2":
+		s.bindImporter(ev)
 	case "wl_subcompositor":
 		s.bindSubcompositor(ev)
 	case "zwp_linux_dmabuf_v1":

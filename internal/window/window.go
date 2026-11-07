@@ -25,6 +25,10 @@ var ErrNotConfigured = errors.New("window: not configured yet")
 // used again.
 var ErrClosed = errors.New("window: closed")
 
+// ErrNoImporter reports a foreign parent asked of a compositor that
+// cannot import an xdg-foreign handle (no zxdg_importer_v2).
+var ErrNoImporter = errors.New("window: the compositor has no zxdg_importer_v2")
+
 // Config describes the window before the first commit.
 type Config struct {
 	// Title and AppID identify the window to the compositor.
@@ -137,6 +141,8 @@ type Window struct {
 	dialogModalled bool
 	exported       *wlr.ZxdgExportedV2
 	exportHandle   string
+	// imported is the foreign parent's import, set by SetForeignParent.
+	imported *wlr.ZxdgImportedV2
 
 	// onCloseRequest vetoes the compositor's close request when it
 	// returns false (an unsaved-changes prompt, for instance); nil
@@ -452,6 +458,9 @@ func (w *Window) ServerDecorated() bool { return w.decoration != nil }
 // and may group them. A nil parent clears the association.
 func (w *Window) SetParent(parent *Window) {
 	w.parent = parent
+	if parent != nil {
+		w.teardownImport()
+	}
 	if w.Toplevel == nil {
 		return
 	}
@@ -492,6 +501,7 @@ func (w *Window) Closed() bool { return w.closed }
 // wl_surface stays with its owner. Idempotent.
 func (w *Window) Close() {
 	w.teardownDialog()
+	w.teardownImport()
 	w.teardownExport()
 	w.teardownRole()
 	w.closed = true
@@ -605,6 +615,65 @@ func (w *Window) Export(exp *wlr.ZxdgExporterV2) error {
 	e.AddHandleHandler(exportHandler{w})
 	w.exported = e
 	return nil
+}
+
+// SetForeignParent parents this toplevel to another client's, named by
+// the xdg-foreign handle that client exported it as: the compositor
+// keeps this one above it, on its workspace. It replaces the previous
+// parent, foreign or not, and an empty handle leaves none. lost runs
+// once if the import ends, the parent having gone away or the handle
+// naming no toplevel; the window then has no parent.
+func (w *Window) SetForeignParent(imp *wlr.ZxdgImporterV2, handle string, lost func()) error {
+	w.teardownImport()
+	if handle == "" {
+		return nil
+	}
+	if imp == nil {
+		return ErrNoImporter
+	}
+	if w.parent != nil {
+		w.SetParent(nil)
+	}
+	im, err := imp.ImportToplevel(handle)
+	if err != nil {
+		return fmt.Errorf("window: import_toplevel %q: %w", handle, err)
+	}
+	w.imported = im
+	im.AddDestroyedHandler(&importLost{w: w, im: im, lost: lost})
+	if err := im.SetParentOf(w.WLSurface); err != nil {
+		return fmt.Errorf("window: set_parent_of %q: %w", handle, err)
+	}
+	return nil
+}
+
+// ForeignParented reports whether the window holds a live import of a
+// foreign parent.
+func (w *Window) ForeignParented() bool { return w.imported != nil }
+
+// importLost ends one import when the compositor destroys it.
+type importLost struct {
+	w    *Window
+	im   *wlr.ZxdgImportedV2
+	lost func()
+}
+
+func (h *importLost) HandleZxdgImportedV2Destroyed(wlr.ZxdgImportedV2DestroyedEvent) {
+	if h.w.imported != h.im {
+		return
+	}
+	h.w.teardownImport()
+	debug.Log("shell", "foreign parent gone")
+	if h.lost != nil {
+		h.lost()
+	}
+}
+
+func (w *Window) teardownImport() {
+	if w.imported == nil {
+		return
+	}
+	_ = w.imported.Destroy()
+	w.imported = nil
 }
 
 // ExportHandle returns the toplevel's xdg-foreign handle, or "" before

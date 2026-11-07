@@ -67,10 +67,10 @@ type portalClient struct {
 }
 
 func portalParent(w *Window) string {
-	if w == nil || w.win == nil {
+	if w == nil {
 		return ""
 	}
-	if h := w.win.ExportHandle(); h != "" {
+	if h := w.ExportHandle(); h != "" {
 		return "wayland:" + h
 	}
 	return ""

@@ -436,6 +436,22 @@ type WindowConfig struct {
 	// Parent, when set, makes the window transient for it from the
 	// first commit (SetTransientFor): a toolbox above its owner.
 	Parent *Window
+	// ForeignParent, when set, makes the window transient for another
+	// client's toplevel from the first commit, named by the xdg-foreign
+	// handle that client exported it as (a portal request's
+	// "wayland:<handle>" without the prefix): the compositor keeps the
+	// window above it, on its workspace. It excludes Parent, and the
+	// window fails to open on a compositor that cannot import a handle
+	// (ErrForeignParentUnsupported).
+	ForeignParent string
+	// OnParentLost runs on the loop goroutine, once, when the foreign
+	// parent goes away or the handle names no toplevel; the window stays
+	// mapped, without a parent.
+	OnParentLost func()
+	// Modal hints the compositor (xdg_dialog_v1) that the window is a
+	// modal dialog of its parent, so it blocks input to that window
+	// only; ignored where the compositor lacks the protocol.
+	Modal bool
 	// OnPress fires after the router recorded a press (chrome drag,
 	// context menus).
 	OnPress func(button uint32, over widget.Widget)
@@ -566,6 +582,9 @@ func (a *Application) openWindow(w *Window, cfg WindowConfig) (*hostWindow, erro
 	if a.sess.WmBase() == nil {
 		return nil, errors.New("app: compositor has no xdg_wm_base; windows unsupported")
 	}
+	if err := cfg.parentErr(a.sess.Importer() != nil); err != nil {
+		return nil, err
+	}
 	surf, err := a.sess.Compositor().CreateSurface()
 	if err != nil {
 		return nil, fmt.Errorf("app: create surface: %w", err)
@@ -598,11 +617,36 @@ func (a *Application) openWindow(w *Window, cfg WindowConfig) (*hostWindow, erro
 	if cfg.Parent != nil {
 		w.SetTransientFor(cfg.Parent)
 	}
+	if err := win.SetForeignParent(a.sess.Importer(), cfg.ForeignParent, w.parentLost); err != nil {
+		return nil, fmt.Errorf("app: %w", err)
+	}
+	if cfg.Modal {
+		if err := win.SetModal(a.sess.DialogManager(), true); err != nil {
+			return nil, fmt.Errorf("app: %w", err)
+		}
+	}
 	a.initialHints(surf, cfg.ContentType)
 	if err := surf.Commit(); err != nil {
 		return nil, fmt.Errorf("app: initial commit: %w", err)
 	}
 	return hw, nil
+}
+
+// ErrForeignParentUnsupported reports a window given a foreign parent
+// on a compositor that cannot import an xdg-foreign handle: the caller
+// shows its surface some other way.
+var ErrForeignParentUnsupported = errors.New("app: the compositor cannot import a foreign parent (no zxdg_importer_v2)")
+
+// parentErr is why cfg's parents cannot be set up, nil when they can;
+// canImport says whether the compositor imports xdg-foreign handles.
+func (cfg WindowConfig) parentErr(canImport bool) error {
+	switch {
+	case cfg.Parent != nil && cfg.ForeignParent != "":
+		return errors.New("app: a window takes Parent or ForeignParent, not both")
+	case cfg.ForeignParent != "" && !canImport:
+		return ErrForeignParentUnsupported
+	}
+	return nil
 }
 
 // ErrLayerShellUnavailable reports a compositor without

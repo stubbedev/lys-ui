@@ -6,6 +6,7 @@ package window
 
 import (
 	"encoding/binary"
+	"errors"
 	"testing"
 	"time"
 
@@ -481,5 +482,125 @@ func TestCloseDestroysTheRole(t *testing.T) {
 	case f := <-frames:
 		t.Errorf("a request followed the teardown: object %d opcode %d", f.Obj, f.Opcode)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// A foreign parent goes out before the window's first commit: the
+// import of the handle, then set_parent_of naming the window's own
+// wl_surface. The compositor ending the import tells lost once and
+// leaves the window unparented; a new parent replaces the import, and
+// close drops it.
+func TestForeignParentImportsBeforeTheFirstCommit(t *testing.T) {
+	frames := headlesstest.WireServer(t, "wayland-test")
+	w := newWireWindow(t, Config{Title: "dialog"})
+	imp := wlr.NewZxdgImporterV2(w.WLSurface.Context())
+	imp.Unregister()
+	lost := 0
+	if err := w.SetForeignParent(imp, "app-handle", func() { lost++ }); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.WLSurface.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	f := headlesstest.WaitForFrame(t, frames, "import_toplevel", func(f headlesstest.WireFrame) bool {
+		return f.Obj == uint32(imp.Id()) && f.Opcode == 1
+	})
+	if want := wireString("app-handle"); len(f.Body) != 4+len(want) || string(f.Body[4:]) != string(want) {
+		t.Fatalf("import_toplevel payload %v, want a new id and the handle", f.Body)
+	}
+	first := w.imported
+	if f.Word(0) != int32(first.Id()) {
+		t.Fatalf("import_toplevel created %d, the window holds %d", f.Word(0), first.Id())
+	}
+	headlesstest.WaitForFrame(t, frames, "set_parent_of before the commit", func(f headlesstest.WireFrame) bool {
+		if f.Obj == uint32(w.WLSurface.Id()) && f.Opcode == 6 {
+			t.Fatal("the window committed before set_parent_of")
+		}
+		return f.Obj == uint32(first.Id()) && f.Opcode == 1 && len(f.Body) == 4 && f.Word(0) == int32(w.WLSurface.Id())
+	})
+
+	first.Dispatch(&wl.Event{Opcode: 0})
+	first.Dispatch(&wl.Event{Opcode: 0})
+	if lost != 1 {
+		t.Errorf("lost ran %d times for one ended import, want once", lost)
+	}
+	if w.ForeignParented() {
+		t.Error("the window kept an ended import")
+	}
+	headlesstest.WaitForFrame(t, frames, "the ended import destroyed", func(f headlesstest.WireFrame) bool {
+		return f.Obj == uint32(first.Id()) && f.Opcode == 0
+	})
+
+	if err := w.SetForeignParent(imp, "next-handle", func() { lost++ }); err != nil {
+		t.Fatal(err)
+	}
+	second := w.imported
+	if err := w.SetForeignParent(imp, "third-handle", func() { lost++ }); err != nil {
+		t.Fatal(err)
+	}
+	headlesstest.WaitForFrame(t, frames, "the replaced import destroyed", func(f headlesstest.WireFrame) bool {
+		return f.Obj == uint32(second.Id()) && f.Opcode == 0
+	})
+	second.Dispatch(&wl.Event{Opcode: 0})
+	if lost != 1 {
+		t.Errorf("a replaced import's end told lost (%d)", lost)
+	}
+	third := w.imported
+	w.Close()
+	headlesstest.WaitForFrame(t, frames, "the import destroyed on close", func(f headlesstest.WireFrame) bool {
+		return f.Obj == uint32(third.Id()) && f.Opcode == 0
+	})
+	if lost != 1 {
+		t.Errorf("closing the window told lost (%d)", lost)
+	}
+}
+
+// Without an importer a foreign parent is refused, not silently
+// dropped; an empty handle needs none.
+func TestForeignParentNeedsAnImporter(t *testing.T) {
+	headlesstest.WireServer(t, "wayland-test")
+	w := newWireWindow(t, Config{Title: "dialog"})
+	if err := w.SetForeignParent(nil, "app-handle", nil); !errors.Is(err, ErrNoImporter) {
+		t.Errorf("SetForeignParent without an importer = %v, want ErrNoImporter", err)
+	}
+	if err := w.SetForeignParent(nil, "", nil); err != nil {
+		t.Errorf("clearing the foreign parent = %v", err)
+	}
+	if w.ForeignParented() {
+		t.Error("a refused import left the window parented")
+	}
+}
+
+// A window has one parent: a foreign one clears a parent of this
+// client (set_parent null), and a parent of this client destroys the
+// foreign import.
+func TestForeignAndLocalParentsReplaceEachOther(t *testing.T) {
+	frames := headlesstest.WireServer(t, "wayland-test")
+	w := newWireWindow(t, Config{Title: "dialog"})
+	ctx := w.WLSurface.Context()
+	ownerSurface := wl.NewSurface(ctx)
+	ownerSurface.Unregister()
+	wmBase := xdg.NewWmBase(ctx)
+	wmBase.Unregister()
+	owner, err := New(wmBase, ownerSurface, Config{Title: "owner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	imp := wlr.NewZxdgImporterV2(ctx)
+	imp.Unregister()
+	w.SetParent(owner)
+	if err := w.SetForeignParent(imp, "app-handle", nil); err != nil {
+		t.Fatal(err)
+	}
+	headlesstest.WaitForFrame(t, frames, "set_parent null", func(f headlesstest.WireFrame) bool {
+		return f.Obj == uint32(w.Toplevel.Id()) && f.Opcode == 1 && len(f.Body) == 4 && f.Word(0) == 0
+	})
+	imported := w.imported
+	w.SetParent(owner)
+	headlesstest.WaitForFrame(t, frames, "the import destroyed", func(f headlesstest.WireFrame) bool {
+		return f.Obj == uint32(imported.Id()) && f.Opcode == 0
+	})
+	if w.ForeignParented() {
+		t.Error("a local parent left the foreign import live")
 	}
 }
