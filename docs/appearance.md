@@ -86,7 +86,7 @@ The same monitor follows the icon-theme setting for the icon lookup
 
 ## Tests
 
-`internal/portalsettings` runs against a real private `dbus-daemon`
+`portalsettings` runs against a real private `dbus-daemon`
 with a scripted mock portal. The tests cover:
 
 - the startup read and every unknown fallback

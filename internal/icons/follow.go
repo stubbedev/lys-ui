@@ -1,5 +1,5 @@
 // Icon-theme following (#64): the cache applies live icon-theme
-// switches delivered by the portal monitor (internal/portalsettings), which
+// switches delivered by the portal monitor (portalsettings), which
 // the application wires in. This is a lookup refresh, never a palette
 // swap — the "toolkit never flips its own theme" rule is untouched
 // (docs/architecture.md "Non-goals"); what changes is which theme's

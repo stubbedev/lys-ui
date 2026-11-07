@@ -9,7 +9,7 @@ import (
 	"github.com/stubbedev/lys-lib/dbustest"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
-	"github.com/stubbedev/lys-ui/internal/portalsettings"
+	"github.com/stubbedev/lys-ui/portalsettings"
 )
 
 // fontPortal answers the two interface keys DesktopFontSize reads.

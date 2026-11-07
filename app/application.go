@@ -32,11 +32,11 @@ import (
 	"github.com/stubbedev/lys-ui/internal/layersurface"
 	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/notify"
-	"github.com/stubbedev/lys-ui/internal/portalsettings"
 	"github.com/stubbedev/lys-ui/internal/recentfiles"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/window"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
+	"github.com/stubbedev/lys-ui/portalsettings"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

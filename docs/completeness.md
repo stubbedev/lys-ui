@@ -82,6 +82,7 @@ live in [architecture.md](architecture.md#non-goals).
 | CSS | GTK-flavored stylesheets above the palette: selectors, `@define-color`, transitions, `@keyframes`, hot reload; stylesheet files loadable at chosen priorities (`AddStylesheetFile`) with one shared poller | internal/style, widget/style.go, [css.md](css.md) |
 | glass surfaces | the `css.Glass`, `css.LiquidGlass` and `css.Frosted` style classes; behind-window and behind-popover blur through ext_background_effect_v1 (`WindowConfig`, `LayerConfig` and `PopoverConfig.BackgroundBlur`) | widget/adwaita.go, app/surfacehints.go, internal/blursync, cmd/lys-ui-glass |
 | GTK settings | `gtksettings`: GTK 4's settings.ini | gtksettings/ |
+| desktop settings | `portalsettings`: the appearance, icon theme and font xdg-desktop-portal publishes, followed live, for programs that draw without an `app.Application` | portalsettings/ |
 | icon themes | freedesktop spec in pure Go, live icon-theme following; `icontheme` for programs that draw icons without widgets | internal/icons, icontheme/, [icons.md](icons.md) |
 | accessibility | semantic roles, keyboard-first guarantee, in-process AT-SPI bridge | widget/a11y.go, internal/atspi, [a11y.md](a11y.md) |
 | animation (`adw::TimedAnimation`, `SpringAnimation`) | `anim`: tweens, easing curves, springs, Sequence/Parallel/Delay timelines, reduced motion | anim/, internal/animclock |
