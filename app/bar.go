@@ -146,7 +146,7 @@ func barMargins(edge widget.BarEdge, m int32) Margins {
 // between the controls, and Enter and Space press the focused one.
 // Esc ends the walk: the focus clears, the bar gives the keyboard
 // back, and done runs. Walking a bar that walks restarts at its first
-// control, and the earlier walk's done never runs.
+// control once the earlier walk's done ran.
 func (w *BarWindow) WalkKeyboard(done func()) error {
 	hw := w.app.hostWindowOf(w.LayerWindow)
 	if hw == nil {
@@ -154,6 +154,9 @@ func (w *BarWindow) WalkKeyboard(done func()) error {
 	}
 	if err := w.holdKeyboard(KeyboardExclusive); err != nil {
 		return fmt.Errorf("app: walk the bar's keyboard: %w", err)
+	}
+	if w.walkDone != nil {
+		w.walkDone()
 	}
 	w.walkDone = done
 	_ = hw.router.SetFocus(nil)
