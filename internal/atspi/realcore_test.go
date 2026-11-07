@@ -139,6 +139,15 @@ func TestRealAtSpi2Core(t *testing.T) {
 	} else if toolkit, _ = v.Value().(string); toolkit != "lys-ui" {
 		t.Errorf("toolkit = %q, want lys-ui", toolkit)
 	}
+	var registry string
+	if err := at.BusObject().Call("org.freedesktop.DBus.GetNameOwner", 0, "org.a11y.atspi.Registry").Store(&registry); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := app.GetProperty(ifaceAccessible + ".Parent"); err != nil {
+		t.Fatalf("the root's Parent: %v", err)
+	} else if parent, ok := v.Value().([]any); !ok || len(parent) != 2 || parent[0] != registry || parent[1] != RootPath {
+		t.Errorf("the root's parent is %v, want the registry's desktop (%s, %s), which libatspi recognizes", v.Value(), registry, RootPath)
+	}
 	var items []cacheItem
 	if err := at.Object(owner, CachePath).Call(ifaceCache+".GetItems", 0).Store(&items); err != nil {
 		t.Fatalf("Cache.GetItems: %v", err)

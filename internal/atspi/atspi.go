@@ -203,6 +203,9 @@ type Bridge struct {
 	// appID is the Id the registry set on the Application interface
 	// (its Embed handshake); zero until then.
 	appID int32
+	// desktop is the registry's desktop as its Embed answered, the parent
+	// ATs walk up to from the application root.
+	desktop objRef
 
 	stop   chan struct{}
 	closed sync.Once
@@ -307,6 +310,7 @@ func Serve(scene Scene, opts Options) (*Bridge, error) {
 		ids:      make(map[widget.Widget]int32),
 		exported: make(map[dbus.ObjectPath]bool),
 		cur:      &tree{root: &anode{id: 0, index: -1}, nodes: map[int32]*anode{}},
+		desktop:  desktopRef,
 		stop:     make(chan struct{}),
 		kick:     make(chan struct{}, 1),
 		done:     make(chan struct{}),
@@ -334,13 +338,14 @@ func Serve(scene Scene, opts Options) (*Bridge, error) {
 	// socket lives at the desktop root path, where at-spi2-core's
 	// registryd and GTK's bridge both speak it.
 	registry := conn.Object("org.a11y.atspi.Registry", RootPath)
-	var socket struct {
-		Name string
-		Path dbus.ObjectPath
-	}
+	var socket objRef
 	if err := registry.CallWithContext(ctx, "org.a11y.atspi.Socket.Embed", 0,
 		objRef{Name: name, Path: RootPath}).Store(&socket); err != nil {
 		debug.Log("a11y", "registry embed: %v (older registry probes roots itself)", err)
+	} else {
+		b.mu.Lock()
+		b.desktop = socket
+		b.mu.Unlock()
 	}
 
 	if b.poll > 0 {

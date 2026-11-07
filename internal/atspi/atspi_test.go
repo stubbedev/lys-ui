@@ -124,13 +124,18 @@ func (r *fakeRegistry) record() {
 	}
 }
 
+// fakeDesktop is the desktop the fake registry answers Embed with, by
+// the unique name a real registry answers with rather than its
+// well-known one.
+var fakeDesktop = objRef{Name: ":1.999", Path: RootPath}
+
 // Embed implements org.a11y.atspi.Socket: record the plug, answer with
 // the registry's root.
 func (r *fakeRegistry) Embed(plug ref) ref {
 	r.mu.Lock()
 	r.plug = plug
 	r.mu.Unlock()
-	return ref{Name: "org.a11y.atspi.Registry", Path: "/org/a11y/atspi/accessible/0"}
+	return ref(fakeDesktop)
 }
 
 // Unembed implements org.a11y.atspi.Socket.
@@ -863,7 +868,7 @@ func TestCacheGetItems(t *testing.T) {
 		t.Fatalf("cache holds %d items, the tree %d objects plus the root", len(items), len(walked))
 	}
 	root := items[0]
-	if root.Path.Path != RootPath || root.Role != roleApplication || root.Parent != desktopRef {
+	if root.Path.Path != RootPath || root.Role != roleApplication || root.Parent != fakeDesktop {
 		t.Errorf("root item = %+v", root)
 	}
 	for _, it := range items[1:] {

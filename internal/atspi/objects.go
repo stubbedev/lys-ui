@@ -51,7 +51,7 @@ const nullPath dbus.ObjectPath = "/org/a11y/atspi/null"
 
 // desktopRef is the registry's desktop object — the AT-SPI tree root
 // above applications; the application root's parent.
-var desktopRef = objRef{Name: "org.a11y.atspi.Registry", Path: "/org/a11y/atspi/accessible/0"}
+var desktopRef = objRef{Name: "org.a11y.atspi.Registry", Path: RootPath}
 
 // exportNode wires one object's interfaces on the bus. id 0 is the
 // application root; text/action/value select the subinterfaces; app

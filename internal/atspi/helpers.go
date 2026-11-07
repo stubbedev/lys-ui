@@ -215,7 +215,7 @@ func descriptionOf(n *anode) string {
 func (b *Bridge) parentRef(n *anode) objRef {
 	switch {
 	case n != nil && n.id == 0:
-		return desktopRef
+		return b.desktop
 	case n == nil || n.parent == nil:
 		return objRef{Name: "", Path: nullPath}
 	default:
