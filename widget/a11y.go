@@ -293,6 +293,19 @@ func isFocusable(w Widget) bool {
 	return IsEnabled(w) && rendered(w)
 }
 
+// FirstFocusable is the first widget of w's tree, w included, in
+// focus order that focus can land on, nil when none can: what a form
+// focuses to bring a row's control under the keys.
+func FirstFocusable(w Widget) Widget {
+	var first Widget
+	focusWalker(w, func(x Widget) {
+		if first == nil && isFocusable(x) {
+			first = x
+		}
+	})
+	return first
+}
+
 // rendered reports whether w is on screen for the user: laid out
 // (IsVisible) and shown by its computed visibility.
 func rendered(w Widget) bool { return IsVisible(w) && shown(w) }
