@@ -147,6 +147,9 @@ type A11yState struct {
 	// the tooltip text, else the visible label text for labeled
 	// controls.
 	Name string
+	// Description is what assistive technology reads after the name:
+	// a control's current value or state in words.
+	Description string
 	// Text is the current contents for text-bearing roles.
 	Text string
 	// Caret is the text cursor as a rune offset into Text.
@@ -209,6 +212,9 @@ func Describe(w Widget) A11yState {
 	if p, ok := w.(a11yPresser); ok {
 		st.Pressed = p.a11yPressed()
 	}
+	if d, ok := w.(a11yDescriber); ok {
+		st.Description = d.a11yDescription()
+	}
 	switch v := w.(type) {
 	case *Label:
 		st.Text = v.Text()
@@ -268,6 +274,9 @@ func (b *Button) a11yName() string { return labelText(b.child) }
 // a11yPresser is a toggle reporting its pressed state, promoted like
 // a11yNamer to the types that embed one.
 type a11yPresser interface{ a11yPressed() bool }
+
+// a11yDescriber is a widget that describes itself beyond its name.
+type a11yDescriber interface{ a11yDescription() string }
 
 func (t *ToggleButton) a11yPressed() bool { return t.active }
 

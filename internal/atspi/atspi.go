@@ -703,6 +703,9 @@ func diff(old, cur *tree, busName string) []event {
 		if now.st.Name != before.st.Name {
 			out = append(out, propertyEvent(now, "accessible-name", dbus.MakeVariant(now.st.Name)))
 		}
+		if now.st.Description != before.st.Description {
+			out = append(out, propertyEvent(now, "accessible-description", dbus.MakeVariant(now.st.Description)))
+		}
 		if now.value && now.st.Value != before.st.Value {
 			out = append(out, propertyEvent(now, "accessible-value", dbus.MakeVariant(now.st.Value)))
 		}

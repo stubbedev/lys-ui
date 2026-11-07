@@ -55,6 +55,7 @@ live in [architecture.md](architecture.md#non-goals).
 | ColorDialog, FontDialog, Calendar, EmojiChooser | `ColorChooserDialog`, `FontChooserDialog`, `CalendarDialog`, `EmojiChooser` | app/dialog.go, app/emojichooser.go |
 | adw AboutDialog | `Application.AboutDialog` | app/about.go |
 | ShortcutsWindow | `ShortcutsView` + `Application.ShortcutsDialog` from the accelerator registry | widget/shortcuts.go, app/accel.go |
+| ShortcutRecorder (GNOME Settings "Set Shortcut", KKeySequenceWidget) | `ShortcutRecorder`: keycaps at rest, records through `KeyRecorder` ahead of key capture and accelerators, live modifier preview, `Validate` | widget/shortcutrecorder.go, widget/accel.go, app/application.go |
 | adw Toast | `Toast` + `Application.ShowToast` (stacking, action, hover pause) | widget/toast.go, app/toast.go |
 | Tooltip | `SetTooltip` and `SetTooltipMarkup` on any widget; `Application.SetTooltipOptions` for every window | widget/widget.go, app/tooltip.go |
 | GLArea | `widget.GPUArea`: application-rendered dmabufs (zero copy, async import checked against the advertised formats) or CPU images, on a subsurface below the window, paced by `OnFrame` | widget/gpuarea.go, app/gpuarea.go, lys-lib/dmabuf/ |

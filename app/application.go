@@ -21,6 +21,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
+	"github.com/stubbedev/lys-lib/xkb"
 
 	"github.com/stubbedev/lys-ui/gtksettings"
 	"github.com/stubbedev/lys-ui/internal/animclock"
@@ -913,7 +914,7 @@ func (a *Application) settleWire() {
 // Run, and again on each session a reconnect adopts.
 func (a *Application) wireSession() {
 	a.sess.OnKey = a.routeKey
-	a.sess.OnKeyUp = a.rep.release
+	a.sess.OnKeyUp = func(keycode uint32) { a.keyUp(a.sess, keycode) }
 	a.sess.OnKeyboardFocus = a.rep.stop
 	a.sess.OnIME = a.imeEvent
 	a.sess.OnIMEFocus = a.ime.reset
@@ -961,7 +962,7 @@ func (a *Application) tick(step func() error, now time.Time) error {
 	}
 
 	if code, mods, ok := a.rep.tick(); ok && !a.sess.KeymapPending() {
-		a.deliverKey(code, mods)
+		a.deliverKey(a.sess, code, mods)
 		// Repeat keys are deliveries too: keep the state fresh.
 	}
 	// Push the focused widget's text-input state; this is what
@@ -1227,7 +1228,7 @@ func (a *Application) updateTip(tip *tooltipCtl, router *widget.Router, now time
 // focus, falling back to the first window.
 func (a *Application) routeKey(keycode uint32, mods wlsession.Mods) {
 	a.rep.press(keycode, mods)
-	a.deliverKey(keycode, mods)
+	a.deliverKey(a.sess, keycode, mods)
 	for _, w := range a.windows {
 		w.dirty = true
 	}
@@ -1239,12 +1240,16 @@ func (a *Application) routeKey(keycode uint32, mods wlsession.Mods) {
 // application-wide one. The hook chain must hang off the FOCUSED
 // window - consulting only the app-level hook silently dropped every
 // Config.OnKey a client passed to Run, so Escape-to-close never fired.
-func (a *Application) deliverKey(keycode uint32, mods wlsession.Mods) {
-	if a.cancelDragKey(keycode) {
+func (a *Application) deliverKey(tr keyTranslator, keycode uint32, mods wlsession.Mods) {
+	sym := tr.KeySym(keycode)
+	if a.cancelDragKey(sym) {
+		return
+	}
+	if recordKey(a.keyboardRouter(), sym, mods) {
 		return
 	}
 	if op := a.keyPopover(); op != nil {
-		a.deliverPopoverKey(a.sess, op, keycode, mods)
+		a.deliverPopoverKey(tr, op, keycode, mods)
 		return
 	}
 	target := a.focused()
@@ -1259,7 +1264,7 @@ func (a *Application) deliverKey(keycode uint32, mods wlsession.Mods) {
 	// routing, accelerators, and text - but only while it is armed,
 	// so unarmed apps never lose their ctrl+shift bindings.
 	if a.inspectArmed {
-		if act, ok := inspectKey(a.sess.KeySym(keycode), mods); ok {
+		if act, ok := inspectKey(sym, mods); ok {
 			switch act {
 			case inspectToggle:
 				a.ToggleInspect()
@@ -1269,10 +1274,49 @@ func (a *Application) deliverKey(keycode uint32, mods wlsession.Mods) {
 			return
 		}
 	}
-	if captureKey(a.sess, target.cfg.keyCapture, keycode, mods) {
+	if captureKey(tr, target.cfg.keyCapture, keycode, mods) {
 		return
 	}
-	routeKey(a.sess, target.router, keycode, mods, a.keyClip, a.accels, extra)
+	routeKey(tr, target.router, keycode, mods, a.keyClip, a.accels, extra)
+}
+
+// recordKey hands a press to the focused widget of router while it
+// records a shortcut (a widget.KeyRecorder), normalized as captureKey
+// normalizes, and reports whether it took the press.
+func recordKey(router *widget.Router, sym xkb.Keysym, mods wlsession.Mods) bool {
+	rec, ok := focusedRecorder(router)
+	if !ok {
+		return false
+	}
+	rec.RecordPress(normalizeSym(sym), widget.Mods(mods&^wlsession.ModCapsLock))
+	return true
+}
+
+// focusedRecorder is router's focused widget while it records a
+// shortcut.
+func focusedRecorder(router *widget.Router) (widget.KeyRecorder, bool) {
+	if router == nil {
+		return nil, false
+	}
+	rec, ok := router.Focused().(widget.KeyRecorder)
+	return rec, ok && rec.Recording()
+}
+
+// keyUp ends a key's repeat and hands the release to a recording
+// widget, so a released modifier leaves its live preview.
+func (a *Application) keyUp(tr keyTranslator, keycode uint32) {
+	a.rep.release(keycode)
+	rec, ok := focusedRecorder(a.keyboardRouter())
+	if !ok {
+		return
+	}
+	rec.RecordRelease(normalizeSym(tr.KeySym(keycode)))
+	if op := a.keyPopover(); op != nil {
+		op.pop.MarkFrame()
+	}
+	for _, w := range a.windows {
+		w.dirty = true
+	}
 }
 
 // captureKey offers one press to a window's KeyCapture hook and

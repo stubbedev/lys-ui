@@ -201,6 +201,15 @@ func nameOf(n *anode) string {
 	}
 }
 
+// descriptionOf is a node's accessible description; the application
+// root has none.
+func descriptionOf(n *anode) string {
+	if n == nil || n.id == 0 {
+		return ""
+	}
+	return n.st.Description
+}
+
 // parentRef is a node's parent reference: the registry's desktop for
 // the application root, the null reference for a node with none.
 func (b *Bridge) parentRef(n *anode) objRef {
@@ -266,7 +275,7 @@ func (b *Bridge) properties(id int32, iface string) map[string]dbus.Variant {
 		}
 		return map[string]dbus.Variant{
 			"Name":         dbus.MakeVariant(nameOf(n)),
-			"Description":  dbus.MakeVariant(""),
+			"Description":  dbus.MakeVariant(descriptionOf(n)),
 			"Parent":       dbus.MakeVariant(b.parentRef(n)),
 			"ChildCount":   dbus.MakeVariant(int32(childCount)),
 			"Locale":       dbus.MakeVariant(""),

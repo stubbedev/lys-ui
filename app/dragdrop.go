@@ -210,8 +210,8 @@ func (in *surfaceInput) DragAction(offered transfer.Action) transfer.Action {
 // drag-cancel. Compositors that keep the keyboard during a drag (most
 // cancel on Escape themselves) deliver nothing, which leaves the drag
 // to them; one that delivers keys gets the source-side cancel.
-func (a *Application) cancelDragKey(keycode uint32) bool {
-	return a.dnd != nil && a.dnd.Dragging() && a.sess.KeySym(keycode) == xkb.KeyEscape && a.dnd.CancelDrag()
+func (a *Application) cancelDragKey(sym xkb.Keysym) bool {
+	return a.dnd != nil && a.dnd.Dragging() && sym == xkb.KeyEscape && a.dnd.CancelDrag()
 }
 
 // CancelDrag cancels the drag this application started, if one is

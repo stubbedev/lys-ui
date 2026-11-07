@@ -57,15 +57,16 @@ func (b *Bridge) cacheItemOf(tr *tree, n *anode) cacheItem {
 		role = atspiRole(n.st.Role)
 	}
 	return cacheItem{
-		Path:       objRef{Name: b.name, Path: pathOf(n)},
-		App:        objRef{Name: b.name, Path: RootPath},
-		Parent:     b.parentRef(n),
-		Index:      intconv.Clamp[int32](n.index),
-		Children:   intconv.Clamp[int32](len(n.children)),
-		Interfaces: ifacesOf(n),
-		Name:       nameOf(n),
-		Role:       role,
-		States:     stateSet(b.statesOf(tr, n.id)),
+		Path:        objRef{Name: b.name, Path: pathOf(n)},
+		App:         objRef{Name: b.name, Path: RootPath},
+		Parent:      b.parentRef(n),
+		Index:       intconv.Clamp[int32](n.index),
+		Children:    intconv.Clamp[int32](len(n.children)),
+		Interfaces:  ifacesOf(n),
+		Name:        nameOf(n),
+		Role:        role,
+		Description: descriptionOf(n),
+		States:      stateSet(b.statesOf(tr, n.id)),
 	}
 }
 

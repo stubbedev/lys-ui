@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"iter"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -47,29 +46,7 @@ func ParseAccel(s string) (Accel, error) {
 
 // String renders the canonical menu-label form: "Ctrl+Shift+P",
 // "Ctrl+Return", "Esc".
-func (a Accel) String() string {
-	var parts []string
-	if a.Mods&wlsession.ModCtrl != 0 {
-		parts = append(parts, "Ctrl")
-	}
-	if a.Mods&wlsession.ModShift != 0 {
-		parts = append(parts, "Shift")
-	}
-	if a.Mods&wlsession.ModAlt != 0 {
-		parts = append(parts, "Alt")
-	}
-	if a.Mods&wlsession.ModSuper != 0 {
-		parts = append(parts, "Super")
-	}
-	name := xkb.KeysymGetName(a.Sym)
-	if name == "" {
-		name = "0x" + strconv.FormatUint(uint64(a.Sym), 16)
-	}
-	if len(name) == 1 {
-		name = strings.ToUpper(name)
-	}
-	return strings.Join(append(parts, name), "+")
-}
+func (a Accel) String() string { return widget.AccelLabel(a.Sym, widget.Mods(a.Mods)) }
 
 // parseAccelMods peels the modifier prefix off an accelerator string
 // and returns the mods with the remaining key name.
@@ -308,18 +285,6 @@ func (t *accelTable) keysFor(a widget.Activatable) string {
 	return ""
 }
 
-// isModifierSym reports whether sym is a bare modifier key: pressing
-// ctrl between ctrl+x and ctrl+s must not break the chord.
-func isModifierSym(sym xkb.Keysym) bool {
-	switch sym {
-	case xkb.KeyShiftL, xkb.KeyShiftR, xkb.KeyControlL, xkb.KeyControlR,
-		xkb.KeyAltL, xkb.KeyAltR, xkb.KeyMetaL, xkb.KeyMetaR,
-		xkb.KeySuperL, xkb.KeySuperR, xkb.KeyCapsLock, xkb.KeyISOLevel3Shift:
-		return true
-	}
-	return false
-}
-
 // fire runs the binding for sym+mods and reports whether the key was
 // consumed. The key extends the chord in progress (dropped once it
 // waited past chordTimeout): a complete shortcut fires, a prefix of
@@ -328,7 +293,7 @@ func isModifierSym(sym xkb.Keysym) bool {
 // focused widget's, which shadow the app-wide ones, then the app-wide
 // ones; a consumed key never reaches text routing or widget actions.
 func (t *accelTable) fire(router *widget.Router, sym xkb.Keysym, mods wlsession.Mods) bool {
-	if t == nil || len(t.bound) == 0 || isModifierSym(sym) {
+	if t == nil || len(t.bound) == 0 || widget.IsModifierKeysym(sym) {
 		return false
 	}
 	if len(t.pending) > 0 && accelNow().Sub(t.pendingAt) > chordTimeout {

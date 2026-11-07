@@ -69,7 +69,7 @@ func TestAllocBudgetKeyDelivery(t *testing.T) {
 	a := idleBudgetApp(t)
 	a.windows[0].cfg.onKey = func(*widget.Router, uint32, wlsession.Mods) {}
 	a.OnKey(func(*widget.Router, uint32, wlsession.Mods) {})
-	deliver := func() { a.deliverKey(30, 0) }
+	deliver := func() { a.deliverKey(a.sess, 30, 0) }
 	deliver()
 	const budget = 0
 	allocs := testing.AllocsPerRun(100, deliver)
