@@ -78,6 +78,9 @@
         # `just atspi-verify` runs the bridge against real at-spi2-core: its
         # bus launcher and registry daemon live in libexec, off PATH.
         ATSPI_LIBEXEC = "${pkgs.at-spi2-core}/libexec";
+        # The launcher keeps the accessibility switch in GSettings
+        # (org.gnome.desktop.interface), so atspitest hands it the schema.
+        ATSPI_GSETTINGS_SCHEMA_DIR = pkgs.glib.getSchemaPath pkgs.gsettings-desktop-schemas;
 
         # `just headless` points the suite's clients at a known xcursor theme:
         # the client-side cursor path (LYS_UI_NO_CURSOR_SHAPE) needs one, and a

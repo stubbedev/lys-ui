@@ -6,6 +6,7 @@
 package atspitest
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,6 +26,13 @@ import (
 // at-spi2-core's libexec directory, where at-spi-bus-launcher and
 // at-spi2-registryd live off PATH.
 const LibexecEnv = "ATSPI_LIBEXEC"
+
+// SchemaDirEnv names the environment variable that points at the
+// compiled GSettings schemas holding org.gnome.desktop.interface: the
+// bus launcher keeps the accessibility switch in its
+// toolkit-accessibility key, and without the schema IsEnabled reads
+// false whatever was set.
+const SchemaDirEnv = "ATSPI_GSETTINGS_SCHEMA_DIR"
 
 const waitBound = 5 * time.Second
 
@@ -49,13 +57,18 @@ func Start(t *testing.T) *Core {
 	if libexec == "" {
 		t.Skipf("%s unset; the dev shell points it at at-spi2-core's libexec", LibexecEnv)
 	}
+	schemas := os.Getenv(SchemaDirEnv)
+	if schemas == "" {
+		t.Fatalf("atspitest: %s is set but %s is not; the dev shell points it at gsettings-desktop-schemas", LibexecEnv, SchemaDirEnv)
+	}
 	bus := dbustest.Session(t)
 	runtime := t.TempDir()
 	// dbus-daemon, not dbus-broker: under a systemd user session the
 	// launcher prefers the broker, which only runs with systemd's
-	// socket activation and so dies on this private bus.
+	// socket activation and so dies on this private bus. The switch
+	// lives in memory, never in the desktop's own settings.
 	launcher := exec.Command(filepath.Join(libexec, "at-spi-bus-launcher"), "--launch-immediately")
-	launcher.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtime, "ATSPI_DBUS_IMPLEMENTATION=dbus-daemon")
+	launcher.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtime, "ATSPI_DBUS_IMPLEMENTATION=dbus-daemon", "GSETTINGS_BACKEND=memory", "GSETTINGS_SCHEMA_DIR="+schemas)
 	// The accessibility bus's dbus-daemon outlives a killed launcher:
 	// the launcher leads a process group, and the whole group goes.
 	launcher.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -66,8 +79,8 @@ func Start(t *testing.T) *Core {
 
 	sess := bus.Conn(t)
 	var address string
-	eventually(t, proto.BusName, func() bool {
-		return sess.Object(proto.BusName, proto.BusPath).Call(proto.BusName+".GetAddress", 0).Store(&address) == nil
+	eventually(t, proto.BusName, func() error {
+		return sess.Object(proto.BusName, proto.BusPath).Call(proto.BusName+".GetAddress", 0).Store(&address)
 	})
 	// The registry starts directly: on a host with a systemd user
 	// manager the accessibility bus would activate the desktop
@@ -86,9 +99,15 @@ func Start(t *testing.T) *Core {
 		t.Fatalf("atspitest: connect to the accessibility bus %s: %v", address, err)
 	}
 	t.Cleanup(func() { _ = at.Close() })
-	eventually(t, "the registry on the accessibility bus", func() bool {
+	eventually(t, "the registry on the accessibility bus", func() error {
 		var has bool
-		return at.BusObject().Call("org.freedesktop.DBus.NameHasOwner", 0, proto.RegistryName).Store(&has) == nil && has
+		if err := at.BusObject().Call("org.freedesktop.DBus.NameHasOwner", 0, proto.RegistryName).Store(&has); err != nil {
+			return err
+		}
+		if !has {
+			return errors.New(proto.RegistryName + " has no owner")
+		}
+		return nil
 	})
 	return &Core{Session: bus, AT: at}
 }
@@ -98,9 +117,16 @@ func Start(t *testing.T) *Core {
 // that follow the switch start serving.
 func (c *Core) Enable(t *testing.T) {
 	t.Helper()
-	conn := c.Session.Conn(t)
-	if err := conn.Object(proto.BusName, proto.BusPath).SetProperty(proto.IfaceStatus+".IsEnabled", dbus.MakeVariant(true)); err != nil {
+	status := c.Session.Conn(t).Object(proto.BusName, proto.BusPath)
+	if err := status.SetProperty(proto.IfaceStatus+".IsEnabled", dbus.MakeVariant(true)); err != nil {
 		t.Fatalf("atspitest: turn %s.IsEnabled on: %v", proto.IfaceStatus, err)
+	}
+	v, err := status.GetProperty(proto.IfaceStatus + ".IsEnabled")
+	if err != nil {
+		t.Fatalf("atspitest: read %s.IsEnabled back: %v", proto.IfaceStatus, err)
+	}
+	if on, _ := v.Value().(bool); !on {
+		t.Fatalf("atspitest: %s.IsEnabled reads %v after turning it on", proto.IfaceStatus, v)
 	}
 }
 
@@ -115,10 +141,15 @@ func (c *Core) Desktop() Accessible {
 func (c *Core) Application(t *testing.T, toolkit string) Accessible {
 	t.Helper()
 	var found []Accessible
-	var last error
-	eventually(t, "a "+toolkit+" application under the registry's desktop", func() bool {
-		found, last = c.applications(toolkit)
-		return last == nil && len(found) > 0
+	eventually(t, "a "+toolkit+" application under the registry's desktop", func() error {
+		var err error
+		if found, err = c.applications(toolkit); err != nil {
+			return err
+		}
+		if len(found) == 0 {
+			return errors.New("none listed yet")
+		}
+		return nil
 	})
 	if len(found) != 1 {
 		t.Fatalf("atspitest: %d %s applications under the desktop, want one", len(found), toolkit)
@@ -209,12 +240,16 @@ func (a Accessible) Names() ([]string, error) {
 	return out, walk(a)
 }
 
-func eventually(t *testing.T, what string, cond func() bool) {
+func eventually(t *testing.T, what string, cond func() error) {
 	t.Helper()
 	deadline := time.Now().Add(waitBound)
-	for !cond() {
+	for {
+		last := cond()
+		if last == nil {
+			return
+		}
 		if time.Now().After(deadline) {
-			t.Fatalf("atspitest: timed out waiting for %s", what)
+			t.Fatalf("atspitest: timed out waiting for %s: %v", what, last)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
