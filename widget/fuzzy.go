@@ -20,14 +20,14 @@ const (
 	fuzzyTieScale = 256
 )
 
-// fuzzyScore ranks how well query matches text, cmdk's way: every
+// FuzzyScore ranks how well query matches text, cmdk's way: every
 // query rune appears in text in order, case-insensitively; runs of
 // consecutive matches, matches at word starts and at the very start
 // score higher, unmatched runes inside the match cost, and of two
 // otherwise equal matches the shorter text wins. ok is false
 // when query is not a subsequence of text. An empty query matches with
 // score 0.
-func fuzzyScore(query, text string) (score int, ok bool) {
+func FuzzyScore(query, text string) (score int, ok bool) {
 	if query == "" {
 		return 0, true
 	}

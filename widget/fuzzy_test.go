@@ -17,8 +17,8 @@ func TestFuzzyScoreMatches(t *testing.T) {
 		{"émo", "Émoji", true},
 		{"xyz", "Calendar", false},
 	} {
-		if _, ok := fuzzyScore(tc.query, tc.text); ok != tc.ok {
-			t.Errorf("fuzzyScore(%q, %q) ok = %v, want %v", tc.query, tc.text, ok, tc.ok)
+		if _, ok := FuzzyScore(tc.query, tc.text); ok != tc.ok {
+			t.Errorf("FuzzyScore(%q, %q) ok = %v, want %v", tc.query, tc.text, ok, tc.ok)
 		}
 	}
 }
@@ -28,8 +28,8 @@ func TestFuzzyScoreRanks(t *testing.T) {
 	texts := []string{"Toggle sidebar", "Settings", "Search emoji", "Profile settings"}
 	ranked := slices.Clone(texts)
 	slices.SortStableFunc(ranked, func(a, b string) int {
-		sa, _ := fuzzyScore("se", a)
-		sb, _ := fuzzyScore("se", b)
+		sa, _ := FuzzyScore("se", a)
+		sb, _ := FuzzyScore("se", b)
 		return sb - sa
 	})
 	want := []string{"Settings", "Search emoji", "Profile settings", "Toggle sidebar"}

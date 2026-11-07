@@ -212,9 +212,9 @@ func (c *Command) SetQuery(q string) {
 // score is how well the query matches it: its label's or best
 // keyword's fuzzy score.
 func score(query string, it CommandItem) (int, bool) {
-	best, ok := fuzzyScore(query, it.Label)
+	best, ok := FuzzyScore(query, it.Label)
 	for _, k := range it.Keywords {
-		if s, kok := fuzzyScore(query, k); kok && (!ok || s > best) {
+		if s, kok := FuzzyScore(query, k); kok && (!ok || s > best) {
 			best, ok = s, true
 		}
 	}
