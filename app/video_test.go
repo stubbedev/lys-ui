@@ -334,11 +334,14 @@ func TestVideoPlaysOnAYUVSubsurface(t *testing.T) {
 	}
 
 	const steady = 120
-	before := c.counts()
-	var allocs uint64
+	var (
+		before videoCounts
+		allocs uint64
+	)
 	func() {
-		runtime.GC()
 		defer debug.SetGCPercent(debug.SetGCPercent(-1))
+		c.awaitVideoCommits(t, c.counts().videoCommits+10)
+		before = c.counts()
 		var m0, m1 runtime.MemStats
 		runtime.ReadMemStats(&m0)
 		c.awaitVideoCommits(t, before.videoCommits+steady)
