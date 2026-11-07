@@ -211,7 +211,7 @@ func TestRefusedImportIsLoggedAsARefusal(t *testing.T) {
 	for _, named := range []bool{false, true} {
 		var log bytes.Buffer
 		logutil.Set(slog.New(slog.NewTextHandler(&log, &slog.HandlerOptions{Level: slog.LevelInfo})))
-		r := &gpuRenderer{name: "llvmpipe", hasNode: named}
+		r := &gpuRenderer{name: "llvmpipe", plan: rendererPlan{hasNode: named}}
 		r.refuse(errors.New("refused"))
 		r.refuse(errors.New("refused again"))
 		logutil.Set(nil)

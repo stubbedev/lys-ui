@@ -93,7 +93,7 @@ func newScanoutHarness(t *testing.T, c *feedbackClient) *scanoutHarness {
 	w := h.wnd
 	w.renderer = &gpuRenderer{
 		name: "test", rec: render.NewRecorder(1, 1, 1, 1),
-		node: feedbackDevice, hasNode: true, modifiers: []fourcc.Modifier{fourcc.Linear, feedbackTiled},
+		plan: rendererPlan{node: feedbackDevice, hasNode: true}, modifiers: []fourcc.Modifier{fourcc.Linear, feedbackTiled},
 		render: func(*render.List, *gpu.Target, []gpu.Carry, bool) (gpuFrame, error) { return gpuFrame{}, nil },
 	}
 	w.newBuffer = func() (*buffer.Buffer, error) {

@@ -565,7 +565,7 @@ func (w *hostWindow) bufferModifiers() []fourcc.Modifier {
 		return nil
 	}
 	t, ok := w.feedback.Preferred(fourcc.ARGB8888)
-	if !ok || !t.Scanout() || (r.hasNode && t.Device != r.node) {
+	if !ok || !t.Scanout() || (r.plan.hasNode && t.Device != r.plan.node) {
 		return nil
 	}
 	var mods []fourcc.Modifier

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -51,6 +52,8 @@ type Application struct {
 	gpuErr      error
 	gpuOpening  sync.WaitGroup
 	gpuLanding  atomic.Pointer[gpuRenderer]
+	gpuOpen     func(rendererPlan) (*gpuRenderer, error)
+	gpuLosses   gpu.Losses
 	tooltipFace *render.Typeface
 	// tooltipOpts tunes tooltips (SetTooltipOptions).
 	tooltipOpts TooltipOptions

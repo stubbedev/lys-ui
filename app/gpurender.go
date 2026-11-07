@@ -52,23 +52,19 @@ type gpuRenderer struct {
 	// LYS_UI_RENDERER=gpu, where it fails the next buffer instead of
 	// sending the windows to the CPU.
 	refused error
-	// node is the compositor's main device the renderer was opened on;
-	// hasNode is false where the compositor named none.
-	node    uint64
-	hasNode bool
+	plan    rendererPlan
 	// render draws a frame on the device, a seam for tests: explicit for a
 	// consumer told when it is done through its sync_file, which never waits.
 	render func(l *render.List, t *gpu.Target, carry []gpu.Carry, explicit bool) (gpuFrame, error)
 	// timelines are the device's timeline syncobjs where the compositor takes
-	// explicit synchronization, nil where it does not; syncMgr is the
-	// session's manager the buffers' timelines import into.
+	// explicit synchronization, nil where it does not.
 	timelines syncTimelines
-	syncMgr   *wlr.WpDrmSyncobjManagerV1
 	// wake arms the loop to wake after a delay: the retry of a frame the
 	// device refused, which no commit will call back for.
 	wake func(time.Duration)
 	// invoke runs a worker's answer on the loop.
 	invoke func(func())
+	lost   func(*gpuRenderer, error)
 	// prepare is the device's PrepareTarget, a seam for tests.
 	prepare func(w, h int, mods []fourcc.Modifier) (*gpu.Target, error)
 	// workers are the target allocations running; closed marks the device
@@ -111,10 +107,26 @@ func (r *gpuRenderer) trimIdle() bool {
 	if !r.trimmed {
 		r.trimmed = true
 		if err := r.dev.Trim(); err != nil {
-			r.fail(fmt.Errorf("app: trim the GPU device: %w", err))
+			r.fault(fmt.Errorf("app: trim the GPU device: %w", err))
 		}
 	}
 	return false
+}
+
+func (r *gpuRenderer) fault(err error) {
+	if errors.Is(err, gpu.ErrDeviceLost) && !r.required {
+		r.lose(err)
+		return
+	}
+	r.fail(err)
+}
+
+func (r *gpuRenderer) lose(err error) {
+	if r.failed != nil {
+		return
+	}
+	r.failed = err
+	r.invoke(func() { r.lost(r, err) })
 }
 
 // fail records a frame error and reports the switch to the CPU, once.
@@ -141,11 +153,11 @@ func (r *gpuRenderer) refuse(err error) {
 	}
 	r.failed = err
 	level := slog.LevelWarn
-	if r.hasNode {
+	if r.plan.hasNode {
 		level = slog.LevelError
 	}
 	logutil.L().Log(context.Background(), level, "app: the compositor refused the GPU's buffers; every window draws on the CPU from now on",
-		"device", r.name, "named_by_compositor", r.hasNode, "err", err)
+		"device", r.name, "named_by_compositor", r.plan.hasNode, "err", err)
 }
 
 // renderer is the application's GPU renderer; nil draws on the CPU. Under
@@ -204,6 +216,7 @@ func (a *Application) rendererPlan() (rendererPlan, error) {
 }
 
 func (a *Application) startRenderer(plan rendererPlan, open func(rendererPlan) (*gpuRenderer, error)) {
+	a.gpuOpen = open
 	sess := a.sess
 	a.gpuOpening.Go(func() {
 		r, err := open(plan)
@@ -226,7 +239,7 @@ func (a *Application) adoptRenderer(sess *wlsession.Session) {
 	if sess != a.sess {
 		r.dev.Close()
 		if plan, err := a.rendererPlan(); err == nil {
-			a.startRenderer(plan, openRenderer)
+			a.startRenderer(plan, a.gpuOpen)
 		}
 		return
 	}
@@ -237,7 +250,7 @@ func (a *Application) adoptRenderer(sess *wlsession.Session) {
 }
 
 func (a *Application) installRenderer(r *gpuRenderer) {
-	r.wake, r.invoke = func(d time.Duration) { a.wake(d) }, a.Invoke
+	r.wake, r.invoke, r.lost = func(d time.Duration) { a.wake(d) }, a.Invoke, a.loseRenderer
 	if t, ok := r.timelines.(*drmTimelines); ok {
 		t.setInvoke(a.Invoke)
 	}
@@ -261,12 +274,8 @@ func openRenderer(plan rendererPlan) (*gpuRenderer, error) {
 		dev.Close()
 		return nil, err
 	}
-	r := &gpuRenderer{
-		dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1),
-		node: plan.node, hasNode: plan.hasNode,
-	}
+	r := &gpuRenderer{dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1), plan: plan}
 	r.render, r.prepare = r.deviceFrame, r.deviceTarget
-	r.syncMgr = plan.syncobj
 	if plan.syncobj != nil {
 		r.timelines = explicitTimelines(dev)
 	}
@@ -314,11 +323,11 @@ func (a *Application) reagreeRenderer() error {
 	if err == nil {
 		mods, err = agreeModifiers(r.dev, plan.imports)
 	}
-	if err == nil && (plan.hasNode != r.hasNode || plan.node != r.node) {
+	if err == nil && (plan.hasNode != r.plan.hasNode || plan.node != r.plan.node) {
 		err = fmt.Errorf("the new compositor imports from device %d:%d, not the renderer's", unix.Major(plan.node), unix.Minor(plan.node))
 	}
 	if err == nil {
-		r.modifiers, r.syncMgr = mods, plan.syncobj
+		r.modifiers, r.plan = mods, plan
 		return nil
 	}
 	if r.required {
@@ -340,7 +349,7 @@ func (r *gpuRenderer) newBufferIn(sess *wlsession.Session, bufW, bufH, scale int
 		return nil, fmt.Errorf("app: %s=gpu: %w", rendererEnv, r.refused)
 	}
 	b, err := buffer.NewDmabuf(r.allocateIn(mods), sess.Dmabuf(), bufW, bufH, scale, rejected)
-	if err != nil || r.timelines == nil || r.syncMgr == nil {
+	if err != nil || r.timelines == nil || r.plan.syncobj == nil {
 		return b, err
 	}
 	if b.Timeline, err = r.newTimeline(); err != nil {
@@ -355,7 +364,7 @@ func (r *gpuRenderer) newTimeline() (*buffer.Timeline, error) {
 	if err != nil {
 		return nil, fmt.Errorf("app: a buffer's timeline: %w", err)
 	}
-	wlt, err := r.syncMgr.ImportTimeline(uintptr(fd))
+	wlt, err := r.plan.syncobj.ImportTimeline(uintptr(fd))
 	if cerr := unix.Close(fd); err == nil && cerr != nil {
 		err = cerr
 	}
@@ -415,8 +424,9 @@ const gpuBusyRetry = 4 * time.Millisecond
 // done nothing, and the loop wakes to retry it: no commit went out, so
 // no frame callback will. A frame drawn without an image still on its way
 // to the device is incomplete: it goes out, and what it painted stays owed.
-// A failed frame turns every surface to the CPU (fail); with the GPU
-// required it is the error.
+// A failed frame turns every surface to the CPU (fault), until a new
+// device opens where the old one was lost; with the GPU required it is
+// the error.
 func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, carry []gpu.Carry, paint func(cv *render.Canvas)) (buffer.FrameOutcome, error) {
 	r.drawn, r.trimmed = true, false
 	cv := r.rec.ResetRecorder(b.Width, b.Height, num, scale.Denom)
@@ -443,7 +453,7 @@ func (r *gpuRenderer) Frame(b *buffer.Buffer, num int, carry []gpu.Carry, paint 
 	case r.required:
 		return buffer.FrameLost, fmt.Errorf("app: GPU frame: %w", err)
 	}
-	r.fail(err)
+	r.fault(err)
 	return buffer.FrameLost, nil
 }
 
@@ -476,20 +486,47 @@ func (a *Application) ForgetImage(id render.ImageID) {
 	}
 }
 
+func (a *Application) loseRenderer(r *gpuRenderer, err error) {
+	if a.gpu != r {
+		return
+	}
+	for _, w := range a.windows {
+		if w.renderer == r {
+			w.renderer = nil
+			w.reallocate()
+		}
+	}
+	a.releaseRenderer()
+	if !a.gpuLosses.Record(time.Now(), err) {
+		logutil.L().Error("app: the GPU device was lost too often; every window draws on the CPU from now on",
+			"device", r.name, "losses", a.gpuLosses.Count(), "window", gpu.LossWindow, "err", a.gpuLosses.Err())
+		return
+	}
+	logutil.L().Warn("app: the GPU device was lost; drawing on the CPU until a new one opens",
+		"device", r.name, "losses", a.gpuLosses.Count(), "err", err)
+	a.startRenderer(r.plan, a.gpuOpen)
+}
+
 // closeRenderer releases the GPU once every window has gone.
 func (a *Application) closeRenderer() {
 	a.gpuOpening.Wait()
 	if r := a.gpuLanding.Swap(nil); r != nil {
 		r.dev.Close()
 	}
-	if a.gpu != nil {
-		imgcache.Default().SetForget(nil)
-		a.gpu.closed = true
-		a.gpu.dev.Close()
-		a.gpu.workers.Wait()
-		if a.gpu.timelines != nil {
-			a.gpu.timelines.close()
-		}
-		a.gpu = nil
+	a.releaseRenderer()
+}
+
+func (a *Application) releaseRenderer() {
+	r := a.gpu
+	if r == nil {
+		return
 	}
+	imgcache.Default().SetForget(nil)
+	r.closed = true
+	r.dev.Close()
+	r.workers.Wait()
+	if r.timelines != nil {
+		r.timelines.close()
+	}
+	a.gpu = nil
 }
