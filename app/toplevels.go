@@ -3,6 +3,7 @@ package app
 import (
 	"slices"
 
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/wlsession"
@@ -87,5 +88,5 @@ func (t Toplevel) SetRectangle(host Host, r render.Rect) {
 	if r.Empty() {
 		r = render.Rect{}
 	}
-	t.t.SetRectangle(host.HostSurface(), int32(r.X), int32(r.Y), int32(r.W), int32(r.H))
+	t.t.SetRectangle(host.HostSurface(), intconv.Clamp[int32](r.X), intconv.Clamp[int32](r.Y), intconv.Clamp[int32](r.W), intconv.Clamp[int32](r.H))
 }

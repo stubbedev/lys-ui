@@ -1,7 +1,7 @@
 package app_test
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -27,7 +27,7 @@ func TestHeadlessToplevelsListAnotherClientsWindow(t *testing.T) {
 	inproc.Show(t, func(application *app.Application, out *app.Output) error {
 		a, output = application, out.Name
 		if !a.ToplevelsAvailable() {
-			return fmt.Errorf("the compositor offers no foreign-toplevel manager")
+			return errors.New("the compositor offers no foreign-toplevel manager")
 		}
 		a.OnToplevelsChanged(func() {
 			select {
@@ -61,12 +61,12 @@ func TestHeadlessToplevelsListAnotherClientsWindow(t *testing.T) {
 	wltest.Eventually(t, "the other client's window listed on its output", func() error {
 		tl, ok := find()
 		if !ok {
-			return fmt.Errorf("not listed")
+			return errors.New("not listed")
 		}
 		onOutput := make(chan bool, 1)
 		a.Invoke(func() { onOutput <- tl.Title() == "listed" && tl.OnOutput(output) && !tl.OnOutput("nowhere") })
 		if !<-onOutput {
-			return fmt.Errorf("listed without its title or output")
+			return errors.New("listed without its title or output")
 		}
 		return nil
 	})
@@ -78,7 +78,7 @@ func TestHeadlessToplevelsListAnotherClientsWindow(t *testing.T) {
 	b.Invoke(window.Close)
 	wltest.Eventually(t, "the closed window off the list", func() error {
 		if _, ok := find(); ok {
-			return fmt.Errorf("still listed")
+			return errors.New("still listed")
 		}
 		return nil
 	})
