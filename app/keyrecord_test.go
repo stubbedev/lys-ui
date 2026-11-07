@@ -111,3 +111,43 @@ func TestARecordingWidgetHearsModifierReleases(t *testing.T) {
 		t.Error("a release at rest restarted recording")
 	}
 }
+
+type countedInhibitor struct{ destroyed *int }
+
+func (c countedInhibitor) Destroy() { *c.destroyed++ }
+
+func TestTheCompositorsShortcutsAreInhibitedExactlyWhileRecording(t *testing.T) {
+	f := newRecordFixture(t)
+	created, destroyed := 0, 0
+	f.app.inhibitShortcuts = func(*hostWindow) (inhibitor, error) {
+		created++
+		return countedInhibitor{&destroyed}, nil
+	}
+	tick := func() {
+		if err := f.app.tick(f.app.step, budgetNow); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tick()
+	if created != 0 {
+		t.Fatalf("a resting recorder inhibited the compositor's shortcuts %d times", created)
+	}
+	f.rec.StartRecording()
+	tick()
+	tick()
+	if created != 1 || destroyed != 0 {
+		t.Fatalf("while recording: %d inhibitors made, %d destroyed; want 1 and 0", created, destroyed)
+	}
+	f.press(recordCodeAlt, 0)
+	f.press(recordCodeP, wlsession.ModAlt)
+	tick()
+	if f.rec.Recording() || created != 1 || destroyed != 1 {
+		t.Fatalf("after the commit: recording %v, %d made, %d destroyed; want false, 1, 1", f.rec.Recording(), created, destroyed)
+	}
+	f.rec.StartRecording()
+	tick()
+	f.app.windows[0].release()
+	if created != 2 || destroyed != 2 {
+		t.Fatalf("a window closed while recording: %d made, %d destroyed; want 2 and 2", created, destroyed)
+	}
+}

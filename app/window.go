@@ -134,10 +134,11 @@ type hostWindow struct {
 	scaleListeners []*func(num, denom int)
 	// dnd is the application's drag-and-drop controller; its Bind
 	// lifetime matches the window's.
-	dnd    *dragdrop.Controller
-	router *widget.Router
-	input  *surfaceInput
-	tip    *tooltipCtl
+	dnd                *dragdrop.Controller
+	router             *widget.Router
+	shortcutsInhibitor inhibitor
+	input              *surfaceInput
+	tip                *tooltipCtl
 	// keyChain is the window's OnKey hook pre-chained with the
 	// application-wide one, so a key press allocates nothing.
 	keyChain           func(r *widget.Router, keycode uint32, mods wlsession.Mods)
@@ -396,6 +397,10 @@ func (w *hostWindow) release() {
 	}
 	if w.router != nil {
 		widget.Detach(w.router.Root)
+	}
+	if w.shortcutsInhibitor != nil {
+		w.shortcutsInhibitor.Destroy()
+		w.shortcutsInhibitor = nil
 	}
 	if w.sess != nil {
 		w.sess.SetSurfaceInput(w.host.HostSurface(), nil)

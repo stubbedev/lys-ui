@@ -67,9 +67,10 @@ type Application struct {
 	// app/disconnect.go. disconnectOnce makes it fire exactly once, and
 	// step is the dispatch seam (sess.Step in production) tests drive
 	// without a compositor.
-	onDisconnect   func(DisconnectedEvent)
-	disconnectOnce atomic.Bool
-	step           func() error
+	onDisconnect     func(DisconnectedEvent)
+	disconnectOnce   atomic.Bool
+	step             func() error
+	inhibitShortcuts func(*hostWindow) (inhibitor, error)
 	// accels is the accelerator table: named actions plus keysym+mods
 	// bindings, consulted by routeKey before text routing.
 	accels     *accelTable
@@ -238,6 +239,7 @@ func NewApplication(sess *wlsession.Session, opts ...Option) *Application {
 		launchState:  launcher{openPortal: portalOpen, openExternal: xdgOpen},
 		videoMemory:  newUdmabufMemory,
 	}
+	a.inhibitShortcuts = a.sessionInhibitShortcuts
 	a.dnd = dragdrop.New(sess, a.Invoke)
 	a.OnStop(func() { a.dnd.Stop() })
 	// Async image loads (widget.Image file/URL sources) deliver through
@@ -1019,6 +1021,7 @@ func (a *Application) tick(step func() error, now time.Time) error {
 	if a.done() {
 		return ErrClosed
 	}
+	a.syncShortcutsInhibit()
 
 	for _, w := range a.windows {
 		w.takeFrame()
