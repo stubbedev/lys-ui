@@ -168,3 +168,25 @@ func TestScrollCSSBox(t *testing.T) {
 		t.Errorf("an unstyled scroll painted %v at its corner", px(1, 1))
 	}
 }
+
+type embeddingScroll struct{ *Scroll }
+
+func TestRevealRectScrollsAViewportEmbeddedInAnotherType(t *testing.T) {
+	box := NewBox(Column, 0, 0)
+	box.Append(&solidLeaf{sz: Size{W: 50, H: 300}}, false)
+	leaf := &solidLeaf{sz: Size{W: 50, H: 20}}
+	box.Append(leaf, false)
+	page := &embeddingScroll{NewScroll(box)}
+	page.VerticalOnly = true
+	root := NewBox(Column, 0, 0)
+	root.Append(page, true)
+	layoutRoot(root, 100, 100)
+	if _, ok := parentOf(box).(*embeddingScroll); !ok {
+		t.Fatalf("the content's parent is %T, want the embedding type", parentOf(box))
+	}
+	RevealRect(leaf, leaf.bounds)
+	layoutRoot(root, 100, 100)
+	if _, y := page.Offset(); y != 220 {
+		t.Fatalf("offset %d, want 220 (the leaf at the view's bottom)", y)
+	}
+}

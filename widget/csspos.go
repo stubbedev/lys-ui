@@ -104,7 +104,7 @@ func relativeRect(w Widget, v *style.Values, r render.Rect) render.Rect {
 func stickyRect(w Widget, v *style.Values, r render.Rect) render.Rect {
 	var port render.Rect
 	for p := parentOf(w); p != nil; p = parentOf(p) {
-		if s, ok := p.(*Scroll); ok {
+		if s, ok := asScroll(p); ok {
 			port = render.Rect{X: s.view.X, Y: s.view.Y, W: s.viewW, H: s.viewH}
 			break
 		}

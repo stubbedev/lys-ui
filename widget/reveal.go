@@ -17,7 +17,7 @@ func RevealRect(w Widget, r render.Rect) { reveal(w, expandScrollMargin(w, r), t
 // nearest alone.
 func reveal(w Widget, r render.Rect, all bool) {
 	for p := parentOf(w); p != nil; p = parentOf(p) {
-		s, ok := p.(*Scroll)
+		s, ok := asScroll(p)
 		if !ok {
 			continue
 		}
@@ -62,4 +62,13 @@ func boundsOf(w Widget) render.Rect {
 		return b.Bounds()
 	}
 	return render.Rect{}
+}
+
+func (s *Scroll) scrollNode() *Scroll { return s }
+
+func asScroll(w Widget) (*Scroll, bool) {
+	if s, ok := w.(interface{ scrollNode() *Scroll }); ok {
+		return s.scrollNode(), true
+	}
+	return nil, false
 }

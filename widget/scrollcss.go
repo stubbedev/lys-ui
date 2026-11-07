@@ -320,7 +320,7 @@ func (s *Scroll) overscroll(axis int, lost int) {
 // scrollAbove returns the nearest Scroll above s, nil at the root.
 func scrollAbove(s *Scroll) *Scroll {
 	for p := parentOf(s); p != nil; p = parentOf(p) {
-		if sc, ok := p.(*Scroll); ok {
+		if sc, ok := asScroll(p); ok {
 			return sc
 		}
 	}
