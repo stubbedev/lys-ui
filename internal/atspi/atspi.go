@@ -213,6 +213,9 @@ type Bridge struct {
 	// sampledGen is the generation the last pass saw, and
 	// sampleQueued says a pass waits in the scene's Invoke queue, so a
 	// stalled loop accumulates one at most. builds counts the passes.
+	// taken is the announcements a pass drained, reused across passes.
+	taken []widget.Announcement
+
 	sampledGen   atomic.Uint64
 	sampleQueued atomic.Bool
 	builds       atomic.Uint64
@@ -239,6 +242,9 @@ type tree struct {
 	nodes map[int32]*anode
 	focus int32
 	free  []*anode
+	// announce are the announcements this pass speaks, on the objects
+	// they come from.
+	announce []event
 }
 
 // anode is one accessible object: the stable id (its object path),
@@ -326,6 +332,9 @@ func Serve(scene Scene, opts Options) (*Bridge, error) {
 	go b.emitter()
 
 	// The first sample queues through Invoke — before Run it drains
+	// Announcements are heard from now on; the toggle runs on the loop,
+	// which owns the queue.
+	scene.Invoke(func() { widget.SetAnnouncementsHeard(true) })
 	// once the loop starts, which is fine: the registry probes the
 	// root asynchronously after the Embed below, and ATs enumerate
 	// after that.
@@ -401,6 +410,7 @@ func (b *Bridge) check() {
 // call twice; Serve's error path never returns a bridge.
 func (b *Bridge) Stop() {
 	b.closed.Do(func() {
+		b.scene.Invoke(func() { widget.SetAnnouncementsHeard(false) })
 		close(b.stop)
 		t := time.NewTimer(stopTimeout)
 		defer t.Stop()
@@ -455,6 +465,7 @@ func (b *Bridge) sample() {
 		return
 	}
 	nt := b.build()
+	b.announcements(nt)
 	b.builds.Add(1)
 	b.sampledGen.Store(gen)
 	b.handoff.Lock()
@@ -519,6 +530,9 @@ func (b *Bridge) apply(nt *tree) {
 	for _, ev := range diff(old, nt, b.name) {
 		b.send(ev)
 	}
+	for _, ev := range nt.announce {
+		b.send(ev)
+	}
 	for _, id := range gone {
 		b.unexportNode(id)
 	}
@@ -526,6 +540,8 @@ func (b *Bridge) apply(nt *tree) {
 }
 
 func (b *Bridge) retire(old *tree) {
+	clear(old.announce)
+	old.announce = old.announce[:0]
 	for _, n := range old.nodes {
 		kids := n.children
 		clear(kids)
@@ -837,4 +853,28 @@ func (b *Bridge) send(ev event) {
 	if err := b.emit(ev); err != nil {
 		debug.Log("a11y", "emit %s: %v", ev.name, err)
 	}
+}
+
+// announcements turns what the widgets announced since the last pass
+// into Announcement events on their objects (at-spi2-core 2.46's
+// object:announcement, the politeness as detail1, the text as any_data):
+// one each, after the pass's state changes. An announcement from a
+// widget no window shows is not spoken.
+func (b *Bridge) announcements(nt *tree) {
+	b.taken = widget.TakeAnnouncements(b.taken[:0])
+	for _, a := range b.taken {
+		id, ok := b.ids[a.Widget]
+		if !ok {
+			continue
+		}
+		n, ok := nt.nodes[id]
+		if !ok {
+			continue
+		}
+		nt.announce = append(nt.announce, event{
+			path: pathOf(n), name: eventObject("Announcement"),
+			args: []any{"", int32(a.Politeness), int32(0), dbus.MakeVariant(a.Text), map[string]dbus.Variant{}},
+		})
+	}
+	clear(b.taken)
 }

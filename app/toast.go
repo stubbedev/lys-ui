@@ -89,6 +89,7 @@ func (a *Application) ShowToast(text string, timeout time.Duration, cfg *ToastCo
 		margin: orDefault(max(cfg.Margin, 0), toastMargin),
 		max:    orDefault(max(cfg.MaxStack, 0), toastMaxStack),
 	})
+	widget.Announce(t, t.Text(), widget.LiveRegion(t))
 	return t, nil
 }
 

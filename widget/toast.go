@@ -79,9 +79,12 @@ type Toast struct {
 // auto-dismisses the card once it is on screen; zero or negative
 // keeps it until Dismiss. Face may be a render.Chain for mixed-script
 // fallback. A nil face panics here (see requireFace) instead of
-// failing later, in shaping.
+// failing later, in shaping. A toast is a polite live region: shown, and
+// each time its text changes while shown, assistive technology speaks it.
 func NewToast(face render.Font, text string, timeout time.Duration) *Toast {
-	return &Toast{face: requireFace("widget.NewToast", face), text: text, sizePx: Current().TextSize, timeout: timeout}
+	t := &Toast{face: requireFace("widget.NewToast", face), text: text, sizePx: Current().TextSize, timeout: timeout}
+	SetLiveRegion(t, Polite)
+	return t
 }
 
 // Text returns the card's text.
@@ -94,6 +97,9 @@ func (t *Toast) SetText(text string) {
 	}
 	t.text = text
 	t.InvalidateLayout()
+	if !t.dismissed {
+		liveTextChanged(t, text)
+	}
 }
 
 // Description returns the line under the text, empty when there is

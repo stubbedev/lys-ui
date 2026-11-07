@@ -173,6 +173,39 @@ func TestRealAtSpi2Core(t *testing.T) {
 	if err != nil || !ok || caret != 3 {
 		t.Errorf("SetCaretOffset: ok %v err %v caret %d", ok, err, caret)
 	}
+
+	// An announcement reaches the assistive technology as one
+	// object:announcement on the entry, its politeness and text with it.
+	if err := at.AddMatchSignal(dbus.WithMatchInterface("org.a11y.atspi.Event.Object"), dbus.WithMatchMember("Announcement")); err != nil {
+		t.Fatal(err)
+	}
+	signals := make(chan *dbus.Signal, 16)
+	at.Signal(signals)
+	scene.Invoke(func() { widget.Announce(entry, "hello world", widget.Polite) })
+	br.Refresh()
+	var heard []*dbus.Signal
+	timeout := time.After(3 * time.Second)
+	for len(heard) == 0 {
+		select {
+		case s := <-signals:
+			if s.Name == "org.a11y.atspi.Event.Object.Announcement" {
+				heard = append(heard, s)
+			}
+		case <-timeout:
+			t.Fatal("no Announcement reached the assistive technology")
+		}
+	}
+	s := heard[0]
+	if s.Path != entryPath || len(s.Body) != 5 || s.Body[1] != int32(widget.Polite) || s.Body[3].(dbus.Variant).Value() != "hello world" {
+		t.Errorf("announcement %s %v, want the text, polite, on the entry %s", s.Path, s.Body, entryPath)
+	}
+	select {
+	case s := <-signals:
+		if s.Name == "org.a11y.atspi.Event.Object.Announcement" {
+			t.Errorf("a second announcement %v", s.Body)
+		}
+	case <-time.After(200 * time.Millisecond):
+	}
 }
 
 // eventually polls cond for up to five seconds.

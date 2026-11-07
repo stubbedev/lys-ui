@@ -179,6 +179,8 @@ type node struct {
 	styleRoot bool
 	// accName is the accessible name SetAccessibleName set.
 	accName string
+	// live is the node's politeness as a live region, zero for none.
+	live Politeness
 	// noFocusOnClick keeps a press on the widget from moving the focus
 	// (SetFocusOnClick).
 	noFocusOnClick bool

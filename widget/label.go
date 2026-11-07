@@ -104,6 +104,7 @@ func (l *Label) SetText(text string) {
 	l.text = text
 	l.retext()
 	l.InvalidateLayout()
+	liveTextChanged(l, text)
 }
 
 // Text returns the current label text.
