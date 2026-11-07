@@ -52,6 +52,10 @@ func NewToggleGroup(items ...Widget) *ToggleGroup {
 // never announces: OnChanged reports user and SetActive changes only.
 func (g *ToggleGroup) Append(content Widget) {
 	i := len(g.buttons)
+	if n := nodeOf(content); n != nil {
+		n.SetHAlign(AlignCenter)
+		n.SetVAlign(AlignCenter)
+	}
 	t := NewToggleButton(content, 6, 999)
 	t.joinGroup(&g.group)
 	t.OnToggled = func(on bool) {

@@ -54,6 +54,28 @@ func TestToggleGroup(t *testing.T) {
 	}
 }
 
+// A segment centres its content however wide or tall the segment is laid
+// out, at every text size: labels sat at the start of a widened segment.
+func TestAToggleGroupCentresEachSegmentsContent(t *testing.T) {
+	face := adaptiveFace(t)
+	th := DarkTheme()
+	for _, px := range []float64{14, 17.5, 28} {
+		labels := []*Label{NewLabel(face, px, "Top", th.Text), NewLabel(face, px, "Background", th.Text), NewLabel(face, px, "Left", th.Text)}
+		g := NewToggleGroup(labels[0], labels[1], labels[2])
+		for i, b := range g.buttons {
+			w, h := b.Measure(Row, Unknown).Nat, b.Measure(Column, Unknown).Nat
+			b.Arrange(render.Rect{X: 10, Y: 5, W: w + 41, H: h + 13})
+			bb, lb := b.Bounds(), labels[i].Bounds()
+			if nat := labels[i].Measure(Row, Unknown).Nat; lb.W != nat {
+				t.Errorf("%vpx segment %d: the label is laid out %dpx wide, its text %dpx, so the text sits at its start", px, i, lb.W, nat)
+			}
+			if dx, dy := (2*lb.X+lb.W)-(2*bb.X+bb.W), (2*lb.Y+lb.H)-(2*bb.Y+bb.H); dx < -1 || dx > 1 || dy < -1 || dy > 1 {
+				t.Errorf("%vpx segment %d: label %v is off the centre of %v", px, i, lb, bb)
+			}
+		}
+	}
+}
+
 // TestButtonContent pins the halves: empty icon or label drops it.
 func TestButtonContent(t *testing.T) {
 	face := adaptiveFace(t)
