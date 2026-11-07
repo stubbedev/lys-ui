@@ -246,18 +246,19 @@ in
         " && chown -R ${lysUIUser}:users /tmp/build"
       )
 
-      # -run pattern, kept as a knob while the gate settles on Hyprland;
-      # the quotes are literal: the command runs through sh
-      suite_run = "'.'"
+      # Hyprland boots once, so the test that kills it runs on its own
+      # after the rest of the suite (kill_test.go refuses otherwise).
+      kill_test = "TestHeadlessCompositorKillExitsCleanly"
 
       try:
-          machine.succeed(
-            "su - ${lysUIUser} -c 'cd /tmp/build && "
-            + suite_env
-            + "go test ./internal/headlesstest -count=1 -run "
-            + suite_run
-            + " >/tmp/lysuitest/suite.log 2>&1'"
-          )
+          for selection in ["-skip " + kill_test, "-run " + kill_test]:
+              machine.succeed(
+                "su - ${lysUIUser} -c 'cd /tmp/build && "
+                + suite_env
+                + "go test ./internal/headlesstest -count=1 "
+                + selection
+                + " >>/tmp/lysuitest/suite.log 2>&1'"
+              )
       except Exception:
           # The whole suite log: each failing test carries its client's
           # log tail, the evidence a 120-line suite tail cuts off.

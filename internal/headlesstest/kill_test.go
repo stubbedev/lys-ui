@@ -6,14 +6,17 @@
 // with the distinct DisconnectExitCode a supervisor respawns on. No
 // panic, no zombie.
 //
-// This file sorts after integration_test.go on purpose: killing the
-// compositor ends the shared session, so the kill must be the suite's
-// last act. The env recipe's trap-based teardown still runs afterwards
-// and is happy to tear down an already-dead compositor.
+// Killing the compositor ends the shared session. Where the driver can
+// boot it again (sway) the test restarts it on cleanup, so it may run
+// anywhere in the suite. Where it cannot (Hyprland, booted once by the
+// VM) the kill must be the last act, and file order cannot promise that:
+// the test then runs only when it is the one test selected, which
+// tests/hyprland-vm.nix does after the rest of the suite.
 package headlesstest
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,6 +28,9 @@ import (
 
 	"github.com/stubbedev/lys-ui/app"
 )
+
+// killAloneRun is the -run pattern that selects the kill test alone.
+const killAloneRun = "TestHeadlessCompositorKillExitsCleanly"
 
 // killTimeout bounds how long the client may take to notice the dead
 // socket and unwind after the compositor is SIGKILLed. The read fails
@@ -142,6 +148,9 @@ func mainGoroutineStack(logPath string) string {
 // end to end: real compositor, real client, real death.
 func TestHeadlessCompositorKillExitsCleanly(t *testing.T) {
 	requireEnv(t)
+	if !testEnv.CanRestartCompositor() && flag.Lookup("test.run").Value.String() != killAloneRun {
+		t.Fatalf("the %s driver cannot boot the compositor again, so the kill must run on its own after the suite: -run %s (and -skip it in the suite run)", testEnv.compositor.Name(), killAloneRun)
+	}
 	c, w, _ := startShowcase(t)
 
 	// The client must be alive right up to the kill; an early exit

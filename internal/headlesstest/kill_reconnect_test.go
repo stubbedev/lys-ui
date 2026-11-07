@@ -2,9 +2,8 @@
 // client that opted into reconnecting, boot it again on the same
 // socket, and assert the client lived through it - the policy traced
 // once with a rebuild planned, the window rebuilt on the new session,
-// and keyboard input reaching it there. It runs before kill_test.go's
-// clean-exit test (the file sorts first) and leaves the restarted
-// compositor serving for it.
+// and keyboard input reaching it there. It leaves the restarted
+// compositor serving the rest of the suite.
 package headlesstest
 
 import (
@@ -17,7 +16,7 @@ import (
 func TestHeadlessReconnectRebuildsWindows(t *testing.T) {
 	requireEnv(t)
 	if !testEnv.CanRestartCompositor() {
-		t.Skip("the compositor driver cannot restart; the kill test after this one needs it alive")
+		t.Skip("the compositor driver cannot boot the compositor again, which a reconnect needs")
 	}
 	bin, err := BuildClient(testEnv.Dir, "./cmd/lys-ui-states", "lys-ui-states")
 	if err != nil {

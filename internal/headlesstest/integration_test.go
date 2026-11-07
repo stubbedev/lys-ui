@@ -101,7 +101,7 @@ func startShowcaseEnv(t *testing.T, env ...string) (*Client, *LogWatcher, map[st
 	}
 	if _, err := w.Wait("demo", fmt.Sprintf("mapped %dx%d", showcaseW, showcaseH), traceTimeout); err != nil {
 		t.Fatalf("showcase never mapped at the pinned %dx%d: %v\ncompositor log tail:\n\t%s",
-			showcaseW, showcaseH, err, strings.ReplaceAll(tailFile(testEnv.Dir+"/sway.log", 15), "\n", "\n\t"))
+			showcaseW, showcaseH, err, strings.ReplaceAll(tailFile(testEnv.LogPath(), 15), "\n", "\n\t"))
 	}
 	centers := make(map[string][2]int)
 	for range showcaseControls {
