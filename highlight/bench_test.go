@@ -3,6 +3,8 @@ package highlight
 import (
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 // benchSource is forty lines of C-family code, the most a launcher
@@ -53,6 +55,7 @@ func BenchmarkGo40Lines(b *testing.B) {
 // Highlighting a preview's forty lines allocates about one span list per
 // line, whatever the language.
 func TestHighlightingFortyLinesAllocatesPerLine(t *testing.T) {
+	testbuild.SkipAllocBudget(t)
 	lines := benchLines()
 	allocs := testing.AllocsPerRun(20, func() {
 		state := 0
