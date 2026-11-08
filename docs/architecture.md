@@ -1,8 +1,6 @@
-# lys-ui architecture
+# Architecture
 
-How lys-ui is put together, and the rules that keep it correct: the
-layering first, then the invariants each layer must hold. Each rule
-cites the code and the tests that pin it.
+The layers, and the invariants each one holds.
 
 ## Layers
 
@@ -18,7 +16,7 @@ cites the code and the tests that pin it.
       |
       v
     app                         Application / Run: the parked loop,
-      |  per-window state       hostWindow (pool, damage, pacing),
+      |  per-window state       per-window pool, damage and pacing,
       |                         router wiring, dialogs, popovers,
       v                         tooltips, IME, drag and drop
     widget.Router               hover, grab, click, drag, focus,
@@ -29,401 +27,248 @@ cites the code and the tests that pin it.
       v
     render                      Canvas (premultiplied ARGB), shaped
       |                         text, icons; the only device-scale
-      |                         boundary in the stack; a recording
-      v                         Canvas captures a frame as a List
+      |                         boundary; a recording Canvas captures
+      v                         a frame as a List
     gpu                         plays a List with Vulkan into dmabufs
                                 the compositor imports
 
-A window draws on the GPU when it can: `LYS_UI_RENDERER` unset or
-`auto` opens one Vulkan device per application and, where the
-compositor imports a dmabuf layout the device renders (ARGB8888 in a
-shared modifier), records each frame and renders it into a dmabuf
-buffer. The CPU canvas draws otherwise, into shared memory.
-`LYS_UI_RENDERER=cpu` always draws on the CPU, and `=gpu` makes a GPU
-that cannot draw an error from `Run`. Both paths paint the same pixels:
-the GPU runs the canvas's own arithmetic step for step (integer math,
-and float32 in one fixed order where the canvas evaluates a distance
-field, a gradient or a sample), and every widget golden is checked on
-both, byte for byte (`just gpu`), under the Vulkan validation layer,
-whose every error fails the test. The Vulkan loader is found through
-the library path, which the nix packages set. A GPU frame that fails
-at run time (a device lost) is logged and turns every window to the
-CPU, except under `LYS_UI_RENDERER=gpu`, where it is fatal; a reconnect
-agrees the renderer with the new compositor again.
+Each layer talks only to its neighbours. Widgets never touch the wire,
+the session knows nothing about widgets, and everything above the
+session uses logical pixels.
 
-An image the GPU should upload once and keep is a `render.StillImage`:
-an `*image.RGBA` its owner never changes. Icons, the image widget's
-decoded sources and cached rasters are still. A `render.VersionedImage`
-uploads when its version moves, as a video frame does. Any other image
-draws from its pixels at each draw, so changing one in place between
-frames always shows. An app
-that draws an image it never changes wraps it to save the uploads.
+## Renderer
 
-Each layer talks only to its neighbors: widgets never touch the wire,
-the session never knows widgets exist, and everything above the session
-speaks logical pixels. Demos in cmd/ compose these pieces; they contain
-no loop plumbing of their own.
+`LYS_UI_RENDERER` picks the renderer:
 
-## The rules
+| Value | Behaviour |
+| --- | --- |
+| unset, `auto` | One Vulkan device per application, opened on a worker. A window draws on the GPU once the device is ready and the compositor imports an ARGB8888 dmabuf layout it renders; otherwise on the CPU into shared memory. |
+| `cpu` | Always the CPU. |
+| `gpu` | The GPU or an error from `Run`. A failed GPU frame is fatal. |
+
+Any other value is an error. Under `auto`, a failed GPU frame (such as
+a lost device) or a refused dmabuf import is logged and moves every
+window to the CPU. A reconnect chooses the renderer again.
+
+Both paths produce identical pixels. The GPU runs the canvas's
+arithmetic step for step, and `just gpu` checks every widget golden on
+both, byte for byte, under the Vulkan validation layer. The Vulkan
+loader is found through the library path.
+
+Image upload on the GPU:
+
+| Image | Uploaded |
+| --- | --- |
+| `render.StillImage` (an `*image.RGBA` never changed) | once; icons, decoded images and cached rasters use it |
+| `render.VersionedImage` | when its version changes, as for video frames |
+| any other image | at every draw |
+
+## Invariants
 
 ### 1. One connection, one loop, one goroutine
 
-`Session.Roundtrip` and `Session.Step` are the only readers of the
-connection, and one goroutine drives the loop (internal/wlsession/
-session.go, app/application.go). Wayland requests from one client must
-stay ordered, and per-window goroutines would need a marshalling layer
-to preserve that, so lys-ui has none (see Non-goals). Timer work (key
-repeat, animation deadlines, tooltip dwell) runs on the loop. A
-`Session.WakeAfter` only sets the socket's read deadline, so the parked
-read returns without a word to the compositor, and an animated cursor's
-timer pushes its own frame.
+`Session.Step` and `Session.Roundtrip` are the only readers of the
+connection, and one goroutine drives the loop. There are no per-window
+goroutines. Key repeat, animation deadlines and tooltip dwell run on the
+loop. `Session.WakeAfter` only moves the socket's read deadline; it
+sends nothing to the compositor.
 
 ### 2. The loop parks
 
-`Application.Run` blocks in `Session.Step` (one blocking
-dispatch) instead of polling. Wakeups come from exactly three sources:
-compositor events, frame callbacks, and timer deadlines armed through
-`WakeAfter` — key repeat, animation frames, tooltip dwell, `Every`
-poller deadlines, and `Invoke` kicks (app/invoke.go,
-docs/threading.md; one armed wake covers an entire invoke storm).
-`nextWake` (app/app.go) computes the earliest pending
-deadline; with no dirty state and nothing scheduled the loop schedules
-no kick and holds no CPU — idle is 0%, verified against headless sway.
-`loopKicker.schedule` coalesces timer kicks: one outstanding kick
-covers every deadline in its span, so an animation queues one sync per
-frame, not one per pass.
+`Application.Run` blocks in `Session.Step`. It wakes for compositor
+events, frame callbacks and one timer deadline: the earliest of key
+repeat, animation frames, tooltip dwell, `Every` deadlines and `Invoke`
+kicks. With nothing dirty and nothing scheduled the loop uses no CPU.
 
 ### 3. Redraw only damage, paced by frame callbacks
 
-Widgets record invalidation instead of apps blindly repainting:
-`node.Invalidate` / `InvalidateRect` / `InvalidateLayout` walk the
-parent chain into `widget.CollectDamage` (widget/damage.go,
-widget/widget.go). The frame loop clips painting to the damage union,
-sends per-rect `damage_buffer`, and skips buffer acquisition and
-commit entirely when nothing is dirty. Layout is GTK's measure
-protocol: `Measure(axis, forSize)` reports a widget's minimum and
-natural extent along one axis for an extent across (height for
-width), never clamped to its host, and a container measures its
-children where it arranges them, handing out room as GTK's box
-allocation does (widget/measure.go). Each widget memoizes its last few
-requests (widget/widget.go), so a static tree's frame computes no
-measure at all; edits and resizes drop exactly the affected branch.
+- `Invalidate`, `InvalidateRect` and `InvalidateLayout` record damage
+  up the parent chain (`widget.CollectDamage`). A frame clips painting to
+  the damage union, sends per-rect `damage_buffer`, and skips acquire
+  and commit when nothing is dirty.
+- Layout is GTK's measure protocol: `Measure(axis, forSize)` returns
+  minimum and natural extent for one axis given the other, never clamped
+  to the host. Each widget memoizes its recent requests, so a static
+  tree measures nothing per frame.
+- Each pooled buffer tracks the damage painted into other buffers since
+  it was last shown and repaints that plus the frame's damage. On the
+  GPU the stale rects are copied inside the frame's submission
+  (`gpu.Carry`). A frame the device refuses (`gpu.ErrBusy`) stays owed.
+- Arrange records a paint bound for each audited kit widget
+  (widget/paintink.go), and `PaintChild` skips children outside the
+  clip. Unknown types, including every `widget.Base` widget, are always
+  visited.
+- A scroll step that provably yields the same picture moves pixels
+  instead of repainting (widget/scrollshift.go): the viewport is copied
+  and only the exposed strip paints. A non-flat backdrop, an
+  overlapping sibling, an effect on an ancestor or a step between
+  device pixels repaints the whole viewport.
 
-Partial repaint carries an obligation: it is only correct if the
-acquired buffer already matches the screen outside the damaged region.
-Each pooled buffer therefore tracks `Stale` — the damage painted into
-other buffers since its content was last shown — and repaints Stale ∪
-frame damage; fresh buffers start fully stale (internal/buffer/pool.go,
-app/window.go). `Presented` records only what actually changed on
-screen, so one buffer's init paint cannot poison the pool. On the GPU
-the stale rects copy inside the frame's own submission (`gpu.Carry`), and
-a frame the device refuses (`gpu.ErrBusy`) stays owed, stale rects
-included, for a retry the renderer wakes the loop for.
+### 4. Resize before acquire; resize commits bypass pacing
 
-A repaint visits only what its clip can reach. Arrange gives each audited
-kit widget a bound on what it and its subtree paint (widget/paintink.go),
-and `PaintChild` skips one outside the clip. A type it does not know,
-which includes every `widget.Base` widget, may paint anywhere: it and its
-ancestors are always visited.
+Size and scale are checked before a buffer is acquired, because
+resizing the pool destroys buffers. The commit for a configured size
+ignores frame pacing, because compositors withhold the frame callback
+until the surface commits at that size. Min/max limits are clamped
+client-side in the same pass.
 
-A scroll step moves pixels instead of painting them where that is
-provably the same picture (widget/scrollshift.go): the content is
-translated with no relayout, rows far from the viewport keep only their
-top-level bounds until something asks (`Bounds`, a hit, a paint), and
-the frame copies the viewport in the buffer and paints the exposed
-strip. Anything that does not move with the content rules it out and the
-whole viewport paints: a non-flat backdrop, an overlapping sibling, an
-effect on an ancestor, or a step that lands between device pixels. On
-the GPU the move is a carry with an offset from the front target, in the
-frame's own submission; the buffer's staleness carries around the moved
-area, which the move writes anyway. A frame the GPU
-refuses owes the moved viewport whole.
+### 5. Occlusion parks, never spins
 
-### 4. Resize before Acquire; a resize commit bypasses pacing
+An occluded surface gets no frame callbacks. Dirty input still forces
+the next redraw, and a running animation paces itself by timer once a
+callback is a frame and a half late. Apps declare animations with the
+`anim` package (`Animate`, `Easing`, `Sequence`, `Parallel`, `Delay`,
+`Play`); nothing running means no deadline.
 
-The draw path checks size and scale before acquiring a buffer:
-`Pool.Resize` destroys buffers, and resizing after Acquire would
-destroy the buffer about to be attached, a protocol error that ends
-the connection. Configure relayout runs `syncSize` between events
-(app/window.go) and marks the frame dirty.
+### 6. Logical coordinates; device scale only at paint
 
-The resize commit bypasses frame pacing (`shouldDraw`, app/app.go):
-compositors withhold a surface's frame callback until it commits at
-the configured size, so a paced repaint deadlocks the resize. That is
-a liveness requirement, not politeness. Min/max limits are clamped
-client-side in the same pass, so a compositor configuring outside the
-limits still lays out inside them.
+- Input routing, hit tests, caret rects and popup anchoring use logical
+  surface pixels.
+- Scales are rational in 120ths (`scale.Denom`; 1.25 is 150/120),
+  matching `wp_fractional_scale_v1`.
+- `render.Canvas` takes logical rects and covers every device pixel
+  they touch.
+- Text is shaped at its logical size and rasterized at the device scale;
+  the glyph cache keys on scale.
+- `preferred_scale` rescales a window in place: same router, focus and
+  pool, rebuilt buffers, full repaint. Compositors without the
+  fractional protocols use integer `set_buffer_scale`.
 
-### 5. Occlusion degrades to parking, never spinning
+### 7. Premultiplied alpha
 
-A fully occluded surface stops receiving frame callbacks. The loop
-must not spin waiting for one: dirty input still forces the next
-redraw, and a running animation takes over pacing itself — the
-animation clock's timer pushes a frame only once the callback has gone
-unheard for a frame and a half (`frameOwed`, app/window.go). Animation
-is timer-paced for the same reason. Apps declare timelines with the
-public `anim` package (Animate, Easing, Sequence, Parallel, Delay,
-Play), and the loop drives the scheduler in internal/animclock:
-`Tick` advances the launched pieces on wakes, `Next` reports the next
-frame deadline, and nothing running means no deadline and a full park.
-Only ticks that ran callbacks mark windows dirty. The split keeps the
-loop-driving calls out of the public API.
+`render.Color` is premultiplied ARGB; blending is source-over. Straight
+alpha appears only at colour construction, the PNG boundary and CSS
+blend modes. Anti-aliased primitives multiply coverage into all four
+channels. Every primitive has a row in the source-over conformance table
+in lys-lib's `render/blend_test.go`; a new primitive needs one too.
 
-### 6. Logical coordinates end to end; the device scale exists only at the paint boundary
+### 8. Measure and Paint agree
 
-The widget tree — input routing, hit tests, caret rects, popup
-anchoring — lives in logical surface pixels. The device scale appears
-where the hardware needs it and nowhere else (internal/scale,
-lys-lib/render/canvas.go):
+A widget measures and paints from the same values. `Label.Measure` and
+`DrawAligned` share `ShapedText.LineHeight`. A new widget computes
+shared geometry once.
 
-- scales are rational and 120-based (`scale.Denom` = 120; 1.25 is
-  150/120), matching `wp_fractional_scale_v1`'s wire unit;
-- `render.Canvas` carries the rational scale; primitives take logical
-  rects and land on device pixels rounded outward, so a logical rect
-  covers every device pixel it spans;
-- text is shaped once at its logical size and rasterized at the device
-  scale — crisp at any factor; the glyph cache keys on scale, so nothing
-  is invalidated;
-- `preferred_scale` rescales the window in place (same router, focus,
-  and pool; buffers rebuilt, whole window queued for repaint — the
-  fresh buffers' full staleness is what guarantees the full repaint);
-  compositors without the fractional protocols keep the integer
-  `set_buffer_scale` path.
+### 9. Buffers outlive the frames that read them
 
-### 7. Premultiplied alpha, and anti-aliasing must respect it
-
-`render.Color` is premultiplied ARGB end to end; blending is
-source-over, and straight alpha appears only at color construction,
-the PNG boundary and CSS blend modes.
-Anti-aliased primitives (signed-distance RoundedRect and Line)
-multiply the *coverage into all premultiplied channels*, not just
-alpha — scaling alpha alone leaves full-strength source color on edge
-pixels and halos around every rounded control (lys-lib/render/canvas.go, pinned
-by TestRoundedRectEdgeBlending and TestLine). Every primitive is held
-to a shared source-over conformance table in lys-lib/render/blend_test.go:
-when you add a primitive, add a row there — paint, probe points, and a
-tolerance rationale — so its blending stays pinned against the suite's
-independent reference compositor.
-
-### 8. A widget's Measure and Paint must agree
-
-Layout and painting derive from the same sources, or the widget
-measures boxes its own painter refuses to fill into: a measure that
-rounds a line height while the painter's fit check compares the exact
-float lays out a label that paints nothing. `Label.Measure` and
-`DrawAligned` share `ShapedText.LineHeight` (lys-lib/render/text.go), pinned by
-TestLabelNaturalHeightPaints. When adding a widget, compute shared
-geometry once and measure the thing you paint.
-
-### 9. Buffers outlive the frames that read them; objects die with their done events
-
-The shell never draws into a buffer the compositor holds: `Pool.Resize`
-drops busy buffers from rotation but keeps the wl_buffer object and its
-slot alive until the release event lands, retiring the oldest frame
-beyond pool capacity instead of stacking unbounded pending buffers
-(internal/buffer/pool.go). `ErrBusy` survives: no pending buffer is
-ever handed out.
-
-Storage is one arena per session: a single anonymous file backs one
-`wl_shm_pool`, buffers are sub-allocations (offset + byte range), and
-growth goes through truncate + `pool.resize` + remap — a session holds
-exactly one fd and one mapping no matter how many windows resize how
-often (internal/buffer/arena.go). `Session.Close` tears the arena down.
-
-Done events are destructor events: frame callbacks, sync callbacks, and
-loop kicks unregister their proxies after done, or a per-frame loop
-leaks an object id per frame (app/app.go `frameDone`).
+- The client never draws into a buffer the compositor holds. A resize
+  drops busy buffers from rotation and keeps them alive until their
+  release event; beyond pool capacity the oldest frame is retired.
+- One anonymous file backs one `wl_shm_pool` per session. Buffers are
+  sub-allocations, and growth truncates, resizes the pool and remaps:
+  one fd and one mapping per session.
+- Frame callbacks, sync callbacks and loop kicks unregister their
+  proxies on `done`.
 
 ### 10. Input routes by surface, under an implicit grab
 
-The session owns a focus/grab state machine and routes every pointer
-event to the handler registered for its surface; surfaces never swap
-global hooks (internal/wlsession, docs/input-model.md). A button press
-opens a client-side implicit grab on the focus surface — drags keep
-feeding the widget they started on — and a press on a resize edge is
-intercepted before the router sees it, so the frame and the widget
-model never fight over the same press. On the keyboard side,
-`widget.KeyActionForSym` is the single keysym-to-action map; app-level
-routing and popup hosts both delegate to it (widget/input.go), so an
-editing key means the same thing everywhere.
+Every pointer event goes to the handler registered for its surface. A
+press opens an implicit grab, so a drag keeps feeding the widget it
+started on. A press on a resize edge is handled before the router.
+`widget.KeyActionForSym` is the single keysym-to-action map. See
+[Input model](input-model.md).
 
-### 11. A layer surface's zero axis is automatic, as in gtk4-layer-shell
+### 11. Layer surfaces size a zero axis automatically
 
-zwlr_layer_surface_v1 leaves an axis to the compositor only when both
-edges of that axis are anchored; requesting a zero width or height
-otherwise is a protocol error. `LayerConfig` keeps gtk4-layer-shell's
-meaning for a zero axis instead: anchored on both edges it stretches
-(the size the wire carries is zero and the buffer falls back to the
-output mode), and anchored on one edge or none it takes the root's
-natural size, re-measured before every frame so the surface follows its
-content (app/layerfit.go). An OSD or a notification stack anchored to a
-corner therefore needs no size at all. The layer surface still validates
-the wire rule for every concrete request (internal/layersurface), and
-`Reshape` changes anchor and size as one validated state.
+As in gtk4-layer-shell, a zero width or height in `LayerConfig`:
 
-### 12. Optional globals are feature-detected and never gate Connect
+- anchored on both edges of that axis, stretches;
+- otherwise takes the root's natural size, re-measured before every
+  frame (app/layerfit.go).
 
-Every protocol beyond the required core of `wl_compositor` and `wl_shm` —
-xdg-decoration, fractional-scale, text-input, the data device
-(version-capped) — binds optionally, reports its presence or negotiated
-version, and the callers gate on it. A compositor missing any of them gets
-the pre-feature behavior byte for byte; none of them fail `Connect`
-(internal/wlsession). The shell roles are optional too: `NewWindow` without
-`xdg_wm_base` and `NewLayer` without `zwlr_layer_shell_v1` fail at that call,
-and a compositor with no `wl_output` right now is a session with no outputs
-yet. Feature work adds capabilities without adding requirements.
+Corner-anchored OSDs and notification stacks need no size. Concrete
+requests are validated against the protocol, and `Reshape` changes
+anchor and size as one validated state.
+
+### 12. Optional globals never gate Connect
+
+Only `wl_compositor` and `wl_shm` are required. Every other global
+binds optionally and callers check its presence or version. `NewWindow`
+fails without `xdg_wm_base`, `NewLayer` without
+`zwlr_layer_shell_v1`; a session with no `wl_output` has no outputs yet.
 
 ### 13. A surface declares its own opacity
 
-Every shm buffer is ARGB8888 premultiplied — `buffer.Format`
-(internal/buffer), never XRGB, because a translucent surface loses its
-alpha channel to XRGB and composites as garbage. The whole alpha path
-is pinned end to end in app/alpha_test.go: `WindowConfig.Background` through
-`ClearDevice` (an overwrite, so the background is premultiplied
-exactly once), widget blends on top, wl_shm bytes read back as B, G,
-R, A.
+Every shm buffer is ARGB8888 premultiplied (`buffer.Format`), never
+XRGB. Opacity follows `WindowConfig.Background`:
 
-Opacity is declared once per window and acted on by the frame
-pipeline (app/window.go `syncOpaque`):
+| Background alpha | Behaviour |
+| --- | --- |
+| below 255 | Translucent. The compositor blends the surface; no opaque region is set. Hyprland blurs translucent layer surfaces; an alpha of 200–235 keeps text readable over the blur. |
+| 255 | Opaque. `set_opaque_region` covers the surface minus any `GPUArea` or `Video` holes, re-sent only when the size or holes change. |
 
-- **Background alpha < 255 — translucent, the panel shape.** The
-  compositor blends the surface over whatever is behind it. Hyprland
-  applies its blur to translucent layer surfaces automatically, so a
-  wayle panel gets the blur look for free: keep the background in the
-  200–235 alpha range (`render.RGBA(r, g, b, 216)` is a good default)
-  — solid enough for text contrast, transparent enough for the blur to
-  read. Translucent windows never set an opaque region: promising
-  opacity there would make the compositor skip the very blend the
-  panel exists for.
-- **Background alpha == 255 — opaque.** The pipeline promises that to
-  the compositor once per size change: `wl_surface.set_opaque_region`
-  over the logical surface rect less any GPUArea or Video holes (region created
-  from the compositor, destroyed right after the set), re-sent when the
-  size or the holes change, never per frame. The compositor can then skip blending behind the
-  window entirely. An explicit `WindowConfig.Opaque` forces the promise —
-  only sound if the tree really paints every pixel opaquely.
+`WindowConfig.Opaque` forces the opaque region. Use it only when the
+tree paints every pixel opaque.
 
 ## Theming
 
-The theme is a single palette value (`widget.Theme`): public color
-roles, metrics and motion settings, constructed from
-the `DarkTheme`/`LightTheme` presets and customized through `With*`
-methods. Every `With*` returns a fresh copy and never mutates the
-receiver, so a config-driven palette composes and branches without
-aliasing:
+`widget.Theme` is one palette value: colour roles, metrics and motion.
+Start from `DarkTheme`, `LightTheme` or `HighContrastTheme` and adjust
+with `With*` methods, which return a copy:
 
-	theme, err := widget.DarkTheme().WithAccentHex("#a6e3a1")
-	if err != nil {
-		return err // malformed config colors fail at construction, never silently default
-	}
-	widget.SetTheme(theme.WithPadding(8))
+```go
+theme, err := widget.DarkTheme().WithAccentHex("#a6e3a1")
+if err != nil {
+	return err
+}
+widget.SetTheme(theme.WithPadding(8))
+```
 
-`SetTheme` swaps the palette globally and bumps the theme generation,
-so the next frame repaints every widget (rule 3's damage walk).
-Explicit per-widget colors (`button.Bg`) always win over the palette.
+`SetTheme` replaces the palette globally and repaints every widget
+(nil restores `DarkTheme`). Explicit per-widget colours (`Button.Bg`)
+win over the palette, and [stylesheets](css.md) sit between the two.
 
-Stylesheets ([css.md](css.md)) restyle widgets per class and state
-above the palette. Programmatic per-widget colors stay above the
-cascade, and with no stylesheet loaded the palette alone decides.
+Derived state colours are `Theme` methods, so every widget derives them
+the same way:
 
-**Derived state colors live on the palette, not in widgets.** Hover,
-pressed, and disabled appearances are methods on `Theme`
-(`widget/theme.go`), so a custom palette derives the same states as
-the presets and every widget paints identically:
+| Method | Value |
+| --- | --- |
+| `HoverSurface` | `SurfaceHover`, else `Surface` mixed 8% toward `Text` |
+| `PressedSurface` | `SurfacePressed`, else `Surface` mixed 20% toward black |
+| `HoverAccent` | `Accent` at alpha 70 |
+| `DisabledText` | `TextMuted`, else `Text` at 45% alpha |
+| `DisabledSurface` | `SurfaceDisabled`, else `Surface` mixed halfway toward `Bg` |
+| `DisabledAccent` | `Accent` at 45% alpha |
 
-- `HoverSurface`: the explicit `SurfaceHover` when set, otherwise
-  `Surface` mixed 8% toward `Text` — the text pole carries the
-  palette's polarity, so dark palettes lighten and light palettes
-  darken.
-- `PressedSurface`: the explicit `SurfacePressed` when set, otherwise
-  `Surface` mixed 20% toward black — the surface recedes under a
-  press on any palette.
-- `HoverAccent`: `Accent` at alpha 70 — the translucent wash rows and
-  menu items paint under the pointer.
-- `DisabledText`: the explicit `TextMuted` when set, otherwise `Text`
-  faded to 45% alpha.
-- `DisabledSurface`: the explicit `SurfaceDisabled` when set, otherwise
-  `Surface` mixed halfway toward `Bg` — a disabled control recedes
-  into the window, the inert counterpart of `PressedSurface`.
-- `DisabledAccent`: `Accent` faded to 45% alpha — a switch's on-track,
-  a slider's fill, a checkbox's tick while the control ignores input.
+`SetTheme` checks opaque `Text`/`Bg` and `TextMuted`/`Bg` against WCAG
+AA (4.5:1) and logs a Warn through `app.SetLogger` when they fail. The
+theme is still applied.
 
-Widgets never mix these themselves; the presets pin explicit shades
-that pass through untouched. Widgets also fade colors the palette
-cannot know (an entry's constructor color, a button's child subtree
-through the canvas alpha stack) by the same 45% fraction, so every
-muted surface shares one derivation family.
+### Enabled and read-only
 
-**Enabled and read-only states.** `SetEnabled(bool)` exists on every
-widget (it rides the shared `node`); disabled controls paint muted,
-ignore presses, keys, drags, and wheel, and are skipped by focus
-traversal. Propagation is a per-query ancestor walk
-(`widget.IsEnabled`), not a rewrite: disabling a `Box` makes the whole
-subtree read disabled while every widget keeps its own flag, so
-re-enabling the box never resurrects a child the app disabled on
-purpose. Disabled is not chrome: `widget.IsInteractive` still counts a
-disabled control as interactive, because it still consumes — and
-swallows — the press. Read-only (`Entry.SetReadOnly`,
-`TextArea.SetReadOnly`) freezes user edits — typing, paste, cut,
-composition, undo/redo, and new undo entries — while selection, copy,
-caret motion, and pan keep working; `SetText` stays programmatic.
-Visually the states are mirrors: disabled fades the text, read-only
-fades only the caret.
-
-**Contrast guard.** `SetTheme` checks `Text`/`Bg` and
-`TextMuted`/`Bg` against WCAG AA (4.5:1) and reports a warning at
-Warn on the injected library logger (`app.SetLogger`; nil keeps the
-silent default). It warns and
-applies; a theme is never rejected for its colors.
+- `SetEnabled(false)` works on every widget. Disabled controls paint
+  muted, ignore pointer, keys and wheel, and are skipped by focus
+  traversal. `widget.IsEnabled` walks ancestors per query, so
+  re-enabling a container never re-enables a child disabled on its own.
+  `widget.IsInteractive` still counts a disabled control: it swallows
+  the press.
+- `Entry.SetReadOnly` and `TextArea.SetReadOnly` block typing, paste,
+  cut, composition and undo/redo. Selection, copy, caret motion and
+  panning still work, and `SetText` still applies.
+- Disabled fades the text; read-only fades only the caret.
 
 ## Non-goals
 
-- **No per-window goroutines.** There is one loop and one goroutine,
-  so requests stay ordered (rule 1). Background work runs on its own
-  goroutines and reaches the loop through `Invoke`.
-- **No window manager.** lys-ui does no cascading, tiling or focus
-  stealing; on Wayland that is the compositor's job.
-- **No automatic theme switching.** The toolkit never changes its own
-  palette, not even on a system dark/light change. The preference is
-  offered as a signal (`Application.OnColorSchemeChange`), and the app
-  decides whether to call `SetTheme` ([appearance.md](appearance.md)).
-- **Two kinds of subsurface: GPUArea's and Video's. No single-pixel
-  buffers.** lys-ui
-  draws each window into one buffer per surface. Overlays (popover
-  shadows, the fader) are painted into that buffer, a drag icon is its
-  own `start_drag` surface, and
-  spacers are rectangle fills inside the damage, so damage and pacing
-  stay one problem per window. The exceptions are `widget.GPUArea`,
-  whose pixels the application renders outside lys-ui, and
-  `widget.Video`, whose frames are YUV the compositor samples as
-  decoded. Each area gets one
-  desynchronized subsurface placed *below* its window, so everything
-  lys-ui draws over the area stays on top. The surface shows through a
-  transparent hole the area paints, which is also cut out of the opaque
-  region. It has an empty input region, so the window keeps routing
-  input, and a viewport sized to the area's bounds. Its frames pace
-  themselves by the subsurface's own frame callbacks and leave the
-  window's damage and pacing alone. A Video of a 4:2:0 stream gets the
-  same kind of subsurface where the compositor imports linear YUV420 or
-  NV12 dmabufs and has wp_viewporter and wp_color_representation_v1:
-  each frame's planes are copied into one of a fixed ring of three
-  udmabufs, the viewport scales them to the fitted rect, the surface is
-  opaque, tagged with the stream's matrix and range and with the video
-  content type, and a frame finding no buffer released is dropped. The
-  window is not repainted while only the video advances; its controls
-  paint above the hole as before. Without that support the frames are
-  painted into the window (`Video.OffloadErr` says why). No other
-  widget gets a subsurface.
-- **No commit timing** (wp_commit_timing_v1, wp_fifo_v1). Frame
-  callbacks pace every commit (rule 3), and video presents on the
-  frame clock, as a repaint or on its own subsurface; commit timing matters only to a
-  presentation path that targets exact display times.
-- **No security context and no toplevel drag.** Security context is
-  for sandbox launchers, which lys-ui does not ship. Toplevel drag only
-  matters for detachable tabs.
-- **No color management or HDR.** A surface without an image
-  description is handled as sRGB, which is what lys-ui paints, so its
-  colors map correctly onto wide-gamut and HDR outputs. Showing content
-  beyond sRGB would need per-surface image descriptions, a color-state
-  canvas, 10-bit or half-float formats and blending in the right
-  transfer function.
+- **Per-window goroutines.** One loop, one goroutine. Background work
+  reaches the loop through `Invoke`.
+- **Window management.** No cascading, tiling or focus stealing.
+- **Automatic theme switching.** The toolkit never changes its palette
+  on its own. Apps follow the desktop through
+  `Application.OnColorSchemeChange` ([Appearance](appearance.md)).
+- **Subsurfaces, except for `GPUArea` and `Video`.** Each window draws
+  into one buffer. Popover shadows and the fader paint into it; a drag
+  icon is its own `start_drag` surface. No single-pixel buffers.
+  - `widget.GPUArea` gets one desynchronized subsurface below the
+    window, with an empty input region, a viewport sized to the area,
+    and its own frame callbacks. The window paints a transparent hole
+    over it, also cut from the opaque region.
+  - `widget.Video` gets the same for a 4:2:0 stream when the compositor
+    imports linear YUV420 or NV12 dmabufs and offers wp_viewporter and
+    wp_color_representation_v1. Frames are copied into a ring of three
+    udmabufs, tagged with the stream's matrix, range and the video
+    content type; a frame with no free buffer is dropped. Otherwise the
+    frames paint into the window, and `Video.OffloadErr` says why.
+- **Commit timing** (wp_commit_timing_v1, wp_fifo_v1). Frame callbacks
+  pace every commit.
+- **Security context and toplevel drag.**
+- **Colour management and HDR.** Surfaces carry no image description,
+  so the compositor treats them as sRGB.

@@ -1,83 +1,62 @@
-# lys-ui icons
+# Icons
 
-How lys-ui resolves and paints themed icons.
+## Lookup
 
-## Pieces
+`internal/icons` implements the freedesktop icon theme spec in pure Go:
 
-- `internal/icons` — the freedesktop icon theme spec in pure Go:
-  `index.theme` parsing (sections, `Inherits`, `Directories` /
-  `ScaledDirectories`, per-directory `Size` / `Type` / `MinSize` /
-  `MaxSize` / `Threshold` / `Scale`), the spec's lookup algorithm
-  (exact-size pass, nearest-size pass, inheritance chain with hicolor
-  last, unthemed base-directory fallback), `-symbolic` name fallback,
-  and a raster cache keyed by (name, logical size, 120-based scale).
-  The last tier is a bundled set of Lucide icons (lucide-static, ISC,
-  `internal/icons/lucide`): freedesktop names such as
-  `document-save-symbolic` map onto them, so stock chrome draws on a
-  host with no icon theme, and an installed theme always wins.
-- `widget.Icon` — five constructors: `NewIcon` (a raster the caller
-  made), `NewThemeIcon` (theme name), `NewThemeIconFallback` (theme
-  name, with fallbacks), `NewFileIcon` (png / svg / svgz
-  path), `NewSVGIcon` (embedded bytes, for apps that ship their own
-  glyphs). Icons rasterize at the canvas device scale, so a fractional
-  rescale re-rasterizes crisply. `widget.ThemeIconExists` asks whether
-  a theme name resolves, `widget.SetIconSearchPaths` replaces the base
-  directories (GTK's `IconTheme.set_search_path`; nil restores the XDG
-  default), and `widget.RefreshIcons` forgets every resolved icon so
-  icons installed or removed since are picked up. `widget.SetIconNamespace`
-  names an application's own icons by prefix and directory, so drawing
-  them never lists the theme chain. A paint never reads or decodes: it
-  draws what is decoded, and otherwise asks for the decode off the loop
-  and keeps the raster it has, or a theme icon's nearest decoded scale,
-  until the answer repaints it, at every scale, fractional ones included
-  ([threading.md](threading.md)). `widget.PreloadThemeIcon` decodes ahead
-  of the first paint, so a view that shows an icon once
-  `widget.ThemeIconPreloaded` says so never paints it blank.
-- `render.Icon.Tint` — the recoloring primitive.
+- `index.theme` parsing: `Inherits`, `Directories`/`ScaledDirectories`,
+  and per-directory `Size`, `Type`, `MinSize`, `MaxSize`, `Threshold`
+  and `Scale`;
+- the spec's lookup: exact size, then nearest size, along the
+  inheritance chain with hicolor last, then the unthemed base
+  directories;
+- `-symbolic` name fallback;
+- a raster cache keyed by name, logical size and scale;
+- a last tier of bundled [Lucide](https://lucide.dev) icons (ISC) that
+  common freedesktop names such as `document-save-symbolic` map onto, so
+  stock chrome draws without an installed theme. An installed theme
+  always wins.
 
-## Symbolic recoloring
+Programs that draw icons without widgets use the public `icontheme`
+package.
 
-Symbolic sources are `-symbolic` theme files and SVGs painting with
-`currentColor` (oksvg rejects `currentColor` in strict mode, so
-`internal/icons` rewrites it to opaque white before parsing). Recoloring
-is a **mask pass**: the source is decoded once, and the tinted variant
-keeps every pixel's alpha while taking the tint's color. This is what
-GTK does for symbolic icons, and it survives opacity exactly
-(anti-aliasing and `fill-opacity` carry into the result).
+## `widget.Icon`
 
-The honest limits of the mask approach: ink comes out one flat color.
-Gradient hue variation collapses to its alpha ramp, and multi-color art
-goes monochrome — which is the symbolic-icon contract, not a bug.
-Gradients that encode their shape in *alpha* (the common symbolic idiom,
-currentColor → transparent) survive unchanged.
+| Function | Does |
+| --- | --- |
+| `NewIcon(ic)` | an icon from a caller-made `*render.Icon` |
+| `NewThemeIcon(name, size)` | a theme icon |
+| `NewThemeIconFallback(name, size)` | a theme icon that falls back to dash-shortened names (`a-b-c`, `a-b`, `a`) |
+| `NewFileIcon(path, size)` | a PNG, SVG or SVGZ file |
+| `NewSVGIcon(svg, size)` | embedded SVG bytes |
+| `ThemeIconExists(name)` | whether a theme name resolves |
+| `SetIconSearchPaths(paths)` | replaces the base directories; nil restores the XDG default |
+| `SetIconNamespace(dir, prefixes)` | serves names with these prefixes from `dir` without walking the theme chain |
+| `RefreshIcons()` | forgets resolved icons, picking up installs and removals |
+| `PreloadThemeIcon`, `ThemeIconPreloaded` | decode ahead of the first paint |
 
-A symbolic `widget.Icon` takes the stylesheet's `color`, else
-`widget.Current().Accent`;
-`SetTint` pins a different color (zero un-pins). Non-symbolic sources
-keep their colors unless a tint is pinned. Widgets showing a theme icon in
-one color share one raster; a widget whose tint then moves recolors a
-raster of its own in place, reading no file.
+Icons rasterize at the device scale, fractional included. A paint never
+reads or decodes: it draws the decoded raster (or the nearest decoded
+scale) and requests a decode off the loop ([Threading](threading.md)).
 
-## Icon-theme changes are followed live
+## Symbolic recolouring
 
-The portal's `org.gnome.desktop.interface icon-theme` setting is
-watched by the same monitor that carries the color-scheme preference
-(portalsettings). The application wires the two together:
-`Monitor.OnIconThemeChange` feeds `icons.Default().ApplyIconTheme`, and
-an `Application` does that wiring for you — a desktop theme switch
-swaps the resolution theme, drops every cached raster, and bumps
-`Generation`:
+Symbolic sources are `-symbolic` theme files and SVGs that paint with
+`currentColor`. Recolouring is a mask pass: each pixel keeps its alpha
+and takes the tint colour, so anti-aliasing and `fill-opacity` carry
+over. Ink comes out in one flat colour; multi-colour art becomes
+monochrome.
 
-- `widget.Icon` compares its resolved generation against the cache in
-  its damage drain, so the next frame after a switch repaints the new
-  theme's icons; the application requests that repaint through the
-  loop queue.
-- An emptied setting keeps the previous theme (Warn, the
-  degraded-but-running convention) — a broken portal never blanks the
-  UI.
-- Inside the toolkit, `icons.Cache.OnIconThemeChanged` hears about
-  every applied switch, on the monitor's goroutine.
+A symbolic icon takes the stylesheet `color`, else the theme accent.
+`SetTint` pins a colour (zero unpins). Non-symbolic icons keep their
+colours unless a tint is pinned. Icons with the same tint share one
+raster.
 
-This is a lookup refresh, never a palette swap: the "toolkit never
-flips its own theme" rule stands, and the color-scheme preference
-stays the app's to wire ([appearance.md](appearance.md)).
+## Theme changes
+
+An `Application` starts with `gtk-icon-theme-name` from GTK's
+`settings.ini` and follows the portal's
+`org.gnome.desktop.interface icon-theme` setting live. A change swaps
+the theme, drops cached rasters and repaints icons on the next frame.
+An empty setting keeps the current theme and logs a Warn. The palette
+is not affected.

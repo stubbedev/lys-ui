@@ -5,13 +5,11 @@
 <h1 align="center">lys-ui</h1>
 
 <p align="center">
-  A pure-Go (no cgo) widget toolkit for Wayland, built as a
-  feature-complete counterpart of <a href="https://relm4.org">relm4</a>: a component
-  framework with typed messages, a retained widget tree with
-  GTK4/libadwaita-class widgets and a modern component set,
-  xdg-shell and layer-shell windows, a GTK-flavored CSS engine over a
-  typed palette, the desktop's portals and protocols, and an event loop
-  that idles at 0% CPU.
+  A pure-Go (no cgo) widget toolkit for Wayland: a
+  <a href="https://relm4.org">relm4</a>-style component framework with typed
+  messages, GTK4/libadwaita-class widgets, xdg-shell and layer-shell
+  windows, a GTK-flavoured CSS engine and an event loop that idles at
+  0% CPU.
 </p>
 
 <p align="center">
@@ -93,17 +91,15 @@ func main() {
 }
 ```
 
-This program is kept compiling as `ExampleRun` in
-`component/example_test.go`.
+This program is `ExampleRun` in `component/example_test.go`.
 
 ## Documentation
 
-The [documentation site](https://stubbedev.github.io/lys-ui/) has the
-[getting started guide](https://stubbedev.github.io/lys-ui/guide/getting-started),
-a screenshot of [every widget](https://stubbedev.github.io/lys-ui/widgets)
-taken from the current code on every push, the
-[demos](https://stubbedev.github.io/lys-ui/guide/demos), the
-[development workflow](https://stubbedev.github.io/lys-ui/guide/development)
+[stubbedev.github.io/lys-ui](https://stubbedev.github.io/lys-ui/):
+[getting started](https://stubbedev.github.io/lys-ui/guide/getting-started),
+[widgets](https://stubbedev.github.io/lys-ui/widgets),
+[demos](https://stubbedev.github.io/lys-ui/guide/demos),
+[development](https://stubbedev.github.io/lys-ui/guide/development)
 and the reference.
 
 ## The lys family

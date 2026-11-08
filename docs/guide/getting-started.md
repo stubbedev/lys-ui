@@ -11,17 +11,15 @@ go get github.com/stubbedev/lys-ui@latest
 
 ## A first app
 
-A counter: a component with typed messages, its view built with the `ui`
-builders. This is `component/example_test.go`, kept compiling as an
-example test:
+A counter component with typed messages and a view built with the `ui`
+builders (`component/example_test.go`):
 
 <<< @/../component/example_test.go
 
 `component.Run` opens the window and runs the loop.
-[Components](../components) walks through components, the typed
-builders, factories, workers and actions. `app.NewApplication` and
-`NewWindow` are the lower-level path for apps that want the widget tree
-without components (`ExampleApplication` in `app/example_test.go`).
+[Components](../components) covers components, builders, factories,
+workers and actions. Without components, use `app.NewApplication` and
+`NewWindow` directly (`ExampleApplication` in `app/example_test.go`).
 
 ## Packages
 
@@ -38,27 +36,24 @@ implementation.
 | `widget/css` | libadwaita's style classes and named colors as constants |
 | `anim` | tweens, easing, springs and timelines |
 | `appearance` | the desktop's color scheme, accent and contrast preferences |
+| `portalsettings` | the desktop settings xdg-desktop-portal publishes, for programs without an `app.Application` |
 | `gtksettings` | GTK 4's settings.ini, read with GTK's file order |
 | `icontheme` | freedesktop icon theme lookup for programs that draw icons without widgets |
+| `atspitest` | real at-spi2-core for tests that check an app's accessibility tree |
 | `i18n` | gettext catalogs (`.mo`, `.po`) |
 | `highlight` | syntax highlighters for the code view |
 | `media` | video and sound playback |
 | `pdf` | PDF writing |
 | `transfer` | the shared shape of clipboard and drag-and-drop content |
 
-The canvas widgets paint on (`render`), the GPU renderer (`gpu`), screen
-capture (`capture`), virtual input (`vinput`), the Wayland protocol
-bindings (`wlr`), dmabufs, MP4/Matroska muxing and the Opus encoder live
-in [lys-lib](https://github.com/stubbedev/lys-lib), which lys-ui imports.
+[lys-lib](https://github.com/stubbedev/lys-lib) provides the canvas
+(`render`), the GPU renderer (`gpu`), screen capture (`capture`),
+virtual input (`vinput`), the Wayland protocol bindings (`wlr`),
+dmabufs, MP4/Matroska muxing and the Opus encoder.
 
-The [demos](./demos) show the packages at work.
+The [demos](./demos) show the packages in use.
 
 ## The gallery
 
-```sh
-just gallery
-```
-
-opens every component in one window. Ctrl+T toggles the
-palette, Ctrl+K opens the command palette, and Escape quits.
-[Widgets](../widgets) shows each one.
+`just gallery` opens every component in one window. Ctrl+T toggles the
+palette, Ctrl+K opens the command palette, Escape quits.

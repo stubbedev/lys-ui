@@ -1,19 +1,12 @@
 # System appearance
 
-How an app follows the desktop's color scheme, accent color and
-contrast preference, and why lys-ui never applies them on its own.
-
-The preferences live in xdg-desktop-portal's
-`org.freedesktop.portal.Settings` (`org.freedesktop.appearance`
-namespace), which Hyprland, GNOME, KDE and others all publish. Every
-`app.Application` watches them over the session bus in pure Go and
-reports them with the public types in package `appearance`.
+Every `app.Application` reads the desktop's colour scheme, accent and
+contrast preference from xdg-desktop-portal's
+`org.freedesktop.portal.Settings` (`org.freedesktop.appearance`) and
+reports them with the types in package `appearance`. The toolkit never
+changes the palette by itself; apps decide whether to follow.
 
 ## Following the preference
-
-Theming is explicit (`widget.SetTheme`, [architecture.md](architecture.md#theming)):
-the toolkit never switches palettes by itself, so an app with a fixed
-brand simply never follows. Following is a few lines:
 
 ```go
 follow := func(s appearance.ColorScheme) {
@@ -40,61 +33,37 @@ application.OnContrastChange(func(c appearance.Contrast) {
 })
 ```
 
-- The getters (`ColorScheme`, `Accent`, `Contrast`) are valid as soon
-  as `NewApplication` returns: the startup read is synchronous.
-- The `On*Change` hooks run on the loop goroutine, so they may touch
-  widgets directly. Each returns an `off` function, and a change queued
-  before `off` ran is dropped.
-- The startup read is a baseline, never an event.
-- Duplicate announcements are deduplicated, so hooks hear real changes
-  only.
-
-`appearance.Unknown`, `ContrastUnknown` and an accent with `Known`
-false mean no preference, no portal, or an unreadable value. They are a
-reason to keep the current theme.
+- `ColorScheme`, `Accent` and `Contrast` are valid once
+  `NewApplication` returns.
+- `On*Change` hooks run on the loop and fire only on real changes, not
+  for the startup value. Each returns an `off` function; a change queued
+  before `off` is dropped.
+- `appearance.Unknown`, `ContrastUnknown` and an accent with `Known`
+  false mean no preference, no portal or an unreadable value.
 
 ## Reduced motion
 
-The portal's `reduced-motion` key, and `gtk-enable-animations = false` in
-`settings.ini` where it is not set, is the one preference lys-ui applies on its
-own, because an app has no reason to overrule it and should not need to know:
-`NewApplication` calls `widget.SetReducedMotion` and follows changes. Springs,
-smooth scrolling, keyframes, spinners and the caret's blink stop; a surface's
-enter and exit become a short fade; `Theme.Moves` answers false, so the motion
-tokens are zero and `prefers-reduced-motion` matches. `Application.ReducedMotion`
-and `OnReducedMotionChange` report it. `LYS_UI_NO_ANIM=1` goes further and
-collapses fades as well.
+Reduced motion is applied automatically. The portal's `reduced-motion`
+key, or `gtk-enable-animations = false` in GTK's `settings.ini` when the
+key is absent, sets `widget.SetReducedMotion`:
 
-## Failure model
+- springs, smooth scrolling, keyframes, spinners and caret blink stop;
+- surface enter and exit become a short fade;
+- `Theme.Moves` is false, the motion tokens are zero, and
+  `prefers-reduced-motion` matches.
 
-- **No session bus.** The monitor is inert: everything reads unknown
-  forever, no events fire, and no goroutines run.
-- **No portal, or the key is unreadable.** The values read unknown. The
-  name-ownership probe is a fast bus call, so lys-ui never waits on dbus
-  activation at startup. A portal that appears later is read as its
-  name appears, and any value that differs is reported.
-- **The bus or portal restarts mid-session.** The monitor reconnects
-  with exponential backoff (250ms doubling to 8s), re-reads every key,
-  and reports any preference that changed while it was disconnected.
-  While no portal is on the bus, each value stays as it last was: a
-  portal going away says nothing about the preference.
-- **Bounded calls.** Every bus round trip is bounded (3s probe, 5s
-  read), so a stalled portal costs an unknown, never a hung startup.
+`Application.ReducedMotion` and `OnReducedMotionChange` report it.
+`LYS_UI_NO_ANIM=1` also removes the fades.
 
-The same monitor follows the icon-theme setting for the icon lookup
-([icons.md](icons.md)). That is a lookup refresh, never a palette swap.
+## Failure behaviour
 
-## Tests
+| Situation | Behaviour |
+| --- | --- |
+| no session bus | every value reads unknown; no events, no goroutines |
+| no portal, or an unreadable key | the value reads unknown; a portal that appears later is read then |
+| bus or portal restart | reconnects with backoff from 250 ms to 8 s, re-reads, reports what changed; values keep their last state meanwhile |
+| stalled portal | calls time out (3 s probe, 5 s read) and read unknown |
 
-`portalsettings` runs against a real private `dbus-daemon`
-with a scripted mock portal. The tests cover:
-
-- the startup read and every unknown fallback
-- ordered, deduplicated delivery of signal bursts
-- no-portal and no-bus inertia
-- reconnecting across a bus restart
-- `Close` draining goroutines
-
-They fail when no `dbus-daemon` binary exists. `app/appearance_test.go`
-pins loop delivery: hooks run on the pump, in order, and nothing is
-delivered after `off`.
+The same monitor follows the icon theme ([Icons](icons.md)).
+Programs without an `app.Application` can use `portalsettings`
+directly.

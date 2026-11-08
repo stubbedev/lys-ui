@@ -1,297 +1,225 @@
-# lys-ui application model
+# Application model
 
-How lys-ui composes many windows in one process, and the relm4 and
-gtk4-layer-shell concepts it borrows.
+Many windows in one process, on one connection and one loop.
 
 ## Pieces
 
-- `app.Application` — one per process. Owns the parked event loop, the
-  key repeater, and the window list. `Quit` ends the loop; `Run`
-  returns `ErrClosed` when quitting or when the last window closed.
-- `app.Window` — a toplevel (`xdg_toplevel`) declared through
-  `WindowConfig` and driven by the application. `SetCloseRequest`
-  vetoes the compositor's close request (unsaved-changes prompts);
-  client-side `Close` always wins.
-- `app.LayerWindow` — a layer surface (`zwlr_layer_surface_v1`)
-  declared through `LayerConfig`: layer, anchors, margins, exclusive
-  zone, keyboard interactivity, namespace. No close request exists in
-  the protocol; the surface dies when the compositor closes it or its
-  output disappears.
-  On a compositor without layer shell, such as a kiosk, `NewLayer` fails
-  with `ErrLayerShellUnavailable` and toplevels keep working.
+| Type | Is |
+| --- | --- |
+| `app.Application` | One per process. Owns the loop, key repeat and the window list. `Quit` ends the loop; `Run` returns `ErrClosed` after `Quit` or when the last window closes. |
+| `app.Window` | An `xdg_toplevel` from a `WindowConfig`. `SetCloseRequest` can veto the compositor's close request; `Close` always closes. |
+| `app.LayerWindow` | A `zwlr_layer_surface_v1` from a `LayerConfig`: layer, anchors, margins, exclusive zone, keyboard interactivity, namespace. It closes when the compositor closes it or its output goes away. Without layer shell, `NewLayer` fails with `ErrLayerShellUnavailable`. |
+
+Every window has its own dirty flag, buffer pool, frame callback and
+tooltip state. Pointer input routes by surface; keyboard input goes to
+the window with keyboard focus. A closed window is reaped and its
+`OnClosed` hook runs. Bars are ordinary layer windows, one per output.
+
+| relm4 / GTK | lys-ui |
+| --- | --- |
+| `RelmApp`, `gtk::Application` | `app.Application`: construct, hook, `Run`; no `startup`/`activate` split |
+| `ApplicationWindow` | `app.Window` from a `WindowConfig` |
+| gtk4-layer-shell | `app.LayerWindow` from a `LayerConfig` |
+| `close-request` | `Window.SetCloseRequest`; return false to veto |
+| `gtk::Application::quit` | `Application.Quit`; ignores vetoes |
+| GApplication single instance | `app.ClaimInstance` |
+| `FileDialog` | `Application.OpenFileDialog` and friends |
+| `UriLauncher`, `FileLauncher` | `Application.OpenURL`, `OpenPath`: the OpenURI portal with an activation token, else `xdg-open` |
+| `scale-factor` | per-window scale, following `preferred_scale` live |
+
+The component layer is in [Components](components.md); the full
+capability map is [Completeness](completeness.md).
+
+## Outputs and scale
+
+`Session.Outputs()` lists the current outputs. `Session.OnOutputAdded`
+fires for outputs that appear later; `Session.OnOutputRemoved` fires
+when one goes away, and a layer surface pinned to it gets its closed
+event (`OnClosed`).
+
+`LayerConfig` with zero `Scale` uses the output's integer scale. With
+`wp_viewporter` and `wp_fractional_scale_manager_v1`, the compositor's
+`preferred_scale` overrides it live and buffers resize in place.
 
 ## Compositor disconnects
 
-Wayland has no reconnection: when the compositor restarts (crash,
-reload, upgrade), the kernel kills every client's socket and every
-proxy object on the connection dies with it. lys-ui turns that from
-"whatever a dead socket read does" into a defined story.
+A lost connection surfaces as `*wlsession.DisconnectError`, matched by
+`errors.Is(err, app.ErrDisconnected)`, with a reason:
 
-**Detection.** Every dispatch surface — the loop's park
-(`Session.Step`), `Session.Roundtrip`, and the frame path's
-attach/damage/commit — maps wire failures onto one typed error,
-`*wlsession.DisconnectError` (matchable as `app.ErrDisconnected` via
-`errors.Is`), carrying a classified reason:
-
-| wire shape | reason |
+| Cause | Reason |
 | --- | --- |
-| EOF on the socket read (`ErrContextRunConnectionClosed`) | `DisconnectConnectionLost` — the compositor went away |
-| dead-socket errno on read or write (EPIPE, ECONNRESET, ENOTCONN, EBADF, …) | `DisconnectConnectionLost` |
-| fatal `wl_display.error` recorded, or a protocol-error marker in the dispatch failure | `DisconnectProtocol` |
-| anything else (timeout, decode failure with no verdict) | not classified — returned as-is; not every wire hiccup is a disconnect |
+| EOF or a dead-socket errno (EPIPE, ECONNRESET, ENOTCONN, EBADF, ...) on read or write | `DisconnectConnectionLost` |
+| a fatal `wl_display.error` | `DisconnectProtocol` |
+| anything else | not a disconnect; returned as is |
 
-The destroyed-proxy retry inside dispatch (`ErrContextRunProxyNil`, a
-normal mid-queue abort) is bounded, so no error shape — a dead fd chief
-among them — can turn a roundtrip or the park into a spin.
+`Application.OnDisconnect` fires on the loop, at most once per
+connection, before teardown, with `DisconnectedEvent{Reason, Err,
+Reconnecting}`. Then `Run` releases every window, closes the session
+(arena, fd, display), stops the invoke queues and returns the error.
 
-**Policy.** `Application.OnDisconnect` fires exactly once, on the loop goroutine, before
-teardown, with `DisconnectedEvent{Reason, Err}`. After it returns, Run
-releases every window (buffer pools included), closes the session — the
-shared arena's memfd, mapping, and fd, and the display — and shuts the
-invoke queues, so the exiting process leaves nothing mapped and no
-timer or queued fn reaches for a dead connection. Run then returns the
-disconnect error.
+The expected handling is a clean exit with `app.DisconnectExitCode`
+(75, EX_TEMPFAIL), which systemd `Restart=on-failure` restarts:
 
-The sanctioned behavior is a **clean exit**: `main` matches
-`errors.Is(err, app.ErrDisconnected)` and exits with
-`app.DisconnectExitCode` (75, EX_TEMPFAIL), which systemd
-`Restart=on-failure` — or a wayle supervisor — treats as respawn-us on
-the new session. The hook itself is optional observation (flush state
-before the teardown, never block indefinitely); without it the same
-clean exit runs.
+```go
+if errors.Is(err, app.ErrDisconnected) {
+	os.Exit(app.DisconnectExitCode)
+}
+```
 
-**Reconnect with rebuild.** `Application.SetReconnect` turns a
-lost connection into a rebuild instead of the exit, for the case it can
-honestly cover: the connection was lost without a protocol verdict (a
-compositor that killed the client would do it again) and every window
-came from `NewWindow`, `NewLayer`, or a dialog (a host built outside
-the application cannot be rebuilt, so its loop exits with the
-disconnect error).
-`DisconnectedEvent.Reconnecting` tells the hook which way it goes.
+### Reconnect
 
-1. The policy hook fires, the windows are set aside with their toasts,
-   open popovers close (their `OnClosed` fires), and the usual teardown
-   runs - every proxy died with the socket.
-2. Run dials again (`ReconnectOptions.Connect`, default
-   `wlsession.Connect`), backing off from 50ms to a second until
-   `Timeout` (ten seconds). The new session is adopted: dispatch and
-   wake seams, drag and drop, the input method, key repeat, the
-   clipboard handle (`Clipboard.Reset`, empty on the new session), and
-   the session hooks.
-3. Every window reopens through the same path that opened it, on the
-   same handle - an app's `*Window` and `*LayerWindow` stay valid -
-   from its config updated with what the old objects carried: title,
-   size, size limits, maximized and fullscreen, layer anchor, margin,
-   zone, layer, and declared keyboard mode, content type, opacity, and
-   the output a layer was pinned to, re-resolved by its xdg-output name.
-   Then transient parents and dialog modality re-link across the
-   rebuilt set, window icons are posted again from their source images,
-   toasts move onto their rebuilt windows, and keyboard focus inside
-   each tree is restored. Widget trees, queues, timers, and
-   accelerators never left.
+`Application.SetReconnect(&app.ReconnectOptions{...})` rebuilds instead
+of exiting when the connection was lost without a protocol error and
+every window came from `NewWindow`, `NewLayer` or a dialog. Otherwise
+`Run` returns the error.
 
-Lost, because it was the compositor's: clipboard contents, drags,
-popovers and tooltips, session locks, idle inhibitors and idle watches,
-pointer constraints, and pending configure serials. Code holding the
-`*wlsession.Session` reads the current one from `Application.Session`;
-key handlers use `Application.KeySym` and never hold one.
+1. `OnDisconnect` fires with `Reconnecting` true. Windows are set
+   aside, popovers close (their `OnClosed` fires), and the old session
+   is torn down.
+2. `Run` dials again (`ReconnectOptions.Connect`, default
+   `wlsession.Connect`), backing off from 50 ms to 1 s, for
+   `ReconnectOptions.Timeout` (default 10 s).
+3. Every window reopens on the same `*Window` or `*LayerWindow` handle
+   with its title, size, limits, maximized and fullscreen state, layer
+   anchor, margin, zone, layer, keyboard mode, content type, opacity and
+   output (matched by xdg-output name). Transient parents, dialog
+   modality, window icons, toasts and keyboard focus are restored.
+   Widget trees, queues, timers and accelerators are untouched.
+   `ReconnectOptions.OnReconnected` then runs on the loop.
 
-**Testing.** Unit: dead-socket classification, the bounded retry, the
-exactly-once hook, the pool/queue/fd teardown, and the goroutine budget
-(app and wlsession packages). Live: `internal/headlesstest`'s kill test
-boots the headless session, runs the showcase, SIGKILLs sway mid-run,
-and asserts one policy trace and exit code 75; the reconnect test
-kills sway under a client with `SetReconnect`, boots it again on the
-same socket, and asserts the policy trace, the rebuilt window taking
-keyboard input on the new session, and no file descriptor left over
-from the old one.
+Lost on reconnect: clipboard contents, drags, popovers, tooltips,
+session locks, idle inhibitors and watches, pointer constraints. Read
+the current session from `Application.Session`; key handlers use
+`Application.KeySym`.
 
-## Loop sharing
+## Single instance
 
-All windows live on one connection and one parked loop (see
-docs/input-model.md). Each window carries its own dirty flag, buffer
-pool, frame callback, and tooltip state machine; input routes by
-surface, keyboard routes to the window holding the seat's keyboard
-focus. A window that closes is reaped and its `OnClosed` hook runs.
-
-## Multi-output
-
-The session tracks `wl_output` globals in arrival order
-(`Session.Outputs`) and exposes hotplug hooks:
-
-- `Session.OnOutputAdded` — fires for outputs that appear after the
-  hooks are installed; enumerate `Session.Outputs()` at startup for the
-  initial set.
-- `Session.OnOutputRemoved` — fires when an output's global goes away.
-  A layer surface pinned to that output receives the layer-shell closed
-  event, so its `OnClosed` is the spawn-cleanup path.
-
-Per-output scale comes from the output's integer scale; `LayerConfig`
-derives it when `Scale` is zero. With the fractional-scale protocols
-(`wp_viewporter` plus `wp_fractional_scale_manager_v1`) the compositor's
-`preferred_scale` — 1.25 and friends included — overrides the integer
-scale live: buffers resize in place, no window recreation. Compositors
-without the protocols keep the integer behavior.
-
-## Single instance and remote activation
-
-`app.ClaimInstance` is the GApplication single-instance guard:
-the first process to claim an AppID becomes the primary and listens on
-a unix socket under `XDG_RUNTIME_DIR`; every later process forwards
-its invocation - argv, `--open` paths, working directory, activation
-token - and exits with status 0 without ever connecting the session.
+`app.ClaimInstance` makes the first process for an AppID the primary,
+listening on a unix socket under `XDG_RUNTIME_DIR`. Later processes
+forward argv, `--open` paths, working directory and activation token,
+then exit without connecting.
 
 ```go
 ins, primary, err := app.ClaimInstance(app.InstanceConfig{
-    AppID: "dev.stubbe.lys.ui.messages",
-    OnCommandLine: func(args []string, cwd string) { ... },
-    OnOpen:       func(paths []string, cwd string) { ... },
+	AppID:         "dev.example.app",
+	OnCommandLine: func(args []string, cwd string) { ... },
+	OnOpen:        func(paths []string, cwd string) { ... },
 }, app.OSInvocation(os.Args[1:]))
-if err != nil { return err }
-if !primary { return nil } // forwarded to the primary; exit 0
-
+if err != nil {
+	return err
+}
+if !primary {
+	return nil
+}
 defer ins.Close()
 application := app.NewApplication(sess)
-ins.Bind(application) // hooks run on the loop; buffered forwards flush
+ins.Bind(application)
 ```
 
-The hooks fire on the loop goroutine with event-callback guarantees;
-invocations that arrive between the claim and `Bind` buffer and flush
-through the first pump. An invocation carrying open paths fires
-`OnOpen` alone (GApplication's open replacing command-line); a token
-the launcher exported as `XDG_ACTIVATION_TOKEN` is spent after the
-hooks to focus the application. A crashed primary leaves a stale
-socket; the next claim dials it, gets no answer, and reclaims it.
-`AllowMultipleInstances` opts out entirely (relm4's
-`allow_multiple_instances`). The claim races safely between two
-simultaneous launches: the socket bind is atomic, the loser forwards.
+- Hooks run on the loop. Invocations that arrive before `Bind` are
+  buffered.
+- An invocation with paths fires `OnOpen` only, else `OnCommandLine`.
+- An `XDG_ACTIVATION_TOKEN` from the launcher is used after the hooks to
+  focus the application.
+- A stale socket from a crashed primary is reclaimed. Two simultaneous
+  launches resolve to one primary.
+- `AllowMultipleInstances` disables the guard.
 
-The worked example is `cmd/lys-ui-messages`: run it twice and the second
-run toasts in the first's windows and exits. The compositor-in-the-loop
-test is `TestSingleInstanceForwardsToPrimary`
-(internal/headlesstest): two real processes, one wins, the loser's
-`--open` lands in the winner's shell trace.
+`cmd/lys-ui-messages` is the example: a second run toasts in the
+first's windows and exits.
 
 ## File dialogs
 
-`Application.OpenFileDialog`, `OpenFilesDialog`, `OpenFolderDialog`,
-and `SaveFileDialog` wrap `widget.FileChooser` - the pure-Go picker
-- in the standard Dialog: a places row (Up, Home, Filesystem, and
-Recent when recents are on), the directory listing, pattern filters,
-a name row in save mode, and an ok button that refuses to close the
-dialog until the choice is valid (the `DialogConfig.ValidateResponse`
-veto). Save asks before replacing an existing file, over the picker, and
-declining returns to it; `SkipOverwriteConfirm` turns the question off. Choices land in `OnOpen`/`OnSave` on the loop goroutine, exactly once.
+`Application.OpenFileDialog`, `OpenFilesDialog`, `OpenFolderDialog` and
+`SaveFileDialog` show `widget.FileChooser`, a pure-Go picker (no
+portal), in a standard dialog:
 
-**The picker is portal-free by decision.** lys-ui ships every widget the
-picker needs, a portal FileChooser adds a second UI to keep honest, and portal-less sessions (lab machines,
-early boot, tests) get the same dialog. The seam is
-`FileChooser.SetSource` - the listing comes from an injected
-`DirSource`, so a different listing backend plugs in under the same
-dialog API without touching the picker's UI. Recents are the
-XDG `recently-used.xbel` list (`internal/recentfiles`), shared with
-the desktop's other citizens, bounded and written atomically, with
-their uris through the same `transfer.FileURI`/`URIPath` the
-clipboard and drag and drop use.
+- a places row (Up, Home, Filesystem, and Recent when recents are on),
+  the listing, pattern filters, and a name row when saving;
+- OK stays refused until the choice is valid
+  (`DialogConfig.ValidateResponse`);
+- saving over an existing file asks first, unless
+  `SkipOverwriteConfirm`;
+- the result arrives once, on the loop, in `OnOpen` or `OnSave`.
+
+`FileChooser.SetSource` swaps the listing backend (`DirSource`).
+Recents are the XDG `recently-used.xbel`, shared with other desktop
+apps and written atomically.
 
 ## Clipboard and drag and drop
 
-Every data transfer shares one shape, `transfer.Content`: the mimes a
-payload is offered as, best first, and a writer per mime. The
-builders encode up front - `Text`, `Image` (PNG plus a JPEG flattened
-onto white, so image editors that only read JPEG paste too), `Files`
-and `URIs` (`text/uri-list` with the uris as plain text), `HTML`
-(formatted text with its plain fallback) - and `Merge` combines them.
-`Clipboard.Write` claims the selection with any content;
-`Clipboard.Read(prefs, done)` reads the best mime offered, with
-`ReadText`, `ReadImageBytes`, `ReadURIs` and `ReadHTML` on top. Every
-read takes a callback: the other end is a foreign client that may
-answer late or never, so the transfer runs off the loop and `done` runs
-on the loop when it ends. A payload a `ctrl+v` asked for lands in the
-widget that held focus at the press, and a drop in the widget under
-it, whatever happened in the wait. A selection or drag this client
-serves is written off the loop too, so a writer in a `transfer.Content`
-must not touch widgets; the builders above only copy bytes. At most
-`xfer.MaxTransfers` run at once, and a read past that fails with
-`xfer.ErrBusy`.
+All transfers use `transfer.Content`: the MIME types offered, best
+first, each with a writer. Builders:
 
-A drag is a `transfer.Drag` (`widget.DragContent`): content plus the
-actions it offers (copy unless set; a row reorder offers move),
-`OnFeedback` for the destination's acceptance and the negotiated
-action, and `OnDone` with the action the drop finished as
-(`ActionMove`: delete the source data; `ActionNone`: cancelled). A
-drop target picks among the offered actions through
-`widget.DropActionChooser`; an ask drop settles on that pick, since
-lys-ui shows no drop menu. Escape cancels the application's own drag
-when the compositor delivers the key (most cancel on Escape
-themselves), and `Application.CancelDrag` does it from code.
+| Builder | Offers |
+| --- | --- |
+| `Text` | plain text |
+| `Image` | PNG, plus a JPEG flattened onto white |
+| `Files`, `URIs` | `text/uri-list` and the URIs as plain text |
+| `HTML` | HTML with a plain-text fallback |
+| `Merge` | several of the above |
 
-A non-text paste target implements `widget.ContentPaster` (its mimes,
-best first); `widget.Image` reads images that way. Failed transfers -
-a paste or drop whose peer exceeded `xfer.MaxPayload`, stalled past
-the deadline, or broke the pipe - reach
-`Application.SetTransferErrorHandler` for a toast; an empty clipboard
-is not an error. A middle-click paste over a read-only text widget is
-refused there, ringing the error bell, rather than redirected to the
-keyboard focus.
+`Application.Clipboard()`:
+
+- writes with `Write`, `WriteText`, `WriteImage`, `WritePrimary`, and
+  `WriteExpiring` (clears the selection after a TTL if still owned);
+- reads with `Read(prefs, done)`, `ReadText`, `ReadImageBytes`,
+  `ReadURIs`, `ReadHTML` and `ReadPrimary`; `Offers` tests for a MIME
+  type.
+
+Reads take a callback: the transfer runs off the loop and `done` runs
+on the loop. A ctrl+v result lands in the widget focused at the press;
+a drop lands in the widget under it. Writers run off the loop and must
+not touch widgets. At most 8 transfers run at once; payloads are capped
+at 16 MiB. Failed transfers (oversize, stalled, broken pipe) reach
+`Application.SetTransferErrorHandler`; an empty clipboard is not an
+error.
+
+A drag is a `transfer.Drag` (`widget.DragContent`):
+
+- content plus the offered actions (copy by default; a row reorder
+  offers move);
+- `OnFeedback` reports the destination's acceptance and the negotiated
+  action;
+- `OnDone` reports the final action: `ActionMove` means delete the
+  source data, `ActionNone` means cancelled.
+
+A drop target chooses among offered actions with
+`widget.DropActionChooser`; an "ask" drop uses that choice (no drop
+menu). Escape cancels the app's own drag when the compositor delivers
+the key; `Application.CancelDrag` cancels from code.
+
+A non-text paste target implements `widget.ContentPaster`;
+`widget.Image` pastes images that way. A middle-click paste over a
+read-only text widget is refused with the error bell.
 
 ## Window chrome
 
-`widget.HeaderBar` is the CSD title bar - title/subtitle, start/end
-packs, `WindowControls` (close/minimize/maximize buttons, shown when
-asked and hooked by the app), `widget.MenuBar` the in-window primary
-navigation opening the existing menu popovers, `widget.ActionBar` the
-bottom bar. A press on the bar's background starts the
-compositor's `xdg_toplevel.move` grab (the `WindowMover` contract any
-widget can implement), a double press maximizes, and
-`Application.AttachHeader(win, bar)` wires controls and double-press to the
-window in one call - `Window.SetTitle`, `Minimize`, and
-`ToggleMaximize` are the runtime setters the controls fire into.
+| Widget | Role |
+| --- | --- |
+| `widget.HeaderBar` | client-side title bar: title, subtitle, start and end packs, `WindowControls` |
+| `widget.MenuBar` | in-window menu bar opening menu popovers |
+| `widget.ActionBar` | bottom bar |
 
-**Decoration policy.** xdg-decoration stays as it is: a compositor
-offering server-side decoration gets asked for it. A HeaderBar in the
-tree is the app's explicit opt into client-side chrome - lys-ui windows
-ship undecorated otherwise, the GTK4 default inverted. The two can
-coexist (a compositor frame around an app-drawn header); the app is
-always right about what it draws itself, the compositor about what it
-draws around it. Minimize and maximize buttons follow the
-compositor's `wm_capabilities`: shown until it declares what it
-cannot do, hidden for that.
+A press on the header's background starts `xdg_toplevel.move` (any
+widget can implement `WindowMover`); a double press toggles maximize.
+`Application.AttachHeader(win, bar)` wires the controls and double press
+to the window.
 
-**Window requests from code.** `Window.BeginMove` and
-`BeginResize(edge)` start the compositor's grabs from the press under
-way (custom title areas, drag handles - the session supplies the
-serial of the latest input event the protocol wants); `FullscreenOn(output)` names the monitor;
-`SetTransientFor(parent)` (or `WindowConfig.Parent`) keeps a toolbox
-above its owner, the relation dialogs get by construction; and
-`RequestAttention` is the urgency hint: Wayland has none, so it is an
-xdg-activation request with no interaction behind it, which
-compositors answer by marking the window urgent rather than raising
-it. Activation tokens are per request, so an attention request and a
-URI launch never trade tokens.
+Decorations: lys-ui asks for server-side decoration when the compositor
+offers xdg-decoration. A `HeaderBar` in the tree is the opt-in to
+client-side chrome; without one, windows are undecorated. Minimize and
+maximize buttons hide when the compositor's `wm_capabilities` excludes
+them.
 
-## Concept mapping
+`Window` requests:
 
-| relm4 / GTK | lys-ui | note |
-| --- | --- | --- |
-| `relm4::RelmApp`, `gtk::Application` | `app.Application` | construct, hook, `Run`; there is no `startup`/`activate` split |
-| `ApplicationWindow` | `app.Window` from a `WindowConfig` | a declarative config instead of builder chains |
-| gtk4-layer-shell | `app.LayerWindow` from a `LayerConfig` | the same wire concepts: layer, anchors, margins, exclusive zone, keyboard mode |
-| `gtk::Window::close-request` | `Window.SetCloseRequest` | return false to veto |
-| `gtk::Application::quit` | `Application.Quit` | authoritative, bypasses vetoes |
-| GApplication single instance, `command-line`, `open` | `app.ClaimInstance` | see Single instance above |
-| `FileDialog`, relm4 `open_dialog`/`save_dialog` | the `Application.OpenFileDialog` family | see File dialogs above |
-| `UriLauncher`, `FileLauncher` | `Application.OpenURL`, `OpenPath` | portal OpenURI with an activation token, xdg-open fallback |
-| per-window `scale-factor` | per-window scale with live `preferred_scale` | see Multi-output above |
+| Method | Does |
+| --- | --- |
+| `SetTitle`, `Minimize`, `ToggleMaximize` | the runtime setters the controls call |
+| `BeginMove`, `BeginResize(edge)` | start the compositor's grab from the current press |
+| `FullscreenOn(output)` | fullscreen on one output |
+| `SetTransientFor(parent)` (or `WindowConfig.Parent`) | keep the window above its parent |
+| `RequestAttention` | an xdg-activation request without user interaction; compositors mark the window urgent |
 
-The component side of relm4 (components, workers, commands, factories)
-is described in [components.md](components.md) and mapped in
-[threading.md](threading.md#the-relm4-mapping). The widget-by-widget
-map is [completeness.md](completeness.md).
-
-## What is deliberately absent
-
-Bars are windows like any other, one per output: there is no implicit
-single-window shortcut for layer surfaces. The process-wide non-goals
-(no per-window goroutines, no window manager) are in
-[architecture.md](architecture.md#non-goals).
+Each activation request uses its own token.
