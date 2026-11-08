@@ -102,7 +102,8 @@ type Entry struct {
 	ell EllipsizeMode
 
 	// blink is the caret's blink phase while focused.
-	blink caretBlink
+	blink   CaretBlink
+	hoverAt Point
 
 	// caretHidden suppresses the caret even while focused: a field
 	// presenting as plain text (EditableLabel at rest).
@@ -139,6 +140,7 @@ type Entry struct {
 // here (see requireFace) instead of failing later, in shaping.
 func NewEntry(face render.Font, sizePx float64, color render.Color) *Entry {
 	e := &Entry{face: requireFace("widget.NewEntry", face), sizePx: sizePx, color: color}
+	e.blink.Bind(e.repaintCaret)
 	e.text.SetElement("text")
 	e.text.placeholder.SetElement("placeholder")
 	e.text.selection.SetElement("selection")
@@ -500,8 +502,31 @@ func (e *Entry) rejectEdit() {
 	}
 }
 
-// CursorName reports the text caret shape while hovered.
-func (e *Entry) CursorName() string { return "xterm" }
+// CursorName is the text caret, or the hand over what a click activates
+// instead of placing it: a clickable icon or the completion list.
+func (e *Entry) CursorName() string {
+	if e.iconClickAt(e.hoverAt) != nil || (e.completionOpen() && e.completionListRect().Contains(e.hoverAt.X, e.hoverAt.Y)) {
+		return cursorPointer
+	}
+	return cursorText
+}
+
+// HoverMove tracks the pointer for CursorName.
+func (e *Entry) HoverMove(p Point) { e.hoverAt = p }
+
+func (e *Entry) iconClickAt(p Point) func(Point) {
+	if e.leading != nil && e.leadingClick != nil {
+		if r := e.leadingRect(); !r.Empty() && r.Contains(p.X, p.Y) {
+			return e.leadingClick
+		}
+	}
+	if e.trailing != nil && e.trailingClick != nil {
+		if r := e.trailingRect(); !r.Empty() && r.Contains(p.X, p.Y) {
+			return e.trailingClick
+		}
+	}
+	return nil
+}
 
 // Text returns the entry contents.
 func (e *Entry) Text() string {
@@ -1310,19 +1335,16 @@ func (e *Entry) caretRect(sh *render.ShapedText) (render.Rect, bool) {
 	return caretShapeRect(e.caretX(sh, caret), y, h, adv, e.style(e).CaretShape), true
 }
 
-// restartBlink implements caretBlinker.
-func (e *Entry) restartBlink() {
-	if e.blink.dirty == nil {
-		e.blink.dirty = e.repaintCaret
-	}
-	e.blink.restart()
+// RestartBlink implements CaretBlinker.
+func (e *Entry) RestartBlink() {
+	e.blink.Restart()
 }
 
-// stopBlink implements caretBlinker.
-func (e *Entry) stopBlink() { e.blink.stop() }
+// StopBlink implements CaretBlinker.
+func (e *Entry) StopBlink() { e.blink.Stop() }
 
 // detach implements detacher: a field on no surface blinks for nobody.
-func (e *Entry) detach() { e.stopBlink() }
+func (e *Entry) detach() { e.StopBlink() }
 
 // repaintCaret damages the caret's rect alone.
 func (e *Entry) repaintCaret() {
@@ -1396,17 +1418,9 @@ func (e *Entry) ClickAt(p Point) {
 	if e.clickCompletion(p) {
 		return
 	}
-	if e.leading != nil && e.leadingClick != nil {
-		if r := e.leadingRect(); !r.Empty() && r.Contains(p.X, p.Y) {
-			e.leadingClick(p)
-			return
-		}
-	}
-	if e.trailing != nil && e.trailingClick != nil {
-		if r := e.trailingRect(); !r.Empty() && r.Contains(p.X, p.Y) {
-			e.trailingClick(p)
-			return
-		}
+	if click := e.iconClickAt(p); click != nil {
+		click(p)
+		return
 	}
 	e.clearPreedit()
 	sh := e.shape(e.displayText())

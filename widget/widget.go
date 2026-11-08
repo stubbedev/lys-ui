@@ -370,7 +370,7 @@ func (n *node) SetCursorName(s string) {
 }
 
 // CursorNameOf returns the hover pointer shape SetCursorName put on w,
-// empty when none — the fallback cursorFor reads after the widget's
+// empty when none — the fallback HoverCursor reads after the widget's
 // own CursorName.
 func CursorNameOf(w Widget) string {
 	if n := nodeOf(w); n != nil {

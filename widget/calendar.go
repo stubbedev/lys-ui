@@ -769,3 +769,11 @@ func (c *Calendar) KeyAction(a KeyAction, mods Mods) {
 	c.reveal(next)
 	c.Invalidate()
 }
+
+// CursorName is the hand over a day.
+func (c *Calendar) CursorName() string {
+	if c.hover.IsZero() {
+		return ""
+	}
+	return cursorPointer
+}

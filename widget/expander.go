@@ -32,6 +32,7 @@ const (
 // survives being hidden by a parent. Children exposes the child only
 // while open, so focus traversal never lands inside a closed section.
 type Expander struct {
+	hoverAt Point
 	node
 	face   render.Font
 	title  string
@@ -346,4 +347,15 @@ func (e *Expander) InsertRune(r rune) {
 	if r == ' ' {
 		e.Toggle()
 	}
+}
+
+// HoverMove tracks the pointer for CursorName.
+func (e *Expander) HoverMove(p Point) { e.hoverAt = p }
+
+// CursorName is the hand over the header, the part a click toggles.
+func (e *Expander) CursorName() string {
+	if e.headerRect().Contains(e.hoverAt.X, e.hoverAt.Y) {
+		return cursorPointer
+	}
+	return ""
 }

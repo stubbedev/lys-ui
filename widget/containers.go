@@ -1226,3 +1226,6 @@ func (s *Scroll) paintGlow(cv *render.Canvas) {
 		}
 	}
 }
+
+// CursorName asks for no shape of its own: only part of it is clickable.
+func (*Scroll) CursorName() string { return "" }

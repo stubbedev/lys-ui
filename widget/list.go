@@ -1166,10 +1166,14 @@ func (r *listRow) TooltipText() string {
 	return r.tooltip
 }
 
-// CursorName forwards the row widget's cursor shape.
+// CursorName is the row widget's shape, else the hand on a row a
+// click selects or activates.
 func (r *listRow) CursorName() string {
-	if c, ok := r.row.(CursorNamer); ok {
-		return c.CursorName()
+	if name := HoverCursor(r.row); name != "" {
+		return name
+	}
+	if r.list.mode != SelectionNone || r.list.singleClick {
+		return cursorPointer
 	}
 	return ""
 }
@@ -1268,3 +1272,6 @@ func (l *List) movePixels(dy float64) bool {
 	l.setOffset(off)
 	return true
 }
+
+// CursorName asks for no shape of its own: only part of it is clickable.
+func (*List) CursorName() string { return "" }

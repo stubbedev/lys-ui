@@ -224,3 +224,6 @@ func (b *Scrollbar) Role() Role { return RoleScrollBar }
 
 // HitTest implements Widget: the whole strip is the bar.
 func (b *Scrollbar) HitTest(p Point) Widget { return b.HitLeaf(b, p) }
+
+// CursorName asks for no shape of its own: only part of it is clickable.
+func (*Scrollbar) CursorName() string { return "" }

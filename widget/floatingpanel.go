@@ -361,3 +361,6 @@ func (g *panelGrip) DragMove(p Point) {
 
 // PressEnd ends the resize.
 func (g *panelGrip) PressEnd() { g.f.settled() }
+
+// CursorName asks for no shape of its own: only part of it is clickable.
+func (*FloatingPanel) CursorName() string { return "" }

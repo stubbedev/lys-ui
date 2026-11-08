@@ -762,19 +762,19 @@ func (n *Notebook) hoverTab(i int) {
 	}
 }
 
-// CursorName is the hovered tab label's cursor (GTK resolves it on the
-// label itself), else the notebook's own.
+// CursorName is the hovered tab label's cursor, else the hand: a tab
+// is clickable. Off the tabs it is the notebook's own.
 func (n *Notebook) CursorName() string {
 	for _, t := range n.tabs {
-		if !t.part.hovered || t.part.label == nil {
+		if !t.part.hovered {
 			continue
 		}
-		if css := CSSCursorOf(t.part.label); css != "" {
-			return css
+		if t.part.label != nil {
+			if name := HoverCursor(t.part.label); name != "" {
+				return name
+			}
 		}
-		if name := CursorNameOf(t.part.label); name != "" {
-			return name
-		}
+		return cursorPointer
 	}
 	return CursorNameOf(n)
 }

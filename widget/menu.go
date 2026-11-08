@@ -855,3 +855,11 @@ func (m *Menu) appendStyleKids(buf []Widget) []Widget {
 	}
 	return buf
 }
+
+// CursorName is the hand over an activatable row.
+func (m *Menu) CursorName() string {
+	if m.hovered >= 0 {
+		return cursorPointer
+	}
+	return ""
+}

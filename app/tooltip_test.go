@@ -197,14 +197,14 @@ func TestTooltipGhostOnRemove(t *testing.T) {
 // shape; everything else falls back to the arrow.
 func TestCursorFor(t *testing.T) {
 	entry := widget.NewEntry(testFace(t), 14, render.RGB(255, 255, 255))
-	if got := cursorFor(entry); got != "xterm" {
+	if got := widget.HoverCursor(entry); got != "xterm" {
 		t.Errorf("entry cursor = %q, want xterm", got)
 	}
 	target := newTipTarget("t")
-	if got := cursorFor(target); got != "" {
+	if got := widget.HoverCursor(target); got != "" {
 		t.Errorf("plain widget cursor = %q, want empty for the arrow", got)
 	}
-	if got := cursorFor(nil); got != "" {
+	if got := widget.HoverCursor(nil); got != "" {
 		t.Errorf("nil hover cursor = %q, want empty", got)
 	}
 }

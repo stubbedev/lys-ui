@@ -171,13 +171,13 @@ func TestTypingMovesTheNextFlipAndLaunchesNothing(t *testing.T) {
 	}
 	t.Run("allocations", func(t *testing.T) {
 		testbuild.SkipAllocBudget(t)
-		if allocs := testing.AllocsPerRun(100, e.restartBlink); allocs != 0 {
+		if allocs := testing.AllocsPerRun(100, e.RestartBlink); allocs != 0 {
 			t.Errorf("a keystroke's blink restart allocates %v", allocs)
 		}
 	})
 	start := clock.now()
 	clock.set(start.Add(caretBlinkHalf - time.Millisecond))
-	e.restartBlink()
+	e.RestartBlink()
 	retyped := clock.now()
 	for e.blink.flips == 0 {
 		if !clock.step() {
@@ -186,5 +186,27 @@ func TestTypingMovesTheNextFlipAndLaunchesNothing(t *testing.T) {
 	}
 	if got := clock.now().Sub(retyped); got != caretBlinkHalf {
 		t.Errorf("first flip %v after the last keystroke, want %v", got, caretBlinkHalf)
+	}
+}
+
+func TestInputOTPCaretBlinks(t *testing.T) {
+	clock := pinAnimClock(t)
+	o := NewInputOTP(testFace(t), OTPDigits, 6)
+	root := NewBox(Column, 0, 0)
+	root.Append(o, false)
+	arrangeTree(t, root, 400, 80)
+	r := &Router{Root: root}
+	if err := r.SetFocus(o); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := o.caretRect(); !ok {
+		t.Fatal("a focused empty code shows no caret")
+	}
+	if !clock.step() || !o.blink.Hidden() {
+		t.Fatal("the caret did not blink off after half a cycle")
+	}
+	r.Type('1')
+	if o.blink.Hidden() {
+		t.Error("typing left the caret hidden")
 	}
 }

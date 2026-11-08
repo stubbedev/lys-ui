@@ -43,7 +43,7 @@ type Slider struct {
 // the hand over it, the way wayle's slider primitives ask.
 func NewSlider(min, max, step, value float64) *Slider {
 	s := &Slider{min: min, max: max, step: step}
-	s.cursorName = "pointer"
+	s.cursorName = cursorPointer
 	s.value = s.clamp(value)
 	s.AddClass("horizontal")
 	s.trough.SetElement("trough")

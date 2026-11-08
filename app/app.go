@@ -221,7 +221,7 @@ func (in *surfaceInput) cursorAt(x, y float64) string {
 			return shape
 		}
 	}
-	return cursorFor(in.router.Hovered())
+	return widget.HoverCursor(in.router.Hovered())
 }
 
 // HandlePointerButton implements wlsession.SurfacePointerHandler.

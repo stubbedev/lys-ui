@@ -18,11 +18,13 @@ const (
 	caretBlinkTimeout = 10 * time.Second
 )
 
-// caretBlinker is a text field whose caret blinks. The router restarts
-// it on every input the focused field takes and as focus arrives.
-type caretBlinker interface {
-	restartBlink()
-	stopBlink()
+// CaretBlinker is a focusable widget whose caret blinks, the toolkit's
+// or a custom canvas's. The router restarts it on every input the
+// focused widget takes and as focus arrives, and stops it as focus
+// leaves.
+type CaretBlinker interface {
+	RestartBlink()
+	StopBlink()
 }
 
 const (
@@ -30,8 +32,8 @@ const (
 	caretBlinkFlips = int((caretBlinkTimeout - 1) / caretBlinkHalf)
 )
 
-// caretBlink is a field's blink phase and the one pending piece toggling it.
-type caretBlink struct {
+// CaretBlink is a caret's blink phase and the one pending piece toggling it.
+type CaretBlink struct {
 	hidden bool
 	cancel anim.Cancel
 	dirty  func()
@@ -40,13 +42,20 @@ type caretBlink struct {
 	flips  int
 }
 
-// restart shows the caret solid and runs the blink: every half cycle until
-// the timeout, the phase flips and dirty repaints the caret's rect. Typing
+// Bind sets the repaint that damages the caret on each flip; a field
+// binds it once, at construction.
+func (b *CaretBlink) Bind(repaint func()) { b.dirty = repaint }
+
+// Hidden reports whether the caret is in its off phase.
+func (b *CaretBlink) Hidden() bool { return b.hidden }
+
+// Restart shows the caret solid and runs the blink: every half cycle until
+// the timeout, the phase flips and the bound repaint damages the caret. Typing
 // only moves the next flip, so a keystroke launches nothing. Reduced motion
 // keeps the caret solid.
-func (b *caretBlink) restart() {
+func (b *CaretBlink) Restart() {
 	if anim.Instant() {
-		b.stop()
+		b.Stop()
 		return
 	}
 	b.solid()
@@ -57,14 +66,14 @@ func (b *caretBlink) restart() {
 	}
 }
 
-func (b *caretBlink) arm(after time.Duration) {
+func (b *CaretBlink) arm(after time.Duration) {
 	if b.land == nil {
 		b.land = b.landed
 	}
 	b.cancel = anim.Play(anim.Delay(after), anim.Animate(0, b.land))
 }
 
-func (b *caretBlink) landed(float64) {
+func (b *CaretBlink) landed(float64) {
 	now := animclock.Now()
 	if now.Before(b.due) {
 		b.arm(b.due.Sub(now))
@@ -82,15 +91,15 @@ func (b *caretBlink) landed(float64) {
 	b.arm(caretBlinkHalf)
 }
 
-func (b *caretBlink) solid() {
+func (b *CaretBlink) solid() {
 	if b.hidden {
 		b.hidden = false
 		b.dirty()
 	}
 }
 
-// stop ends the blink with the caret solid.
-func (b *caretBlink) stop() {
+// Stop ends the blink with the caret solid.
+func (b *CaretBlink) Stop() {
 	if b.cancel != nil {
 		b.cancel()
 		b.cancel = nil

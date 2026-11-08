@@ -186,3 +186,6 @@ func (s *MenuStack) RawKey(code uint32, mods Mods, sym xkb.Keysym) bool {
 	s.dispatch(func(m *Menu) { consumed = m.RawKey(code, mods, sym) })
 	return consumed
 }
+
+// CursorName is the visible level's.
+func (s *MenuStack) CursorName() string { return s.Top().CursorName() }

@@ -101,7 +101,7 @@ func (r *ActionRow) SetActivatable(on bool) {
 	r.activatable = on
 	r.cursorName = ""
 	if on {
-		r.cursorName = "pointer"
+		r.cursorName = cursorPointer
 	}
 	r.Invalidate()
 }
@@ -214,3 +214,6 @@ func (r *ActionRow) Paint(cv *render.Canvas) {
 	r.paintSurface(cv, r.line.Bounds(), fill)
 	PaintChild(cv, r.root)
 }
+
+// CursorName asks for no shape of its own: only part of it is clickable.
+func (*ActionRow) CursorName() string { return "" }

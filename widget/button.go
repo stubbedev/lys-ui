@@ -43,7 +43,6 @@ type Button struct {
 // button is clickable, the way wayle's button primitives ask.
 func NewButton(child Widget, padding, radius int) *Button {
 	b := &Button{child: child, padding: padding, radius: radius}
-	b.cursorName = "pointer"
 	return b
 }
 

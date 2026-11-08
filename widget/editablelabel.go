@@ -103,12 +103,3 @@ func (l *EditableLabel) KeyAction(a KeyAction, mods Mods) {
 	}
 	l.Entry.KeyAction(a, mods)
 }
-
-// CursorName is the text cursor only while editing; at rest the
-// label keeps the node-level shape like any other widget.
-func (l *EditableLabel) CursorName() string {
-	if l.editing {
-		return l.Entry.CursorName()
-	}
-	return CursorNameOf(l)
-}

@@ -105,7 +105,7 @@ func (l *ListBox) Insert(i int, w Widget) *ListBoxRow {
 	r := &ListBoxRow{box: l, child: w, selectable: true, activatable: true}
 	r.SetElement("row")
 	r.AddClass(css.Activatable)
-	r.cursorName = "pointer"
+	r.cursorName = cursorPointer
 	i = min(max(i, 0), len(l.rows))
 	l.rows = append(l.rows, nil)
 	copy(l.rows[i+1:], l.rows[i:])
@@ -515,7 +515,7 @@ func (r *ListBoxRow) SetActivatable(on bool) {
 	r.activatable = on
 	r.cursorName = ""
 	if on {
-		r.cursorName = "pointer"
+		r.cursorName = cursorPointer
 		r.AddClass(css.Activatable)
 	} else {
 		r.RemoveClass(css.Activatable)
@@ -636,3 +636,6 @@ func (r *ListBoxRow) Children() []Widget {
 	}
 	return []Widget{r.header, r.child}
 }
+
+// CursorName asks for no shape of its own: only part of it is clickable.
+func (*ListBoxRow) CursorName() string { return "" }

@@ -375,3 +375,6 @@ func (s *Sheet) appendStyleKids(buf []Widget) []Widget { return append(buf, s.ro
 
 // Content returns the widget the sheet slides over.
 func (s *Sheet) Content() Widget { return s.root }
+
+// CursorName asks for no shape of its own: only part of it is clickable.
+func (*Sheet) CursorName() string { return "" }

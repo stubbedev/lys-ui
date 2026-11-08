@@ -574,6 +574,7 @@ func (p *Popup) AttachInput(sess inputSession, router *widget.Router, onPress fu
 		pointer:   &pointer,
 		mods:      func() widget.Mods { return widget.Mods(sess.Mods()) },
 		markDirty: func() { p.dirty.Store(true) },
+		setCursor: sess.SetCursor,
 	}
 	pointerAt = func() widget.Point { return widget.Point{X: int(pointer.x), Y: int(pointer.y)} }
 	input.Input = touchinput.Input{
@@ -590,6 +591,7 @@ func (p *Popup) AttachInput(sess inputSession, router *widget.Router, onPress fu
 // inputSession is what a popup's input needs from its session.
 type inputSession interface {
 	Mods() wlsession.Mods
+	SetCursor(name string) error
 	SetSurfaceInput(surf *wl.Surface, h wlsession.SurfacePointerHandler)
 }
 
@@ -610,6 +612,21 @@ type popupInput struct {
 	// mods reads the keyboard modifiers held.
 	mods      func() widget.Mods
 	markDirty func()
+	// setCursor pushes a pointer shape to the session; nil without one.
+	setCursor func(string) error
+	shape     string
+}
+
+func (in *popupInput) applyCursor() {
+	shape := widget.HoverCursor(in.router.Hovered())
+	if shape == in.shape || in.setCursor == nil {
+		return
+	}
+	in.shape = shape
+	if err := in.setCursor(shape); err != nil {
+		in.shape = ""
+		debug.Log("input", "popup cursor %q: %v", shape, err)
+	}
 }
 
 // HandlePointerEnter implements wlsession.SurfacePointerHandler.
@@ -624,6 +641,7 @@ func (in *popupInput) move(x, y float64) {
 	}
 	in.pointer.x, in.pointer.y = x, y
 	in.router.Move(widget.Point{X: int(x), Y: int(y)})
+	in.applyCursor()
 	in.markDirty()
 }
 
@@ -671,7 +689,10 @@ func (in *popupInput) HandlePointerAxis(dx, dy float64) {
 // session leaves a surface only when the pointer truly left or the
 // device went away, so the whole gesture ends: an in-flight press is
 // cancelled without a click, its release will never arrive.
-func (in *popupInput) HandlePointerLeave() { in.router.PointerLost() }
+func (in *popupInput) HandlePointerLeave() {
+	in.shape = ""
+	in.router.PointerLost()
+}
 
 // HandlePointerScrollPixels implements wlsession.SurfacePreciseScroller.
 func (in *popupInput) HandlePointerScrollPixels(dx, dy float64) {

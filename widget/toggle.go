@@ -33,7 +33,6 @@ type Switch struct {
 // the hand over it, the way wayle's switch primitive asks.
 func NewSwitch(on bool) *Switch {
 	s := &Switch{on: on, progress: switchTarget(on)}
-	s.cursorName = "pointer"
 	s.knob.SetElement("slider")
 	s.SetState(StateChecked, on)
 	return s
@@ -257,7 +256,6 @@ type CheckButton struct {
 // turns to the hand over it, the way wayle's checkbox primitive asks.
 func NewCheckButton(checked bool) *CheckButton {
 	c := &CheckButton{checked: checked}
-	c.cursorName = "pointer"
 	c.check.SetElement("check")
 	setParents(c, &c.check)
 	return c

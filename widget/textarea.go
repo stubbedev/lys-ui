@@ -19,7 +19,7 @@ import (
 type TextArea struct {
 	node
 	// blink is the caret's blink phase while focused.
-	blink       caretBlink
+	blink       CaretBlink
 	face        render.Font
 	faces       faceCache
 	sizePx      float64
@@ -191,6 +191,7 @@ func NewTextArea(face render.Font, sizePx float64, color render.Color) *TextArea
 		lines:  [][]rune{{}},
 		wrap:   true,
 	}
+	t.blink.Bind(t.repaintCaret)
 	t.text.SetElement("text")
 	t.text.placeholder.SetElement("placeholder")
 	t.text.selection.SetElement("selection")
@@ -243,7 +244,7 @@ type pos struct {
 }
 
 // CursorName reports the text caret shape while hovered.
-func (t *TextArea) CursorName() string { return "xterm" }
+func (t *TextArea) CursorName() string { return cursorText }
 
 // Text returns the contents, lines joined with newlines.
 func (t *TextArea) Text() string {
@@ -1230,19 +1231,16 @@ func (t *TextArea) caretRectAt(caret pos) (render.Rect, bool) {
 	return caretShapeRect(t.caretX(caret.line, caret.col), y, h, adv, t.style(t).CaretShape), true
 }
 
-// restartBlink implements caretBlinker.
-func (t *TextArea) restartBlink() {
-	if t.blink.dirty == nil {
-		t.blink.dirty = t.repaintCaret
-	}
-	t.blink.restart()
+// RestartBlink implements CaretBlinker.
+func (t *TextArea) RestartBlink() {
+	t.blink.Restart()
 }
 
-// stopBlink implements caretBlinker.
-func (t *TextArea) stopBlink() { t.blink.stop() }
+// StopBlink implements CaretBlinker.
+func (t *TextArea) StopBlink() { t.blink.Stop() }
 
 // detach implements detacher: a field on no surface blinks for nobody.
-func (t *TextArea) detach() { t.stopBlink() }
+func (t *TextArea) detach() { t.StopBlink() }
 
 // repaintCaret damages the caret's rect alone.
 func (t *TextArea) repaintCaret() {

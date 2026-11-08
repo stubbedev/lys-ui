@@ -6,6 +6,7 @@ package popup
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -370,6 +371,8 @@ type recordedInput struct {
 
 func (*recordedInput) Mods() wlsession.Mods { return 0 }
 
+func (*recordedInput) SetCursor(string) error { return nil }
+
 func (r *recordedInput) SetSurfaceInput(surf *wl.Surface, h wlsession.SurfacePointerHandler) {
 	r.attached[surf] = h != nil
 }
@@ -451,5 +454,29 @@ func TestPopupDismissedBeforeItsConfigure(t *testing.T) {
 	}
 	if animclock.Active() {
 		t.Error("a configure after the close started an enter")
+	}
+}
+
+func TestPopupInputAppliesTheHoveredCursor(t *testing.T) {
+	button := widget.NewButton(widget.NewSpacer(40, 40), 0, 0)
+	root := widget.NewBox(widget.Row, 0, 0)
+	root.Append(button, false).Append(widget.NewSpacer(40, 40), false)
+	widget.SizeWithin(root, widget.Size{W: 80, H: 40})
+	root.Arrange(render.Rect{W: 80, H: 40})
+	var pushed []string
+	in := &popupInput{
+		dismissed: func() bool { return false },
+		router:    &widget.Router{Root: root},
+		pointer:   &struct{ x, y float64 }{},
+		markDirty: func() {},
+		setCursor: func(s string) error { pushed = append(pushed, s); return nil },
+	}
+	in.HandlePointerEnter(10, 10)
+	in.HandlePointerMotion(12, 12)
+	in.HandlePointerMotion(60, 10)
+	in.HandlePointerLeave()
+	in.HandlePointerEnter(10, 10)
+	if want := []string{"pointer", "", "pointer"}; !slices.Equal(pushed, want) {
+		t.Errorf("pushed shapes %q, want %q", pushed, want)
 	}
 }

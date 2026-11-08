@@ -247,7 +247,7 @@ func TestNotebookTabHoverAndCursor(t *testing.T) {
 		t.Errorf("over the first tab: hover %v/%v, cursor %q", hovered(0), hovered(1), n.CursorName())
 	}
 	n.HoverMove(center(n.tabRect(1)))
-	if hovered(0) || !hovered(1) || n.CursorName() != "" {
+	if hovered(0) || !hovered(1) || n.CursorName() != "pointer" {
 		t.Errorf("over the second tab: hover %v/%v, cursor %q", hovered(0), hovered(1), n.CursorName())
 	}
 	n.SetHovered(false)

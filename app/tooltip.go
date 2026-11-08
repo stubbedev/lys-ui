@@ -190,21 +190,6 @@ func (t *tooltipCtl) update(router *widget.Router, now time.Time, opener func(wi
 	}
 }
 
-// cursorFor resolves the pointer shape for the hovered widget: the
-// stylesheet's cursor declaration first (it inherits, so a container
-// covers its subtree and overrides widget defaults), else the
-// widget's own CursorName (text fields ask for the caret), else the
-// node-level SetCursorName, else the arrow.
-func cursorFor(hover widget.Widget) string {
-	if css := widget.CSSCursorOf(hover); css != "" {
-		return css
-	}
-	if cn, ok := hover.(widget.CursorNamer); ok {
-		return cn.CursorName()
-	}
-	return widget.CursorNameOf(hover)
-}
-
 // tooltipAnchor is the rect a tooltip opens centered under, or above
 // when the output has no room below: the hovered widget, or the part
 // of it a TooltipAnchorer names, clipped to the window. A widget

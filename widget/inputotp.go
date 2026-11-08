@@ -46,6 +46,7 @@ type InputOTP struct {
 	charset OTPCharset
 	code    []rune
 	caret   int
+	blink   CaretBlink
 
 	// OnChanged fires with the code after every edit; OnComplete when
 	// an edit fills the last empty slot.
@@ -65,6 +66,7 @@ func NewInputOTP(face render.Font, charset OTPCharset, groups ...int) *InputOTP 
 		panic(fmt.Sprintf("widget: NewInputOTP: groups %v, want one or more of at least one slot", groups))
 	}
 	o := &InputOTP{row: NewBox(Row, 8, 0), charset: charset}
+	o.blink.Bind(o.repaintCaret)
 	o.SetElement("inputotp")
 	for g, n := range groups {
 		if g > 0 {
@@ -235,13 +237,37 @@ func (o *InputOTP) HitTest(p Point) Widget { return o.HitLeaf(o, p) }
 // the input has the focus.
 func (o *InputOTP) Paint(cv *render.Canvas) {
 	o.composite.Paint(cv)
+	if r, ok := o.caretRect(); ok && !o.blink.Hidden() {
+		cv.FillRect(r, Current().Text)
+	}
+}
+
+func (o *InputOTP) caretRect() (render.Rect, bool) {
 	if !o.focused || o.caret != len(o.code) || len(o.code) == len(o.slots) {
-		return
+		return render.Rect{}, false
 	}
 	b := o.slots[o.active()].Bounds()
 	h := b.H * 4 / 9
-	cv.FillRect(render.Rect{X: b.X + b.W/2, Y: b.Y + (b.H-h)/2, W: 1, H: h}, Current().Text)
+	return render.Rect{X: b.X + b.W/2, Y: b.Y + (b.H-h)/2, W: 1, H: h}, true
 }
+
+func (o *InputOTP) repaintCaret() {
+	if r, ok := o.caretRect(); ok {
+		o.InvalidateRect(r)
+	}
+}
+
+// RestartBlink implements CaretBlinker.
+func (o *InputOTP) RestartBlink() { o.blink.Restart() }
+
+// StopBlink implements CaretBlinker.
+func (o *InputOTP) StopBlink() { o.blink.Stop() }
+
+// detach implements detacher.
+func (o *InputOTP) detach() { o.blink.Stop() }
+
+// CursorName is the text caret: the code is writable.
+func (o *InputOTP) CursorName() string { return cursorText }
 
 // focusRingTarget draws the focus ring around the active slot.
 func (o *InputOTP) focusRingTarget() Widget { return o.slots[o.active()] }

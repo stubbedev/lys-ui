@@ -121,7 +121,7 @@ func (it *Item) SetOnActivate(fn func()) {
 		return
 	}
 	it.AddClass(css.Activatable)
-	it.SetCursorName("pointer")
+	it.SetCursorName(cursorPointer)
 }
 
 // focusable implements focusOptOut: only an activatable item takes the
@@ -295,3 +295,6 @@ func (g *ItemGroup) Clear() {
 	g.box.Clear()
 	g.items = 0
 }
+
+// CursorName asks for no shape of its own: only part of it is clickable.
+func (*Item) CursorName() string { return "" }

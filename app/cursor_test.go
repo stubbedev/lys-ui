@@ -121,11 +121,11 @@ func TestSurfaceInputCursorPassThrough(t *testing.T) {
 // CursorName implementation still outranks it.
 func TestSetCursorName(t *testing.T) {
 	b := widget.NewBox(widget.Row, 0, 0)
-	if got := cursorFor(b); got != "" {
+	if got := widget.HoverCursor(b); got != "" {
 		t.Errorf("fresh box cursor = %q, want the arrow", got)
 	}
 	b.SetCursorName("pointer")
-	if got := cursorFor(b); got != "pointer" {
+	if got := widget.HoverCursor(b); got != "pointer" {
 		t.Errorf("SetCursorName cursor = %q, want pointer", got)
 	}
 	if got := widget.CursorNameOf(widget.NewSpacer(4, 4)); got != "" {
@@ -134,11 +134,11 @@ func TestSetCursorName(t *testing.T) {
 }
 
 // The stylesheet's cursor outranks the widget's built-in shape, and
-// inline styles carry it: cursorFor reads the computed cascade first.
+// inline styles carry it: HoverCursor reads the computed cascade first.
 func TestCursorForCSS(t *testing.T) {
 	b := widget.NewBox(widget.Row, 0, 0)
 	b.SetInlineStyle("cursor: crosshair")
-	if got := cursorFor(b); got != "crosshair" {
+	if got := widget.HoverCursor(b); got != "crosshair" {
 		t.Errorf("css cursor = %q, want crosshair", got)
 	}
 	face, err := render.NewFixtureTypeface()
@@ -146,11 +146,11 @@ func TestCursorForCSS(t *testing.T) {
 		t.Fatalf("fixture face: %v", err)
 	}
 	e := widget.NewEntry(face, 14, render.RGB(255, 255, 255))
-	if got := cursorFor(e); got != "xterm" {
+	if got := widget.HoverCursor(e); got != "xterm" {
 		t.Fatalf("entry cursor = %q, want its own xterm", got)
 	}
 	e.SetInlineStyle("cursor: pointer")
-	if got := cursorFor(e); got != "pointer" {
+	if got := widget.HoverCursor(e); got != "pointer" {
 		t.Errorf("css cursor over the widget shape = %q, want pointer", got)
 	}
 }

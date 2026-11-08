@@ -101,11 +101,42 @@ type PixelClaimer interface {
 	ClaimPixels(dx, dy float64) bool
 }
 
+const (
+	cursorPointer = "pointer"
+	cursorText    = "xterm"
+)
+
 // CursorNamer lets a widget request a pointer shape while hovered,
-// using xcursor names ("xterm" for text, "left_ptr" arrow default).
+// using xcursor names. An empty name asks for none, which is how a
+// Clicker only clickable in part keeps the arrow elsewhere.
 type CursorNamer interface {
 	// CursorName returns the xcursor shape for the hovered widget.
 	CursorName() string
+}
+
+// HoverCursor resolves the pointer shape over hover: the stylesheet
+// first, then the widget's own request, then the hand wherever a
+// release would click something, exactly as Release routes it.
+func HoverCursor(hover Widget) string {
+	if css := CSSCursorOf(hover); css != "" {
+		return css
+	}
+	namer, shaped := hover.(CursorNamer)
+	if shaped {
+		if name := namer.CursorName(); name != "" {
+			return name
+		}
+	}
+	if name := CursorNameOf(hover); name != "" {
+		return name
+	}
+	if _, clicks := hover.(Clicker); clicks && !shaped {
+		return cursorPointer
+	}
+	if clickWithinOf(hover) != nil {
+		return cursorPointer
+	}
+	return ""
 }
 
 // TooltipTexter exposes a widget's hover tooltip text.
@@ -701,15 +732,15 @@ func setFocusStyle(old, new Widget, visible bool) {
 	}
 	if off != nil {
 		off.focused, off.focusVisible = false, false
-		if b, ok := old.(caretBlinker); ok {
-			b.stopBlink()
+		if b, ok := old.(CaretBlinker); ok {
+			b.StopBlink()
 		}
 		off.invalidateState(style.Focus | style.FocusVisible)
 	}
 	if on != nil {
 		on.focused, on.focusVisible = true, visible
-		if b, ok := new.(caretBlinker); ok {
-			b.restartBlink()
+		if b, ok := new.(CaretBlinker); ok {
+			b.RestartBlink()
 		}
 		on.invalidateState(style.Focus | style.FocusVisible)
 		shiftFocusWithin(new, 1)
@@ -1259,8 +1290,8 @@ func (r *Router) focusStep(dir int) {
 // takes (a key, typed text, a press or a drag) shows the caret solid
 // again, as GTK's does.
 func (r *Router) touchCaret() {
-	if b, ok := r.focus.(caretBlinker); ok {
-		b.restartBlink()
+	if b, ok := r.focus.(CaretBlinker); ok {
+		b.RestartBlink()
 	}
 }
 

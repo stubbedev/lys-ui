@@ -461,3 +461,11 @@ func (t *Toast) ClickAt(p Point) {
 	}
 	t.Dismiss()
 }
+
+// CursorName is the hand over the action button.
+func (t *Toast) CursorName() string {
+	if t.action != "" && t.actionRect.Contains(t.hoverPt.X, t.hoverPt.Y) {
+		return cursorPointer
+	}
+	return ""
+}
