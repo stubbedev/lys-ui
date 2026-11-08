@@ -6,8 +6,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
-
-	"github.com/stubbedev/lys-ui/internal/testbuild"
+	"github.com/stubbedev/lys-lib/testbuild"
 )
 
 // cssTree loads css, then measures and arranges root in a w x h rect

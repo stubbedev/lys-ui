@@ -11,7 +11,7 @@ Machine: Intel i5-10400F (6 cores, 12 threads), Go 1.27, Linux, measured
 the median. The canvas and text benchmarks live with their code in
 lys-lib.
 
-    go test -run '^$' -bench . -benchmem -count 6 ./widget ./app ./internal/icons
+    go test -run '^$' -bench . -benchmem -count 6 ./widget ./app
     go test -run TestAllocBudget -v ./app ./widget
 
 `just bench` runs every benchmark once; CI archives that output for

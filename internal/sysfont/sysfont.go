@@ -16,6 +16,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/stubbedev/lys-lib/assetfile"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/typesetting/font"
 	"github.com/stubbedev/lys-lib/third_party/typesetting/font/opentype"
@@ -23,7 +24,6 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/typesetting/language"
 	"golang.org/x/sys/unix"
 
-	"github.com/stubbedev/lys-ui/internal/assetfile"
 	"github.com/stubbedev/lys-ui/internal/uifont"
 )
 

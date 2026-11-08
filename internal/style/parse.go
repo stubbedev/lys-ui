@@ -23,8 +23,7 @@ import (
 	"strings"
 
 	"github.com/stubbedev/lys-lib/intconv"
-
-	"github.com/stubbedev/lys-ui/internal/logutil"
+	"github.com/stubbedev/lys-lib/logutil"
 )
 
 // SheetLimit is the most a stylesheet file or an @import may hold.

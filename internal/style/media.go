@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/stubbedev/lys-ui/internal/assetfile"
+	"github.com/stubbedev/lys-lib/assetfile"
 )
 
 // Media is the environment @media conditions evaluate against: the

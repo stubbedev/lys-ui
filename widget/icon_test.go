@@ -12,10 +12,9 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/assetfile"
+	"github.com/stubbedev/lys-lib/icons"
 	"github.com/stubbedev/lys-lib/render"
-
-	"github.com/stubbedev/lys-ui/internal/assetfile"
-	"github.com/stubbedev/lys-ui/internal/icons"
 )
 
 const (

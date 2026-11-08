@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/stubbedev/lys-ui/internal/assetfile"
+	"github.com/stubbedev/lys-lib/assetfile"
 )
 
 const maxAssetQueue = 1024

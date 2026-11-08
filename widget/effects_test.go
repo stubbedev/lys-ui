@@ -9,8 +9,7 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
-
-	"github.com/stubbedev/lys-ui/internal/testbuild"
+	"github.com/stubbedev/lys-lib/testbuild"
 )
 
 func TestBackdropFilterPaints(t *testing.T) {

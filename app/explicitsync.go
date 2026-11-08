@@ -8,9 +8,8 @@ import (
 
 	"github.com/stubbedev/lys-lib/drm"
 	"github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/logutil"
 	"golang.org/x/sys/unix"
-
-	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
 type syncTimelines interface {

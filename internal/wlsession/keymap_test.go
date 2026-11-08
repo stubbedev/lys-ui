@@ -9,11 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/logutil"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/xkb"
 	"golang.org/x/sys/unix"
-
-	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
 // findXKBData locates the system xkeyboard-config data directory; tests

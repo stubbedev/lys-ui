@@ -1,10 +1,9 @@
 package widget
 
 import (
-	"os"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/i18n"
+	"github.com/stubbedev/lys-lib/i18n"
 )
 
 // TestMessageCatalog pins the catalog contract: Tr is the identity
@@ -55,16 +54,28 @@ func TestChooserLabelsFlowThroughCatalog(t *testing.T) {
 	}
 }
 
+const polishCatalog = `msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+msgctxt "menu"
+msgid "Open"
+msgstr "Otwórz…"
+
+msgid "%d file"
+msgid_plural "%d files"
+msgstr[0] "%d plik"
+msgstr[1] "%d pliki"
+msgstr[2] "%d plików"
+`
+
 func TestTrNAndTrCtxRouteThroughTheCatalog(t *testing.T) {
 	defer SetMessageCatalog(nil)
 	if TrN("%d file", "%d files", 1) != "%d file" || TrN("%d file", "%d files", 3) != "%d files" || TrCtx("menu", "Open") != "Open" {
 		t.Error("the identity catalog does not pick English forms")
 	}
-	data, err := os.ReadFile("../i18n/testdata/pl.po")
-	if err != nil {
-		t.Fatal(err)
-	}
-	c, err := i18n.ParsePO(data)
+	c, err := i18n.ParsePO([]byte(polishCatalog))
 	if err != nil {
 		t.Fatal(err)
 	}

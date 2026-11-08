@@ -7,10 +7,10 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/testbuild"
 
 	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
-	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 // A focused entry's caret spans the font's extents and blinks as GTK's

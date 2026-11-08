@@ -4,11 +4,11 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/stubbedev/lys-lib/appearance"
+	"github.com/stubbedev/lys-lib/logutil"
 	"github.com/stubbedev/lys-lib/xdg"
 
-	"github.com/stubbedev/lys-ui/appearance"
 	"github.com/stubbedev/lys-ui/gtksettings"
-	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

@@ -65,5 +65,5 @@ key is absent, sets `widget.SetReducedMotion`:
 | stalled portal | calls time out (3 s probe, 5 s read) and read unknown |
 
 The same monitor follows the icon theme ([Icons](icons.md)).
-Programs without an `app.Application` can use `portalsettings`
+Programs without an `app.Application` can use lys-lib's `portalsettings`
 directly.

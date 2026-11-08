@@ -4,7 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stubbedev/lys-ui/appearance"
+	"github.com/stubbedev/lys-lib/appearance"
+
 	"github.com/stubbedev/lys-ui/gtksettings"
 )
 

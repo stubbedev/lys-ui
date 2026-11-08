@@ -2,7 +2,7 @@
 
 ## Lookup
 
-`internal/icons` implements the freedesktop icon theme spec in pure Go:
+lys-lib's `icons` implements the freedesktop icon theme spec in pure Go:
 
 - `index.theme` parsing: `Inherits`, `Directories`/`ScaledDirectories`,
   and per-directory `Size`, `Type`, `MinSize`, `MaxSize`, `Threshold`
@@ -17,7 +17,7 @@
   stock chrome draws without an installed theme. An installed theme
   always wins.
 
-Programs that draw icons without widgets use the public `icontheme`
+Programs that draw icons without widgets use lys-lib's `icontheme`
 package.
 
 ## `widget.Icon`

@@ -4,10 +4,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/stubbedev/lys-lib/logutil"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
-	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/sessionlock"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/wlsession"

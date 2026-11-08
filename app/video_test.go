@@ -13,12 +13,12 @@ import (
 
 	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/testbuild"
 	"github.com/stubbedev/lys-lib/wlr"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/app"
-	"github.com/stubbedev/lys-ui/internal/testbuild"
 	"github.com/stubbedev/lys-ui/media"
 	"github.com/stubbedev/lys-ui/widget"
 )

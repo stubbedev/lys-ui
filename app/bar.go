@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/stubbedev/lys-lib/intconv"
+	"github.com/stubbedev/lys-lib/logutil"
 	"github.com/stubbedev/lys-lib/xkb"
 
-	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

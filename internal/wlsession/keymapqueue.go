@@ -8,10 +8,9 @@ import (
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/keymapfd"
+	"github.com/stubbedev/lys-lib/logutil"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/xkb"
-
-	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
 const maxQueuedKeyEvents = 4096

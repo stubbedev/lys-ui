@@ -8,10 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stubbedev/lys-lib/testbuild"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/xkb"
-
-	"github.com/stubbedev/lys-ui/internal/testbuild"
 )
 
 func goroutineID() string {

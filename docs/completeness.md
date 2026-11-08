@@ -90,8 +90,8 @@ Details: [Architecture](architecture.md), [CSS](css.md), [Appearance](appearance
 | CSS | GTK-flavoured stylesheets above the palette: selectors, `@define-color`, transitions, `@keyframes`, flexbox, grid, effects; files at chosen priorities (`AddStylesheetFile`), hot-reloaded through inotify |
 | glass surfaces | the `css.Glass`, `css.LiquidGlass` and `css.Frosted` style classes; behind-window and behind-popover blur through ext_background_effect_v1 (`WindowConfig`, `LayerConfig` and `PopoverConfig.BackgroundBlur`) |
 | GTK settings | `gtksettings`: GTK 4's settings.ini |
-| desktop settings | `portalsettings`: the appearance, icon theme and font xdg-desktop-portal publishes, followed live, for programs that draw without an `app.Application` |
-| icon themes | freedesktop spec in pure Go, live icon-theme following; `icontheme` for programs that draw icons without widgets |
+| desktop settings | lys-lib's `portalsettings`: the appearance, icon theme and font xdg-desktop-portal publishes, followed live, for programs that draw without an `app.Application` |
+| icon themes | freedesktop spec in pure Go, live icon-theme following; lys-lib's `icontheme` for programs that draw icons without widgets |
 | accessibility | semantic roles, keyboard-first guarantee, in-process AT-SPI bridge |
 | animation (`adw::TimedAnimation`, `SpringAnimation`) | `anim`: tweens, easing curves, springs, Sequence/Parallel/Delay timelines, reduced motion |
 

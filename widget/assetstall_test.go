@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/assetfile"
 	"github.com/stubbedev/lys-lib/render"
-
-	"github.com/stubbedev/lys-ui/internal/assetfile"
 )
 
 func TestAStuckReadAndAPipeHoldUpNoOtherIcon(t *testing.T) {

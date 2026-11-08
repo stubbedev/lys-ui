@@ -12,11 +12,11 @@ import (
 	"image"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/logutil"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
-	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
 // defaultIconSizes is the rasterization ladder when the compositor

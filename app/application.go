@@ -18,6 +18,9 @@ import (
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/icons"
+	"github.com/stubbedev/lys-lib/logutil"
+	"github.com/stubbedev/lys-lib/portalsettings"
 	"github.com/stubbedev/lys-lib/render"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -29,16 +32,13 @@ import (
 	"github.com/stubbedev/lys-ui/internal/clipboard"
 	"github.com/stubbedev/lys-ui/internal/datacontrol"
 	"github.com/stubbedev/lys-ui/internal/dragdrop"
-	"github.com/stubbedev/lys-ui/internal/icons"
 	"github.com/stubbedev/lys-ui/internal/inspect"
 	"github.com/stubbedev/lys-ui/internal/layersurface"
-	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/notify"
 	"github.com/stubbedev/lys-ui/internal/recentfiles"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/window"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
-	"github.com/stubbedev/lys-ui/portalsettings"
 	"github.com/stubbedev/lys-ui/widget"
 )
 

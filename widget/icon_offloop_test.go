@@ -9,10 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/icons"
 	"github.com/stubbedev/lys-lib/render"
-
-	"github.com/stubbedev/lys-ui/internal/icons"
-	"github.com/stubbedev/lys-ui/internal/testbuild"
+	"github.com/stubbedev/lys-lib/testbuild"
 )
 
 func settleAssets(t *testing.T, f *fakeInvoker) {

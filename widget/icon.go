@@ -4,10 +4,10 @@ import (
 	"image"
 	"path/filepath"
 
+	"github.com/stubbedev/lys-lib/icons"
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 
-	"github.com/stubbedev/lys-ui/internal/icons"
 	"github.com/stubbedev/lys-ui/internal/style"
 )
 

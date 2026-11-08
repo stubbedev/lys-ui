@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/stubbedev/lys-lib/logutil"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/gomath"
 
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
 // Theme holds the palette and metrics widgets paint with. Colors left at

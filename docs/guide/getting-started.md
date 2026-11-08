@@ -35,12 +35,8 @@ implementation.
 | `widget` | the widget tree, theme, CSS, actions, bindings |
 | `widget/css` | libadwaita's style classes and named colors as constants |
 | `anim` | tweens, easing, springs and timelines |
-| `appearance` | the desktop's color scheme, accent and contrast preferences |
-| `portalsettings` | the desktop settings xdg-desktop-portal publishes, for programs without an `app.Application` |
 | `gtksettings` | GTK 4's settings.ini, read with GTK's file order |
-| `icontheme` | freedesktop icon theme lookup for programs that draw icons without widgets |
 | `atspitest` | real at-spi2-core for tests that check an app's accessibility tree |
-| `i18n` | gettext catalogs (`.mo`, `.po`) |
 | `highlight` | syntax highlighters for the code view |
 | `media` | video and sound playback |
 | `pdf` | PDF writing |

@@ -1,6 +1,6 @@
 package widget
 
-import "github.com/stubbedev/lys-ui/internal/icons"
+import "github.com/stubbedev/lys-lib/icons"
 
 // SetDeviceScale records that root's tree presents at num device pixels
 // per denom logical ones, and has every dynamic Icon in it decode for

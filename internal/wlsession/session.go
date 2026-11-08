@@ -16,6 +16,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/intconv"
+	"github.com/stubbedev/lys-lib/logutil"
 	text "github.com/stubbedev/lys-lib/third_party/wayland/unstable/text-input-v3"
 	deco "github.com/stubbedev/lys-lib/third_party/wayland/unstable/xdg-decoration-v1"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -26,7 +27,6 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/compose"
-	"github.com/stubbedev/lys-ui/internal/logutil"
 	"github.com/stubbedev/lys-ui/internal/worker"
 )
 

@@ -16,13 +16,12 @@ import (
 	"sync"
 
 	"github.com/stubbedev/lys-lib/intconv"
+	"github.com/stubbedev/lys-lib/logutil"
 	"github.com/stubbedev/lys-lib/render"
 	wlos "github.com/stubbedev/lys-lib/third_party/wayland/os"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 	"golang.org/x/sys/unix"
-
-	"github.com/stubbedev/lys-ui/internal/logutil"
 )
 
 // slot is a byte range in the arena's pool file. Buffer geometry (width,
