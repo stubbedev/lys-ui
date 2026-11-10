@@ -28,32 +28,30 @@ type fakeDecoder struct {
 }
 
 func (d *fakeDecoder) Decode(p demux.Packet) error {
-	if d.closed {
+	switch {
+	case d.closed:
 		return errors.New("decode on a closed decoder")
+	case d.lost != nil:
+		return d.lost
 	}
 	d.decoded = append(d.decoded, p.PTS)
 	d.ready++
 	return nil
 }
 
-func (d *fakeDecoder) Next() (*gpu.VideoFrame, error) {
-	switch {
-	case d.closed:
-		return nil, errors.New("next on a closed decoder")
-	case d.lost != nil:
-		return nil, d.lost
-	case d.ready == 0:
-		return nil, nil
+func (d *fakeDecoder) Next() *gpu.VideoFrame {
+	if d.closed || d.ready == 0 {
+		return nil
 	}
 	d.ready--
-	return &gpu.VideoFrame{}, nil
+	return &gpu.VideoFrame{}
 }
 
 func (d *fakeDecoder) Flush() {}
 
 func (d *fakeDecoder) Reset() error {
 	d.ready = 0
-	return nil
+	return d.lost
 }
 
 func (d *fakeDecoder) Close() { d.closed = true }
@@ -123,13 +121,30 @@ type losses struct{ errs []error }
 
 func (l *losses) lost(err error) { l.errs = append(l.errs, err) }
 
+type fakeDecodes struct {
+	pending bool
+	lost    error
+}
+
+func (d *fakeDecodes) decoded(*gpu.VideoFrame) (bool, error) { return !d.pending, d.lost }
+
+func playTextures(t *testing.T, src Source, open openAudioFunc, body func(h *harness, decodes *fakeDecodes)) {
+	play(t, src, open, func(h *harness) {
+		decodes := &fakeDecodes{}
+		h.s.tex.decoded = decodes.decoded
+		body(h, decodes)
+	})
+}
+
+var errFakeLoss = fmt.Errorf("fake decoder: %w", gpu.ErrDeviceLost)
+
 func TestATextureStreamMovesItsDecodingToAnotherDevice(t *testing.T) {
 	var opened []time.Duration
 	o := &outs{}
 	src := &fakeTextures{}
 	first, second := &gpu.Device{}, &gpu.Device{}
 	reported := &losses{}
-	play(t, audibleTextures{src, &opened}, o.open, func(h *harness) {
+	playTextures(t, audibleTextures{src, &opened}, o.open, func(h *harness, _ *fakeDecodes) {
 		s := h.s
 		if err := s.UseDevice(first, reported.lost); err != nil {
 			t.Fatal(err)
@@ -194,61 +209,119 @@ func TestATextureStreamMovesItsDecodingToAnotherDevice(t *testing.T) {
 }
 
 func TestADeviceLostWhileDecodingIsReportedAndReplaced(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		lose func(h *harness, dec *fakeDecoder, decodes *fakeDecodes)
+	}{
+		{"decoding a packet", func(h *harness, dec *fakeDecoder, _ *fakeDecodes) {
+			h.step(0)
+			h.s.Play()
+			h.step(0)
+			h.step(2 * fakeStep)
+			dec.lost = errFakeLoss
+			h.step(fakeStep)
+		}},
+		{"seeking", func(h *harness, dec *fakeDecoder, _ *fakeDecodes) {
+			h.settle()
+			h.s.Play()
+			h.step(0)
+			dec.lost = errFakeLoss
+			if err := h.s.Seek(10 * fakeStep); err != nil {
+				h.t.Fatal(err)
+			}
+		}},
+		{"asking whether a frame has decoded", func(h *harness, _ *fakeDecoder, decodes *fakeDecodes) {
+			h.settle()
+			h.s.Play()
+			h.step(0)
+			if err := h.s.Seek(10 * fakeStep); err != nil {
+				h.t.Fatal(err)
+			}
+			decodes.lost = errFakeLoss
+			h.settle()
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			src := &fakeTextures{}
+			first, second := &gpu.Device{}, &gpu.Device{}
+			reported := &losses{}
+			playTextures(t, src, noAudio, func(h *harness, decodes *fakeDecodes) {
+				h.t = t
+				s := h.s
+				if err := s.UseDevice(first, reported.lost); err != nil {
+					t.Fatal(err)
+				}
+				old := src.decoders[0]
+				c.lose(h, old, decodes)
+				if len(reported.errs) != 1 || !errors.Is(reported.errs[0], gpu.ErrDeviceLost) {
+					t.Fatalf("the loss was reported as %v, want once", reported.errs)
+				}
+				if !old.closed || s.Texture() != nil || s.Err() != nil || !s.Playing() {
+					t.Fatalf("after the loss: decoder closed %v, frame %v, error %v, playing %v; want the stream playing on with no device", old.closed, s.Texture(), s.Err(), s.Playing())
+				}
+				h.step(fakeStep)
+				if len(reported.errs) != 1 {
+					t.Errorf("one loss was reported %d times", len(reported.errs))
+				}
+				at, sought := s.Position(), len(src.sought())
+				decodes.lost = nil
+
+				if err := s.UseDevice(second, reported.lost); err != nil {
+					t.Fatal(err)
+				}
+				h.settle()
+				next := src.decoders[1]
+				key := at / (fakeGOP * fakeStep) * (fakeGOP * fakeStep)
+				if got := src.sought(); len(got) != sought+1 || got[sought] != at {
+					t.Errorf("the source was sought to %v, want last to the position, %v", got, at)
+				}
+				if next.dev != second || len(next.decoded) == 0 || next.decoded[0] != key {
+					t.Errorf("the new device decoded from %v, want from the keyframe at %v", next.decoded, key)
+				}
+				if s.Err() != nil || !s.Playing() {
+					t.Errorf("on the new device: error %v, playing %v", s.Err(), s.Playing())
+				}
+			})
+		})
+	}
+}
+
+func TestAFrameStillDecodingIsShownOnceItHasDecoded(t *testing.T) {
 	src := &fakeTextures{}
-	first, second := &gpu.Device{}, &gpu.Device{}
-	reported := &losses{}
-	play(t, src, noAudio, func(h *harness) {
+	playTextures(t, src, noAudio, func(h *harness, decodes *fakeDecodes) {
 		s := h.s
-		if err := s.UseDevice(first, reported.lost); err != nil {
+		decodes.pending = true
+		if err := s.UseDevice(&gpu.Device{}, nil); err != nil {
 			t.Fatal(err)
 		}
 		h.settle()
-		s.Play()
+		if s.Texture() != nil || s.FrameSeq() != 0 {
+			t.Fatalf("a frame still decoding is shown: %v, sequence %d", s.Texture(), s.FrameSeq())
+		}
+		if s.Err() != nil || s.ticker == nil {
+			t.Fatalf("waiting for the decode: error %v, ticking %v; want the paused stream ticking until its frame is there", s.Err(), s.ticker != nil)
+		}
+		decodes.pending = false
 		h.step(0)
-		h.step(10 * fakeStep)
-		old := src.decoders[0]
-		old.lost = fmt.Errorf("fake decoder: %w", gpu.ErrDeviceLost)
-		h.step(fakeStep)
-		if len(reported.errs) != 1 || !errors.Is(reported.errs[0], gpu.ErrDeviceLost) {
-			t.Fatalf("the loss was reported as %v, want once", reported.errs)
+		if s.Texture() == nil || s.FrameSeq() != 1 {
+			t.Fatalf("once decoded: frame %v, sequence %d; want it shown", s.Texture(), s.FrameSeq())
 		}
-		if !old.closed || s.Texture() != nil || s.Err() != nil || !s.Playing() {
-			t.Fatalf("after the loss: decoder closed %v, frame %v, error %v, playing %v; want the stream playing on with no device", old.closed, s.Texture(), s.Err(), s.Playing())
-		}
-		h.step(fakeStep)
-		if len(reported.errs) != 1 {
-			t.Errorf("one loss was reported %d times", len(reported.errs))
-		}
-		at := s.Position()
-
-		if err := s.UseDevice(second, reported.lost); err != nil {
-			t.Fatal(err)
-		}
-		h.step(0)
-		next := src.decoders[1]
-		key := at / (fakeGOP * fakeStep) * (fakeGOP * fakeStep)
-		if got := src.sought(); len(got) != 1 || got[0] != at {
-			t.Errorf("the source was sought to %v, want once to the position, %v", got, at)
-		}
-		if next.dev != second || len(next.decoded) == 0 || next.decoded[0] != key {
-			t.Errorf("the new device decoded from %v, want from the keyframe at %v", next.decoded, key)
-		}
-		if s.Err() != nil || !s.Playing() {
-			t.Errorf("on the new device: error %v, playing %v", s.Err(), s.Playing())
+		if s.ticker != nil {
+			t.Error("the paused stream keeps ticking with its frame shown")
 		}
 	})
 }
 
 func TestADeviceLostWithNoOneToReplaceItFailsTheStream(t *testing.T) {
 	src := &fakeTextures{}
-	play(t, src, noAudio, func(h *harness) {
+	playTextures(t, src, noAudio, func(h *harness, _ *fakeDecodes) {
 		s := h.s
 		if err := s.UseDevice(&gpu.Device{}, nil); err != nil {
 			t.Fatal(err)
 		}
-		h.settle()
+		h.step(0)
 		s.Play()
-		src.decoders[0].lost = fmt.Errorf("fake decoder: %w", gpu.ErrDeviceLost)
+		src.decoders[0].lost = errFakeLoss
 		h.step(fakeStep)
 		if !errors.Is(s.Err(), gpu.ErrDeviceLost) || s.Playing() {
 			t.Errorf("error %v, playing %v; want the stream failed by the loss", s.Err(), s.Playing())
@@ -259,7 +332,7 @@ func TestADeviceLostWithNoOneToReplaceItFailsTheStream(t *testing.T) {
 func TestANewDeviceThatDecodesNoneOfTheVideoFailsTheStream(t *testing.T) {
 	src := &fakeTextures{}
 	reported := &losses{}
-	play(t, src, noAudio, func(h *harness) {
+	playTextures(t, src, noAudio, func(h *harness, _ *fakeDecodes) {
 		s := h.s
 		if err := s.UseDevice(&gpu.Device{}, reported.lost); err != nil {
 			t.Fatal(err)
@@ -280,7 +353,7 @@ func TestANewDeviceThatDecodesNoneOfTheVideoFailsTheStream(t *testing.T) {
 func TestNamingAnotherDeviceLetsGoOfTheOneBefore(t *testing.T) {
 	src := &fakeTextures{}
 	first, second := &gpu.Device{}, &gpu.Device{}
-	play(t, src, noAudio, func(h *harness) {
+	playTextures(t, src, noAudio, func(h *harness, _ *fakeDecodes) {
 		s := h.s
 		if err := s.UseDevice(first, nil); err != nil {
 			t.Fatal(err)

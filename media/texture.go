@@ -141,16 +141,26 @@ func (r *packetReader) requestSeek(req seekRequest) {
 	}
 }
 
+func (r *packetReader) read() *packet {
+	select {
+	case b := <-r.out:
+		return b
+	default:
+		return nil
+	}
+}
+
 func (r *packetReader) recycle(b *packet) { r.free <- b }
 
 // textureVideo is a Stream's GPU decoding: a TextureSource's packets,
 // read on their own goroutine, decoded on the loop into frames of the
 // device the Video showing the stream draws with.
 type textureVideo struct {
-	src TextureSource
-	dev *gpu.Device
-	dec VideoDecoder
-	rd  *packetReader
+	src     TextureSource
+	dev     *gpu.Device
+	dec     VideoDecoder
+	rd      *packetReader
+	decoded func(*gpu.VideoFrame) (bool, error)
 	// queue are the frames decoded ahead of cur, in presentation order,
 	// and candidate the one that may show at the seek target, held
 	// until a later one tells.
@@ -169,7 +179,7 @@ type textureVideo struct {
 }
 
 func newTextureVideo(src TextureSource) *textureVideo {
-	return &textureVideo{src: src, queue: make([]*gpu.VideoFrame, 0, heldTextures-1), closed: make(chan struct{})}
+	return &textureVideo{src: src, decoded: (*gpu.VideoFrame).Decoded, queue: make([]*gpu.VideoFrame, 0, heldTextures-1), closed: make(chan struct{})}
 }
 
 // attach decodes on dev from t on, the stream at generation gen: the
@@ -206,40 +216,20 @@ func (v *textureVideo) detach() {
 	v.dev = nil
 }
 
-// pump moves the stream's decoding along: it takes the frames the
-// packets decoded on earlier ticks completed, whose decodes are done by
-// now, then decodes the packets that keep texturesAhead frames ahead.
-// It reports the track's end and the first failure.
+// pump moves the stream's decoding along: it decodes the packets that
+// keep texturesAhead frames ahead and queues the frames they complete,
+// whose pictures may still be decoding. It reports the track's end and
+// the first failure.
 func (v *textureVideo) pump(gen int) (queued []*gpu.VideoFrame, ended bool, err error) {
 	start := len(v.queue)
-	for len(v.queue) < cap(v.queue)-1 {
-		f, err := v.dec.Next()
-		if err != nil {
-			return nil, false, fmt.Errorf("media: decode the video: %w", err)
-		}
-		if f == nil {
-			if v.flushed && v.candidate != nil {
-				v.land(nil)
-			}
-			ended = v.flushed
-			break
-		}
-		if v.landed {
-			v.queue = append(v.queue, f)
-			continue
-		}
-		v.arrive(f)
-	}
 	budget := texturesAhead - len(v.queue)
 	if !v.landed {
 		budget = catchUpPackets
 	}
 	for ; budget > 0 && !v.flushed; budget-- {
-		var b *packet
-		select {
-		case b = <-v.rd.out:
-		default:
-			return v.queue[start:], ended, nil
+		b := v.rd.read()
+		if b == nil {
+			break
 		}
 		err := v.decode(b, gen)
 		v.rd.recycle(b)
@@ -247,7 +237,25 @@ func (v *textureVideo) pump(gen int) (queued []*gpu.VideoFrame, ended bool, err 
 			return nil, false, err
 		}
 	}
-	return v.queue[start:], ended, nil
+	return v.queue[start:], v.take(), nil
+}
+
+func (v *textureVideo) take() (ended bool) {
+	for len(v.queue) < cap(v.queue)-1 {
+		f := v.dec.Next()
+		if f == nil {
+			if v.flushed && v.candidate != nil {
+				v.land(nil)
+			}
+			return v.flushed
+		}
+		if v.landed {
+			v.queue = append(v.queue, f)
+			continue
+		}
+		v.arrive(f)
+	}
+	return false
 }
 
 // arrive takes f, decoded on the way to the seek target: a frame over

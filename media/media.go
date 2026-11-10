@@ -90,11 +90,13 @@ type TextureSource interface {
 // order, Next hands out the frames they complete in presentation order,
 // nil when there is none yet, Flush hands out the frames held back at
 // the track's end, Reset drops what is decoding for a seek, and Close
-// releases the decoder with every frame it handed out. A device that
-// was lost fails them with gpu.ErrDeviceLost.
+// releases the decoder with every frame it handed out. Next waits for
+// nothing: a frame's picture may still be decoding (its Decoded tells).
+// A device that was lost fails Decode and Reset with
+// gpu.ErrDeviceLost.
 type VideoDecoder interface {
 	Decode(p demux.Packet) error
-	Next() (*gpu.VideoFrame, error)
+	Next() *gpu.VideoFrame
 	Flush()
 	Reset() error
 	Close()

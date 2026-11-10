@@ -290,9 +290,10 @@ func (s *Stream) textureFailed(err error) {
 
 // Texture returns the frame to show of a stream decoding on the GPU,
 // nil before the first is decoded, after Close and for a stream
-// decoding on the CPU. Draw its Texture's Rect on the device UseDevice
-// named. It belongs to the stream and stays valid until the next change
-// or Close; FrameSeq tells when it changed.
+// decoding on the CPU. Its picture has finished decoding: draw it
+// (gpu.Pass.DrawFrame) on the device UseDevice named, and nothing
+// waits for the decoder. It belongs to the stream and stays valid until
+// the next change or Close; FrameSeq tells when it changed.
 func (s *Stream) Texture() *gpu.VideoFrame {
 	if s.tex == nil {
 		return nil
@@ -617,7 +618,15 @@ func (s *Stream) present() bool {
 func (s *Stream) presentTexture() bool {
 	shown := 0
 	for _, f := range s.tex.queue {
-		if s.curGen == s.gen && f.PTS() > s.pos {
+		if !s.frameDue(f) {
+			break
+		}
+		decoded, err := s.tex.decoded(f)
+		if err != nil {
+			s.textureFailed(fmt.Errorf("media: the video frame at %v: %w", f.PTS(), err))
+			return false
+		}
+		if !decoded {
 			break
 		}
 		s.curGen = s.gen
@@ -639,10 +648,22 @@ func (s *Stream) videoDone() bool {
 	return s.eofGen == s.gen && len(s.queue) == 0
 }
 
+func (s *Stream) frameDue(f *gpu.VideoFrame) bool {
+	return s.curGen != s.gen || f.PTS() <= s.pos
+}
+
 // awaitingFrame reports whether the frame at the playback position is
-// still to come.
+// still to come: to be decoded, or, on the GPU, decoding still.
 func (s *Stream) awaitingFrame() bool {
-	return s.curGen != s.gen && s.eofGen != s.gen && (s.tex == nil || s.tex.attached())
+	switch {
+	case s.tex == nil:
+		return s.curGen != s.gen && s.eofGen != s.gen
+	case !s.tex.attached():
+		return false
+	case len(s.tex.queue) > 0:
+		return s.frameDue(s.tex.queue[0])
+	}
+	return s.curGen != s.gen && s.eofGen != s.gen
 }
 
 func (s *Stream) advance(now time.Time) {

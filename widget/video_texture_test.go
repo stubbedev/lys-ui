@@ -24,9 +24,9 @@ type fakeVideoDecoder struct {
 	closed bool
 }
 
-func (d *fakeVideoDecoder) Decode(demux.Packet) error { return nil }
+func (d *fakeVideoDecoder) Decode(demux.Packet) error { return d.lost }
 
-func (d *fakeVideoDecoder) Next() (*gpu.VideoFrame, error) { return nil, d.lost }
+func (d *fakeVideoDecoder) Next() *gpu.VideoFrame { return nil }
 
 func (d *fakeVideoDecoder) Flush() {}
 
@@ -47,7 +47,12 @@ func (*fakeTextureSource) Close() error { return nil }
 
 func (*fakeTextureSource) Seek(time.Duration) error { return nil }
 
-func (*fakeTextureSource) ReadPacket() (demux.Packet, error) { return demux.Packet{}, io.EOF }
+func (f *fakeTextureSource) ReadPacket() (demux.Packet, error) {
+	if !f.decodes {
+		return demux.Packet{}, io.EOF
+	}
+	return demux.Packet{Key: true}, nil
+}
 
 func (f *fakeTextureSource) NewVideoDecoder(dev *gpu.Device) (media.VideoDecoder, error) {
 	if !f.decodes {

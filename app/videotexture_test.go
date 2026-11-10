@@ -49,11 +49,7 @@ func firstVideoFrame(t *testing.T, dev *gpu.Device, path string) *gpu.VideoFrame
 				}
 			}
 		}
-		frame, err := dec.Next()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if frame != nil {
+		if frame := dec.Next(); frame != nil {
 			return frame
 		}
 		if eof {

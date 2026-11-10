@@ -7,10 +7,8 @@ import (
 	"slices"
 
 	"github.com/stubbedev/lys-lib/debug"
-	"github.com/stubbedev/lys-lib/dmabuf"
 	"github.com/stubbedev/lys-lib/fourcc"
 	"github.com/stubbedev/lys-lib/gpu"
-	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -148,45 +146,19 @@ func (s *textureSurface) Present(f *gpu.VideoFrame) (bool, error) {
 
 // drawVideoFrame draws f's picture over all of t, whose whole is
 // whole[0], through its YCbCr conversion, and hands t to the
-// compositor: the pass's fence on t's dmabuf, which linux-dmabuf's
-// implicit synchronization has every reader wait on, or else the pass
-// finished here.
+// compositor (gpu.Device.Publish).
 func drawVideoFrame(dev *gpu.Device, t *gpu.Target, whole []image.Rectangle, f *gpu.VideoFrame) error {
 	p, err := dev.Begin(t, whole)
 	if err != nil {
 		return fmt.Errorf("app: draw a video frame: %w", err)
 	}
-	pic := f.Rect()
-	src := gpu.FRect{X: float64(pic.Min.X), Y: float64(pic.Min.Y), W: float64(pic.Dx()), H: float64(pic.Dy())}
-	p.DrawTexture(f.Texture(), src, whole[0], gpu.TransformNormal, 1, gpu.Mask{})
+	size := f.Size()
+	p.DrawFrame(f, gpu.FRect{W: float64(size.X), H: float64(size.Y)}, whole[0], gpu.TransformNormal, 1, gpu.Mask{})
 	if err := p.End(); err != nil {
 		return fmt.Errorf("app: draw a video frame: %w", err)
 	}
-	fd, err := dev.SyncFile()
-	switch {
-	case errors.Is(err, gpu.ErrNoSyncFile):
-		return finishVideoFrame(dev)
-	case err != nil:
-		return fmt.Errorf("app: a video frame's fence: %w", err)
-	case fd < 0:
-		return nil
-	}
-	err = dmabuf.ImportSyncFile(t.Dmabuf().Planes[0].FD, fd)
-	if cerr := unix.Close(fd); err == nil && cerr != nil {
-		return fmt.Errorf("app: close a video frame's fence: %w", cerr)
-	}
-	switch {
-	case errors.Is(err, dmabuf.ErrNoSyncFileImport):
-		return finishVideoFrame(dev)
-	case err != nil:
-		return fmt.Errorf("app: attach a video frame's fence: %w", err)
-	}
-	return nil
-}
-
-func finishVideoFrame(dev *gpu.Device) error {
-	if err := dev.Finish(); err != nil {
-		return fmt.Errorf("app: finish a video frame: %w", err)
+	if err := dev.Publish(t); err != nil {
+		return fmt.Errorf("app: hand a video frame to the compositor: %w", err)
 	}
 	return nil
 }

@@ -76,21 +76,40 @@ func until(t *testing.T, s *Stream, now time.Time, what string, done func() bool
 	}
 }
 
+func wantShownDecoded(t *testing.T, s *Stream) {
+	t.Helper()
+	if decoded, err := s.Texture().Decoded(); err != nil || !decoded {
+		t.Fatalf("the frame the stream shows has finished decoding: %v, %v; want true", decoded, err)
+	}
+}
+
+func nextFrameDecoded(t *testing.T, s *Stream) bool {
+	t.Helper()
+	if len(s.tex.queue) == 0 {
+		return s.eofGen == s.gen
+	}
+	decoded, err := s.tex.queue[0].Decoded()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return decoded
+}
+
 // centre is the colour of the shown frame's centre, drawn on dev.
 func centre(t *testing.T, dev *gpu.Device, f *gpu.VideoFrame) color.RGBA {
 	t.Helper()
-	r := f.Rect()
-	tg, err := dev.NewOffscreen(r.Dx(), r.Dy())
+	size := f.Size()
+	tg, err := dev.NewOffscreen(size.X, size.Y)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tg.Close()
-	bounds := image.Rect(0, 0, r.Dx(), r.Dy())
+	bounds := image.Rectangle{Max: size}
 	p, err := dev.Begin(tg, []image.Rectangle{bounds})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p.DrawTexture(f.Texture(), gpu.FRect{X: float64(r.Min.X), Y: float64(r.Min.Y), W: float64(r.Dx()), H: float64(r.Dy())}, bounds, gpu.TransformNormal, 1, gpu.Mask{})
+	p.DrawFrame(f, gpu.FRect{W: float64(size.X), H: float64(size.Y)}, bounds, gpu.TransformNormal, 1, gpu.Mask{})
 	if err := p.End(); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +117,7 @@ func centre(t *testing.T, dev *gpu.Device, f *gpu.VideoFrame) color.RGBA {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return img.RGBAAt(r.Dx()/2, r.Dy()/2)
+	return img.RGBAAt(size.X/2, size.Y/2)
 }
 
 func reddish(c color.RGBA) bool  { return c.R > 200 && c.G < 60 && c.B < 60 }
@@ -126,8 +145,9 @@ func TestFilesDecodeOnTheGPU(t *testing.T) {
 			s := gpuStream(t, dev, c.name)
 			now := time.Now()
 			until(t, s, now, "the first frame", func() bool { return s.Texture() != nil })
-			if f := s.Texture(); f.PTS() != 0 || f.Rect().Size() != image.Pt(192, 144) || !reddish(centre(t, dev, f)) {
-				t.Errorf("first frame at %v, %v, colour %v, want red at 0", f.PTS(), f.Rect(), centre(t, dev, f))
+			wantShownDecoded(t, s)
+			if f := s.Texture(); f.PTS() != 0 || f.Size() != image.Pt(192, 144) || !reddish(centre(t, dev, f)) {
+				t.Errorf("first frame at %v, %v, colour %v, want red at 0", f.PTS(), f.Size(), centre(t, dev, f))
 			}
 			for _, seek := range []struct {
 				to, shows time.Duration
@@ -142,6 +162,7 @@ func TestFilesDecodeOnTheGPU(t *testing.T) {
 				}
 				until(t, s, now, "the frame at the seek target", func() bool { return s.curGen == s.gen })
 				f := s.Texture()
+				wantShownDecoded(t, s)
 				if got := centre(t, dev, f); f.PTS() != seek.shows || greenish(got) != seek.green || !greenish(got) && !reddish(got) {
 					t.Errorf("seek to %v shows the frame at %v coloured %v, want the one at %v, green %v", seek.to, f.PTS(), got, seek.shows, seek.green)
 				}
@@ -161,7 +182,7 @@ func TestFilesDecodeOnTheGPU(t *testing.T) {
 				if step == 10 {
 					runtime.ReadMemStats(&m0)
 				}
-				until(t, s, now, "the next frame decoded", func() bool { return len(s.tex.queue) > 0 || s.eofGen == s.gen })
+				until(t, s, now, "the next frame decoded", func() bool { return nextFrameDecoded(t, s) })
 				now = now.Add(fixtureStep)
 				s.advance(now)
 				if f := s.Texture(); len(shown) == 0 || shown[len(shown)-1] != f.PTS() {
@@ -257,7 +278,7 @@ func TestAStreamResumesAtItsPositionOnANewGPUDevice(t *testing.T) {
 			s.Play()
 			shown := []time.Duration{f.PTS()}
 			for step := 0; !s.Ended(); step++ {
-				until(t, s, now, "the next frame decoded", func() bool { return len(s.tex.queue) > 0 || s.eofGen == s.gen })
+				until(t, s, now, "the next frame decoded", func() bool { return nextFrameDecoded(t, s) })
 				now = now.Add(fixtureStep)
 				s.advance(now)
 				if f := s.Texture(); shown[len(shown)-1] != f.PTS() {
