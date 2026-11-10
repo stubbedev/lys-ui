@@ -77,7 +77,7 @@ func TestPulseOutPlaysWholeFramesAsRequestedAndDrains(t *testing.T) {
 	}
 	h.p.Request(250 * audioFrame)
 	eventually(t, "drained", h.out.Drained)
-	if got := h.p.Data(); !bytes.Equal(got, pcm[:len(pcm)-3]) {
+	if got := h.p.WaitData(t, len(pcm)-3); !bytes.Equal(got, pcm[:len(pcm)-3]) {
 		t.Errorf("server received %d bytes, want the %d of whole frames", len(got), len(pcm)-3)
 	}
 	if got := h.out.frames.Load(); got != firstRequest/audioFrame+250 {
