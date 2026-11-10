@@ -21,6 +21,12 @@ type widgetHooks struct {
 
 var allWidgetHooks = widgetHooks{true, true, true, true, true}
 
+func (s *stopSet) added() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.next
+}
+
 func hooksOf(t *testing.T, a *Application) widgetHooks {
 	t.Helper()
 	t.Cleanup(animclock.Reset)
@@ -38,12 +44,12 @@ func hooksOf(t *testing.T, a *Application) widgetHooks {
 	if err := os.WriteFile(path, []byte("label { color: red; }"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	watching := len(a.watchers.stops)
+	watched := a.watchers.added()
 	sheet, err := widget.AddStylesheetFile(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got.stylesheetWatcher = len(a.watchers.stops) == watching+1
+	got.stylesheetWatcher = a.watchers.added() == watched+1
 	sheet.Remove()
 
 	area := widget.NewGPUArea()
