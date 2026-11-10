@@ -53,6 +53,8 @@ type Stream struct {
 	dec *decoder
 	tex *textureVideo
 
+	deviceLost func(error)
+
 	playing, ended, loop, closed bool
 
 	pos       time.Duration
@@ -219,10 +221,16 @@ func (s *Stream) DecodesOnGPU() bool { return s.tex != nil }
 
 // UseDevice decodes a TextureSource's frames on dev, the device that
 // draws them, from the playback position on; until then the stream
-// shows no frame. A stream decodes on one device for its life. A device
+// shows no frame. A stream decodes on one device at a time: naming
+// another lets go of the one before, as ReleaseDevice does. A device
 // that does not decode the video's codec fails the stream with an error
 // naming the codec and the file, which UseDevice returns too.
-func (s *Stream) UseDevice(dev *gpu.Device) error {
+//
+// lost is called on the loop when decoding finds dev lost
+// (gpu.ErrDeviceLost), the stream having let go of it as ReleaseDevice
+// does: whoever named the device has its owner open the next and names
+// that. With a nil lost a lost device fails the stream.
+func (s *Stream) UseDevice(dev *gpu.Device, lost func(error)) error {
 	switch {
 	case s.tex == nil:
 		return fmt.Errorf("media: %s decodes its frames on the CPU", s.name)
@@ -230,17 +238,54 @@ func (s *Stream) UseDevice(dev *gpu.Device) error {
 		return errStreamClosed
 	case s.err != nil:
 		return s.err
-	case s.tex.dec != nil && s.tex.dev == dev:
+	case s.tex.attached() && s.tex.dev == dev:
+		s.deviceLost = lost
 		return nil
-	case s.tex.dec != nil:
-		return fmt.Errorf("media: %s decodes on %s, not %s", s.name, s.tex.dev.Name(), dev.Name())
 	}
+	s.releaseDevice()
+	if s.tex.rd != nil {
+		s.gen++
+		s.lastPTS, s.prevPTS = 0, 0
+	}
+	s.deviceLost = lost
 	if err := s.tex.attach(dev, s.gen, s.pos); err != nil {
-		s.Fail(err)
-		return err
+		s.textureFailed(err)
+		s.notify()
+		s.sync()
+		return s.err
 	}
 	s.sync()
 	return nil
+}
+
+// ReleaseDevice lets go of the device UseDevice named, which is going
+// away: the frames decoded on it and its decoder are released, and the
+// stream goes on as it was, playing or paused, its sound and its clock
+// untouched, showing no frame until UseDevice names another device.
+// Decoding resumes there at the playback position. A stream decoding
+// on no device stays as it is.
+func (s *Stream) ReleaseDevice() {
+	if s.tex == nil || !s.tex.attached() {
+		return
+	}
+	s.releaseDevice()
+	s.notify()
+	s.sync()
+}
+
+func (s *Stream) releaseDevice() {
+	s.tex.detach()
+	s.deviceLost = nil
+}
+
+func (s *Stream) textureFailed(err error) {
+	lost := s.deviceLost
+	if lost == nil || !errors.Is(err, gpu.ErrDeviceLost) {
+		s.fail(err)
+		return
+	}
+	s.releaseDevice()
+	lost(err)
 }
 
 // Texture returns the frame to show of a stream decoding on the GPU,
@@ -386,7 +431,9 @@ func (s *Stream) seekTo(t time.Duration) {
 	s.queue = s.queue[:0]
 	s.lastPTS, s.prevPTS = 0, 0
 	if s.tex != nil {
-		s.check(s.tex.seek(s.gen, t))
+		if err := s.tex.seek(s.gen, t); err != nil {
+			s.textureFailed(err)
+		}
 	} else {
 		s.dec.requestSeek(seekRequest{gen: s.gen, t: t})
 	}
@@ -514,12 +561,12 @@ func (s *Stream) collect() {
 }
 
 func (s *Stream) collectTextures() {
-	if s.tex.dec == nil || s.err != nil {
+	if !s.tex.attached() || s.err != nil {
 		return
 	}
 	queued, ended, err := s.tex.pump(s.gen)
 	if err != nil {
-		s.fail(err)
+		s.textureFailed(err)
 		return
 	}
 	for _, f := range queued {
@@ -582,11 +629,12 @@ func (s *Stream) presentTexture() bool {
 }
 
 // videoDone reports whether the frames decoded to the end of the
-// video have all been shown; a TextureSource's stream with no device to
-// decode on shows none and ends by its clock alone.
+// video have all been shown; a TextureSource's stream never given a
+// device to decode on shows none and ends by its clock alone, and one
+// between two devices ends once the next has decoded to the end.
 func (s *Stream) videoDone() bool {
 	if s.tex != nil {
-		return s.tex.dec == nil || s.eofGen == s.gen && len(s.tex.queue) == 0
+		return s.tex.rd == nil || s.eofGen == s.gen && len(s.tex.queue) == 0
 	}
 	return s.eofGen == s.gen && len(s.queue) == 0
 }
@@ -594,7 +642,7 @@ func (s *Stream) videoDone() bool {
 // awaitingFrame reports whether the frame at the playback position is
 // still to come.
 func (s *Stream) awaitingFrame() bool {
-	return s.curGen != s.gen && s.eofGen != s.gen && (s.tex == nil || s.tex.dec != nil)
+	return s.curGen != s.gen && s.eofGen != s.gen && (s.tex == nil || s.tex.attached())
 }
 
 func (s *Stream) advance(now time.Time) {

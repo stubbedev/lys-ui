@@ -341,7 +341,7 @@ func TestSetSurfaceMotion(t *testing.T) {
 
 func TestAnEndedLoopLeavesIconsPaintingInline(t *testing.T) {
 	t.Cleanup(func() { widget.SetInvoker(nil) })
-	a := NewApplication(&wlsession.Session{})
+	a := NewTestApplication(t, &wlsession.Session{})
 	a.endLoop()
 	ic := widget.NewSVGIcon([]byte(`<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#e04020"/></svg>`), 16)
 	ic.Arrange(render.Rect{W: 16, H: 16})

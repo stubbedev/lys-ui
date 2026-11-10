@@ -129,7 +129,7 @@ func TestNewApplicationPrintsDoctorOnEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.Stdout = w
-	app := NewApplication(&wlsession.Session{})
+	app := NewTestApplication(t, &wlsession.Session{})
 	os.Stdout = old
 	_ = w.Close()
 

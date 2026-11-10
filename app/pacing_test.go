@@ -27,7 +27,7 @@ func newPacingRig(t *testing.T) *pacingRig {
 	area := widget.NewDrawingArea(64, 48)
 	r.h = newPaintHarness(area, 64, 48)
 	r.h.surf.withholdFrames = true
-	r.a = NewApplication(&wlsession.Session{})
+	r.a = NewTestApplication(t, &wlsession.Session{})
 	r.a.step = func() error { return nil }
 	r.a.wake = func(time.Duration) {}
 	r.a.arm = func(at time.Time) {

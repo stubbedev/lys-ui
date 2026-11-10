@@ -46,8 +46,8 @@ func runCageClient(t *testing.T, done string) {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	defer sess.Close()
-	a := app.NewApplication(sess)
+	t.Cleanup(sess.Close)
+	a := app.NewTestApplication(t, sess)
 	if _, err := a.NewLayer(layerConfig()); !errors.Is(err, app.ErrLayerShellUnavailable) {
 		t.Fatalf("NewLayer under cage: err = %v, want ErrLayerShellUnavailable", err)
 	}

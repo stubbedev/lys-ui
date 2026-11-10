@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"log/slog"
 	"os"
 	"slices"
@@ -67,6 +68,8 @@ type gpuRenderer struct {
 	lost   func(*gpuRenderer, error)
 	// prepare is the device's PrepareTarget, a seam for tests.
 	prepare func(w, h int, mods []fourcc.Modifier) (*gpu.Target, error)
+	video   func(t *gpu.Target, whole []image.Rectangle, f *gpu.VideoFrame) error
+	videos  []*textureSurface
 	// workers are the target allocations running; closed marks the device
 	// closed, after which a target landing is dropped.
 	workers sync.WaitGroup
@@ -92,6 +95,14 @@ func (r *gpuRenderer) deviceFrame(l *render.List, t *gpu.Target, carry []gpu.Car
 
 func (r *gpuRenderer) deviceTarget(w, h int, mods []fourcc.Modifier) (*gpu.Target, error) {
 	return r.dev.PrepareTarget(w, h, fourcc.ARGB8888, mods)
+}
+
+func (r *gpuRenderer) deviceVideo(t *gpu.Target, whole []image.Rectangle, f *gpu.VideoFrame) error {
+	return drawVideoFrame(r.dev, t, whole, f)
+}
+
+func (r *gpuRenderer) leaving() bool {
+	return !r.required && errors.Is(r.failed, gpu.ErrDeviceLost)
 }
 
 // trimIdle trims the device once it has drawn nothing for a whole trim
@@ -283,7 +294,7 @@ func openRenderer(plan rendererPlan) (*gpuRenderer, error) {
 		return nil, err
 	}
 	r := &gpuRenderer{dev: dev, name: dev.Name(), modifiers: mods, rec: render.NewRecorder(1, 1, 1, 1), plan: plan}
-	r.render, r.prepare = r.deviceFrame, r.deviceTarget
+	r.render, r.prepare, r.video = r.deviceFrame, r.deviceTarget, r.deviceVideo
 	if plan.syncobj != nil {
 		r.timelines = explicitTimelines(dev)
 	}
@@ -496,6 +507,7 @@ func (a *Application) ForgetImage(id render.ImageID) {
 
 func (a *Application) loseRenderer(r *gpuRenderer, err error) {
 	if a.gpu != r {
+		a.wakeGPUWaiting()
 		return
 	}
 	for _, w := range a.windows {
@@ -504,10 +516,12 @@ func (a *Application) loseRenderer(r *gpuRenderer, err error) {
 			w.reallocate()
 		}
 	}
+	a.detachVideos(r)
 	a.releaseRenderer()
 	if !a.gpuLosses.Record(time.Now(), err) {
 		logutil.L().Error("app: the GPU device was lost too often; every window draws on the CPU from now on",
 			"device", r.name, "losses", a.gpuLosses.Count(), "window", gpu.LossWindow, "err", a.gpuLosses.Err())
+		a.wakeGPUWaiting()
 		return
 	}
 	logutil.L().Warn("app: the GPU device was lost; drawing on the CPU until a new one opens",
@@ -531,7 +545,7 @@ func (a *Application) releaseRenderer() {
 	}
 	imgcache.Default().SetForget(nil)
 	r.closed = true
-	a.loseVideoTextures(r)
+	r.failVideos()
 	r.dev.Close()
 	r.workers.Wait()
 	if r.timelines != nil {

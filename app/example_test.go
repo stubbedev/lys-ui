@@ -41,6 +41,7 @@ func run() error {
 	}
 
 	application := app.NewApplication(sess)
+	defer application.Close()
 	if _, err := application.NewWindow(app.WindowConfig{
 		Title: "hello", AppID: "dev.stubbe.lys.ui.hello",
 		Width: 320, Height: 120,

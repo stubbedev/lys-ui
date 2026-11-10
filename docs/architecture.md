@@ -46,9 +46,20 @@ session uses logical pixels.
 | `cpu` | Always the CPU. |
 | `gpu` | The GPU or an error from `Run`. A failed GPU frame is fatal. |
 
-Any other value is an error. Under `auto`, a failed GPU frame (such as
-a lost device) or a refused dmabuf import is logged and moves every
-window to the CPU. A reconnect chooses the renderer again.
+Any other value is an error. Under `auto`, a failed GPU frame or a
+refused dmabuf import is logged and moves every window to the CPU. A
+reconnect chooses the renderer again.
+
+A lost device is reopened under `auto`. The windows draw on the CPU
+until the new device is there. A video decoding on the GPU
+(`media.OpenFile`) follows them: its `widget.Video` gives up the
+surface and the decoder of the lost device, the stream plays on by its
+clock with its sound uninterrupted, and decoding resumes on the new
+device from the keyframe before the playback position. The loss is
+answered the same whether a window's frame, the video's decoding or the
+drawing of a video frame finds it. A device lost more than three times
+in a minute stays closed: the windows stay on the CPU and such a video
+fails with `app.ErrNoGPURenderer`.
 
 Both paths produce identical pixels. The GPU runs the canvas's
 arithmetic step for step, and `just gpu` checks every widget golden on

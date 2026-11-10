@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"slices"
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/dmabuf"
@@ -19,12 +20,12 @@ var (
 	// in an application whose windows draw on the CPU: the frames decode
 	// on the device the windows draw with.
 	ErrNoGPURenderer = errors.New("app: the windows draw on the CPU, and video decoded on the GPU needs the GPU renderer")
-	// ErrVideoDeviceGone reports a Video surface whose GPU was lost or
-	// closed under it.
+	// ErrVideoDeviceGone reports a Video surface whose GPU was closed
+	// under it.
 	ErrVideoDeviceGone = errors.New("app: the GPU the video drew on is gone")
 )
 
-func (a *Application) textureSurfaceFor(v *widget.Video, width, height int, wake func()) (widget.TextureSurface, error) {
+func (a *Application) textureSurfaceFor(v *widget.Video, width, height int, wake, lost func()) (widget.TextureSurface, error) {
 	hw, subc, err := a.videoWindow(v)
 	if err != nil {
 		return nil, err
@@ -33,17 +34,19 @@ func (a *Application) textureSurfaceFor(v *widget.Video, width, height int, wake
 	switch {
 	case err != nil:
 		return nil, err
-	case r == nil && a.gpuPending:
+	case r == nil && a.gpuPending, r != nil && r.leaving():
 		a.gpuWaiting = append(a.gpuWaiting, wake)
 		return nil, widget.ErrVideoDevicePending
-	case r == nil || r.Failed():
+	case r == nil:
 		return nil, ErrNoGPURenderer
+	case r.Failed():
+		return nil, fmt.Errorf("%w: %w", ErrNoGPURenderer, r.failed)
 	}
-	s := &textureSurface{r: r, damage: [1]image.Rectangle{image.Rect(0, 0, width, height)}}
+	s := &textureSurface{r: r, lost: lost, damage: [1]image.Rectangle{image.Rect(0, 0, width, height)}}
 	if err := s.open(a, hw, subc, wake); err != nil {
 		return nil, err
 	}
-	s.device = r.dev
+	r.videos = append(r.videos, s)
 	if err := s.init(width, height); err != nil {
 		s.Close()
 		return nil, err
@@ -63,16 +66,33 @@ func (a *Application) wakeGPUWaiting() {
 	}
 }
 
-// loseVideoTextures fails the Video surfaces drawn on r's device, which
-// is closing: their frames and buffers go with it.
-func (a *Application) loseVideoTextures(r *gpuRenderer) {
-	for _, w := range a.windows {
-		for _, o := range w.video {
-			if o.device == r.dev && o.err == nil {
-				o.err = fmt.Errorf("%w: %s", ErrVideoDeviceGone, r.name)
-			}
+func (r *gpuRenderer) failVideos() {
+	for _, s := range r.videos {
+		if s.err == nil {
+			s.err = fmt.Errorf("%w: %s", ErrVideoDeviceGone, r.name)
 		}
 	}
+}
+
+func (a *Application) detachVideos(r *gpuRenderer) {
+	for _, s := range slices.Clone(r.videos) {
+		a.gpuWaiting = append(a.gpuWaiting, s.wake)
+		s.lost()
+	}
+}
+
+func (a *Application) videoDeviceLost(r *gpuRenderer, err error) {
+	if r.closed {
+		return
+	}
+	r.fault(err)
+	if r.leaving() {
+		return
+	}
+	a.Invoke(func() {
+		a.detachVideos(r)
+		a.wakeGPUWaiting()
+	})
 }
 
 // textureSurface is a Video's subsurface for a stream decoding on the
@@ -82,6 +102,7 @@ func (a *Application) loseVideoTextures(r *gpuRenderer) {
 type textureSurface struct {
 	videoOutput
 	r       *gpuRenderer
+	lost    func()
 	targets [videoRing]*gpu.Target
 	// damage is the whole target, kept here so a pass takes it without
 	// an allocation.
@@ -112,7 +133,11 @@ func (s *textureSurface) Present(f *gpu.VideoFrame) (bool, error) {
 	if i < 0 {
 		return false, err
 	}
-	if err := drawVideoFrame(s.r.dev, s.targets[i], s.damage[:], f); err != nil {
+	switch err := s.r.video(s.targets[i], s.damage[:], f); {
+	case errors.Is(err, gpu.ErrDeviceLost):
+		s.DeviceLost(err)
+		return false, nil
+	case err != nil:
 		return false, err
 	}
 	if err := s.show(i, s.damage[0].Dx(), s.damage[0].Dy()); err != nil {
@@ -166,8 +191,15 @@ func finishVideoFrame(dev *gpu.Device) error {
 	return nil
 }
 
+func (s *textureSurface) DeviceLost(err error) {
+	if !s.closed {
+		s.app.videoDeviceLost(s.r, err)
+	}
+}
+
 func (s *textureSurface) Close() {
 	s.close(func() {
+		s.r.videos = slices.DeleteFunc(s.r.videos, func(v *textureSurface) bool { return v == s })
 		for i, t := range s.targets {
 			if t != nil {
 				t.Close()

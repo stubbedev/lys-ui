@@ -7,7 +7,7 @@ import (
 )
 
 func TestOnLocksReportsNowAndEachChangeUntilStopped(t *testing.T) {
-	a := NewApplication(&wlsession.Session{})
+	a := NewTestApplication(t, &wlsession.Session{})
 	var seen []Locks
 	stop := a.OnLocks(func(l Locks) { seen = append(seen, l) })
 	if len(seen) != 1 || seen[0] != (Locks{}) {
@@ -26,7 +26,7 @@ func TestOnLocksReportsNowAndEachChangeUntilStopped(t *testing.T) {
 }
 
 func TestOnKeyboardLayoutReportsNowAndEachChangeUntilStopped(t *testing.T) {
-	a := NewApplication(&wlsession.Session{})
+	a := NewTestApplication(t, &wlsession.Session{})
 	var seen []KeyboardLayout
 	stop := a.OnKeyboardLayout(func(l KeyboardLayout) { seen = append(seen, l) })
 	if len(seen) != 1 || len(seen[0].Names) != 0 {

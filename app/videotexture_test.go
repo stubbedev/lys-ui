@@ -62,10 +62,22 @@ func firstVideoFrame(t *testing.T, dev *gpu.Device, path string) *gpu.VideoFrame
 	}
 }
 
-// A Video surface's frame is drawn on the device straight from the
-// decoded picture into a buffer the compositor imports, its fence on
-// the buffer, allocating nothing per frame.
-func TestAVideoFrameIsDrawnOnTheGPUIntoTheBuffer(t *testing.T) {
+type videoDraw struct {
+	dev   *gpu.Device
+	tg    *gpu.Target
+	whole []image.Rectangle
+	frame *gpu.VideoFrame
+}
+
+func (d videoDraw) draw(t *testing.T) {
+	t.Helper()
+	if err := drawVideoFrame(d.dev, d.tg, d.whole, d.frame); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func newVideoDraw(t *testing.T, w, h int) videoDraw {
+	t.Helper()
 	if !gputest.Enabled() {
 		t.Skip("LYS_TEST_GPU is unset")
 	}
@@ -82,20 +94,22 @@ func TestAVideoFrameIsDrawnOnTheGPUIntoTheBuffer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const w, h = 96, 72
 	tg, err := dev.NewTarget(w, h, fourcc.ARGB8888, mods)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(tg.Close)
-	whole := []image.Rectangle{image.Rect(0, 0, w, h)}
-	if err := drawVideoFrame(dev, tg, whole, frame); err != nil {
+	return videoDraw{dev: dev, tg: tg, whole: []image.Rectangle{image.Rect(0, 0, w, h)}, frame: frame}
+}
+
+func TestAVideoFrameIsDrawnOnTheGPUIntoTheBuffer(t *testing.T) {
+	const w, h = 96, 72
+	d := newVideoDraw(t, w, h)
+	d.draw(t)
+	if err := d.dev.Finish(); err != nil {
 		t.Fatal(err)
 	}
-	if err := dev.Finish(); err != nil {
-		t.Fatal(err)
-	}
-	img, err := tg.ReadPixels()
+	img, err := d.tg.ReadPixels()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,13 +118,15 @@ func TestAVideoFrameIsDrawnOnTheGPUIntoTheBuffer(t *testing.T) {
 			t.Errorf("(%d,%d) = %v, want the frame's opaque red scaled over the whole buffer", pt.X, pt.Y, c)
 		}
 	}
-	allocs := testing.AllocsPerRun(20, func() {
-		if err := drawVideoFrame(dev, tg, whole, frame); err != nil {
-			t.Fatal(err)
-		}
-	})
+}
+
+func TestAllocBudgetGPUVideoFrameDraw(t *testing.T) {
+	testbuild.SkipAllocBudget(t)
+	d := newVideoDraw(t, 96, 72)
+	d.draw(t)
+	allocs := testing.AllocsPerRun(20, func() { d.draw(t) })
 	t.Logf("%v heap allocations per frame drawn", allocs)
-	if testbuild.AllocBudgetsHold && allocs != 0 {
+	if allocs != 0 {
 		t.Errorf("%v heap allocations per frame drawn, want none", allocs)
 	}
 }

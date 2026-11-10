@@ -78,7 +78,7 @@ type file struct {
 
 func (f *file) Info() Info { return f.info }
 
-func (f *file) NewVideoDecoder(dev *gpu.Device) (*gpu.VideoDecoder, error) {
+func (f *file) NewVideoDecoder(dev *gpu.Device) (VideoDecoder, error) {
 	dec, err := dev.NewVideoDecoder(f.video)
 	switch {
 	case errors.Is(err, gpu.ErrNoVideoDecoder):

@@ -110,7 +110,7 @@ func boundedTick(t *testing.T, a *Application, step func() error) {
 func TestStalledWireSkipsFramesAndOwesThem(t *testing.T) {
 	f := newWireFixture(t, "wayland-stall")
 	f.ctx.SetBuffered(true)
-	a := NewApplication(f.sess)
+	a := NewTestApplication(t, f.sess)
 	h := f.window(t, a)
 	surf := h.wnd.surf.(wireSurface).wl
 
@@ -252,7 +252,7 @@ func TestWireFrameSendmsgPerPass(t *testing.T) {
 			testbuild.SkipAllocBudget(t)
 			f := newWireFixture(t, "wayland-sends")
 			f.ctx.SetBuffered(true)
-			a := NewApplication(f.sess)
+			a := NewTestApplication(t, f.sess)
 			var hs []*paintHarness
 			for range tc.windows {
 				hs = append(hs, f.window(t, a))

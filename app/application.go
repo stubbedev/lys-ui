@@ -194,6 +194,7 @@ type Application struct {
 	// the loop; ended closes when the loop ends, releasing a poller
 	// waiting on a dropped invoke.
 	watchers  stopSet
+	closeOnce sync.Once
 	endedOnce sync.Once
 	ended     chan struct{}
 	endedMu   sync.Mutex
@@ -830,6 +831,37 @@ func outputWire(o *wlsession.Output) *wl.Output {
 	return o.WL
 }
 
+// Close stops everything the application started: the queued invokes
+// and timers, the watchers and OnStop hooks, the font warm-up, the
+// AT-SPI bridge, the desktop settings monitor with its session bus
+// connection, the notifier, the portal sessions and the GPU renderer.
+// Run closes the application when it returns, whatever ended the loop,
+// a dead connection included; a program that builds an application and
+// never runs it closes it itself. Closing again does nothing.
+func (a *Application) Close() { a.closeOnce.Do(a.teardown) }
+
+func (a *Application) teardown() {
+	a.queues.shutdown()
+	a.watchers.shutdown()
+	a.endLoop()
+	a.stopAccessibility()
+	if a.stopMotionFollow != nil {
+		a.stopMotionFollow()
+	}
+	if a.stopIconFollow != nil {
+		a.stopIconFollow()
+	}
+	if a.portal != nil {
+		a.portal.Close()
+	}
+	a.closeNotifier()
+	a.shortcuts.shutdown()
+	if a.portals != nil {
+		a.portals.close()
+	}
+	a.closeRenderer()
+}
+
 // Run drives every window until the application quits (Quit) or every
 // window has closed with no session lock held (a lock keeps the loop
 // alive with nothing mapped). It returns ErrClosed in both cases. Run's
@@ -839,38 +871,12 @@ func outputWire(o *wlsession.Output) *wl.Output {
 // the goroutine for the off-loop debug hook, pumps the queued work at
 // the top of every pass, and folds the periodic-timer deadlines into
 // the wake computation, so a pending poller wakes the park exactly
-// once per tick.
+// once per tick. Run closes the application (Close) when it returns.
 func (a *Application) Run() error {
 	widget.MarkLoop()
 	defer func() {
 		widget.UnmarkLoop()
-		// Discard queued invokes and stop the pollers: nothing will run
-		// them, and later Invokes drop instead of accumulating. This runs
-		// on the disconnect path too — timers and invokes die with the
-		// loop, whatever killed it.
-		a.queues.shutdown()
-		a.watchers.shutdown()
-		a.endLoop()
-		// The AT-SPI bridge dies with the loop: its samplers hop
-		// through Invoke, which shutdown just drained.
-		a.stopAccessibility()
-		// Unwind the NewApplication icon-follow wiring: stop the cache's
-		// subscription, then the monitor's goroutines and connection.
-		if a.stopMotionFollow != nil {
-			a.stopMotionFollow()
-		}
-		if a.stopIconFollow != nil {
-			a.stopIconFollow()
-		}
-		if a.portal != nil {
-			a.portal.Close()
-		}
-		a.closeNotifier()
-		a.shortcuts.shutdown()
-		if a.portals != nil {
-			a.portals.close()
-		}
-		a.closeRenderer()
+		a.Close()
 	}()
 	if _, err := a.renderer(); err != nil {
 		return err

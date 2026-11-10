@@ -75,12 +75,29 @@ type TextureSource interface {
 	Source
 	Seeker
 	// NewVideoDecoder opens a decoder of the video track on dev, an
-	// error naming the codec and the file where dev decodes none.
-	NewVideoDecoder(dev *gpu.Device) (*gpu.VideoDecoder, error)
+	// error naming the codec and the file where dev decodes none. A
+	// Stream that moves to another device closes the decoder and opens
+	// one on the next.
+	NewVideoDecoder(dev *gpu.Device) (VideoDecoder, error)
 	// ReadPacket returns the video track's next packet, its Data valid
 	// until the next ReadPacket or Seek, and io.EOF after the last.
 	// After Seek(t) the packets start at the keyframe at or before t.
 	ReadPacket() (demux.Packet, error)
+}
+
+// VideoDecoder decodes a TextureSource's packets on one GPU device,
+// what a *gpu.VideoDecoder does: Decode takes the packets in decode
+// order, Next hands out the frames they complete in presentation order,
+// nil when there is none yet, Flush hands out the frames held back at
+// the track's end, Reset drops what is decoding for a seek, and Close
+// releases the decoder with every frame it handed out. A device that
+// was lost fails them with gpu.ErrDeviceLost.
+type VideoDecoder interface {
+	Decode(p demux.Packet) error
+	Next() (*gpu.VideoFrame, error)
+	Flush()
+	Reset() error
+	Close()
 }
 
 // StillSource is a Source whose frames are rasters it keeps unchanged for

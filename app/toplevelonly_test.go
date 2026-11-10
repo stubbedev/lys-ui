@@ -281,8 +281,8 @@ func connectFakeWith(t *testing.T, globals []fakeGlobal, setup ...func(*fakeComp
 	if err != nil {
 		t.Fatalf("connect with %v: %v", globals, err)
 	}
-	a := app.NewApplication(sess)
 	t.Cleanup(sess.Close)
+	a := app.NewTestApplication(t, sess)
 	return f, a
 }
 

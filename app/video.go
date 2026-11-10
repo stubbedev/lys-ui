@@ -10,7 +10,6 @@ import (
 	"github.com/stubbedev/lys-lib/dmabuf"
 	"github.com/stubbedev/lys-lib/dmabufwl"
 	"github.com/stubbedev/lys-lib/fourcc"
-	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -221,8 +220,6 @@ type videoOutput struct {
 	app *Application
 	hw  *hostWindow
 	subsurface
-	// device is the GPU a texture surface draws on, nil for YUV.
-	device *gpu.Device
 	ring   [videoRing]videoBuffer
 	wake   func()
 	bounds render.Rect

@@ -118,7 +118,7 @@ func (a *Application) stopBridge() error {
 	return nil
 }
 
-// stopAccessibility is Run's exit: the switch and the bridge stop, after
+// stopAccessibility is Close's part: the switch and the bridge stop, after
 // whatever the worker still had queued, and the worker ends. Work stuck
 // on a bus past the bound still reaches the stop when it returns.
 func (a *Application) stopAccessibility() {

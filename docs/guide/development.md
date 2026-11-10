@@ -34,6 +34,25 @@ memory cap.
 | `just gallery` | opens the gallery |
 | `just docshots` | screenshots every widget for this site |
 
+## Test isolation
+
+A package whose tests build applications or dial a bus runs under
+`internal/testhome` (`TestMain` calls `testhome.Run`): `HOME` and the
+XDG directories point at a scratch directory, the session bus and the
+sound server at sockets in it that nothing serves, and every variable
+naming a compositor or display is unset. `DBUS_SESSION_BUS_ADDRESS` is
+set because godbus otherwise falls back to `/run/user/<uid>/bus`,
+whatever `XDG_RUNTIME_DIR` says. A test that needs a bus, a compositor
+or a sound server starts its own (`dbustest`, `wltest`, `pulsetest`).
+Under `LYS_TEST_HEADLESS` the session the recipe booted stays in
+place. Each such package has a test calling
+`testhome.RequireNoHostSession`, which fails when the process could
+reach the session of whoever runs it.
+
+Tests in package `app` build applications with `NewTestApplication`,
+which closes them when the test ends; a test there calling
+`NewApplication` itself fails `TestEveryTestApplicationIsBuiltToBeClosed`.
+
 ## Builds and releases
 
 `nix build .#lys-ui` builds the module and every demo. A `v*` tag

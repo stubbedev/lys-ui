@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -60,6 +61,35 @@ func BuildClient(dir, pkg, bin string) (string, error) {
 		return "", fmt.Errorf("build %s: %w\n%s", pkg, err, out)
 	}
 	return filepath.Join(dir, bin), nil
+}
+
+// toolchainEnv are the go command's variables whose defaults lie under
+// the user's home and configuration directory.
+var toolchainEnv = [...]string{"GOENV", "GOCACHE", "GOMODCACHE", "GOPATH"}
+
+// toolchainTimeout bounds the go env call of PinToolchain.
+const toolchainTimeout = 30 * time.Second
+
+// PinToolchain sets the go command's cache and configuration variables
+// to what they resolve to now, so BuildClient still finds the module
+// and build caches once the test binary's home has moved (testhome).
+// Call it before isolating the process.
+func PinToolchain() error {
+	cmd := exec.Command(goTool(), append([]string{"env"}, toolchainEnv[:]...)...) //nolint:gosec // fixed subcommand and variable names
+	out, err := runWithTimeout(cmd, toolchainTimeout)
+	if err != nil {
+		return fmt.Errorf("headlesstest: go env %s: %w\n%s", strings.Join(toolchainEnv[:], " "), err, out)
+	}
+	values := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	if len(values) != len(toolchainEnv) {
+		return fmt.Errorf("headlesstest: go env %s printed %d lines: %q", strings.Join(toolchainEnv[:], " "), len(values), out)
+	}
+	for i, key := range toolchainEnv {
+		if err := os.Setenv(key, values[i]); err != nil {
+			return fmt.Errorf("headlesstest: set %s: %w", key, err)
+		}
+	}
+	return nil
 }
 
 // goTool prefers the go in PATH; GOROOT-built test binaries (go test

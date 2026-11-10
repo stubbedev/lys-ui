@@ -59,6 +59,7 @@ func startLock(t *testing.T) *lockRun {
 		OnLocked:   func() { r.locked <- struct{}{} },
 		OnFinished: func() { r.finished <- struct{}{} },
 	}); err != nil {
+		r.app.Close()
 		sess.Close()
 		t.Fatalf("LockSession: %v", err)
 	}

@@ -44,9 +44,10 @@ func (s *stopSet) shutdown() {
 	}
 }
 
-// OnStop registers fn to run when Run returns, after the loop's last
+// OnStop registers fn to run when the application closes (Close, which
+// Run calls when it returns), after the loop's last
 // pass. Hooks run in reverse registration order, like deferred calls.
-// After the loop already ended, fn runs at once. The returned cancel
+// After the application closed, fn runs at once. The returned cancel
 // unregisters fn without running it.
 func (a *Application) OnStop(fn func()) (cancel func()) {
 	id, ok := a.watchers.add(fn)

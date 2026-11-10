@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"image"
 	"log/slog"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/stubbedev/lys-lib/gputest"
 	"github.com/stubbedev/lys-lib/logutil"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/widget"
@@ -207,4 +209,147 @@ func TestADeviceLostTooOftenLeavesTheWindowsOnTheCPU(t *testing.T) {
 	if !errors.Is(rig.a.gpuLosses.Err(), gpu.ErrDeviceLost) {
 		t.Error("the recorded losses lost their cause")
 	}
+}
+
+type videoStub struct {
+	rig         *lossRig
+	s           *textureSurface
+	lostOpen    []bool
+	wokenOn     []*gpuRenderer
+	wokePending []bool
+}
+
+func (rig *lossRig) video() *videoStub {
+	v := &videoStub{rig: rig, s: &textureSurface{}}
+	v.s.app, v.s.wake, v.s.lost = rig.a, v.wake, v.lost
+	v.attach(rig.a.gpu)
+	return v
+}
+
+func (v *videoStub) attach(r *gpuRenderer) {
+	v.s.r = r
+	r.videos = append(r.videos, v.s)
+}
+
+func (v *videoStub) lost() {
+	r := v.s.r
+	v.lostOpen = append(v.lostOpen, !r.closed)
+	r.videos = slices.DeleteFunc(r.videos, func(s *textureSurface) bool { return s == v.s })
+}
+
+func (v *videoStub) wake() {
+	a := v.rig.a
+	v.wokenOn = append(v.wokenOn, a.gpu)
+	v.wokePending = append(v.wokePending, a.gpuPending)
+	if a.gpu != nil && !a.gpu.Failed() {
+		v.attach(a.gpu)
+	}
+}
+
+var errVideoLoss = fmt.Errorf("app test: a video's decoding: %w", gpu.ErrDeviceLost)
+
+func TestAGPUVideoIsToldOfALostDeviceBeforeItClosesAndWokenOnTheNext(t *testing.T) {
+	rig := newLossRig(t)
+	v := rig.video()
+	lost := rig.a.gpu
+
+	rig.loseFrame(0.2)
+	rig.drain()
+	if len(v.lostOpen) != 1 || !v.lostOpen[0] || !lost.closed {
+		t.Fatalf("the video heard of the loss %v (true: with the device still open), device closed %v; want once, before the close", v.lostOpen, lost.closed)
+	}
+	if len(v.wokenOn) != 0 {
+		t.Fatalf("the video was woken %d times before the next device opened", len(v.wokenOn))
+	}
+	if v.s.err != nil {
+		t.Errorf("the surface of a lost device was failed: %v", v.s.err)
+	}
+	rig.land()
+	if len(v.wokenOn) != 1 || v.wokenOn[0] != rig.a.gpu || v.wokenOn[0] == lost {
+		t.Fatalf("the video was woken on %v, want once on the new device", v.wokenOn)
+	}
+	if !slices.Contains(rig.a.gpu.videos, v.s) {
+		t.Error("the video is not on the new device")
+	}
+}
+
+func TestAGPUDeviceLossAVideoFindsIsAnsweredLikeAFramesOwn(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		report func(v *videoStub) error
+	}{
+		{"found decoding", func(v *videoStub) error {
+			v.s.DeviceLost(errVideoLoss)
+			return nil
+		}},
+		{"found drawing a frame", func(v *videoStub) error {
+			v.s.bounds = render.Rect{W: 4, H: 4}
+			v.s.ring[0].wl = &wl.Buffer{}
+			v.s.r.video = func(*gpu.Target, []image.Rectangle, *gpu.VideoFrame) error { return errVideoLoss }
+			shown, err := v.s.Present(nil)
+			if shown {
+				return errors.New("a frame the lost device never drew was shown")
+			}
+			return err
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			rig := newLossRig(t)
+			v := rig.video()
+			lost := rig.a.gpu
+			if err := c.report(v); err != nil {
+				t.Fatalf("the loss failed the video: %v", err)
+			}
+			if len(v.lostOpen) != 0 {
+				t.Fatal("the video was told of the loss from inside its own report")
+			}
+			rig.drain()
+			if len(v.lostOpen) != 1 || !lost.closed || rig.h.wnd.renderer != nil {
+				t.Fatalf("after the report: video told %v, device closed %v, window renderer %v; want the device given up", v.lostOpen, lost.closed, rig.h.wnd.renderer)
+			}
+			rig.land()
+			if rig.opens != 2 || rig.h.wnd.renderer != rig.a.gpu || len(v.wokenOn) != 1 || v.wokenOn[0] != rig.a.gpu {
+				t.Errorf("%d devices opened, window on %v, video woken on %v; want both on a second device", rig.opens, rig.h.wnd.renderer, v.wokenOn)
+			}
+			if v.s.err != nil {
+				t.Errorf("the surface was failed: %v", v.s.err)
+			}
+		})
+	}
+}
+
+func TestAGPUVideoLearnsThatNoDeviceFollowsALostOne(t *testing.T) {
+	t.Run("lost too often", func(t *testing.T) {
+		logutil.Set(slog.New(slog.DiscardHandler))
+		t.Cleanup(func() { logutil.Set(nil) })
+		rig := newLossRig(t)
+		v := rig.video()
+		for i := range gpu.LossLimit {
+			rig.loseFrame(float64(i) / 10)
+			rig.drain()
+			rig.land()
+		}
+		woken := len(v.wokenOn)
+		rig.loseFrame(0.9)
+		rig.drain()
+		if len(v.wokenOn) != woken+1 || v.wokenOn[woken] != nil || v.wokePending[woken] {
+			t.Fatalf("after the last loss the video was woken on %v, pending %v; want once, with no device there or coming", v.wokenOn[woken:], v.wokePending[woken:])
+		}
+	})
+	t.Run("the GPU is required", func(t *testing.T) {
+		logutil.Set(slog.New(slog.DiscardHandler))
+		t.Cleanup(func() { logutil.Set(nil) })
+		rig := newLossRig(t)
+		v := rig.video()
+		r := rig.a.gpu
+		r.required = true
+		v.s.DeviceLost(errVideoLoss)
+		rig.drain()
+		if len(v.lostOpen) != 1 || len(v.wokenOn) != 1 || v.wokenOn[0] != r || !r.Failed() || rig.opens != 1 {
+			t.Fatalf("video told %v, woken on %v, renderer failed %v, %d devices opened; want the video sent back to a failed renderer", v.lostOpen, v.wokenOn, r.Failed(), rig.opens)
+		}
+		if !errors.Is(r.failed, gpu.ErrDeviceLost) {
+			t.Errorf("the renderer failed with %v, want the loss", r.failed)
+		}
+	})
 }

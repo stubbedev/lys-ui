@@ -54,7 +54,7 @@ func gpuStream(t *testing.T, dev *gpu.Device, name string) *Stream {
 		}
 		animclock.Reset()
 	})
-	if err := s.UseDevice(dev); err != nil {
+	if err := s.UseDevice(dev, nil); err != nil {
 		t.Fatal(err)
 	}
 	return s
@@ -208,12 +208,73 @@ func TestAVideoCodecTheGPUDoesNotDecodeSaysSo(t *testing.T) {
 		}
 		animclock.Reset()
 	}()
-	err = s.UseDevice(dev)
+	err = s.UseDevice(dev, nil)
 	var unsupported *demux.UnsupportedCodecError
 	if !errors.Is(err, gpu.ErrNoVideoDecoder) || !errors.As(err, &unsupported) || !strings.Contains(unsupported.Codec, "VP9") || unsupported.File != fixture(t, "vp9.webm") {
 		t.Errorf("UseDevice = %v, want the device's refusal naming VP9 and the file", err)
 	}
 	if !errors.Is(s.Err(), gpu.ErrNoVideoDecoder) {
 		t.Errorf("the stream's error %v, want the refusal", s.Err())
+	}
+}
+
+func TestAStreamResumesAtItsPositionOnANewGPUDevice(t *testing.T) {
+	first := gpuDevice(t)
+	second, err := gpu.Open()
+	if err != nil {
+		t.Fatalf("a second GPU device: %v", err)
+	}
+	t.Cleanup(second.Close)
+	for _, c := range gpuFixtures {
+		t.Run(c.name, func(t *testing.T) {
+			if !slices.Contains(first.DecodeCodecs(), c.codec) {
+				t.Skipf("%s decodes no %s", first.Name(), c.codec)
+			}
+			s := gpuStream(t, first, c.name)
+			now := time.Now()
+			const at, shows = 620 * time.Millisecond, 600 * time.Millisecond
+			if err := s.Seek(at); err != nil {
+				t.Fatal(err)
+			}
+			until(t, s, now, "the frame at the seek target", func() bool { return s.curGen == s.gen })
+			if f := s.Texture(); f.PTS() != shows {
+				t.Fatalf("the first device shows the frame at %v, want %v", f.PTS(), shows)
+			}
+
+			s.ReleaseDevice()
+			if s.Texture() != nil || s.Err() != nil || s.Position() != at {
+				t.Fatalf("between the devices: frame %v, error %v, at %v", s.Texture(), s.Err(), s.Position())
+			}
+			if err := s.UseDevice(second, nil); err != nil {
+				t.Fatal(err)
+			}
+			until(t, s, now, "the frame at the position on the new device", func() bool { return s.curGen == s.gen })
+			f := s.Texture()
+			if got := centre(t, second, f); f.PTS() != shows || !greenish(got) {
+				t.Fatalf("the new device shows the frame at %v coloured %v, want the green one at %v", f.PTS(), got, shows)
+			}
+
+			s.Play()
+			shown := []time.Duration{f.PTS()}
+			for step := 0; !s.Ended(); step++ {
+				until(t, s, now, "the next frame decoded", func() bool { return len(s.tex.queue) > 0 || s.eofGen == s.gen })
+				now = now.Add(fixtureStep)
+				s.advance(now)
+				if f := s.Texture(); shown[len(shown)-1] != f.PTS() {
+					shown = append(shown, f.PTS())
+				}
+				if step > 40 {
+					t.Fatalf("still playing after %d steps of %v", step, fixtureStep)
+				}
+			}
+			if len(shown) != 10 || shown[9] != 24*fixtureStep {
+				t.Errorf("playback on the new device showed the frames at %v, want every 40 ms from %v to the end", shown, shows)
+			}
+			for i := 1; i < len(shown); i++ {
+				if shown[i]-shown[i-1] != fixtureStep {
+					t.Errorf("frame %d at %v follows %v", i, shown[i], shown[i-1])
+				}
+			}
+		})
 	}
 }

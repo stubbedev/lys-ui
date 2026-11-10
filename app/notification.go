@@ -150,7 +150,7 @@ func (a *Application) notifyClosed(id string, reason notify.CloseReason) {
 	}
 }
 
-// closeNotifier is Run's exit hook: the notifier's connection dies
+// closeNotifier is Close's part: the notifier's connection dies
 // with the loop like every other loop-owned resource.
 func (a *Application) closeNotifier() {
 	a.notifyMu.Lock()

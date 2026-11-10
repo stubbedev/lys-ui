@@ -49,6 +49,10 @@ type VideoSurface interface {
 type TextureSurface interface {
 	videoPlacement
 	Device() *gpu.Device
+	// DeviceLost tells the host that decoding found Device lost, with
+	// the error that said so. The host answers as it does when its own
+	// drawing finds it: through the lost and wake it was given.
+	DeviceLost(err error)
 	// Present draws f onto the surface. It is false, the frame
 	// dropped, while every buffer is still the compositor's; the wake
 	// the host was given runs once one is free again.
@@ -63,8 +67,13 @@ type VideoHost func(v *Video, format VideoFormat, wake func()) (VideoSurface, er
 // TextureHost gives an on-screen Video of a stream decoding on the GPU
 // its TextureSurface for width x height frames, or says why it has
 // none; wake runs on the loop when a buffer frees after a dropped
-// frame, and when the device opens after ErrVideoDevicePending.
-type TextureHost func(v *Video, width, height int, wake func()) (TextureSurface, error)
+// frame, and when the device opens after ErrVideoDevicePending. lost
+// runs on the loop when the surface's device is going away, before it
+// does: the Video closes the surface and has its stream let go of the
+// device (media.Stream.ReleaseDevice), and the host's next wake has it
+// ask for a surface again, on the device opened since or to learn that
+// there is none.
+type TextureHost func(v *Video, width, height int, wake, lost func()) (TextureSurface, error)
 
 var (
 	videoHost   atomic.Pointer[VideoHost]
@@ -118,7 +127,9 @@ var (
 // above it. Otherwise the frames are painted into the window. A stream
 // decoding on the GPU always plays on a subsurface (TextureSurface),
 // decoded on the device the windows draw with and drawn onto it there;
-// a Video that gets no such surface fails the stream. The Video does
+// when that device is lost the stream follows the windows to the one
+// opened in its place, playing on from its position, and a Video that
+// gets no such surface fails the stream. The Video does
 // not own the stream; whoever made it closes it. It styles as `video`.
 type Video struct {
 	composite
@@ -352,7 +363,7 @@ func (p *videoView) openTextureOffload() {
 		return
 	}
 	w, h := p.stream.Size()
-	s, err := (*host)(p.video, w, h, p.wake)
+	s, err := (*host)(p.video, w, h, p.wake, p.deviceGone)
 	switch {
 	case errors.Is(err, ErrVideoOffscreen) || errors.Is(err, ErrVideoDevicePending):
 		return
@@ -360,7 +371,7 @@ func (p *videoView) openTextureOffload() {
 		p.failTextures(err)
 		return
 	}
-	if err := p.stream.UseDevice(s.Device()); err != nil {
+	if err := p.stream.UseDevice(s.Device(), s.DeviceLost); err != nil {
 		s.Close()
 		p.offloadErr = err
 		return
@@ -379,6 +390,11 @@ func (p *videoView) openTextureOffload() {
 func (p *videoView) failTextures(err error) {
 	p.offloadErr = err
 	p.stream.Fail(err)
+}
+
+func (p *videoView) deviceGone() {
+	p.closeOffload()
+	p.stream.ReleaseDevice()
 }
 
 // wake is the host's call back: a buffer freed after a dropped frame,

@@ -12,6 +12,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/testbuild"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
@@ -852,7 +853,7 @@ func TestAGPUScrollStepCarriesItsPixels(t *testing.T) {
 }
 
 func TestAllocBudgetScrollFrame(t *testing.T) {
-	quietAllocBudget(t)
+	testbuild.SkipAllocBudget(t)
 	h, sc, _ := scrollWindow(t)
 	h.frame()
 	y := 0

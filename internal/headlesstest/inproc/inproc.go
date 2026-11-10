@@ -28,10 +28,12 @@ func Show(t *testing.T, build func(a *app.Application, out *app.Output) error) {
 	a := app.NewApplication(sess)
 	outs := sess.Outputs()
 	if len(outs) == 0 {
+		a.Close()
 		sess.Close()
 		t.Fatal("no outputs")
 	}
 	if err := build(a, outs[0]); err != nil {
+		a.Close()
 		sess.Close()
 		t.Fatalf("build: %v", err)
 	}

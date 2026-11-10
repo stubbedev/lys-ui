@@ -54,6 +54,7 @@ const (
 type videoCompositor struct {
 	f       *fakeCompositor
 	formats []fourcc.Format
+	argb    []fourcc.Modifier
 
 	mu            sync.Mutex
 	nextServer    uint32
@@ -100,6 +101,9 @@ func (c *videoCompositor) bound(iface string, id uint32) {
 	case "zwp_linux_dmabuf_v1":
 		for _, format := range c.formats {
 			c.f.send(id, dmabufEventModifier, uint32(format), 0, 0)
+		}
+		for _, m := range c.argb {
+			c.f.send(id, dmabufEventModifier, uint32(fourcc.ARGB8888), uint32(m>>32), uint32(m))
 		}
 	case "wp_color_representation_manager_v1":
 		for _, r := range []uint32{wlr.WpColorRepresentationSurfaceV1RangeLimited, wlr.WpColorRepresentationSurfaceV1RangeFull} {

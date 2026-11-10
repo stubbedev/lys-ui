@@ -19,7 +19,7 @@ import (
 // without a data device reports the clipboard unavailable instead of
 // crashing on a programmatic copy.
 func TestClipboardInstalledAndUnavailable(t *testing.T) {
-	a := NewApplication(&wlsession.Session{})
+	a := NewTestApplication(t, &wlsession.Session{})
 	if a.Clipboard() != nil {
 		t.Fatal("a fresh application has a clipboard")
 	}

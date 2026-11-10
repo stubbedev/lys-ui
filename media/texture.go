@@ -149,7 +149,7 @@ func (r *packetReader) recycle(b *packet) { r.free <- b }
 type textureVideo struct {
 	src TextureSource
 	dev *gpu.Device
-	dec *gpu.VideoDecoder
+	dec VideoDecoder
 	rd  *packetReader
 	// queue are the frames decoded ahead of cur, in presentation order,
 	// and candidate the one that may show at the seek target, held
@@ -172,15 +172,38 @@ func newTextureVideo(src TextureSource) *textureVideo {
 	return &textureVideo{src: src, queue: make([]*gpu.VideoFrame, 0, heldTextures-1), closed: make(chan struct{})}
 }
 
-// attach decodes on dev from t on, the stream at generation gen.
+// attach decodes on dev from t on, the stream at generation gen: the
+// packets are read from the keyframe before t, from the start of the
+// track for a first attach at 0.
 func (v *textureVideo) attach(dev *gpu.Device, gen int, t time.Duration) error {
 	dec, err := v.src.NewVideoDecoder(dev)
 	if err != nil {
 		return err
 	}
 	v.dev, v.dec, v.target = dev, dec, t
-	v.rd = startPacketReader(v.src, seekRequest{gen: gen, t: t}, t > 0)
+	v.flushed, v.landed = false, false
+	req := seekRequest{gen: gen, t: t}
+	if v.rd == nil {
+		v.rd = startPacketReader(v.src, req, t > 0)
+		return nil
+	}
+	v.rd.requestSeek(req)
 	return nil
+}
+
+func (v *textureVideo) attached() bool { return v.dec != nil }
+
+func (v *textureVideo) detach() {
+	v.releaseQueue()
+	if v.cur != nil {
+		v.cur.Release()
+		v.cur = nil
+	}
+	if v.dec != nil {
+		v.dec.Close()
+		v.dec = nil
+	}
+	v.dev = nil
 }
 
 // pump moves the stream's decoding along: it takes the frames the
@@ -299,7 +322,7 @@ func (v *textureVideo) show(n int) {
 
 // seek restarts the decoding at the keyframe before t.
 func (v *textureVideo) seek(gen int, t time.Duration) error {
-	if v.dec == nil {
+	if !v.attached() {
 		return nil
 	}
 	v.releaseQueue()
@@ -323,14 +346,7 @@ func (v *textureVideo) releaseQueue() {
 // them, and returns at once: the packet goroutine and the source go on
 // a goroutine of their own.
 func (v *textureVideo) close() {
-	v.releaseQueue()
-	if v.cur != nil {
-		v.cur.Release()
-		v.cur = nil
-	}
-	if v.dec != nil {
-		v.dec.Close()
-	}
+	v.detach()
 	rd := v.rd
 	if rd != nil {
 		close(rd.quit)

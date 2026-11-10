@@ -67,8 +67,9 @@ one drain, so many sends cost one wake and arrive as one ordered batch.
 | `app.Reducer[S, M]` (`NewReducer`) | `Emit(msg)` from any goroutine; `reduce` applies messages on the loop in order and subscribers hear only reported changes |
 
 A send from inside a subscriber is delivered on the next pass.
-Everything stops when `Run` returns; `Application.OnStop` hooks run in
-reverse order. Component input and output queues use the same mailbox.
+Everything stops when the application closes, which `Run` does when it
+returns and `Application.Close` does for an application that never
+ran; `Application.OnStop` hooks run in reverse order. Component input and output queues use the same mailbox.
 `cmd/lys-ui-messages` is the example.
 
 ## Off-loop work

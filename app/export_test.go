@@ -1,5 +1,7 @@
 package app
 
+import "github.com/stubbedev/lys-lib/gpu"
+
 // OpenDialogs returns the dialogs a test cannot reach through the API
 // that opened them, oldest first.
 func (a *Application) OpenDialogs() []*Dialog { return a.dialogs }
@@ -28,3 +30,15 @@ func (m plainMemory) bytes() []byte     { return m.mem }
 func (m plainMemory) beginWrite() error { return nil }
 func (m plainMemory) endWrite() error   { return nil }
 func (m plainMemory) close() error      { return m.free() }
+
+// GPUDevice is the device a's windows draw on, nil while they draw on
+// the CPU.
+func (a *Application) GPUDevice() *gpu.Device {
+	if a.gpu == nil {
+		return nil
+	}
+	return a.gpu.dev
+}
+
+// FaultGPU has a's renderer take err as its frame's failure.
+func (a *Application) FaultGPU(err error) { a.gpu.fault(err) }

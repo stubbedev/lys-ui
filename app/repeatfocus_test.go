@@ -31,7 +31,7 @@ func TestHeldKeyStopsRepeatingWhenFocusMoves(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			sess := &wlsession.Session{}
-			a := NewApplication(sess)
+			a := NewTestApplication(t, sess)
 			a.wireSession()
 			focused := &wl.Surface{}
 			sess.HandleKeyboardEnter(wl.KeyboardEnterEvent{Surface: focused})

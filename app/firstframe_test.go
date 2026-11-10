@@ -29,7 +29,7 @@ func newFirstFrameRig(t *testing.T) *firstFrameRig {
 	root := widget.NewBox(widget.Column, 0, 0)
 	root.Append(widget.NewThemeIcon(r.path, 16), false)
 	r.h = newPaintHarness(root, 64, 48)
-	r.a = NewApplication(&wlsession.Session{})
+	r.a = NewTestApplication(t, &wlsession.Session{})
 	r.a.step = func() error { return nil }
 	r.a.wake = func(time.Duration) {}
 	r.a.arm = func(time.Time) {}

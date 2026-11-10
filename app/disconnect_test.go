@@ -53,7 +53,7 @@ func disconnectApp(t *testing.T, sess *wlsession.Session) (*Application, *hostWi
 	root := widget.NewBox(widget.Row, 0, 0)
 	h := newPaintHarness(root, 320, 200)
 	h.wnd.sess = sess
-	a := NewApplication(sess)
+	a := NewTestApplication(t, sess)
 	a.windows = append(a.windows, h.wnd)
 	t.Cleanup(func() { widget.SetInvoker(nil) })
 	return a, h.wnd, h

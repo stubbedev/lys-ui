@@ -8,7 +8,7 @@ import (
 )
 
 func TestDataControlWithoutTheProtocolIsUnavailable(t *testing.T) {
-	a := NewApplication(&wlsession.Session{})
+	a := NewTestApplication(t, &wlsession.Session{})
 
 	d, err := a.DataControl()
 

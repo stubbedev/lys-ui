@@ -20,6 +20,7 @@ func TestHeadlessActivationToken(t *testing.T) {
 	}
 	defer sess.Close()
 	a := app.NewApplication(sess)
+	defer a.Close()
 	cfg := func(title string) app.WindowConfig {
 		return app.WindowConfig{Title: title, AppID: "dev.stubbe.lys.ui.activation", Width: 200, Height: 120, Root: widget.NewBox(widget.Column, 0, 0)}
 	}

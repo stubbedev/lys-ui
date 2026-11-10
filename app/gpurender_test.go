@@ -441,7 +441,7 @@ func TestAFrameTheGPURefusedStaysOwedAndWakesTheLoop(t *testing.T) {
 
 func deviceRenderer(dev *gpu.Device) *gpuRenderer {
 	r := &gpuRenderer{dev: dev, name: dev.Name(), rec: render.NewRecorder(1, 1, 1, 1), wake: func(time.Duration) {}}
-	r.render, r.prepare = r.deviceFrame, r.deviceTarget
+	r.render, r.prepare, r.video = r.deviceFrame, r.deviceTarget, r.deviceVideo
 	return r
 }
 
