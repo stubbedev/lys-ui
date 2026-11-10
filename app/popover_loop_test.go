@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
-	"github.com/stubbedev/lys-lib/testbuild"
 	"github.com/stubbedev/lys-lib/xkb"
 	"golang.org/x/image/font/gofont/goregular"
 
@@ -489,7 +488,7 @@ type quietPopPainter struct{ fakePopPainter }
 func (*quietPopPainter) Collect() bool { return false }
 
 func TestAllocBudgetDrivePopovers(t *testing.T) {
-	testbuild.SkipAllocBudget(t)
+	quietAllocBudget(t)
 	face, err := render.LoadFont(goregular.TTF)
 	if err != nil {
 		t.Fatal(err)
