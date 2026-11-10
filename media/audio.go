@@ -1,19 +1,22 @@
 package media
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sync/atomic"
 	"time"
 
-	"github.com/jfreymuth/pulse"
-	"github.com/jfreymuth/pulse/proto"
+	"github.com/stubbedev/lys-lib/pulse/native"
+	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
 
 const (
 	audioLatency       = 50 * time.Millisecond
 	audioClientTimeout = 2 * time.Second
+	audioChunkBytes    = AudioRate / 100 * audioFrame
 )
 
 type audioOut interface {
@@ -34,91 +37,105 @@ func playedFor(frames int64) time.Duration {
 }
 
 type pulseOut struct {
-	client  *pulse.Client
-	stream  *pulse.PlaybackStream
+	conn    *native.Conn
+	stream  *native.PlaybackStream
 	pcm     io.Reader
 	frames  atomic.Int64
 	closed  atomic.Bool
 	drained atomic.Bool
-}
-
-type pcmReader struct{ o *pulseOut }
-
-func (pcmReader) Format() byte { return proto.FormatInt16LE }
-
-func (r pcmReader) Read(b []byte) (int, error) {
-	if r.o.closed.Load() {
-		return 0, pulse.EndOfData
-	}
-	b = b[:len(b)/audioFrame*audioFrame]
-	n, err := io.ReadFull(r.o.pcm, b)
-	n = n / audioFrame * audioFrame
-	r.o.frames.Add(int64(n / audioFrame))
-	switch {
-	case errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF):
-		if n > 0 {
-			return n, nil
-		}
-		r.o.drained.Store(true)
-		return 0, pulse.EndOfData
-	case err != nil && r.o.closed.Load():
-		return 0, pulse.EndOfData
-	}
-	return n, err
+	failure atomic.Pointer[error]
 }
 
 func openPulse(pcm io.Reader, name string) (audioOut, error) {
-	c, err := pulse.NewClient(pulse.ClientApplicationName(name), pulse.ClientTimeout(audioClientTimeout))
+	ctx := context.Background()
+	c, err := native.Dial(ctx, native.Options{ClientName: name, Timeout: audioClientTimeout})
 	if err != nil {
 		return nil, fmt.Errorf("media: connect to the PulseAudio server: %w", err)
 	}
-	o := &pulseOut{client: c, pcm: pcm}
-	st, err := c.NewPlayback(pcmReader{o},
-		pulse.PlaybackStereo, pulse.PlaybackSampleRate(AudioRate),
-		pulse.PlaybackLatency(audioLatency.Seconds()), pulse.PlaybackMediaName(name))
+	st, err := c.CreatePlaybackStream(ctx, native.PlaybackParams{
+		SampleSpec: native.SampleSpec{Format: native.SampleS16LE, Channels: AudioChannels, Rate: AudioRate},
+		ChannelMap: native.ChannelMap{native.ChannelFrontLeft, native.ChannelFrontRight},
+		Latency:    audioLatency,
+		Props:      native.PropList{"media.name": name},
+	})
 	if err != nil {
-		c.Close()
+		_ = c.Close()
 		return nil, fmt.Errorf("media: open a PulseAudio playback stream: %w", err)
 	}
-	o.stream = st
-	st.Start()
+	o := &pulseOut{conn: c, stream: st, pcm: pcm}
+	go o.feed()
 	return o, nil
+}
+
+func (o *pulseOut) feed() {
+	buf := make([]byte, audioChunkBytes)
+	for {
+		n, err := io.ReadFull(o.pcm, buf)
+		n -= n % audioFrame
+		if n > 0 {
+			if werr := o.stream.Write(context.Background(), buf[:n]); werr != nil {
+				o.fail(werr)
+				return
+			}
+			o.frames.Add(int64(n / audioFrame))
+		}
+		switch {
+		case errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF):
+			o.drained.Store(true)
+			return
+		case err != nil:
+			o.fail(fmt.Errorf("read the PCM: %w", err))
+			return
+		}
+	}
+}
+
+func (o *pulseOut) fail(err error) {
+	if o.closed.Load() {
+		return
+	}
+	o.failure.CompareAndSwap(nil, &err)
 }
 
 func (o *pulseOut) Played() time.Duration { return playedFor(o.frames.Load()) }
 
 func (o *pulseOut) Drained() bool { return o.drained.Load() }
 
-func (o *pulseOut) Pause() { o.stream.Pause() }
+func (o *pulseOut) Pause() { o.cork(true) }
 
-func (o *pulseOut) Resume() { o.stream.Resume() }
+func (o *pulseOut) Resume() { o.cork(false) }
+
+func (o *pulseOut) cork(on bool) {
+	if err := o.stream.Cork(context.Background(), on); err != nil {
+		o.fail(err)
+	}
+}
 
 func (o *pulseOut) SetVolume(linear float64) error {
-	v := proto.LinearVolume(linear)
-	if err := o.stream.SetVolume(proto.ChannelVolumes{v, v}); err != nil {
+	v := native.Volume(math.Round(gomath.Cbrt(linear) * float64(native.VolumeNorm)))
+	if err := o.conn.SetSinkInputVolume(context.Background(), o.stream.Info().SinkInput, native.CVolume{v, v}); err != nil {
 		return fmt.Errorf("media: set the stream volume: %w", err)
 	}
 	return nil
 }
 
 func (o *pulseOut) SetMuted(on bool) error {
-	if err := o.client.RawRequest(&proto.SetSinkInputMute{SinkInputIndex: o.stream.StreamInputIndex(), Mute: on}, nil); err != nil {
+	if err := o.conn.SetSinkInputMute(context.Background(), o.stream.Info().SinkInput, on); err != nil {
 		return fmt.Errorf("media: mute the stream: %w", err)
 	}
 	return nil
 }
 
 func (o *pulseOut) Err() error {
-	if err := o.stream.Error(); err != nil {
-		return fmt.Errorf("media: audio playback: %w", err)
+	if err := o.failure.Load(); err != nil {
+		return fmt.Errorf("media: audio playback: %w", *err)
 	}
 	return nil
 }
 
 func (o *pulseOut) Close() {
 	o.closed.Store(true)
-	o.stream.Close()
-	o.client.Close()
+	_ = o.conn.Close()
 }
 
 type audioLink struct {

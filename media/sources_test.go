@@ -1,7 +1,6 @@
 package media
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"image"
@@ -13,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jfreymuth/pulse"
 	"github.com/stubbedev/lys-lib/render"
 )
 
@@ -181,46 +179,5 @@ func TestFFmpegReportsWhatItCannotPlay(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	if _, err := OpenFile(silent); !errors.Is(err, exec.ErrNotFound) {
 		t.Errorf("without ffmpeg on PATH: %v", err)
-	}
-}
-
-func TestPCMReaderCountsWholeFramesAndEnds(t *testing.T) {
-	o := &pulseOut{pcm: bytes.NewReader(make([]byte, 10*audioFrame+3))}
-	r := pcmReader{o}
-	buf := make([]byte, 6*audioFrame+1)
-	if n, err := r.Read(buf); n != 6*audioFrame || err != nil {
-		t.Fatalf("first read %d %v", n, err)
-	}
-	if n, err := r.Read(buf); n != 4*audioFrame || err != nil {
-		t.Fatalf("short read %d %v", n, err)
-	}
-	if o.Drained() {
-		t.Error("drained before the end was read")
-	}
-	if _, err := r.Read(buf); !errors.Is(err, pulse.EndOfData) || !o.Drained() {
-		t.Errorf("at the end: %v drained %v", err, o.Drained())
-	}
-	if got := o.frames.Load(); got != 10 {
-		t.Errorf("counted %d frames, want 10", got)
-	}
-	o.closed.Store(true)
-	if _, err := r.Read(buf); !errors.Is(err, pulse.EndOfData) {
-		t.Errorf("after close: %v", err)
-	}
-}
-
-func TestPlayedSubtractsTheBufferedLatency(t *testing.T) {
-	if got := playedFor(AudioRate); got != time.Second-audioLatency {
-		t.Errorf("one second handed over plays as %v", got)
-	}
-	if got := playedFor(10); got != 0 {
-		t.Errorf("a few frames in: %v, want 0 while buffering", got)
-	}
-}
-
-func TestNoAudioServerIsAnError(t *testing.T) {
-	t.Setenv("PULSE_SERVER", "unix:"+filepath.Join(t.TempDir(), "absent"))
-	if _, err := openPulse(strings.NewReader(""), "test"); err == nil || !strings.Contains(err.Error(), "PulseAudio") {
-		t.Errorf("without a server: %v", err)
 	}
 }

@@ -52,8 +52,6 @@ packages.
 Pure Go, no cgo. Direct dependencies:
 [lys-lib](https://github.com/stubbedev/lys-lib),
 [stubbedev/memory-go](https://github.com/stubbedev/memory-go),
-[jfreymuth/pulse](https://github.com/jfreymuth/pulse) (PulseAudio
-protocol, also served by pipewire-pulse),
 [golang.org/x/image](https://pkg.go.dev/golang.org/x/image) and
 [golang.org/x/sys](https://pkg.go.dev/golang.org/x/sys).
 
