@@ -173,6 +173,7 @@ func TestFilesDecodeOnTheGPU(t *testing.T) {
 			}
 			until(t, s, now, "the frame at 0", func() bool { return s.curGen == s.gen })
 			s.Play()
+			waits := dev.BlockingWaits()
 			var (
 				shown  = append(make([]time.Duration, 0, 64), s.Texture().PTS())
 				allocs uint64
@@ -194,6 +195,9 @@ func TestFilesDecodeOnTheGPU(t *testing.T) {
 			}
 			runtime.ReadMemStats(&m1)
 			allocs = m1.Mallocs - m0.Mallocs
+			if waited := dev.BlockingWaits() - waits; waited != 0 {
+				t.Errorf("playback waited for the GPU %d times, want never", waited)
+			}
 			if len(shown) != 25 || shown[0] != 0 || shown[24] != 24*fixtureStep {
 				t.Errorf("playback showed the frames at %v, want every 40 ms of the second", shown)
 			}

@@ -92,9 +92,12 @@ type TextureSource interface {
 // the track's end, Reset drops what is decoding for a seek, and Close
 // releases the decoder with every frame it handed out. Next waits for
 // nothing: a frame's picture may still be decoding (its Decoded tells).
-// A device that was lost fails Decode and Reset with
-// gpu.ErrDeviceLost.
+// Busy reports, without waiting, a decoder so far behind the packets it
+// took that Decode of another could wait for it: the Stream holds its
+// next packet back until the following tick. A device that was lost
+// fails Decode, Reset and Busy with gpu.ErrDeviceLost.
 type VideoDecoder interface {
+	Busy() (bool, error)
 	Decode(p demux.Packet) error
 	Next() *gpu.VideoFrame
 	Flush()

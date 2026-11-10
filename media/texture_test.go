@@ -23,9 +23,13 @@ type fakeDecoder struct {
 	dev     *gpu.Device
 	decoded []time.Duration
 	ready   int
+	busy    bool
+	busyErr error
 	lost    error
 	closed  bool
 }
+
+func (d *fakeDecoder) Busy() (bool, error) { return d.busy, d.busyErr }
 
 func (d *fakeDecoder) Decode(p demux.Packet) error {
 	switch {
@@ -221,6 +225,14 @@ func TestADeviceLostWhileDecodingIsReportedAndReplaced(t *testing.T) {
 			dec.lost = errFakeLoss
 			h.step(fakeStep)
 		}},
+		{"asking whether the decoder is busy", func(h *harness, dec *fakeDecoder, _ *fakeDecodes) {
+			h.step(0)
+			h.s.Play()
+			h.step(0)
+			h.step(2 * fakeStep)
+			dec.busyErr = errFakeLoss
+			h.step(fakeStep)
+		}},
 		{"seeking", func(h *harness, dec *fakeDecoder, _ *fakeDecodes) {
 			h.settle()
 			h.s.Play()
@@ -371,6 +383,50 @@ func TestNamingAnotherDeviceLetsGoOfTheOneBefore(t *testing.T) {
 		}
 		if s.Err() != nil || s.Texture() == nil {
 			t.Errorf("on the second device: error %v, frame %v", s.Err(), s.Texture())
+		}
+	})
+}
+
+func TestABusyDecoderIsGivenNoPacketUntilItHasCaughtUp(t *testing.T) {
+	src := &fakeTextures{}
+	playTextures(t, src, noAudio, func(h *harness, _ *fakeDecodes) {
+		s := h.s
+		if err := s.UseDevice(&gpu.Device{}, nil); err != nil {
+			t.Fatal(err)
+		}
+		dec := src.decoders[0]
+		dec.busy = true
+		h.settle()
+		if len(dec.decoded) != 0 {
+			t.Fatalf("a busy decoder was given the packets at %v", dec.decoded)
+		}
+		if s.Err() != nil || s.ticker == nil {
+			t.Fatalf("with its decoder busy: error %v, ticking %v; want the stream ticking until its frame is there", s.Err(), s.ticker != nil)
+		}
+		dec.busy = false
+		h.step(0)
+		if len(dec.decoded) == 0 || dec.decoded[0] != 0 {
+			t.Errorf("once it caught up the decoder took %v, want the packets from the start", dec.decoded)
+		}
+		h.settle()
+		if s.Texture() == nil {
+			t.Error("no frame shown after the decoder caught up")
+		}
+	})
+}
+
+func TestADecoderThatCannotSayWhetherItIsBusyFailsTheStream(t *testing.T) {
+	src := &fakeTextures{}
+	broken := errors.New("fake decoder: closed")
+	playTextures(t, src, noAudio, func(h *harness, _ *fakeDecodes) {
+		s := h.s
+		if err := s.UseDevice(&gpu.Device{}, nil); err != nil {
+			t.Fatal(err)
+		}
+		src.decoders[0].busyErr = broken
+		h.step(0)
+		if !errors.Is(s.Err(), broken) || len(src.decoders[0].decoded) != 0 {
+			t.Errorf("stream error %v after %d packets, want the decoder's failure before any packet", s.Err(), len(src.decoders[0].decoded))
 		}
 	})
 }

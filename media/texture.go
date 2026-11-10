@@ -217,9 +217,10 @@ func (v *textureVideo) detach() {
 }
 
 // pump moves the stream's decoding along: it decodes the packets that
-// keep texturesAhead frames ahead and queues the frames they complete,
-// whose pictures may still be decoding. It reports the track's end and
-// the first failure.
+// keep texturesAhead frames ahead, none while the decoder is busy with
+// the ones before, and queues the frames they complete, whose pictures
+// may still be decoding. It reports the track's end and the first
+// failure.
 func (v *textureVideo) pump(gen int) (queued []*gpu.VideoFrame, ended bool, err error) {
 	start := len(v.queue)
 	budget := texturesAhead - len(v.queue)
@@ -227,11 +228,18 @@ func (v *textureVideo) pump(gen int) (queued []*gpu.VideoFrame, ended bool, err 
 		budget = catchUpPackets
 	}
 	for ; budget > 0 && !v.flushed; budget-- {
+		busy, err := v.dec.Busy()
+		if err != nil {
+			return nil, false, fmt.Errorf("media: decode the video: %w", err)
+		}
+		if busy {
+			break
+		}
 		b := v.rd.read()
 		if b == nil {
 			break
 		}
-		err := v.decode(b, gen)
+		err = v.decode(b, gen)
 		v.rd.recycle(b)
 		if err != nil {
 			return nil, false, err

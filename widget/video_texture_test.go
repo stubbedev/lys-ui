@@ -24,6 +24,8 @@ type fakeVideoDecoder struct {
 	closed bool
 }
 
+func (d *fakeVideoDecoder) Busy() (bool, error) { return false, nil }
+
 func (d *fakeVideoDecoder) Decode(demux.Packet) error { return d.lost }
 
 func (d *fakeVideoDecoder) Next() *gpu.VideoFrame { return nil }
