@@ -227,8 +227,11 @@ in
       ).strip()
       print(f"Hyprland up on {wayland_display}")
 
+      # LYS_TEST_SESSION names this session to the tests: its runtime
+      # directory is the one a desktop's would be, and only the name tells
+      # the suite's host-session guard that it is the recipe's.
       suite_env = (
-        "XDG_RUNTIME_DIR=${runtimeDir} WAYLAND_DISPLAY="
+        "XDG_RUNTIME_DIR=${runtimeDir} LYS_TEST_SESSION=${runtimeDir} WAYLAND_DISPLAY="
         + wayland_display
         + " HYPRLAND_INSTANCE_SIGNATURE="
         + hypr_sig

@@ -92,7 +92,7 @@ headless:
     just test-env "$dir" || exit 1
     trap 'just test-env-stop "$dir"' EXIT INT TERM
     . "$dir/client.env"
-    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$dir" LYS_TEST_HEADLESS=1
+    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$dir" LYS_TEST_SESSION="$dir" LYS_TEST_HEADLESS=1
     # The client-side cursor path needs a theme; the dev shell supplies
     # one (LYS_UI_TEST_XCURSOR_PATH) so the run does not depend on the host.
     if [ -n "$LYS_UI_TEST_XCURSOR_PATH" ]; then

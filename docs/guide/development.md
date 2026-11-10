@@ -37,17 +37,22 @@ memory cap.
 ## Test isolation
 
 A package whose tests build applications or dial a bus runs under
-`internal/testhome` (`TestMain` calls `testhome.Run`): `HOME` and the
-XDG directories point at a scratch directory, the session bus and the
-sound server at sockets in it that nothing serves, and every variable
-naming a compositor or display is unset. `DBUS_SESSION_BUS_ADDRESS` is
-set because godbus otherwise falls back to `/run/user/<uid>/bus`,
-whatever `XDG_RUNTIME_DIR` says. A test that needs a bus, a compositor
-or a sound server starts its own (`dbustest`, `wltest`, `pulsetest`).
-Under `LYS_TEST_HEADLESS` the session the recipe booted stays in
-place. Each such package has a test calling
+lys-lib's `testhome` (`TestMain` calls `testhome.Run`): `HOME` and the
+XDG directories point at a scratch directory, the session bus, the
+system bus and the sound server at sockets in it that nothing serves,
+and every variable naming a compositor or display is unset. A test that
+needs a bus, a compositor or a sound server starts its own (`dbustest`,
+`wltest`, `pulsetest`). Each such package has a test calling
 `testhome.RequireNoHostSession`, which fails when the process could
 reach the session of whoever runs it.
+
+A recipe that boots a session for the tests (`just headless`, the
+Hyprland VM gate) names it: `LYS_TEST_SESSION` is that session's
+runtime directory. The session then stays in place, and the guard holds
+the runtime directory, the buses, the sound server and the display to
+exactly that directory or the scratch home, wherever it lies. In the VM
+it is `/run/user/1000`, which on a developer's machine would be the
+desktop's; only the name tells the two apart.
 
 Tests in package `app` build applications with `NewTestApplication`,
 which closes them when the test ends; a test there calling
