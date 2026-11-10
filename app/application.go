@@ -128,6 +128,7 @@ type Application struct {
 	layoutWatchers   watchers[KeyboardLayout]
 	toplevelWatchers []*func()
 	stopIconFollow   func()
+	stopIconReset    func()
 	// windowIcons (windowicon.go): per-window overrides and the app
 	// default posted through xdg-toplevel-icon-v1, plus the icons
 	// currently applied to live host windows.
@@ -854,6 +855,9 @@ func (a *Application) teardown() {
 	}
 	if a.stopIconFollow != nil {
 		a.stopIconFollow()
+	}
+	if a.stopIconReset != nil {
+		a.stopIconReset()
 	}
 	if a.portal != nil {
 		a.portal.Close()
@@ -1741,9 +1745,11 @@ func notifyWatchers[T any](a *Application, w *watchers[T], v T) {
 func (a *Application) HeldMods() Mods { return a.sess.Mods() }
 
 // repaintOnIconReset bridges every reset of c into the loop as a
-// repaint of every window, so live themed icons re-resolve.
+// repaint of every window, so live themed icons re-resolve, until the
+// application closes. A reset already running then may still call the
+// bridge once: its Invoke is dropped like any after Close.
 func (a *Application) repaintOnIconReset(c *icons.Cache) {
-	c.OnReset(func() {
+	a.stopIconReset = c.OnReset(func() {
 		a.Invoke(func() {
 			for _, w := range a.windows {
 				w.dirty = true
