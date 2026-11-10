@@ -7,9 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/testhome"
 	"github.com/stubbedev/lys-lib/wltest"
-
-	"github.com/stubbedev/lys-ui/internal/testhome"
 )
 
 // The compositor-in-the-loop suite: attaches to the private headless
@@ -45,12 +44,6 @@ func run(m *testing.M) int {
 }
 
 func TestMain(m *testing.M) {
-	if os.Getenv(wltest.HeadlessEnv) != "" {
-		if err := PinToolchain(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-	}
 	os.Exit(testhome.Main(func() int { return run(m) }))
 }
 

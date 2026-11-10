@@ -3,7 +3,7 @@ package media
 import (
 	"testing"
 
-	"github.com/stubbedev/lys-ui/internal/testhome"
+	"github.com/stubbedev/lys-lib/testhome"
 )
 
 func TestMain(m *testing.M) { testhome.Run(m) }
