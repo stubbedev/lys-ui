@@ -79,6 +79,7 @@ func run() error {
 	}
 
 	application := app.NewApplication(sess)
+	defer application.Close()
 	theme := widget.Current()
 
 	tabs := widget.NewNotebook(tf)

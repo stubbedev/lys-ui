@@ -934,13 +934,10 @@ var removedHook atomic.Pointer[func(Widget)]
 // the last install wins. It runs on the goroutine that mutated the tree
 // (the loop goroutine, per docs/threading.md), while the widget is
 // still linked to its container, so a router can find the focus
-// traversal neighbor of a removed focus.
-func SetRemovedHook(fn func(Widget)) {
-	if fn == nil {
-		removedHook.Store(nil)
-		return
-	}
-	removedHook.Store(&fn)
+// traversal neighbor of a removed focus. The returned function removes
+// this hook and leaves a later install in place.
+func SetRemovedHook(fn func(Widget)) (remove func()) {
+	return installHook(&removedHook, fn, fn == nil)
 }
 
 // notifyRemoved detaches every non-nil ws's tree (Detach) and fires

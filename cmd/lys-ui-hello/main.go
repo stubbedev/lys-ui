@@ -75,6 +75,7 @@ func run() error {
 	}
 
 	application := app.NewApplication(sess)
+	defer application.Close()
 	application.SetClipboard(app.NewClipboard(sess))
 	application.SetInspect(true)
 

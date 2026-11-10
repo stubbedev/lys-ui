@@ -43,6 +43,7 @@ func run(mode string, level float64, timeout time.Duration) error {
 	}
 	defer sess.Close()
 	application := app.NewApplication(sess)
+	defer application.Close()
 
 	bar := widget.NewLevelBar(level)
 	body := widget.NewBox(widget.Row, 12, 12)

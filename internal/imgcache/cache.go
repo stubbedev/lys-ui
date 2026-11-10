@@ -75,7 +75,7 @@ type Cache struct {
 	// them to raise the GC's heap goal.
 	pixels memory.Shared
 	// forget drops an evicted raster's GPU texture (SetForget).
-	forget func(render.ImageID)
+	forget *func(render.ImageID)
 
 	bytes      int
 	maxEntries int
@@ -180,11 +180,23 @@ func (c *Cache) Raster(key RasterKey, fill func(dst *image.RGBA) error) (render.
 
 // SetForget sets what drops an evicted raster's GPU texture, nil for
 // nothing: the GPU renderer's device, while one draws. It is called on
-// whichever goroutine evicts.
-func (c *Cache) SetForget(forget func(render.ImageID)) {
+// whichever goroutine evicts. The returned function removes this one and
+// leaves a later install in place.
+func (c *Cache) SetForget(forget func(render.ImageID)) (remove func()) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.forget = forget
+	if forget == nil {
+		c.forget = nil
+		return func() {}
+	}
+	c.forget = &forget
+	return func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.forget == &forget {
+			c.forget = nil
+		}
+	}
 }
 
 // free hands mem back once no recording can draw it.
@@ -304,7 +316,7 @@ func (c *Cache) release(e *entry) {
 		return
 	}
 	if raster, ok := e.img.(render.StillImage); ok && c.forget != nil {
-		c.forget(raster.ID)
+		(*c.forget)(raster.ID)
 	}
 	c.free(e.mem)
 }

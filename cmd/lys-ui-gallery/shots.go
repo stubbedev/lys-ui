@@ -119,6 +119,7 @@ func runShots(dir string) error {
 
 	defer anim.SetInstant(true)()
 	application := app.NewApplication(sess)
+	defer application.Close()
 	widget.LoadStylesheet(galleryCSS)
 	s := &shooter{
 		app:     application,

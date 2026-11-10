@@ -34,6 +34,7 @@ func run() error {
 		return err
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 	theme := widget.Current()
 
 	entry := widget.NewEntry(face, 14, theme.Text)

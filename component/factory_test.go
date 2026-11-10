@@ -208,8 +208,7 @@ func TestGridViewRePlacesShiftedItems(t *testing.T) {
 	grid := widget.NewGrid(0, 0)
 	gf := component.NewFactory(&loop, component.GridView[*row](grid, func(i int) (int, int, int, int) { return i % 2, i / 2, 1, 1 }))
 	removed := 0
-	widget.SetRemovedHook(func(widget.Widget) { removed++ })
-	defer widget.SetRemovedHook(nil)
+	defer widget.SetRemovedHook(func(widget.Widget) { removed++ })()
 	rows := fill(t, gf, "a", "b", "c", "d")
 	z := &row{face: face(t), name: "z"}
 	gf.PushFront(z)
@@ -232,8 +231,7 @@ func TestFixedViewPositionsItems(t *testing.T) {
 	fixed := widget.NewFixed()
 	ff := component.NewFactory(&loop, component.FixedView[*row](fixed, func(i int) (int, int) { return i * 10, i * 5 }))
 	removed := 0
-	widget.SetRemovedHook(func(widget.Widget) { removed++ })
-	defer widget.SetRemovedHook(nil)
+	defer widget.SetRemovedHook(func(widget.Widget) { removed++ })()
 	rows := fill(t, ff, "a", "b", "c")
 
 	placed := func() []render.Rect {

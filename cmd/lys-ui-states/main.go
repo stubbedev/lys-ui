@@ -44,6 +44,7 @@ func run() error {
 		return err
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 	application.SetTooltipFace(tf)
 	// LYS_UI_DEMO_RECONNECT rebuilds the window on a restarted compositor
 	// instead of exiting: the headless reconnect test's probe.

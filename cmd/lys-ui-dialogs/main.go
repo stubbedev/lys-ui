@@ -36,6 +36,7 @@ func run() error {
 		return err
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 	theme := widget.Current()
 
 	status := widget.NewLabel(face, 13, "no dialog answered yet", theme.TextMuted)

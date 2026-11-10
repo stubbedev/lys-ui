@@ -54,6 +54,7 @@ func run() error {
 		return err
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 	application.SetTooltipFace(tf)
 
 	list := widget.NewList(&rowModel{font: tf}, rowH)

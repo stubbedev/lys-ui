@@ -88,8 +88,7 @@ func TestFixedPutMoveRemove(t *testing.T) {
 		a, b := newStub(4, 4), newStub(4, 4)
 		f.Put(a, 0, 0).Put(b, 10, 0)
 		removed := 0
-		SetRemovedHook(func(Widget) { removed++ })
-		defer SetRemovedHook(nil)
+		defer SetRemovedHook(func(Widget) { removed++ })()
 		f.Move(a, 20, 8)
 		if removed != 0 || !slices.Equal(f.Children(), []Widget{a, b}) {
 			t.Fatalf("Move detached a child: removed=%d children=%v", removed, f.Children())

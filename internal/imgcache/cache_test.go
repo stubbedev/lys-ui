@@ -313,3 +313,25 @@ func TestRastersLiveOffTheHeapAndEvictionFreesThem(t *testing.T) {
 		t.Errorf("%d rasters outlived Reset", st.Live)
 	}
 }
+
+func TestRemovingAnEarlierForgetLeavesTheLaterOne(t *testing.T) {
+	c := newWithLimits(1, 1<<30)
+	var first, second []render.ImageID
+	removeFirst := c.SetForget(func(id render.ImageID) { first = append(first, id) })
+	removeSecond := c.SetForget(func(id render.ImageID) { second = append(second, id) })
+	removeFirst()
+	evict := func(source string) {
+		t.Helper()
+		mustRaster(t, c, RasterKey{Source: source, W: 4, H: 4}, func(dst *image.RGBA) error { fillRed(dst); return nil })
+	}
+	evict("a")
+	evict("b")
+	if len(first) != 0 || len(second) != 1 {
+		t.Fatalf("after removing the first forget an eviction told the first %d times and the second %d, want only the second", len(first), len(second))
+	}
+	removeSecond()
+	evict("c")
+	if len(first) != 0 || len(second) != 1 {
+		t.Errorf("after removing both an eviction told the first %d times and the second %d, want neither again", len(first), len(second))
+	}
+}

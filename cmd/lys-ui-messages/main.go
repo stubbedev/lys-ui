@@ -91,6 +91,7 @@ func run() error {
 	}
 
 	application := app.NewApplication(sess)
+	defer application.Close()
 	ins.Bind(application)
 	theme := widget.Current()
 

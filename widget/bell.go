@@ -12,13 +12,11 @@ var surfaceFade atomic.Pointer[func(Widget, float64) bool]
 // applies to the surface whose root is root and reports whether it
 // did: false when root is not a surface's root or the compositor
 // cannot fade surfaces. A Revealer at its surface's root fades through
-// it instead of repainting its child every frame. nil removes it.
-func SetSurfaceFade(fn func(root Widget, alpha float64) bool) {
-	if fn == nil {
-		surfaceFade.Store(nil)
-		return
-	}
-	surfaceFade.Store(&fn)
+// it instead of repainting its child every frame. nil removes it. The
+// returned function removes this one and leaves a later install in
+// place.
+func SetSurfaceFade(fn func(root Widget, alpha float64) bool) (remove func()) {
+	return installHook(&surfaceFade, fn, fn == nil)
 }
 
 func fadeSurface(root Widget, alpha float64) bool {
@@ -26,13 +24,11 @@ func fadeSurface(root Widget, alpha float64) bool {
 	return fn != nil && (*fn)(root, alpha)
 }
 
-// SetErrorBell installs the bell ErrorBell rings; nil silences it.
-func SetErrorBell(fn func(w Widget)) {
-	if fn == nil {
-		errorBell.Store(nil)
-		return
-	}
-	errorBell.Store(&fn)
+// SetErrorBell installs the bell ErrorBell rings; nil silences it. The
+// returned function removes this one and leaves a later install in
+// place.
+func SetErrorBell(fn func(w Widget)) (remove func()) {
+	return installHook(&errorBell, fn, fn == nil)
 }
 
 // ErrorBell signals an input w rejected (gtk_widget_error_bell):

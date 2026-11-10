@@ -163,8 +163,7 @@ func TestTooltipGhostOnRemove(t *testing.T) {
 	box.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 20})
 	router := &widget.Router{Root: box}
 
-	widget.SetRemovedHook(router.Forget)
-	defer widget.SetRemovedHook(nil)
+	defer widget.SetRemovedHook(router.Forget)()
 
 	var openStub *stub
 	opener := func(w widget.Widget, text string) (tooltipWindow, tooltipPainter) {

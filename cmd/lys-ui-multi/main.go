@@ -36,6 +36,7 @@ func run() error {
 	}
 
 	application := app.NewApplication(sess)
+	defer application.Close()
 	application.SetTooltipFace(tf)
 	application.OnKey(func(_ *widget.Router, code uint32, mods app.Mods) {
 		if mods&app.ModAlt == 0 && sess.KeySym(code) == xkb.KeyEscape {

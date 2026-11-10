@@ -32,6 +32,7 @@ func run() error {
 	defer sess.Close()
 	defer func() { _ = sess.Roundtrip() }()
 	application := app.NewApplication(sess)
+	defer application.Close()
 	if !application.SessionLockAvailable() {
 		return app.ErrSessionLockUnavailable
 	}

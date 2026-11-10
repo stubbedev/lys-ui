@@ -109,6 +109,7 @@ func run() error {
 		return errors.New("lys-ui-panel: no output to draw on")
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 	application.SetClipboard(app.NewClipboard(sess))
 	if _, _, err := component.Layer(application, app.LayerConfig{
 		Output:        outputs[0],

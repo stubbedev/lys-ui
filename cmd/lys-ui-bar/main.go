@@ -102,6 +102,7 @@ func run() error {
 		return errors.New("lys-ui-bar: no output to draw on")
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 	ctrl, _, err := component.Layer(application, app.LayerConfig{
 		Output:        outputs[0],
 		Layer:         app.LayerTop,

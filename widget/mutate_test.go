@@ -460,8 +460,7 @@ func removeRouterFixture(t *testing.T) (root *Box, ts []*recTarget, r *Router) {
 // the Application would.
 func forget(t *testing.T, r *Router, b *Box, w Widget) {
 	t.Helper()
-	SetRemovedHook(r.Forget)
-	defer SetRemovedHook(nil)
+	defer SetRemovedHook(r.Forget)()
 	if !b.Remove(w) {
 		t.Fatal("Remove missed the child")
 	}

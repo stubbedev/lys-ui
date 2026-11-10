@@ -55,6 +55,7 @@ func run(blurWindow, blurPopover bool) error {
 		return err
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 
 	backdrop := widget.NewBox(widget.Column, 0, 0)
 	backdrop.AddClass("stripes")

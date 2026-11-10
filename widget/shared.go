@@ -2,6 +2,7 @@ package widget
 
 import (
 	"math"
+	"sync/atomic"
 
 	"github.com/stubbedev/lys-lib/render"
 
@@ -109,22 +110,27 @@ func shotIn(shot sharedShot, root Widget) (sharedShot, bool) {
 
 // originResolver is the host's answer to where a surface's widget tree
 // sits: the root's surface origin in its toplevel's coordinates.
-var originResolver func(root Widget) (Point, bool)
+var originResolver atomic.Pointer[func(root Widget) (Point, bool)]
 
 // SetSurfaceOriginResolver installs the host's surface placement:
 // resolve maps a widget tree's root (RootOf) to where its surface's
 // (0,0) sits in its toplevel surface's coordinates, false while the
 // compositor has not placed it. Shared-element morphs cross surfaces
 // through it, a button into the popover it opens; one process-wide
-// resolver, nil for none (morphs then stay inside one surface).
-func SetSurfaceOriginResolver(resolve func(root Widget) (Point, bool)) { originResolver = resolve }
+// resolver, nil for none (morphs then stay inside one surface). The
+// returned function removes this resolver and leaves a later install in
+// place.
+func SetSurfaceOriginResolver(resolve func(root Widget) (Point, bool)) (remove func()) {
+	return installHook(&originResolver, resolve, resolve == nil)
+}
 
 // surfaceOrigin asks the host where root's surface sits.
 func surfaceOrigin(root Widget) (Point, bool) {
-	if originResolver == nil || root == nil {
+	resolve := originResolver.Load()
+	if resolve == nil || root == nil {
 		return Point{}, false
 	}
-	return originResolver(root)
+	return (*resolve)(root)
 }
 
 // SharedMorphPending reports whether a tree about to show on a surface

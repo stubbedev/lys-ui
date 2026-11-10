@@ -40,6 +40,7 @@ func run() error {
 		return err
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 	t := widget.Current()
 
 	button := widget.NewButton(widget.NewLabel(tf, 13, "open", t.Text), 8, 6)

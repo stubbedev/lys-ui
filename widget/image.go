@@ -90,12 +90,7 @@ var invoker atomic.Pointer[func(func())]
 // Application.Invoke. Nil removes the bridge. The returned function
 // removes this one and leaves a later install in place.
 func SetInvoker(fn func(func())) (remove func()) {
-	if fn == nil {
-		invoker.Store(nil)
-		return func() {}
-	}
-	invoker.Store(&fn)
-	return func() { invoker.CompareAndSwap(&fn, nil) }
+	return installHook(&invoker, fn, fn == nil)
 }
 
 func hasInvoker() bool { return invoker.Load() != nil }

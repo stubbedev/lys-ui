@@ -52,6 +52,7 @@ func run() error {
 		return err
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 	widget.LoadStylesheet(galleryCSS)
 	var ctrl *component.Controller[galleryMsg, struct{}]
 	gal := &gallery{env: ui.Env{Face: app.FontFallback(face), Size: 14}, app: application}

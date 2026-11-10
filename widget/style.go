@@ -624,13 +624,21 @@ var watcherHook atomic.Pointer[StylesheetWatcher]
 // reload that something changed, and watches the files already loaded.
 // One hook per process, like SetRemovedHook; the app installs it once at
 // startup. Without a hook (no running Application) a loaded file simply
-// never hot-reloads.
-func SetStylesheetWatcher(watch StylesheetWatcher) {
-	if watch == nil {
-		watcherHook.Store(nil)
-	} else {
-		watcherHook.Store(&watch)
+// never hot-reloads. The returned function removes this hook, ending
+// its watch, and leaves a later install in place.
+func SetStylesheetWatcher(watch StylesheetWatcher) (remove func()) {
+	unhook := installHook(&watcherHook, watch, watch == nil)
+	rewatch()
+	return func() {
+		installed := watcherHook.Load()
+		unhook()
+		if watcherHook.Load() != installed {
+			rewatch()
+		}
 	}
+}
+
+func rewatch() {
 	watchMu.Lock()
 	defer watchMu.Unlock()
 	if watchStop != nil {

@@ -220,7 +220,7 @@ type videoStub struct {
 }
 
 func (rig *lossRig) video() *videoStub {
-	v := &videoStub{rig: rig, s: &textureSurface{}}
+	v := &videoStub{rig: rig, s: &textureSurface{video: &widget.Video{}}}
 	v.s.app, v.s.wake, v.s.lost = rig.a, v.wake, v.lost
 	v.attach(rig.a.gpu)
 	return v

@@ -82,24 +82,18 @@ var (
 
 // SetVideoHost installs the host that gives on-screen Videos their
 // surfaces; package app installs it. nil disables, and Videos paint
-// their frames into the window.
-func SetVideoHost(fn VideoHost) {
-	if fn == nil {
-		videoHost.Store(nil)
-		return
-	}
-	videoHost.Store(&fn)
+// their frames into the window. The returned function removes this host
+// and leaves a later install in place.
+func SetVideoHost(fn VideoHost) (remove func()) {
+	return installHook(&videoHost, fn, fn == nil)
 }
 
 // SetTextureHost installs the host that gives on-screen Videos of
 // streams decoding on the GPU their surfaces; package app installs it.
-// nil disables, and such Videos fail their streams.
-func SetTextureHost(fn TextureHost) {
-	if fn == nil {
-		textureHost.Store(nil)
-		return
-	}
-	textureHost.Store(&fn)
+// nil disables, and such Videos fail their streams. The returned
+// function removes this host and leaves a later install in place.
+func SetTextureHost(fn TextureHost) (remove func()) {
+	return installHook(&textureHost, fn, fn == nil)
 }
 
 // ErrVideoOffscreen is a VideoHost's answer for a Video not in a

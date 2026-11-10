@@ -49,13 +49,10 @@ type GPUSurface interface {
 var gpuHost atomic.Pointer[func(*GPUArea) (GPUSurface, error)]
 
 // SetGPUHost installs the function that gives an on-screen GPUArea its
-// surface; package app installs it. nil disables.
-func SetGPUHost(fn func(a *GPUArea) (GPUSurface, error)) {
-	if fn == nil {
-		gpuHost.Store(nil)
-		return
-	}
-	gpuHost.Store(&fn)
+// surface; package app installs it. nil disables. The returned function
+// removes this one and leaves a later install in place.
+func SetGPUHost(fn func(a *GPUArea) (GPUSurface, error)) (remove func()) {
+	return installHook(&gpuHost, fn, fn == nil)
 }
 
 // GPUArea is GTK's GLArea without cgo: the application renders with

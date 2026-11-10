@@ -52,6 +52,7 @@ func ExampleWindow() {
 		log.Fatal(err)
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 	if _, _, err := component.Window(application, app.WindowConfig{
 		Title: "counter", AppID: "dev.example.counter",
 	}, &Counter{env: ui.Env{Face: face, Size: 15}}); err != nil {

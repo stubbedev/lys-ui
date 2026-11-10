@@ -57,7 +57,7 @@ type Application struct {
 	// gpuPending marks a renderer opening on a worker, and gpuWaiting
 	// the wakes of the Videos waiting for it to decode on (videotexture.go).
 	gpuPending bool
-	gpuWaiting []func()
+	gpuWaiting []gpuWaiter
 	// videoMemory allocates a Video surface's buffers (video.go).
 	videoMemory func(size int) (videoMemory, error)
 	gpuLosses   gpu.Losses
@@ -123,7 +123,7 @@ type Application struct {
 	gtkIniOnce       sync.Once
 	gtkIni           gtksettings.Settings
 	stopMotionFollow func()
-	removeInvoker    func()
+	widgetHooks      []func()
 	lockWatchers     watchers[Locks]
 	layoutWatchers   watchers[KeyboardLayout]
 	toplevelWatchers []*func()
@@ -247,43 +247,45 @@ func NewApplication(sess *wlsession.Session, opts ...Option) *Application {
 	a.inhibitShortcuts = a.sessionInhibitShortcuts
 	a.dnd = dragdrop.New(sess, a.Invoke)
 	a.OnStop(func() { a.dnd.Stop() })
-	// Async image loads (widget.Image file/URL sources) deliver through
-	// the loop queue - the only sanctioned bridge (docs/threading.md).
-	a.removeInvoker = widget.SetInvoker(a.Invoke)
-	// Stylesheet files hot-reload through an inotify watch on the loop:
-	// the widget package cannot reach it, so the app lends it one, and
-	// nothing polls.
-	widget.SetStylesheetWatcher(func(dirs []string, changed func()) (func(), error) {
-		return a.WatchFiles(dirs, false, changed)
-	})
 	a.OnStop(startFontWarm(warmFonts))
-	// Tree mutations (Box.Remove/RemoveAt/Clear/InsertAt, Stack.Remove,
-	// Scroll.SetChild, ...) must not leave a window's router pointing at
-	// a detached widget: the hook drops hover, press, focus, and
-	// drop-target state for the removed subtree, so no KeyAction reaches
-	// a dead widget — and, through router.Hovered(), no tooltip dwells
-	// on a ghost (tooltipCtl opens and closes on the router's hover).
-	// One hook per process, like SetInvoker; it covers the window
-	// routers — popups run transient routers over short-lived trees.
-	// Rejected input (a key into a read-only field, a value that does
-	// not parse) rings the system bell for the widget's window.
-	widget.SetErrorBell(a.ringFor)
-	widget.SetSurfaceFade(a.fadeSurface)
-	// A GPUArea arranged on screen asks for its presentation surface: a
-	// subsurface of its window (gpuarea.go).
-	widget.SetGPUHost(a.gpuSurfaceFor)
-	// A Video of a YUV stream arranged on screen asks for a subsurface of
-	// its window its frames go to as YUV dmabufs (video.go).
-	widget.SetVideoHost(a.videoSurfaceFor)
-	// A Video of a stream decoding on the GPU asks for a subsurface its
-	// frames are drawn onto, on the renderer's device (videotexture.go).
-	widget.SetTextureHost(a.textureSurfaceFor)
-	widget.SetSurfaceOriginResolver(a.surfaceOrigin)
-	widget.SetRemovedHook(func(w widget.Widget) {
-		for _, win := range a.windows {
-			win.router.Forget(w)
-		}
-	})
+	a.widgetHooks = []func(){
+		// Async image loads (widget.Image file/URL sources) deliver through
+		// the loop queue - the only sanctioned bridge (docs/threading.md).
+		widget.SetInvoker(a.Invoke),
+		// Stylesheet files hot-reload through an inotify watch on the loop:
+		// the widget package cannot reach it, so the app lends it one, and
+		// nothing polls.
+		widget.SetStylesheetWatcher(func(dirs []string, changed func()) (func(), error) {
+			return a.WatchFiles(dirs, false, changed)
+		}),
+		// Rejected input (a key into a read-only field, a value that does
+		// not parse) rings the system bell for the widget's window.
+		widget.SetErrorBell(a.ringFor),
+		widget.SetSurfaceFade(a.fadeSurface),
+		// A GPUArea arranged on screen asks for its presentation surface: a
+		// subsurface of its window (gpuarea.go).
+		widget.SetGPUHost(a.gpuSurfaceFor),
+		// A Video of a YUV stream arranged on screen asks for a subsurface of
+		// its window its frames go to as YUV dmabufs (video.go).
+		widget.SetVideoHost(a.videoSurfaceFor),
+		// A Video of a stream decoding on the GPU asks for a subsurface its
+		// frames are drawn onto, on the renderer's device (videotexture.go).
+		widget.SetTextureHost(a.textureSurfaceFor),
+		widget.SetSurfaceOriginResolver(a.surfaceOrigin),
+		// Tree mutations (Box.Remove/RemoveAt/Clear/InsertAt, Stack.Remove,
+		// Scroll.SetChild, ...) must not leave a window's router pointing at
+		// a detached widget: the hook drops hover, press, focus, and
+		// drop-target state for the removed subtree, so no KeyAction reaches
+		// a dead widget — and, through router.Hovered(), no tooltip dwells
+		// on a ghost (tooltipCtl opens and closes on the router's hover).
+		// One hook per process, like SetInvoker; it covers the window
+		// routers — popups run transient routers over short-lived trees.
+		widget.SetRemovedHook(func(w widget.Widget) {
+			for _, win := range a.windows {
+				win.router.Forget(w)
+			}
+		}),
+	}
 	// Icon lookups start on settings.ini's gtk-icon-theme-name, for a
 	// session without a settings portal, and follow the portal's live
 	// icon-theme setting: a switch swaps the resolution theme (an empty
@@ -835,6 +837,8 @@ func outputWire(o *wlsession.Output) *wl.Output {
 // and timers, the watchers and OnStop hooks, the font warm-up, the
 // AT-SPI bridge, the desktop settings monitor with its session bus
 // connection, the notifier, the portal sessions and the GPU renderer.
+// The hooks NewApplication installed for the widgets go too, those
+// another application has replaced since left alone.
 // Run closes the application when it returns, whatever ended the loop,
 // a dead connection included; a program that builds an application and
 // never runs it closes it itself. Closing again does nothing.

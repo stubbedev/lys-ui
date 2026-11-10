@@ -1,6 +1,15 @@
 package app
 
-import "github.com/stubbedev/lys-lib/gpu"
+import (
+	"errors"
+	"io"
+	"time"
+
+	"github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/media/demux"
+
+	"github.com/stubbedev/lys-ui/media"
+)
 
 // OpenDialogs returns the dialogs a test cannot reach through the API
 // that opened them, oldest first.
@@ -42,3 +51,40 @@ func (a *Application) GPUDevice() *gpu.Device {
 
 // FaultGPU has a's renderer take err as its frame's failure.
 func (a *Application) FaultGPU(err error) { a.gpu.fault(err) }
+
+// HoldGPUOpen has a answer as it does while its GPU device opens, until
+// the returned release: no device came of it, and the Videos waiting are
+// woken.
+func (a *Application) HoldGPUOpen() (release func()) {
+	a.gpuTried, a.gpuPending = true, true
+	return func() {
+		a.gpuPending = false
+		a.wakeGPUWaiting()
+	}
+}
+
+// GPUWaiting is how many Videos wait for a's GPU device.
+func (a *Application) GPUWaiting() int { return len(a.gpuWaiting) }
+
+// UndecodedTextures is a media.TextureSource no device decodes: what a
+// Video shows before it has a device, or with none.
+type UndecodedTextures struct{}
+
+// Info is a 32x16 video a second long.
+func (UndecodedTextures) Info() media.Info {
+	return media.Info{Width: 32, Height: 16, Duration: time.Second}
+}
+
+// Close closes nothing.
+func (UndecodedTextures) Close() error { return nil }
+
+// Seek moves nothing.
+func (UndecodedTextures) Seek(time.Duration) error { return nil }
+
+// ReadPacket has no packets.
+func (UndecodedTextures) ReadPacket() (demux.Packet, error) { return demux.Packet{}, io.EOF }
+
+// NewVideoDecoder refuses every device.
+func (UndecodedTextures) NewVideoDecoder(*gpu.Device) (media.VideoDecoder, error) {
+	return nil, errors.New("app test: no device decodes this")
+}

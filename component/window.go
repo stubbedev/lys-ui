@@ -63,14 +63,20 @@ func chain(first, then func()) func() {
 // compositor, calls setup to build the root component (setup gets the
 // Application, to load fonts, register accelerators or open more
 // windows), opens it as the root of a window from cfg, and runs the loop
-// until the last window closes. A normal close returns nil.
+// until the last window closes. A normal close returns nil. The
+// application is closed on every way out, a failed setup or window
+// included.
 func Run[C Component[In, Out], In, Out any](cfg app.WindowConfig, setup func(*app.Application) (C, error)) error {
 	sess, err := app.Connect()
 	if err != nil {
 		return err
 	}
 	defer sess.Close()
-	a := app.NewApplication(sess)
+	return runOn(app.NewApplication(sess), cfg, setup)
+}
+
+func runOn[C Component[In, Out], In, Out any](a *app.Application, cfg app.WindowConfig, setup func(*app.Application) (C, error)) error {
+	defer a.Close()
 	c, err := setup(a)
 	if err != nil {
 		return err

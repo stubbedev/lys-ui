@@ -32,6 +32,7 @@ func run() error {
 	}
 	defer sess.Close()
 	application := app.NewApplication(sess)
+	defer application.Close()
 	theme := widget.Current()
 
 	var phase float64

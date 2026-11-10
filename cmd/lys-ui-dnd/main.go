@@ -90,6 +90,7 @@ func run() error {
 		return err
 	}
 	application := app.NewApplication(sess)
+	defer application.Close()
 	theme := widget.Current()
 
 	for i, title := range []string{"lys-ui dnd source", "lys-ui dnd target"} {

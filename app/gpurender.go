@@ -70,6 +70,9 @@ type gpuRenderer struct {
 	prepare func(w, h int, mods []fourcc.Modifier) (*gpu.Target, error)
 	video   func(t *gpu.Target, whole []image.Rectangle, f *gpu.VideoFrame) error
 	videos  []*textureSurface
+
+	unforget func()
+
 	// workers are the target allocations running; closed marks the device
 	// closed, after which a target landing is dropped.
 	workers sync.WaitGroup
@@ -276,7 +279,7 @@ func (a *Application) installRenderer(r *gpuRenderer) {
 	debug.Log("gpu", "drawing on %s in %d modifier(s)", r.dev.Name(), len(r.modifiers))
 	a.gpu = r
 	// Evicted image rasters drop their textures with their pixels.
-	imgcache.Default().SetForget(r.dev.Forget)
+	r.unforget = imgcache.Default().SetForget(r.dev.Forget)
 }
 
 // openRenderer opens the GPU device and agrees on the dmabuf layouts it
@@ -543,7 +546,9 @@ func (a *Application) releaseRenderer() {
 	if r == nil {
 		return
 	}
-	imgcache.Default().SetForget(nil)
+	if r.unforget != nil {
+		r.unforget()
+	}
 	r.closed = true
 	r.failVideos()
 	r.dev.Close()

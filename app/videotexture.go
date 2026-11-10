@@ -33,14 +33,14 @@ func (a *Application) textureSurfaceFor(v *widget.Video, width, height int, wake
 	case err != nil:
 		return nil, err
 	case r == nil && a.gpuPending, r != nil && r.leaving():
-		a.gpuWaiting = append(a.gpuWaiting, wake)
+		a.awaitRenderer(v, wake)
 		return nil, widget.ErrVideoDevicePending
 	case r == nil:
 		return nil, ErrNoGPURenderer
 	case r.Failed():
 		return nil, fmt.Errorf("%w: %w", ErrNoGPURenderer, r.failed)
 	}
-	s := &textureSurface{r: r, lost: lost, damage: [1]image.Rectangle{image.Rect(0, 0, width, height)}}
+	s := &textureSurface{r: r, video: v, lost: lost, damage: [1]image.Rectangle{image.Rect(0, 0, width, height)}}
 	if err := s.open(a, hw, subc, wake); err != nil {
 		return nil, err
 	}
@@ -53,14 +53,26 @@ func (a *Application) textureSurfaceFor(v *widget.Video, width, height int, wake
 	return s, nil
 }
 
+type gpuWaiter struct {
+	video *widget.Video
+	wake  func()
+}
+
+func (a *Application) awaitRenderer(v *widget.Video, wake func()) {
+	if slices.ContainsFunc(a.gpuWaiting, func(w gpuWaiter) bool { return w.video == v }) {
+		return
+	}
+	a.gpuWaiting = append(a.gpuWaiting, gpuWaiter{video: v, wake: wake})
+}
+
 // wakeGPUWaiting wakes the Videos that waited for the renderer: they
 // ask for their surfaces again, on its device or, without one, to be
 // told there is none.
 func (a *Application) wakeGPUWaiting() {
 	waiting := a.gpuWaiting
 	a.gpuWaiting = nil
-	for _, wake := range waiting {
-		wake()
+	for _, w := range waiting {
+		w.wake()
 	}
 }
 
@@ -74,7 +86,7 @@ func (r *gpuRenderer) failVideos() {
 
 func (a *Application) detachVideos(r *gpuRenderer) {
 	for _, s := range slices.Clone(r.videos) {
-		a.gpuWaiting = append(a.gpuWaiting, s.wake)
+		a.awaitRenderer(s.video, s.wake)
 		s.lost()
 	}
 }
@@ -100,6 +112,7 @@ func (a *Application) videoDeviceLost(r *gpuRenderer, err error) {
 type textureSurface struct {
 	videoOutput
 	r       *gpuRenderer
+	video   *widget.Video
 	lost    func()
 	targets [videoRing]*gpu.Target
 	// damage is the whole target, kept here so a pass takes it without

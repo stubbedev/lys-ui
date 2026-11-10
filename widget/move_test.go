@@ -10,8 +10,7 @@ func TestBoxMoveKeepsChildrenAttached(t *testing.T) {
 	box := NewBox(Column, 0, 0)
 	box.Append(a, false).Append(b, false).Append(c, false)
 	removed := 0
-	SetRemovedHook(func(Widget) { removed++ })
-	defer SetRemovedHook(nil)
+	defer SetRemovedHook(func(Widget) { removed++ })()
 	box.Move(0, 2)
 	if got := box.Children(); !slices.Equal(got, []Widget{b, c, a}) {
 		t.Errorf("after Move(0, 2) children = %v", got)
@@ -83,8 +82,7 @@ func TestGridPlaceMovesWithoutDisplacing(t *testing.T) {
 	a, b := NewSpacer(1, 1), NewSpacer(1, 1)
 	g.Attach(a, 0, 0, 1, 1).Attach(b, 1, 0, 1, 1)
 	removed := 0
-	SetRemovedHook(func(Widget) { removed++ })
-	defer SetRemovedHook(nil)
+	defer SetRemovedHook(func(Widget) { removed++ })()
 	g.Place(a, 1, 0, 1, 1)
 	g.Place(b, 2, 0, 1, 1)
 	if removed != 0 || len(g.Children()) != 2 {
