@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
@@ -31,13 +32,14 @@ type subscription struct {
 	fn func()
 }
 
-// Stream plays a Source, GTK's GtkMediaStream: it runs the decoder on
-// its own goroutine a few frames ahead, presents the frame due at the
-// playback position on the loop's frame clock, and, when the source
-// is Audible, plays the sound through PulseAudio and follows its clock
-// so picture and sound stay together. Every method runs on the loop
-// goroutine and waits on nothing: the decoder, the sound server and
-// every subprocess are behind goroutines of their own. Subscribers hear
+// Stream plays a Source, GTK's GtkMediaStream: it decodes a few frames
+// ahead (a FrameSource's on a goroutine of its own, a TextureSource's
+// packets read on one and decoded on the loop's GPU device), presents
+// the frame due at the playback position on the loop's frame clock,
+// and, when the source is Audible, plays the sound through PulseAudio
+// and follows its clock so picture and sound stay together. Every
+// method runs on the loop goroutine and waits on no file and no sound
+// server: those are behind goroutines of their own. Subscribers hear
 // every change: the frame, the position while playing, and the state.
 type Stream struct {
 	name    string
@@ -46,7 +48,10 @@ type Stream struct {
 	seeker  Seeker
 	audible Audible
 	openOut openAudioFunc
-	dec     *decoder
+	// dec decodes a FrameSource's frames, tex a TextureSource's: one
+	// of them is nil.
+	dec *decoder
+	tex *textureVideo
 
 	playing, ended, loop, closed bool
 
@@ -84,7 +89,14 @@ func newStream(src Source, name string, openOut openAudioFunc) *Stream {
 	s := &Stream{name: name, src: src, info: src.Info(), openOut: openOut, curGen: -1, eofGen: -1, volume: 1, audioWork: worker.New(audioQueueDepth)}
 	s.seeker, _ = src.(Seeker)
 	s.audible, _ = src.(Audible)
-	s.dec = startDecoder(src, s.seeker, s.info)
+	switch v := src.(type) {
+	case TextureSource:
+		s.tex = newTextureVideo(v)
+	case FrameSource:
+		s.dec = startDecoder(v, s.seeker, s.info)
+	default:
+		panic(undecodable(src))
+	}
 	s.sync()
 	return s
 }
@@ -149,11 +161,12 @@ func (s *Stream) Closed() bool { return s.closed }
 func (s *Stream) Err() error { return s.err }
 
 // Frame returns the frame to show, its RGBA nil before the first is
-// decoded and after Close, under its raster's identity: a pooled
-// buffer's at a version that moves whenever its pixels do, a
-// StillSource's frame at version 0, since its pixels never change. The
-// image belongs to the stream and stays valid until the next change or
-// Close. FrameSeq tells when the frame changed.
+// decoded, after Close and for a stream decoding on the GPU (Texture),
+// under its raster's identity: a pooled buffer's at a version that
+// moves whenever its pixels do, a StillSource's frame at version 0,
+// since its pixels never change. The image belongs to the stream and
+// stays valid until the next change or Close. FrameSeq tells when the
+// frame changed.
 func (s *Stream) Frame() render.VersionedImage {
 	switch {
 	case s.cur == nil:
@@ -172,7 +185,7 @@ func (s *Stream) Frame() render.VersionedImage {
 // YUV reports the colour of the frames FrameYUV returns, false when
 // the source decodes no YUV and FrameYUV returns nil.
 func (s *Stream) YUV() (YUVColor, bool) {
-	if s.dec.yuv == nil {
+	if s.dec == nil || s.dec.yuv == nil {
 		return YUVColor{}, false
 	}
 	return s.dec.yuv.YUV()
@@ -193,7 +206,63 @@ func (s *Stream) FrameYUV() *YUVFrame {
 // RGBA as they are decoded, for a viewer that shows FrameYUV; off
 // resumes it. Frame keeps working either way: it converts the frame
 // it returns when the decoder did not.
-func (s *Stream) SkipRGBA(on bool) { s.dec.skipRGBA.Store(on) }
+func (s *Stream) SkipRGBA(on bool) {
+	if s.dec != nil {
+		s.dec.skipRGBA.Store(on)
+	}
+}
+
+// DecodesOnGPU reports whether the stream plays a TextureSource: its
+// frames are GPU textures (Texture), decoded on the device UseDevice
+// names, and Frame and FrameYUV return none.
+func (s *Stream) DecodesOnGPU() bool { return s.tex != nil }
+
+// UseDevice decodes a TextureSource's frames on dev, the device that
+// draws them, from the playback position on; until then the stream
+// shows no frame. A stream decodes on one device for its life. A device
+// that does not decode the video's codec fails the stream with an error
+// naming the codec and the file, which UseDevice returns too.
+func (s *Stream) UseDevice(dev *gpu.Device) error {
+	switch {
+	case s.tex == nil:
+		return fmt.Errorf("media: %s decodes its frames on the CPU", s.name)
+	case s.closed:
+		return errStreamClosed
+	case s.err != nil:
+		return s.err
+	case s.tex.dec != nil && s.tex.dev == dev:
+		return nil
+	case s.tex.dec != nil:
+		return fmt.Errorf("media: %s decodes on %s, not %s", s.name, s.tex.dev.Name(), dev.Name())
+	}
+	if err := s.tex.attach(dev, s.gen, s.pos); err != nil {
+		s.Fail(err)
+		return err
+	}
+	s.sync()
+	return nil
+}
+
+// Texture returns the frame to show of a stream decoding on the GPU,
+// nil before the first is decoded, after Close and for a stream
+// decoding on the CPU. Draw its Texture's Rect on the device UseDevice
+// named. It belongs to the stream and stays valid until the next change
+// or Close; FrameSeq tells when it changed.
+func (s *Stream) Texture() *gpu.VideoFrame {
+	if s.tex == nil {
+		return nil
+	}
+	return s.tex.cur
+}
+
+// Fail stops the stream with err, what a viewer that cannot show its
+// frames calls; Err returns it. A stream that failed already keeps its
+// first error.
+func (s *Stream) Fail(err error) {
+	s.fail(err)
+	s.notify()
+	s.sync()
+}
 
 // FrameSeq moves whenever Frame shows another frame.
 func (s *Stream) FrameSeq() uint64 { return s.frameSeq }
@@ -275,7 +344,11 @@ func (s *Stream) Close() {
 	// The frames go with the decoder's buffers: nothing reads one
 	// after Close.
 	s.cur, s.queue = nil, nil
-	s.dec.close()
+	if s.tex != nil {
+		s.tex.close()
+	} else {
+		s.dec.close()
+	}
 	s.notify()
 }
 
@@ -287,8 +360,15 @@ func (s *Stream) Wait() error {
 	if !s.audioWork.Settle(audioStopLimit) {
 		return fmt.Errorf("media: close %s: the sound server did not let go", s.name)
 	}
-	<-s.dec.closed
-	if err := s.dec.closeErr; err != nil {
+	var err error
+	if s.tex != nil {
+		<-s.tex.closed
+		err = s.tex.closeErr
+	} else {
+		<-s.dec.closed
+		err = s.dec.closeErr
+	}
+	if err != nil {
 		return fmt.Errorf("media: close %s: %w", s.name, err)
 	}
 	return nil
@@ -305,7 +385,11 @@ func (s *Stream) seekTo(t time.Duration) {
 	}
 	s.queue = s.queue[:0]
 	s.lastPTS, s.prevPTS = 0, 0
-	s.dec.requestSeek(seekRequest{gen: s.gen, t: t})
+	if s.tex != nil {
+		s.check(s.tex.seek(s.gen, t))
+	} else {
+		s.dec.requestSeek(seekRequest{gen: s.gen, t: t})
+	}
 	s.pos, s.anchorAt, s.ended = t, time.Time{}, false
 	if s.audio != nil {
 		s.stopAudio()
@@ -328,14 +412,14 @@ func (s *Stream) startAudio() {
 	}
 	link := &audioLink{}
 	s.audio, s.audioPos = link, s.pos
-	pos, volume, volumeSet, muted := s.pos, s.volume, s.volumeSet, s.muted
+	pos, volume, volumeSet, muted, format := s.pos, s.volume, s.volumeSet, s.muted, s.audible.AudioFormat()
 	s.postAudio(func() {
 		pcm, err := s.audible.OpenAudio(pos)
 		if err != nil {
 			link.fail(err)
 			return
 		}
-		out, err := s.openOut(pcm, s.name)
+		out, err := s.openOut(pcm, format, s.name)
 		if err != nil {
 			_ = pcm.Close()
 			link.fail(err)
@@ -405,6 +489,10 @@ func (s *Stream) end() time.Duration {
 }
 
 func (s *Stream) collect() {
+	if s.tex != nil {
+		s.collectTextures()
+		return
+	}
 	for {
 		select {
 		case d := <-s.dec.out:
@@ -422,6 +510,23 @@ func (s *Stream) collect() {
 		default:
 			return
 		}
+	}
+}
+
+func (s *Stream) collectTextures() {
+	if s.tex.dec == nil || s.err != nil {
+		return
+	}
+	queued, ended, err := s.tex.pump(s.gen)
+	if err != nil {
+		s.fail(err)
+		return
+	}
+	for _, f := range queued {
+		s.prevPTS, s.lastPTS = s.lastPTS, f.PTS()
+	}
+	if ended {
+		s.eofGen = s.gen
 	}
 }
 
@@ -445,6 +550,9 @@ func (s *Stream) advanceClock(now time.Time) {
 }
 
 func (s *Stream) present() bool {
+	if s.tex != nil {
+		return s.presentTexture()
+	}
 	shown := 0
 	for _, d := range s.queue {
 		if s.curGen == s.gen && d.pts > s.pos {
@@ -459,6 +567,36 @@ func (s *Stream) present() bool {
 	return shown > 0
 }
 
+func (s *Stream) presentTexture() bool {
+	shown := 0
+	for _, f := range s.tex.queue {
+		if s.curGen == s.gen && f.PTS() > s.pos {
+			break
+		}
+		s.curGen = s.gen
+		shown++
+	}
+	s.tex.show(shown)
+	s.frameSeq += uint64(shown)
+	return shown > 0
+}
+
+// videoDone reports whether the frames decoded to the end of the
+// video have all been shown; a TextureSource's stream with no device to
+// decode on shows none and ends by its clock alone.
+func (s *Stream) videoDone() bool {
+	if s.tex != nil {
+		return s.tex.dec == nil || s.eofGen == s.gen && len(s.tex.queue) == 0
+	}
+	return s.eofGen == s.gen && len(s.queue) == 0
+}
+
+// awaitingFrame reports whether the frame at the playback position is
+// still to come.
+func (s *Stream) awaitingFrame() bool {
+	return s.curGen != s.gen && s.eofGen != s.gen && (s.tex == nil || s.tex.dec != nil)
+}
+
 func (s *Stream) advance(now time.Time) {
 	if s.closed {
 		return
@@ -470,7 +608,7 @@ func (s *Stream) advance(now time.Time) {
 	wasPlaying := s.playing
 	s.advanceClock(now)
 	changed := s.present()
-	if s.playing && s.eofGen == s.gen && len(s.queue) == 0 && s.pos >= s.end() {
+	if s.playing && s.videoDone() && s.pos >= s.end() {
 		if s.loop {
 			s.seekTo(0)
 		} else {
@@ -485,7 +623,7 @@ func (s *Stream) advance(now time.Time) {
 }
 
 func (s *Stream) active() bool {
-	return !s.closed && s.err == nil && (s.playing || s.curGen != s.gen && s.eofGen != s.gen)
+	return !s.closed && s.err == nil && (s.playing || s.awaitingFrame())
 }
 
 func (s *Stream) sync() {

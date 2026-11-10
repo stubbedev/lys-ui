@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/imgcache"
@@ -20,19 +21,38 @@ type VideoFormat struct {
 	Color         media.YUVColor
 }
 
+// videoPlacement is what every surface a Video shows its frames on
+// does: lie over the fitted frame, and go.
+type videoPlacement interface {
+	// Place shows the frames' src rectangle scaled to dst, a rect in
+	// the window's logical coordinates; an empty dst hides them.
+	Place(dst render.Rect, src image.Rectangle)
+	Close()
+}
+
 // VideoSurface is the surface package app gives a Video on screen to
 // show a stream's YUV frames as they are decoded, on a subsurface of
 // its own below the window instead of in the window's pixels.
 // Applications use Video instead.
 type VideoSurface interface {
-	// Place shows the frames' src rectangle scaled to dst, a rect in
-	// the window's logical coordinates; an empty dst hides them.
-	Place(dst render.Rect, src image.Rectangle)
+	videoPlacement
 	// Present shows f, of the surface's VideoFormat. It is false, the
 	// frame dropped, while every buffer is still the compositor's; the
 	// wake the host was given runs once one is free again.
 	Present(f *media.YUVFrame) (bool, error)
-	Close()
+}
+
+// TextureSurface is the surface package app gives a Video on screen
+// whose stream decodes on the GPU: a subsurface the frames are drawn
+// onto on Device, the GPU the windows draw with, which the stream
+// decodes on. Applications use Video instead.
+type TextureSurface interface {
+	videoPlacement
+	Device() *gpu.Device
+	// Present draws f onto the surface. It is false, the frame
+	// dropped, while every buffer is still the compositor's; the wake
+	// the host was given runs once one is free again.
+	Present(f *gpu.VideoFrame) (bool, error)
 }
 
 // VideoHost gives an on-screen Video its VideoSurface for frames of
@@ -40,7 +60,16 @@ type VideoSurface interface {
 // buffer frees after a dropped frame.
 type VideoHost func(v *Video, format VideoFormat, wake func()) (VideoSurface, error)
 
-var videoHost atomic.Pointer[VideoHost]
+// TextureHost gives an on-screen Video of a stream decoding on the GPU
+// its TextureSurface for width x height frames, or says why it has
+// none; wake runs on the loop when a buffer frees after a dropped
+// frame, and when the device opens after ErrVideoDevicePending.
+type TextureHost func(v *Video, width, height int, wake func()) (TextureSurface, error)
+
+var (
+	videoHost   atomic.Pointer[VideoHost]
+	textureHost atomic.Pointer[TextureHost]
+)
 
 // SetVideoHost installs the host that gives on-screen Videos their
 // surfaces; package app installs it. nil disables, and Videos paint
@@ -53,13 +82,30 @@ func SetVideoHost(fn VideoHost) {
 	videoHost.Store(&fn)
 }
 
+// SetTextureHost installs the host that gives on-screen Videos of
+// streams decoding on the GPU their surfaces; package app installs it.
+// nil disables, and such Videos fail their streams.
+func SetTextureHost(fn TextureHost) {
+	if fn == nil {
+		textureHost.Store(nil)
+		return
+	}
+	textureHost.Store(&fn)
+}
+
 // ErrVideoOffscreen is a VideoHost's answer for a Video not in a
 // window yet: the Video asks again when it is next arranged.
 var ErrVideoOffscreen = errors.New("widget: the Video is not in a window yet")
 
+// ErrVideoDevicePending is a TextureHost's answer while the GPU the
+// windows draw with is still opening: the Video asks again when the
+// host calls its wake.
+var ErrVideoDevicePending = errors.New("widget: the GPU device is still opening")
+
 var (
-	errNoVideoHost = errors.New("widget: no video host is installed")
-	errRGBAStream  = errors.New("widget: the stream decodes no 4:2:0 YUV")
+	errNoVideoHost   = errors.New("widget: no video host is installed")
+	errNoTextureHost = errors.New("widget: no host shows frames decoded on the GPU")
+	errRGBAStream    = errors.New("widget: the stream decodes no 4:2:0 YUV")
 )
 
 // Video is GTK's GtkVideo: a media.Stream's frames fitted into the
@@ -69,9 +115,11 @@ var (
 // frames plays on a subsurface of its own when the host gives one
 // (VideoSurface): its frames go to the compositor as decoded, with no
 // conversion to RGBA and no repaint of the window, whose controls stay
-// above it. Otherwise the frames are painted into the window. The
-// Video does not own the stream; whoever made it closes it. It styles
-// as `video`.
+// above it. Otherwise the frames are painted into the window. A stream
+// decoding on the GPU always plays on a subsurface (TextureSurface),
+// decoded on the device the windows draw with and drawn onto it there;
+// a Video that gets no such surface fails the stream. The Video does
+// not own the stream; whoever made it closes it. It styles as `video`.
 type Video struct {
 	composite
 	view     *videoView
@@ -181,10 +229,12 @@ type videoView struct {
 	painted uint64
 	// offload shows the frames while the view has one, the frame
 	// numbered shown last; offloadErr is why it has none.
-	offload    VideoSurface
+	offload    videoPlacement
 	offloadErr error
-	shown      uint64
-	raster     *image.RGBA
+	// show presents the frame to show on offload.
+	show   func() (bool, error)
+	shown  uint64
+	raster *image.RGBA
 	// rasterID is raster's identity, a new one with every new raster.
 	rasterID render.ImageID
 	drawn    uint64
@@ -256,6 +306,10 @@ func (p *videoView) place() {
 }
 
 func (p *videoView) openOffload() {
+	if p.stream.DecodesOnGPU() {
+		p.openTextureOffload()
+		return
+	}
 	host := videoHost.Load()
 	if host == nil {
 		p.offloadErr = errNoVideoHost
@@ -267,11 +321,7 @@ func (p *videoView) openOffload() {
 		return
 	}
 	w, h := p.stream.Size()
-	s, err := (*host)(p.video, VideoFormat{Width: w, Height: h, Color: c}, func() {
-		if p.offload != nil && p.stream.FrameSeq() != p.shown {
-			p.present()
-		}
-	})
+	s, err := (*host)(p.video, VideoFormat{Width: w, Height: h, Color: c}, p.wake)
 	switch {
 	case errors.Is(err, ErrVideoOffscreen):
 		return
@@ -281,20 +331,77 @@ func (p *videoView) openOffload() {
 		return
 	}
 	p.offload, p.shown = s, 0
+	p.show = func() (bool, error) {
+		f := p.stream.FrameYUV()
+		if f == nil {
+			return false, nil
+		}
+		return s.Present(f)
+	}
 	p.stream.SkipRGBA(true)
 	p.Invalidate()
 }
 
-func (p *videoView) present() {
-	f := p.stream.FrameYUV()
-	if f == nil {
+// openTextureOffload gives a stream decoding on the GPU the surface
+// its frames are drawn onto and the device they decode on. A stream
+// that gets none has nowhere to show its frames: it fails.
+func (p *videoView) openTextureOffload() {
+	host := textureHost.Load()
+	if host == nil {
+		p.failTextures(errNoTextureHost)
 		return
 	}
-	shown, err := p.offload.Present(f)
+	w, h := p.stream.Size()
+	s, err := (*host)(p.video, w, h, p.wake)
+	switch {
+	case errors.Is(err, ErrVideoOffscreen) || errors.Is(err, ErrVideoDevicePending):
+		return
+	case err != nil:
+		p.failTextures(err)
+		return
+	}
+	if err := p.stream.UseDevice(s.Device()); err != nil {
+		s.Close()
+		p.offloadErr = err
+		return
+	}
+	p.offload, p.shown = s, 0
+	p.show = func() (bool, error) {
+		f := p.stream.Texture()
+		if f == nil {
+			return false, nil
+		}
+		return s.Present(f)
+	}
+	p.Invalidate()
+}
+
+func (p *videoView) failTextures(err error) {
+	p.offloadErr = err
+	p.stream.Fail(err)
+}
+
+// wake is the host's call back: a buffer freed after a dropped frame,
+// or the device a surface waited for opened.
+func (p *videoView) wake() {
+	switch {
+	case p.stream == nil:
+	case p.offload == nil && p.offloadErr == nil:
+		p.place()
+	case p.offload != nil && p.stream.FrameSeq() != p.shown:
+		p.present()
+	}
+}
+
+func (p *videoView) present() {
+	shown, err := p.show()
 	if err != nil {
 		p.closeOffload()
 		p.offloadErr = err
-		debug.Log("frame", "video surface failed, frames paint into the window: %v", err)
+		if p.stream.DecodesOnGPU() {
+			p.stream.Fail(err)
+		}
+		debug.Log("frame", "video surface failed: %v", err)
 		return
 	}
 	if shown {
@@ -309,7 +416,7 @@ func (p *videoView) closeOffload() {
 		return
 	}
 	p.offload.Close()
-	p.offload = nil
+	p.offload, p.show = nil, nil
 	p.stream.SkipRGBA(false)
 	p.Invalidate()
 }

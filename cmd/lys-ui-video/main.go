@@ -1,8 +1,10 @@
-// Command lys-ui-video plays a video: a file through ffmpeg (picture and
-// sound) when one is named, otherwise a generated YUV4MPEG2 clip of
-// moving bars decoded in pure Go. The controls show while the pointer
-// is over the picture or playback is paused; Space toggles playback,
-// Escape quits.
+// Command lys-ui-video plays a video: an MP4 or Matroska/WebM file when
+// one is named, its picture decoded on the GPU the window draws with
+// and its sound in Go, otherwise a generated YUV4MPEG2 clip of moving
+// bars decoded in Go. A stream that cannot play (a codec the GPU does
+// not decode, a window drawn on the CPU) quits with its error. The
+// controls show while the pointer is over the picture or playback is
+// paused; Space toggles playback, Escape quits.
 package main
 
 import (
@@ -40,7 +42,7 @@ func play(path string, loop bool) (err error) {
 	stream := media.NewStream(src, "lys-ui video")
 	defer func() {
 		stream.Close()
-		err = errors.Join(err, stream.Wait())
+		err = errors.Join(err, stream.Err(), stream.Wait())
 	}()
 	stream.SetLoop(loop)
 	return run(stream)
@@ -121,6 +123,11 @@ func run(stream *media.Stream) error {
 		if err := a.AddAccel("space", toggle); err != nil {
 			return nil, err
 		}
+		stream.Subscribe(func() {
+			if stream.Err() != nil {
+				a.Quit()
+			}
+		})
 		return newPlayer(stream)
 	})
 }

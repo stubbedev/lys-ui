@@ -4,34 +4,41 @@
 // a clock that follows the audio when there is any. widget.Video paints
 // a Stream and widget.MediaControls drives it.
 //
-// Built-in sources: animated images (NewAnimation), YUV4MPEG2 (NewY4M,
-// decoded here), and any file ffmpeg reads (OpenFile, which runs
-// ffmpeg and ffprobe from PATH as subprocesses). Sound plays through
-// the PulseAudio native protocol, which PulseAudio and pipewire-pulse
-// serve.
+// Built-in sources: animated images (NewAnimation), YUV4MPEG2 (NewY4M),
+// both decoded on the CPU, and MP4 and Matroska/WebM files (OpenFile),
+// demuxed in process, their H.264 and H.265 video decoded on the GPU
+// the windows draw with and their AAC, Opus and Vorbis sound in Go.
+// Sound plays through the PulseAudio native protocol, which PulseAudio
+// and pipewire-pulse serve.
 //
-//	src, err := media.OpenFile("talk.webm")
-//	stream := media.NewStream(src)
+//	src, err := media.OpenFile("talk.mp4")
+//	stream := media.NewStream(src, "talk")
 //	video := widget.NewVideo(face, 13, stream)
 //	stream.Play()
 package media
 
 import (
 	"errors"
+	"fmt"
 	"image"
 	"io"
 	"time"
 
+	"github.com/stubbedev/lys-lib/gpu"
+	"github.com/stubbedev/lys-lib/media/demux"
+	"github.com/stubbedev/lys-lib/pulse/native"
 	"github.com/stubbedev/lys-lib/render"
 )
 
-// The PCM layout every Audible track delivers: interleaved signed
-// 16-bit little-endian samples.
-const (
-	AudioRate     = 48000
-	AudioChannels = 2
-	audioFrame    = 2 * AudioChannels
-)
+// AudioFormat is the PCM an Audible source delivers: interleaved
+// signed 16-bit little-endian samples at Rate, one per speaker of
+// Layout in its order. The sound server converts it to its sink's.
+type AudioFormat struct {
+	Rate   int
+	Layout native.ChannelMap
+}
+
+func (f AudioFormat) frameBytes() int { return 2 * len(f.Layout) }
 
 // Info describes a source's video.
 type Info struct {
@@ -41,16 +48,39 @@ type Info struct {
 	Duration time.Duration
 }
 
-// Source decodes a video's frames in presentation order. ReadFrame and
-// Seek are called from one goroutine; Close may be called from another
-// at any time and must unblock a ReadFrame in progress.
+// Source is a video a Stream plays: a FrameSource, decoded on the CPU,
+// or a TextureSource, decoded on the GPU. Close may be called from any
+// goroutine at any time and must unblock a read in progress.
 type Source interface {
 	Info() Info
+	Close() error
+}
+
+// FrameSource is a Source decoding its frames on the CPU, in
+// presentation order. ReadFrame and Seek are called from one goroutine.
+type FrameSource interface {
+	Source
 	// ReadFrame decodes the next frame into dst, which is Info's size,
 	// and returns its presentation time. It returns io.EOF after the
 	// last frame.
 	ReadFrame(dst *image.RGBA) (time.Duration, error)
-	Close() error
+}
+
+// TextureSource is a Source whose video the GPU decodes: it hands out
+// the video track's packets in decode order, and the Stream decodes
+// them on the device of the Video showing it (Stream.UseDevice).
+// ReadPacket and Seek are called from one goroutine, NewVideoDecoder
+// from the device's.
+type TextureSource interface {
+	Source
+	Seeker
+	// NewVideoDecoder opens a decoder of the video track on dev, an
+	// error naming the codec and the file where dev decodes none.
+	NewVideoDecoder(dev *gpu.Device) (*gpu.VideoDecoder, error)
+	// ReadPacket returns the video track's next packet, its Data valid
+	// until the next ReadPacket or Seek, and io.EOF after the last.
+	// After Seek(t) the packets start at the keyframe at or before t.
+	ReadPacket() (demux.Packet, error)
 }
 
 // StillSource is a Source whose frames are rasters it keeps unchanged for
@@ -62,16 +92,18 @@ type StillSource interface {
 	ReadStill() (render.StillImage, time.Duration, error)
 }
 
-// Seeker is a Source that can reposition: after Seek(t) the next
-// ReadFrame returns the frame showing at t.
+// Seeker is a Source that can reposition: after Seek(t) the next frame
+// read is the one showing at t.
 type Seeker interface {
 	Seek(t time.Duration) error
 }
 
 // Audible is a Source with a sound track.
 type Audible interface {
-	// OpenAudio returns the track from t as PCM in the AudioRate,
-	// AudioChannels layout; closing it stops the decoding.
+	// AudioFormat is the layout of the PCM OpenAudio returns.
+	AudioFormat() AudioFormat
+	// OpenAudio returns the track from t as PCM in AudioFormat;
+	// closing it stops the decoding.
 	OpenAudio(t time.Duration) (io.ReadCloser, error)
 }
 
@@ -80,18 +112,30 @@ var (
 	errNoYUV  = errors.New("media: the source decodes no 4:2:0 YUV")
 )
 
-type muted struct{ Source }
+type mutedFrames struct{ FrameSource }
+
+type seekableMutedFrames struct {
+	mutedFrames
+	Seeker
+}
+
+type mutedTextures struct{ TextureSource }
 
 // WithoutAudio returns src with its sound track hidden, for playback
 // with no audio output at all (a muted Stream still opens one).
 func WithoutAudio(src Source) Source {
-	if s, ok := src.(Seeker); ok {
-		return seekableMuted{muted{src}, s}
+	switch s := src.(type) {
+	case TextureSource:
+		return mutedTextures{s}
+	case FrameSource:
+		if seeker, ok := s.(Seeker); ok {
+			return seekableMutedFrames{mutedFrames{s}, seeker}
+		}
+		return mutedFrames{s}
 	}
-	return muted{src}
+	panic(undecodable(src))
 }
 
-type seekableMuted struct {
-	muted
-	Seeker
+func undecodable(src Source) string {
+	return fmt.Sprintf("media: a %T is neither a FrameSource nor a TextureSource", src)
 }

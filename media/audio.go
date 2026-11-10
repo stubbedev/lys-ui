@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/pulse/native"
 	"github.com/stubbedev/lys-lib/third_party/gomath"
 )
@@ -16,7 +17,7 @@ import (
 const (
 	audioLatency       = 50 * time.Millisecond
 	audioClientTimeout = 2 * time.Second
-	audioChunkBytes    = AudioRate / 100 * audioFrame
+	audioChunksPerSec  = 100
 )
 
 type audioOut interface {
@@ -30,31 +31,42 @@ type audioOut interface {
 	Close()
 }
 
-type openAudioFunc func(pcm io.Reader, name string) (audioOut, error)
+type openAudioFunc func(pcm io.Reader, format AudioFormat, name string) (audioOut, error)
 
-func playedFor(frames int64) time.Duration {
-	return max(time.Duration(mulDiv(frames, int64(time.Second), AudioRate))-audioLatency, 0)
+func playedFor(frames int64, rate int) time.Duration {
+	return max(time.Duration(mulDiv(frames, int64(time.Second), int64(rate)))-audioLatency, 0)
 }
 
 type pulseOut struct {
 	conn    *native.Conn
 	stream  *native.PlaybackStream
 	pcm     io.Reader
+	format  AudioFormat
 	frames  atomic.Int64
 	closed  atomic.Bool
 	drained atomic.Bool
 	failure atomic.Pointer[error]
 }
 
-func openPulse(pcm io.Reader, name string) (audioOut, error) {
+func openPulse(pcm io.Reader, format AudioFormat, name string) (audioOut, error) {
 	ctx := context.Background()
 	c, err := native.Dial(ctx, native.Options{ClientName: name, Timeout: audioClientTimeout})
 	if err != nil {
 		return nil, fmt.Errorf("media: connect to the PulseAudio server: %w", err)
 	}
+	channels, err := intconv.Exact[uint8](len(format.Layout))
+	if err != nil {
+		_ = c.Close()
+		return nil, fmt.Errorf("media: %d audio channels: %w", len(format.Layout), err)
+	}
+	rate, err := intconv.Exact[uint32](format.Rate)
+	if err != nil {
+		_ = c.Close()
+		return nil, fmt.Errorf("media: audio at %d Hz: %w", format.Rate, err)
+	}
 	st, err := c.CreatePlaybackStream(ctx, native.PlaybackParams{
-		SampleSpec: native.SampleSpec{Format: native.SampleS16LE, Channels: AudioChannels, Rate: AudioRate},
-		ChannelMap: native.ChannelMap{native.ChannelFrontLeft, native.ChannelFrontRight},
+		SampleSpec: native.SampleSpec{Format: native.SampleS16LE, Channels: channels, Rate: rate},
+		ChannelMap: format.Layout,
 		Latency:    audioLatency,
 		Props:      native.PropList{"media.name": name},
 	})
@@ -62,22 +74,23 @@ func openPulse(pcm io.Reader, name string) (audioOut, error) {
 		_ = c.Close()
 		return nil, fmt.Errorf("media: open a PulseAudio playback stream: %w", err)
 	}
-	o := &pulseOut{conn: c, stream: st, pcm: pcm}
+	o := &pulseOut{conn: c, stream: st, pcm: pcm, format: format}
 	go o.feed()
 	return o, nil
 }
 
 func (o *pulseOut) feed() {
-	buf := make([]byte, audioChunkBytes)
+	frame := o.format.frameBytes()
+	buf := make([]byte, max(o.format.Rate/audioChunksPerSec, 1)*frame)
 	for {
 		n, err := io.ReadFull(o.pcm, buf)
-		n -= n % audioFrame
+		n -= n % frame
 		if n > 0 {
 			if werr := o.stream.Write(context.Background(), buf[:n]); werr != nil {
 				o.fail(werr)
 				return
 			}
-			o.frames.Add(int64(n / audioFrame))
+			o.frames.Add(int64(n / frame))
 		}
 		switch {
 		case errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF):
@@ -97,7 +110,7 @@ func (o *pulseOut) fail(err error) {
 	o.failure.CompareAndSwap(nil, &err)
 }
 
-func (o *pulseOut) Played() time.Duration { return playedFor(o.frames.Load()) }
+func (o *pulseOut) Played() time.Duration { return playedFor(o.frames.Load(), o.format.Rate) }
 
 func (o *pulseOut) Drained() bool { return o.drained.Load() }
 

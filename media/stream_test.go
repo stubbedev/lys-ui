@@ -70,6 +70,8 @@ type fakePCM struct{ io.Reader }
 
 func (fakePCM) Close() error { return nil }
 
+func (audibleFake) AudioFormat() AudioFormat { return stereo }
+
 func (f audibleFake) OpenAudio(t time.Duration) (io.ReadCloser, error) {
 	*f.opened = append(*f.opened, t)
 	return fakePCM{strings.NewReader("")}, nil
@@ -103,7 +105,7 @@ func (o *fakeOut) Close()        { o.closed = true }
 
 type outs struct{ all []*fakeOut }
 
-func (o *outs) open(io.Reader, string) (audioOut, error) {
+func (o *outs) open(io.Reader, AudioFormat, string) (audioOut, error) {
 	out := &fakeOut{}
 	o.all = append(o.all, out)
 	return out, nil
@@ -111,7 +113,7 @@ func (o *outs) open(io.Reader, string) (audioOut, error) {
 
 func (o *outs) last() *fakeOut { return o.all[len(o.all)-1] }
 
-func noAudio(io.Reader, string) (audioOut, error) { panic("a silent source opened audio") }
+func noAudio(io.Reader, AudioFormat, string) (audioOut, error) { panic("a silent source opened audio") }
 
 type harness struct {
 	t       *testing.T
@@ -434,9 +436,9 @@ func TestAudioWaitsOnNothingOnTheLoop(t *testing.T) {
 		var opened []time.Duration
 		o := &outs{}
 		hold := make(chan struct{})
-		slow := func(pcm io.Reader, name string) (audioOut, error) {
+		slow := func(pcm io.Reader, format AudioFormat, name string) (audioOut, error) {
 			<-hold
-			return o.open(pcm, name)
+			return o.open(pcm, format, name)
 		}
 		src := audibleFake{seekableFake{&fakeSource{frames: 5, failAt: -1}}, &opened}
 		s := newStream(src, "test", slow)
@@ -472,7 +474,7 @@ func TestAudioOpenFailureReachesTheLoop(t *testing.T) {
 		defer animclock.Reset()
 		var opened []time.Duration
 		src := audibleFake{seekableFake{&fakeSource{frames: 5, failAt: -1}}, &opened}
-		s := newStream(src, "test", func(io.Reader, string) (audioOut, error) { return nil, errors.New("no server") })
+		s := newStream(src, "test", func(io.Reader, AudioFormat, string) (audioOut, error) { return nil, errors.New("no server") })
 		s.Play()
 		synctest.Wait()
 		s.advance(time.Now())

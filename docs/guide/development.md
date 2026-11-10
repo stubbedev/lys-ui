@@ -73,5 +73,5 @@ Vulkan bindings of [gogpu/wgpu](https://github.com/gogpu/wgpu).
 Found at runtime:
 
 - `libvulkan`, opened through purego by the GPU renderer. Without it,
-  windows draw on the CPU.
-- `ffmpeg` and `ffprobe` on PATH, used only by `media.OpenFile`.
+  windows draw on the CPU, and `media.OpenFile`'s video, which decodes
+  on the renderer's Vulkan video queue, does not play.

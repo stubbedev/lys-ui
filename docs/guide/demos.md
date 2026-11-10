@@ -25,7 +25,7 @@ Each demo is a command under `cmd/`. Run one from the dev shell with
 | `cmd/lys-ui-a11y` | a labeled form served over AT-SPI; builds with `-tags atspi` to force the bridge on |
 | `cmd/lys-ui-capture` | the capture consumer: list outputs and toplevels, screenshot any of them to PNG, follow one output frame by frame |
 | `cmd/lys-ui-gpu` | a GPUArea paced by its own frame callbacks, with lys-ui drawing over it |
-| `cmd/lys-ui-video` | a video with its controls: a file through ffmpeg, or a generated clip decoded in pure Go |
+| `cmd/lys-ui-video` | a video with its controls: an MP4 or Matroska/WebM file decoded on the GPU, or a generated clip decoded in pure Go |
 | `cmd/lys-ui-i18n` | a gettext .po catalog (plurals included) localizing built-in and app strings |
 | `cmd/lys-ui-states` | the window-state client the headless suite drives: xdg state chords, mirrored from what the compositor confirms |
 | `cmd/lys-ui-multilist` | the multi-select client the headless suite drives: a multiple-selection list with keyboard and rubber-band selection |

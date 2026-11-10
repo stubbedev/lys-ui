@@ -216,13 +216,15 @@ func (a *Application) rendererPlan() (rendererPlan, error) {
 }
 
 func (a *Application) startRenderer(plan rendererPlan, open func(rendererPlan) (*gpuRenderer, error)) {
-	a.gpuOpen = open
+	a.gpuOpen, a.gpuPending = open, true
 	sess := a.sess
 	a.gpuOpening.Go(func() {
 		r, err := open(plan)
 		if err != nil {
 			a.Invoke(func() {
 				logutil.L().Info("app: no GPU renderer; every window draws on the CPU", "err", err)
+				a.gpuPending = false
+				a.wakeGPUWaiting()
 			})
 			return
 		}
@@ -238,15 +240,21 @@ func (a *Application) adoptRenderer(sess *wlsession.Session) {
 	}
 	if sess != a.sess {
 		r.dev.Close()
+		a.gpuPending = false
 		if plan, err := a.rendererPlan(); err == nil {
 			a.startRenderer(plan, a.gpuOpen)
 		}
+		if !a.gpuPending {
+			a.wakeGPUWaiting()
+		}
 		return
 	}
+	a.gpuPending = false
 	a.installRenderer(r)
 	for _, w := range a.windows {
 		w.useRenderer(r)
 	}
+	a.wakeGPUWaiting()
 }
 
 func (a *Application) installRenderer(r *gpuRenderer) {
@@ -523,6 +531,7 @@ func (a *Application) releaseRenderer() {
 	}
 	imgcache.Default().SetForget(nil)
 	r.closed = true
+	a.loseVideoTextures(r)
 	r.dev.Close()
 	r.workers.Wait()
 	if r.timelines != nil {

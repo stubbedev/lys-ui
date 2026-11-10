@@ -49,7 +49,7 @@ type decoder struct {
 	// cost the GC nothing, and the pages go back to the system when the
 	// stream closes rather than when a collection gets to them.
 	pixels memory.Shared
-	src    Source
+	src    FrameSource
 	stills StillSource
 	// yuv is src decoding YUV frames, nil when it decodes none.
 	yuv YUVSource
@@ -68,7 +68,7 @@ type decoder struct {
 	closeErr error
 }
 
-func startDecoder(src Source, seeker Seeker, info Info) *decoder {
+func startDecoder(src FrameSource, seeker Seeker, info Info) *decoder {
 	d := &decoder{
 		src: src, seeker: seeker, size: image.Rect(0, 0, info.Width, info.Height),
 		out:  make(chan decoded, decodeAhead),
@@ -262,7 +262,7 @@ func (d *decoder) newFrameBuf() (*frameBuf, error) {
 }
 
 // close stops the decoder and returns at once: closing the source and
-// joining the goroutine may wait on a subprocess, so they run on their
+// joining the goroutine may wait on a slow reader, so they run on their
 // own goroutine. The frame buffers go once nothing can read them: the
 // decoding goroutine has stopped, the stream has dropped its frames,
 // and every recording that may draw one has ended (render.Retire).

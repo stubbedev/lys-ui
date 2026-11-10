@@ -146,16 +146,15 @@ type y4mStream struct {
 	closer io.Closer
 	planes []byte
 	n      int64
-	base   time.Duration
 	bare   bool
 }
 
 // NewY4M reads a YUV4MPEG2 stream (8-bit 4:2:0, 4:2:2, 4:4:4 or mono,
 // BT.601, limited range unless XCOLORRANGE=FULL). When r is also an
 // io.ReadSeeker the source seeks and knows its duration; that needs
-// every frame header to be a bare FRAME line, as ffmpeg writes. Close
-// closes r when it is an io.Closer.
-func NewY4M(r io.Reader) (Source, error) {
+// every frame header to be a bare FRAME line. Close closes r when it
+// is an io.Closer.
+func NewY4M(r io.Reader) (FrameSource, error) {
 	rs, seekable := r.(io.ReadSeeker)
 	var start int64
 	if seekable {
@@ -278,7 +277,7 @@ func (s *y4mStream) readPlanes(planes []byte) (time.Duration, error) {
 	if _, err := io.ReadFull(s.br, planes); err != nil {
 		return 0, fmt.Errorf("media: y4m frame %d is truncated: %w", s.n, err)
 	}
-	pts := s.base + s.h.pts(s.n)
+	pts := s.h.pts(s.n)
 	s.n++
 	return pts, nil
 }

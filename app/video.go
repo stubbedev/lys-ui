@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-lib/dmabuf"
 	"github.com/stubbedev/lys-lib/dmabufwl"
 	"github.com/stubbedev/lys-lib/fourcc"
+	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -173,54 +174,191 @@ func (a *Application) videoFormatFor() (fourcc.Format, error) {
 }
 
 func (a *Application) videoSurfaceFor(v *widget.Video, format widget.VideoFormat, wake func()) (widget.VideoSurface, error) {
-	hw := a.windowOf(v)
-	if hw == nil || hw.host == nil {
-		return nil, widget.ErrVideoOffscreen
-	}
-	subc := a.sess.Subcompositor()
-	if subc == nil {
-		return nil, ErrNoSubsurfaces
-	}
-	if a.sess.Viewporter() == nil {
-		return nil, ErrNoViewporter
+	hw, subc, err := a.videoWindow(v)
+	if err != nil {
+		return nil, err
 	}
 	pixel, err := a.videoFormatFor()
 	if err != nil {
 		return nil, err
 	}
-	parent := hw.host.HostSurface()
-	ss, err := a.newSubsurface(subc, parent)
-	if err != nil {
-		return nil, fmt.Errorf("app: video: %w", err)
+	s := &videoSurface{layout: newVideoLayout(pixel, format.Width, format.Height)}
+	if err := s.open(a, hw, subc, wake); err != nil {
+		return nil, err
 	}
-	s := &videoSurface{app: a, hw: hw, subsurface: ss, layout: newVideoLayout(pixel, format.Width, format.Height), wake: wake}
 	if err := s.init(format.Color); err != nil {
 		s.Close()
 		return nil, err
 	}
-	hw.video = append(hw.video, s)
-	debug.Log("frame", "video surface %d below %d: %dx%d %s", ss.surf.Id(), parent.Id(), format.Width, format.Height, pixel)
+	debug.Log("frame", "video surface %d: %dx%d %s", s.surf.Id(), format.Width, format.Height, pixel)
 	return s, nil
 }
 
-// videoSurface is a Video's subsurface: a fixed ring of linear YUV
-// dmabufs its frames are written into, scaled by the viewport to the
-// video's placement and tagged with the stream's colour.
-type videoSurface struct {
+// videoWindow is the window v shows in, for a subsurface of its frames,
+// and the subcompositor that makes one: ErrVideoOffscreen before v is
+// in a window, an error for a compositor that cannot place and scale a
+// subsurface.
+func (a *Application) videoWindow(v *widget.Video) (*hostWindow, *wl.Subcompositor, error) {
+	hw := a.windowOf(v)
+	if hw == nil || hw.host == nil {
+		return nil, nil, widget.ErrVideoOffscreen
+	}
+	subc := a.sess.Subcompositor()
+	if subc == nil {
+		return nil, nil, ErrNoSubsurfaces
+	}
+	if a.sess.Viewporter() == nil {
+		return nil, nil, ErrNoViewporter
+	}
+	return hw, subc, nil
+}
+
+// videoOutput is what every Video subsurface is: a fixed ring of
+// dmabufs the compositor imports, scaled by the viewport to the
+// video's placement. A frame arriving while every buffer is the
+// compositor's is dropped, and the next buffer freed wakes the Video.
+type videoOutput struct {
 	app *Application
 	hw  *hostWindow
 	subsurface
-	color  *wlr.WpColorRepresentationSurfaceV1
-	layout videoLayout
+	// device is the GPU a texture surface draws on, nil for YUV.
+	device *gpu.Device
 	ring   [videoRing]videoBuffer
 	wake   func()
 	bounds render.Rect
 	src    image.Rectangle
-	// dropped is a frame Present dropped for want of a free buffer:
-	// the next one freed wakes the Video.
+	// dropped is a frame dropped for want of a free buffer: the next
+	// one freed wakes the Video.
 	dropped bool
 	err     error
 	closed  bool
+}
+
+func (o *videoOutput) open(a *Application, hw *hostWindow, subc *wl.Subcompositor, wake func()) error {
+	parent := hw.host.HostSurface()
+	ss, err := a.newSubsurface(subc, parent)
+	if err != nil {
+		return fmt.Errorf("app: video: %w", err)
+	}
+	o.app, o.hw, o.subsurface, o.wake = a, hw, ss, wake
+	for i := range o.ring {
+		o.ring[i].out = o
+	}
+	hw.video = append(hw.video, o)
+	return nil
+}
+
+func (o *videoOutput) check(err error) {
+	if err != nil {
+		debug.Log("frame", "video surface %d: %v", o.surf.Id(), err)
+	}
+}
+
+func (o *videoOutput) Place(dst render.Rect, src image.Rectangle) {
+	if o.closed || dst == o.bounds && src == o.src {
+		return
+	}
+	hide := dst.Empty() && !o.bounds.Empty()
+	o.bounds, o.src = dst, src
+	o.hw.dirty = true
+	if hide {
+		o.check(o.surf.Attach(nil, 0, 0))
+		o.check(o.surf.Commit())
+		return
+	}
+	if dst.Empty() {
+		return
+	}
+	o.check(o.sub.SetPosition(intconv.Clamp[int32](dst.X), intconv.Clamp[int32](dst.Y)))
+	o.check(o.vp.SetSource(float32(src.Min.X), float32(src.Min.Y), float32(src.Dx()), float32(src.Dy())))
+	o.check(o.vp.SetDestination(intconv.Clamp[int32](dst.W), intconv.Clamp[int32](dst.H)))
+	o.check(o.setOpaque(dst.W, dst.H))
+	o.check(o.surf.Commit())
+}
+
+func (o *videoOutput) setOpaque(w, h int) error {
+	region, err := o.app.sess.Compositor().CreateRegion()
+	if err != nil {
+		return fmt.Errorf("app: video opaque region: %w", err)
+	}
+	defer func() { _ = region.Destroy() }()
+	if err := region.Add(0, 0, intconv.Clamp[int32](w), intconv.Clamp[int32](h)); err != nil {
+		return fmt.Errorf("app: video opaque region add: %w", err)
+	}
+	return o.surf.SetOpaqueRegion(region)
+}
+
+// writable is the index of a buffer to present a frame in, -1 when the
+// frame is dropped: while the video is hidden, or every buffer is the
+// compositor's.
+func (o *videoOutput) writable() (int, error) {
+	switch {
+	case o.closed:
+		return -1, ErrVideoSurfaceGone
+	case o.err != nil:
+		return -1, o.err
+	case o.bounds.Empty():
+		return -1, nil
+	}
+	for i := range o.ring {
+		if b := &o.ring[i]; b.wl != nil && !b.busy {
+			return i, nil
+		}
+	}
+	o.dropped = true
+	return -1, nil
+}
+
+// show attaches buffer i, a w x h frame, and commits it.
+func (o *videoOutput) show(i, w, h int) error {
+	b := &o.ring[i]
+	if err := o.surf.Attach(b.wl, 0, 0); err != nil {
+		return fmt.Errorf("app: video attach: %w", err)
+	}
+	if err := o.surf.DamageBuffer(0, 0, intconv.Clamp[int32](w), intconv.Clamp[int32](h)); err != nil {
+		return fmt.Errorf("app: video damage: %w", err)
+	}
+	if err := o.surf.Commit(); err != nil {
+		return fmt.Errorf("app: video commit: %w", err)
+	}
+	b.busy = true
+	return nil
+}
+
+// freed wakes the Video when a buffer frees after a dropped frame.
+func (o *videoOutput) freed() {
+	if !o.dropped || o.closed {
+		return
+	}
+	o.dropped = false
+	o.wake()
+}
+
+// close destroys the buffers and the subsurface; release frees what
+// backs the buffers once the compositor's handles to them are gone.
+func (o *videoOutput) close(release func()) {
+	if o.closed {
+		return
+	}
+	o.closed = true
+	for i := range o.ring {
+		o.ring[i].drop()
+	}
+	release()
+	o.app.sess.SetSurfaceInput(o.surf, nil)
+	o.destroy()
+	o.hw.video = slices.DeleteFunc(o.hw.video, func(v *videoOutput) bool { return v == o })
+	o.hw.dirty = true
+}
+
+// videoSurface is a Video's subsurface for a stream's YUV frames: its
+// ring is linear YUV dmabufs the frames are written into, tagged with
+// the stream's colour.
+type videoSurface struct {
+	videoOutput
+	color  *wlr.WpColorRepresentationSurfaceV1
+	layout videoLayout
+	mem    [videoRing]videoMemory
 }
 
 func (s *videoSurface) init(c media.YUVColor) error {
@@ -232,159 +370,89 @@ func (s *videoSurface) init(c media.YUVColor) error {
 	case err != nil:
 		return fmt.Errorf("app: video: %w", err)
 	}
-	if err := s.app.sess.SetContentType(s.surf, wlsession.ContentVideo); err != nil && !errors.Is(err, wlsession.ErrProtocolUnavailable) {
-		return fmt.Errorf("app: video content type: %w", err)
+	if err := setVideoContent(s.app, s.surf); err != nil {
+		return err
 	}
 	for i := range s.ring {
-		if err := s.ring[i].init(s); err != nil {
+		mem, err := s.app.videoMemory(s.layout.size)
+		if err != nil {
+			return fmt.Errorf("app: video buffer %d of %d: %w", i+1, videoRing, err)
+		}
+		s.mem[i] = mem
+		if err := s.ring[i].importDmabuf(s.layout.dmabuf(mem.fd())); err != nil {
 			return fmt.Errorf("app: video buffer %d of %d: %w", i+1, videoRing, err)
 		}
 	}
 	return nil
 }
 
-func (s *videoSurface) check(err error) {
-	if err != nil {
-		debug.Log("frame", "video surface %d: %v", s.surf.Id(), err)
-	}
-}
-
-func (s *videoSurface) Place(dst render.Rect, src image.Rectangle) {
-	if s.closed || dst == s.bounds && src == s.src {
-		return
-	}
-	hide := dst.Empty() && !s.bounds.Empty()
-	s.bounds, s.src = dst, src
-	s.hw.dirty = true
-	if hide {
-		s.check(s.surf.Attach(nil, 0, 0))
-		s.check(s.surf.Commit())
-		return
-	}
-	if dst.Empty() {
-		return
-	}
-	s.check(s.sub.SetPosition(intconv.Clamp[int32](dst.X), intconv.Clamp[int32](dst.Y)))
-	s.check(s.vp.SetSource(float32(src.Min.X), float32(src.Min.Y), float32(src.Dx()), float32(src.Dy())))
-	s.check(s.vp.SetDestination(intconv.Clamp[int32](dst.W), intconv.Clamp[int32](dst.H)))
-	s.check(s.setOpaque(dst.W, dst.H))
-	s.check(s.surf.Commit())
-}
-
-func (s *videoSurface) setOpaque(w, h int) error {
-	region, err := s.app.sess.Compositor().CreateRegion()
-	if err != nil {
-		return fmt.Errorf("app: video opaque region: %w", err)
-	}
-	defer func() { _ = region.Destroy() }()
-	if err := region.Add(0, 0, intconv.Clamp[int32](w), intconv.Clamp[int32](h)); err != nil {
-		return fmt.Errorf("app: video opaque region add: %w", err)
-	}
-	return s.surf.SetOpaqueRegion(region)
-}
-
-func (s *videoSurface) Present(f *media.YUVFrame) (bool, error) {
-	switch {
-	case s.closed:
-		return false, ErrVideoSurfaceGone
-	case s.err != nil:
-		return false, s.err
-	case f.Width != s.layout.width || f.Height != s.layout.height:
-		return false, fmt.Errorf("app: a %dx%d frame on a %dx%d video surface", f.Width, f.Height, s.layout.width, s.layout.height)
-	case s.bounds.Empty():
-		return false, nil
-	}
-	b := s.free()
-	if b == nil {
-		s.dropped = true
-		return false, nil
-	}
-	if err := b.mem.beginWrite(); err != nil {
-		return false, fmt.Errorf("app: video frame: %w", err)
-	}
-	s.layout.write(b.mem.bytes(), f)
-	if err := b.mem.endWrite(); err != nil {
-		return false, fmt.Errorf("app: video frame: %w", err)
-	}
-	if err := s.surf.Attach(b.wl, 0, 0); err != nil {
-		return false, fmt.Errorf("app: video attach: %w", err)
-	}
-	if err := s.surf.DamageBuffer(0, 0, intconv.Clamp[int32](f.Width), intconv.Clamp[int32](f.Height)); err != nil {
-		return false, fmt.Errorf("app: video damage: %w", err)
-	}
-	if err := s.surf.Commit(); err != nil {
-		return false, fmt.Errorf("app: video commit: %w", err)
-	}
-	b.busy = true
-	return true, nil
-}
-
-// free is a buffer the compositor imported and is not reading, nil
-// when there is none.
-func (s *videoSurface) free() *videoBuffer {
-	for i := range s.ring {
-		if b := &s.ring[i]; b.wl != nil && !b.busy {
-			return b
-		}
+func setVideoContent(a *Application, surf *wl.Surface) error {
+	if err := a.sess.SetContentType(surf, wlsession.ContentVideo); err != nil && !errors.Is(err, wlsession.ErrProtocolUnavailable) {
+		return fmt.Errorf("app: video content type: %w", err)
 	}
 	return nil
 }
 
-// freed wakes the Video when a buffer frees after a dropped frame.
-func (s *videoSurface) freed() {
-	if !s.dropped || s.closed {
-		return
+func (s *videoSurface) Present(f *media.YUVFrame) (bool, error) {
+	if f.Width != s.layout.width || f.Height != s.layout.height {
+		return false, fmt.Errorf("app: a %dx%d frame on a %dx%d video surface", f.Width, f.Height, s.layout.width, s.layout.height)
 	}
-	s.dropped = false
-	s.wake()
+	i, err := s.writable()
+	if i < 0 {
+		return false, err
+	}
+	mem := s.mem[i]
+	if err := mem.beginWrite(); err != nil {
+		return false, fmt.Errorf("app: video frame: %w", err)
+	}
+	s.layout.write(mem.bytes(), f)
+	if err := mem.endWrite(); err != nil {
+		return false, fmt.Errorf("app: video frame: %w", err)
+	}
+	if err := s.show(i, f.Width, f.Height); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *videoSurface) Close() {
-	if s.closed {
-		return
-	}
-	s.closed = true
-	for i := range s.ring {
-		s.ring[i].drop()
-	}
-	if s.color != nil {
-		_ = s.color.Destroy()
-	}
-	s.app.sess.SetSurfaceInput(s.surf, nil)
-	s.destroy()
-	s.hw.video = slices.DeleteFunc(s.hw.video, func(o *videoSurface) bool { return o == s })
-	s.hw.dirty = true
+	s.close(func() {
+		for i, m := range s.mem {
+			if m != nil {
+				_ = m.close()
+				s.mem[i] = nil
+			}
+		}
+		if s.color != nil {
+			_ = s.color.Destroy()
+		}
+	})
 }
 
 // videoBuffer is one buffer of a video surface's ring.
 type videoBuffer struct {
-	s      *videoSurface
-	mem    videoMemory
+	out    *videoOutput
+	desc   dmabuf.Buffer
 	params *wlr.ZwpBufferParamsV1
 	wl     *wl.Buffer
 	busy   bool
 }
 
-func (b *videoBuffer) init(s *videoSurface) error {
-	b.s = s
-	mem, err := s.app.videoMemory(s.layout.size)
-	if err != nil {
-		return err
-	}
-	b.mem = mem
-	params, err := dmabufwl.Params(s.app.sess.Dmabuf(), s.layout.dmabuf(mem.fd()))
+func (b *videoBuffer) importDmabuf(d dmabuf.Buffer) error {
+	b.desc = d
+	params, err := dmabufwl.Params(b.out.app.sess.Dmabuf(), d)
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}
 	b.params = params
 	params.AddCreatedHandler(b)
 	params.AddFailedHandler(b)
-	w, errW := intconv.Exact[int32](s.layout.width)
-	h, errH := intconv.Exact[int32](s.layout.height)
+	w, errW := intconv.Exact[int32](d.Width)
+	h, errH := intconv.Exact[int32](d.Height)
 	if err := errors.Join(errW, errH); err != nil {
 		return fmt.Errorf("app: video size: %w", err)
 	}
-	if err := params.Create(w, h, uint32(s.layout.format), 0); err != nil {
+	if err := params.Create(w, h, uint32(d.Format), 0); err != nil {
 		return fmt.Errorf("app: dmabuf create: %w", err)
 	}
 	return nil
@@ -392,26 +460,26 @@ func (b *videoBuffer) init(s *videoSurface) error {
 
 func (b *videoBuffer) HandleZwpBufferParamsV1Created(ev wlr.ZwpBufferParamsV1CreatedEvent) {
 	b.finishImport()
-	if b.s.closed {
+	if b.out.closed {
 		_ = ev.Buffer.Destroy()
 		return
 	}
 	b.wl = ev.Buffer
 	b.wl.AddReleaseHandler(b)
-	b.s.freed()
+	b.out.freed()
 }
 
 func (b *videoBuffer) HandleZwpBufferParamsV1Failed(wlr.ZwpBufferParamsV1FailedEvent) {
 	b.finishImport()
-	if b.s.err == nil {
-		b.s.err = fmt.Errorf("%w: %dx%d format %s modifier %s", ErrDmabufRejected, b.s.layout.width, b.s.layout.height, b.s.layout.format, fourcc.Linear)
+	if b.out.err == nil {
+		b.out.err = fmt.Errorf("%w: %dx%d format %s modifier %s", ErrDmabufRejected, b.desc.Width, b.desc.Height, b.desc.Format, b.desc.Modifier)
 	}
-	b.s.freed()
+	b.out.freed()
 }
 
 func (b *videoBuffer) HandleBufferRelease(wl.BufferReleaseEvent) {
 	b.busy = false
-	b.s.freed()
+	b.out.freed()
 }
 
 func (b *videoBuffer) finishImport() {
@@ -426,10 +494,6 @@ func (b *videoBuffer) drop() {
 	if b.wl != nil {
 		_ = b.wl.Destroy()
 		b.wl = nil
-	}
-	if b.mem != nil {
-		_ = b.mem.close()
-		b.mem = nil
 	}
 	b.busy = false
 }

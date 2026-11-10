@@ -54,6 +54,10 @@ type Application struct {
 	gpuOpening sync.WaitGroup
 	gpuLanding atomic.Pointer[gpuRenderer]
 	gpuOpen    func(rendererPlan) (*gpuRenderer, error)
+	// gpuPending marks a renderer opening on a worker, and gpuWaiting
+	// the wakes of the Videos waiting for it to decode on (videotexture.go).
+	gpuPending bool
+	gpuWaiting []func()
 	// videoMemory allocates a Video surface's buffers (video.go).
 	videoMemory func(size int) (videoMemory, error)
 	gpuLosses   gpu.Losses
@@ -270,6 +274,9 @@ func NewApplication(sess *wlsession.Session, opts ...Option) *Application {
 	// A Video of a YUV stream arranged on screen asks for a subsurface of
 	// its window its frames go to as YUV dmabufs (video.go).
 	widget.SetVideoHost(a.videoSurfaceFor)
+	// A Video of a stream decoding on the GPU asks for a subsurface its
+	// frames are drawn onto, on the renderer's device (videotexture.go).
+	widget.SetTextureHost(a.textureSurfaceFor)
 	widget.SetSurfaceOriginResolver(a.surfaceOrigin)
 	widget.SetRemovedHook(func(w widget.Widget) {
 		for _, win := range a.windows {

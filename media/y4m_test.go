@@ -31,7 +31,7 @@ func y4mBytes(header string, w, h int, xs, ys uint, mono bool, frames ...yuv) []
 
 type onlyReader struct{ io.Reader }
 
-func readOne(t *testing.T, src Source) (*image.RGBA, time.Duration) {
+func readOne(t *testing.T, src FrameSource) (*image.RGBA, time.Duration) {
 	t.Helper()
 	i := src.Info()
 	dst := image.NewRGBA(image.Rect(0, 0, i.Width, i.Height))

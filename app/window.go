@@ -205,7 +205,7 @@ type hostWindow struct {
 	gpu []*gpuSurface
 	// video are the Video surfaces under this window; their bounds are
 	// holes too.
-	video []*videoSurface
+	video []*videoOutput
 	// blur is the compositor blur behind the window's style root.
 	blur blursync.Sync
 }

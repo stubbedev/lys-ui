@@ -82,16 +82,16 @@ type YUVSource interface {
 	ReadFrameYUV(dst *YUVFrame) (time.Duration, error)
 }
 
-func (m muted) YUV() (YUVColor, bool) {
-	y, ok := m.Source.(YUVSource)
+func (m mutedFrames) YUV() (YUVColor, bool) {
+	y, ok := m.FrameSource.(YUVSource)
 	if !ok {
 		return YUVColor{}, false
 	}
 	return y.YUV()
 }
 
-func (m muted) ReadFrameYUV(dst *YUVFrame) (time.Duration, error) {
-	y, ok := m.Source.(YUVSource)
+func (m mutedFrames) ReadFrameYUV(dst *YUVFrame) (time.Duration, error) {
+	y, ok := m.FrameSource.(YUVSource)
 	if !ok {
 		return 0, errNoYUV
 	}

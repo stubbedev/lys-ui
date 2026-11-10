@@ -42,6 +42,7 @@ package:
 gpu:
     LYS_TEST_GPU=lavapipe go test -count=1 ./widget
     LYS_TEST_GPU=lavapipe go test -count=1 -run GPU ./app
+    LYS_TEST_GPU=lavapipe go test -count=1 -run GPU ./media
 
 # The same on this host's own GPU, under the validation layer, after a
 # preflight that opens one device through lys-lib's own test: for AMD
@@ -58,6 +59,7 @@ gpu-host:
     rc=0
     LYS_TEST_GPU=host go test -count=1 ./widget || rc=1
     LYS_TEST_GPU=host go test -count=1 -run GPU ./app || rc=1
+    LYS_TEST_GPU=host go test -count=1 -run GPU ./media || rc=1
     exit $rc
 
 # Run the suite under the race detector. It needs cgo, so only this

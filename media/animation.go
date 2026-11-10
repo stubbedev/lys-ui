@@ -20,7 +20,7 @@ type animationSource struct {
 // NewAnimation plays a decoded GIF or APNG (render.DecodeImage) as a
 // seekable source; the image's own loop count is left to the Stream's
 // SetLoop.
-func NewAnimation(a *render.Animation) (Source, error) {
+func NewAnimation(a *render.Animation) (FrameSource, error) {
 	if len(a.Frames) == 0 || len(a.Frames) != len(a.Delays) {
 		return nil, fmt.Errorf("media: animation has %d frames and %d delays", len(a.Frames), len(a.Delays))
 	}
