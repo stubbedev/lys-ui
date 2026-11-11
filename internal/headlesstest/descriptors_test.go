@@ -1,0 +1,69 @@
+package headlesstest
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+)
+
+func TestBeyondNamesWhatIsHeldMoreOftenThanTheBaselineHoldsIt(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		held, baseline []string
+		want           []string
+	}{
+		{"the same", []string{"/a", "socket", "socket"}, []string{"/a", "socket", "socket"}, nil},
+		{"one more of a kind held twice", []string{"/a", "socket", "socket", "socket"}, []string{"/a", "socket", "socket"}, []string{"socket"}},
+		{"one of a kind the baseline lacks", []string{"/a", "/b", "socket"}, []string{"/a", "socket"}, []string{"/b"}},
+		{"fewer of one kind does not pay for more of another", []string{"/b", "/b"}, []string{"/a", "/b"}, []string{"/b"}},
+		{"fewer", []string{"socket"}, []string{"/a", "socket", "socket"}, nil},
+		{"nothing held", nil, []string{"/a"}, nil},
+		{"no baseline", []string{"/a", "socket"}, nil, []string{"/a", "socket"}},
+	} {
+		if got := beyond(tc.held, tc.baseline); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: beyond(%q, %q) = %q, want %q", tc.name, tc.held, tc.baseline, got, tc.want)
+		}
+	}
+}
+
+func TestDescriptorsNameAFileAProcessOpenedUntilItClosesIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "held")
+	before := descriptors(t, os.Getpid())
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := beyond(descriptors(t, os.Getpid()), before); !slices.Equal(got, []string{path}) {
+		_ = f.Close()
+		t.Fatalf("with %s open the process holds %q beyond what it did, want that file alone", path, got)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := descriptorsLeftBeyond(t, os.Getpid(), before); len(got) != 0 {
+		t.Errorf("with the file closed the process still holds %q beyond what it did", got)
+	}
+}
+
+func openPipe(t *testing.T) (closePipe func()) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		_ = r.Close()
+		_ = w.Close()
+	}
+}
+
+func TestDescriptorsCompareSocketsAndPipesByKind(t *testing.T) {
+	// The first pipe of a process brings the runtime's poller with it.
+	openPipe(t)()
+	before := descriptors(t, os.Getpid())
+	defer openPipe(t)()
+	if got := beyond(descriptors(t, os.Getpid()), before); !slices.Equal(got, []string{"pipe", "pipe"}) {
+		t.Errorf("with a pipe open the process holds %q beyond what it did, want its two ends by kind", got)
+	}
+}

@@ -7,7 +7,11 @@
 package headlesstest
 
 import (
+	"errors"
+	"io/fs"
 	"os"
+	"regexp"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -22,7 +26,7 @@ func TestHeadlessReconnectRebuildsWindows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := testEnv.StartClientEnv(bin, "client-"+t.Name(), "demo,wire", []string{"LYS_UI_DEMO_RECONNECT=1"})
+	c, err := testEnv.StartClientEnv(bin, "client-"+t.Name(), "demo,wire,frame", []string{"LYS_UI_DEMO_RECONNECT=1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,8 +38,12 @@ func TestHeadlessReconnectRebuildsWindows(t *testing.T) {
 	if _, err := w.Wait("demo", "state maximized=false", 10*time.Second); err != nil {
 		t.Fatalf("the window never configured: %v; %s", err, tailTraces(w, 15))
 	}
-
-	fdsBefore := openFDs(t, c.cmd.Process.Pid)
+	// A committed frame is the session whole: its socket, its shm arena
+	// and the pool made of it.
+	if err := w.WaitEver("frame", frameCommitted, 10*time.Second); err != nil {
+		t.Fatalf("the window never drew: %v", err)
+	}
+	before := restingDescriptors(t, c.cmd.Process.Pid)
 
 	testEnv.KillCompositor()
 	if err := testEnv.RestartCompositor(); err != nil {
@@ -57,9 +65,15 @@ func TestHeadlessReconnectRebuildsWindows(t *testing.T) {
 	default:
 	}
 	// Nothing of the old session leaks: its socket, shm arena, and
-	// buffers closed, the new session's replaced them one for one.
-	if after := openFDs(t, c.cmd.Process.Pid); after > fdsBefore {
-		t.Errorf("open fds %d after the rebuild, %d before the kill: the old session leaked", after, fdsBefore)
+	// buffers closed, the new session's replaced them one for one. The
+	// new session is whole once the rebuilt window drew; what it opens
+	// on the way there, a compose table it reads, a descriptor on its
+	// way to the compositor, closes by itself, and a leak never does.
+	if _, err := w.Wait("frame", frameCommitted, 10*time.Second); err != nil {
+		t.Fatalf("the rebuilt window never drew: %v", err)
+	}
+	if leaked := descriptorsLeftBeyond(t, c.cmd.Process.Pid, before); len(leaked) > 0 {
+		t.Errorf("the client holds descriptors after the rebuild that it did not before the kill, the old session leaked: %q\nbefore the kill: %q", leaked, before)
 	}
 
 	// Keyboard input reaches the rebuilt window on the new session: a
@@ -83,12 +97,95 @@ func TestHeadlessReconnectRebuildsWindows(t *testing.T) {
 	}
 }
 
-// openFDs counts a process's open file descriptors.
-func openFDs(t *testing.T, pid int) int {
+// frameCommitted is the client's trace of a frame it committed.
+const frameCommitted = "frame committed"
+
+// descriptorSettle is how long a client has to close what it opened on
+// the way to a session at rest, and restingReadings how many readings
+// in a row must agree for its descriptors to count as at rest.
+const (
+	descriptorSettle = 10 * time.Second
+	restingReadings  = 4
+)
+
+var numberedInode = regexp.MustCompile(`^(socket|pipe):\[\d+\]$`)
+
+// descriptors is what a process's open file descriptors refer to, in
+// order: the path each /proc/<pid>/fd entry links to, a socket and a
+// pipe without their inode numbers, so that two readings compare by
+// what is open rather than by which descriptor numbers hold it.
+func descriptors(t *testing.T, pid int) []string {
 	t.Helper()
-	entries, err := os.ReadDir("/proc/" + strconv.Itoa(pid) + "/fd")
+	dir := "/proc/" + strconv.Itoa(pid) + "/fd"
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return len(entries)
+	held := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		target, err := os.Readlink(dir + "/" + entry.Name())
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		held = append(held, numberedInode.ReplaceAllString(target, "$1"))
+	}
+	slices.Sort(held)
+	return held
+}
+
+// beyond lists what held has more of than baseline, both in order.
+func beyond(held, baseline []string) []string {
+	var extra []string
+	for _, target := range held {
+		for len(baseline) > 0 && baseline[0] < target {
+			baseline = baseline[1:]
+		}
+		if len(baseline) > 0 && baseline[0] == target {
+			baseline = baseline[1:]
+			continue
+		}
+		extra = append(extra, target)
+	}
+	return extra
+}
+
+// restingDescriptors reads a process's descriptors until
+// restingReadings readings in a row agree: one taken while the process
+// reads a file or hands a descriptor to its compositor is not what it
+// holds.
+func restingDescriptors(t *testing.T, pid int) []string {
+	t.Helper()
+	deadline := time.Now().Add(descriptorSettle)
+	held, agreed := descriptors(t, pid), 1
+	for agreed < restingReadings {
+		if time.Now().After(deadline) {
+			t.Fatalf("the descriptors of process %d never came to rest; the last reading: %q", pid, held)
+		}
+		time.Sleep(pollInterval)
+		again := descriptors(t, pid)
+		if slices.Equal(again, held) {
+			agreed++
+			continue
+		}
+		held, agreed = again, 1
+	}
+	return held
+}
+
+// descriptorsLeftBeyond waits for a process to hold nothing beyond
+// baseline and returns what it still holds beyond it when the wait
+// ends: nothing, unless it leaked.
+func descriptorsLeftBeyond(t *testing.T, pid int, baseline []string) []string {
+	t.Helper()
+	deadline := time.Now().Add(descriptorSettle)
+	for {
+		extra := beyond(descriptors(t, pid), baseline)
+		if len(extra) == 0 || time.Now().After(deadline) {
+			return extra
+		}
+		time.Sleep(pollInterval)
+	}
 }
