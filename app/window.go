@@ -184,7 +184,7 @@ type hostWindow struct {
 	frame        wlsession.FrameDone
 	framePending bool
 	shown        bool
-	showBy       time.Time
+	firstFrame   firstFrameHold
 	drawErr      error
 	// paintedPixels is the pixel count the last frame actually wrote
 	// on the CPU, and the area of the region it repainted on the GPU;
@@ -719,6 +719,7 @@ func (w *hostWindow) rescale(frac120 uint32) {
 	if frac120 == w.frac120 {
 		if !known {
 			w.noteScale()
+			w.scaleChanged()
 		}
 		return
 	}
@@ -1264,28 +1265,57 @@ func (w *hostWindow) focusChangeRects() []render.Rect {
 	return rects
 }
 
-const firstFrameAssetWait = 250 * time.Millisecond
+// A window's first frame waits for the icons and images its tree asked
+// for while they keep landing: firstFrameStall after the first usable
+// pass, or after the last of them landed, with none landing since, the
+// loads count as stuck and the frame goes out without the rest. However
+// steadily they land, it goes out firstFrameAssetLimit after the first
+// usable pass.
+const (
+	firstFrameStall      = 250 * time.Millisecond
+	firstFrameAssetLimit = time.Second
+)
+
+// firstFrameHold is a window's wait for its first frame's assets: when
+// the first usable pass came, how many assets the tree owed at the last
+// pass, and when the wait ends unless another lands.
+type firstFrameHold struct {
+	since, until time.Time
+	owed         int
+}
 
 func (w *hostWindow) holdsFirstFrame(now time.Time) bool {
 	if w.shown {
 		return false
 	}
-	if w.showBy.IsZero() {
-		w.showBy = now.Add(firstFrameAssetWait)
+	owed := w.assetsOwed()
+	h := &w.firstFrame
+	switch {
+	case h.since.IsZero():
+		h.since, h.until = now, now.Add(firstFrameStall)
+	case owed < h.owed:
+		h.until = now.Add(firstFrameStall)
 	}
-	return w.assetsOwed() && now.Before(w.showBy)
+	if limit := h.since.Add(firstFrameAssetLimit); h.until.After(limit) {
+		h.until = limit
+	}
+	h.owed = owed
+	return owed > 0 && now.Before(h.until)
 }
 
 func (w *hostWindow) firstFrameDeadline() (time.Time, bool) {
-	if w.shown || w.showBy.IsZero() || !w.assetsOwed() {
+	if w.shown || w.firstFrame.since.IsZero() || w.assetsOwed() == 0 {
 		return time.Time{}, false
 	}
-	return w.showBy, true
+	return w.firstFrame.until, true
 }
 
-func (w *hostWindow) assetsOwed() bool {
+func (w *hostWindow) assetsOwed() int {
 	if w.styleRoot != nil {
 		return widget.TreeAssetsOwed(w.styleRoot)
 	}
-	return w.router != nil && w.router.Root != nil && widget.TreeAssetsOwed(w.router.Root)
+	if w.router == nil || w.router.Root == nil {
+		return 0
+	}
+	return widget.TreeAssetsOwed(w.router.Root)
 }

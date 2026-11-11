@@ -136,9 +136,12 @@ func owe(root *node) (settle func()) {
 	return func() { root.owedAssets-- }
 }
 
-// TreeAssetsOwed reports whether a widget in root's tree has asked for an
-// icon or image whose answer has yet to land on the loop.
-func TreeAssetsOwed(root Widget) bool {
+// TreeAssetsOwed reports how many icons and images widgets in root's
+// tree have asked for whose answers have yet to land on the loop.
+func TreeAssetsOwed(root Widget) int {
 	n := nodeOf(root)
-	return n != nil && n.owedAssets > 0
+	if n == nil {
+		return 0
+	}
+	return n.owedAssets
 }

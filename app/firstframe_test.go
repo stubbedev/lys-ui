@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -19,15 +20,25 @@ type firstFrameRig struct {
 	now  time.Time
 }
 
-func newFirstFrameRig(t *testing.T) *firstFrameRig {
+func newFirstFrameRig(t *testing.T) *firstFrameRig { return newFirstFrameRigOf(t, 1) }
+
+// newFirstFrameRigOf is a window whose tree asks for icons icons before
+// its first frame, path the first of them, their answers held.
+func newFirstFrameRigOf(t *testing.T, icons int) *firstFrameRig {
 	t.Helper()
 	r := &firstFrameRig{t: t, now: time.Unix(1000, 0)}
-	r.path = filepath.Join(t.TempDir(), "eye.svg")
-	if err := os.WriteFile(r.path, []byte(scaleTestSVG), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
 	root := widget.NewBox(widget.Column, 0, 0)
-	root.Append(widget.NewThemeIcon(r.path, 16), false)
+	for i := range icons {
+		path := filepath.Join(dir, "eye"+strconv.Itoa(i)+".svg")
+		if err := os.WriteFile(path, []byte(scaleTestSVG), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			r.path = path
+		}
+		root.Append(widget.NewThemeIcon(path, 16), false)
+	}
 	r.h = newPaintHarness(root, 64, 48)
 	r.a = NewTestApplication(t, &wlsession.Session{})
 	r.a.step = func() error { return nil }
@@ -49,6 +60,16 @@ func (r *firstFrameRig) tick(after time.Duration) {
 	if err := r.a.tick(r.a.step, r.now); err != nil {
 		r.t.Fatalf("tick: %v", err)
 	}
+}
+
+func (r *firstFrameRig) answerOne() {
+	r.t.Helper()
+	if len(r.held) == 0 {
+		r.t.Fatal("no icon answer is held")
+	}
+	fn := r.held[0]
+	r.held = r.held[1:]
+	fn()
 }
 
 func (r *firstFrameRig) answer() {
@@ -78,13 +99,56 @@ func TestAWindowsFirstFrameWaitsForTheIconsItsTreeAskedFor(t *testing.T) {
 func TestAWindowsFirstFrameWaitsForAnIconOnlyAsLongAsItsBound(t *testing.T) {
 	r := newFirstFrameRig(t)
 	r.tick(0)
-	r.tick(firstFrameAssetWait - time.Millisecond)
+	r.tick(firstFrameStall - time.Millisecond)
 	if got := r.h.surf.commits; got != 0 {
 		t.Fatalf("%d commits inside the bound with the icon still owed", got)
 	}
 	r.tick(2 * time.Millisecond)
 	if got := r.h.surf.commits; got != 1 {
 		t.Errorf("%d commits past the bound, want the first frame without the icon", got)
+	}
+}
+
+func TestEachIconThatLandsGivesTheFirstFrameAnotherStall(t *testing.T) {
+	r := newFirstFrameRigOf(t, 3)
+	r.tick(0)
+	for range 2 {
+		r.tick(firstFrameStall - time.Millisecond)
+		r.answerOne()
+		r.tick(0)
+		if got := r.h.surf.commits; got != 0 {
+			t.Fatalf("%d commits with an icon landing inside the stall and another still owed", got)
+		}
+	}
+	r.tick(firstFrameStall - time.Millisecond)
+	if got := r.h.surf.commits; got != 0 {
+		t.Fatalf("%d commits inside the stall after the last landing", got)
+	}
+	r.answerOne()
+	r.tick(0)
+	if got := r.h.surf.commits; got != 1 {
+		t.Errorf("%d commits once every icon landed, %s after the first usable pass, want the first frame", got, 3*(firstFrameStall-time.Millisecond))
+	}
+}
+
+func TestIconsThatKeepLandingHoldTheFirstFrameOnlyToTheLimit(t *testing.T) {
+	step := firstFrameStall / 2
+	icons := int(firstFrameAssetLimit/step) + 2
+	r := newFirstFrameRigOf(t, icons)
+	r.tick(0)
+	waited := time.Duration(0)
+	for waited+step < firstFrameAssetLimit {
+		r.tick(step)
+		waited += step
+		r.answerOne()
+		r.tick(0)
+		if got := r.h.surf.commits; got != 0 {
+			t.Fatalf("%d commits %s into the wait, inside the limit with icons landing", got, waited)
+		}
+	}
+	r.tick(firstFrameAssetLimit - waited)
+	if got := r.h.surf.commits; got != 1 {
+		t.Errorf("%d commits at the limit with %d icons still owed, want the first frame without them", got, len(r.held))
 	}
 }
 

@@ -13,8 +13,11 @@ import (
 // was created at.
 func (w *Window) Scale() (num, denom int) { return w.app.scaleOf(w) }
 
-// OnScaleChanged runs fn on the loop each time the window's device scale
-// changes, with the new one as Scale reports it, until cancel.
+// OnScaleChanged runs fn on the loop, until cancel, with the device scale
+// as Scale reports it: when the compositor first confirms it through the
+// fractional-scale protocol, the scale the window was created at
+// included, and each time it changes after. Without that protocol the
+// scale the window was created at is final, and fn runs for none.
 func (w *Window) OnScaleChanged(fn func(num, denom int)) (cancel func()) {
 	return w.app.onScaleChanged(w, fn)
 }
@@ -23,8 +26,9 @@ func (w *Window) OnScaleChanged(fn func(num, denom int)) (cancel func()) {
 // Window.Scale does.
 func (l *LayerWindow) Scale() (num, denom int) { return l.app.scaleOf(l) }
 
-// OnScaleChanged runs fn on the loop each time the layer surface's device
-// scale changes, as Window.OnScaleChanged does.
+// OnScaleChanged runs fn on the loop when the compositor first confirms
+// the layer surface's device scale and each time it changes after, as
+// Window.OnScaleChanged does.
 func (l *LayerWindow) OnScaleChanged(fn func(num, denom int)) (cancel func()) {
 	return l.app.onScaleChanged(l, fn)
 }

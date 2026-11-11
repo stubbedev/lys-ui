@@ -58,3 +58,26 @@ func TestAScaleTheCompositorConfirmsUnchangedStillReachesTheTree(t *testing.T) {
 		t.Errorf("tree scale %d, want the confirmed %d", num, w.frac120)
 	}
 }
+
+func TestTheCompositorsFirstConfirmationReachesTheListenersUnchanged(t *testing.T) {
+	a := idleBudgetApp(t)
+	t.Cleanup(func() { widget.SetInvoker(nil) })
+	w := a.windows[0]
+	host := &Window{app: a}
+	w.win = host
+	var heard []int
+	defer host.OnScaleChanged(func(num, denom int) { heard = append(heard, num*120/denom) })()
+	created := int(w.frac120)
+	w.rescale(w.frac120)
+	if len(heard) != 1 || heard[0] != created {
+		t.Fatalf("the first confirmation, at the scale the window was created at, reached the listener as %v, want [%d]", heard, created)
+	}
+	w.rescale(w.frac120)
+	if len(heard) != 1 {
+		t.Errorf("a repeated confirmation reached the listener again: %v", heard)
+	}
+	w.rescale(240)
+	if len(heard) != 2 || heard[1] != 240 {
+		t.Errorf("the listener heard %v after a change to 240/120", heard)
+	}
+}
