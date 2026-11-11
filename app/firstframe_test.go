@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,8 +17,44 @@ type firstFrameRig struct {
 	a    *Application
 	h    *paintHarness
 	path string
-	held []func()
+	held heldAnswers
 	now  time.Time
+}
+
+type heldAnswers struct {
+	mu  sync.Mutex
+	fns []func()
+}
+
+func (h *heldAnswers) add(fn func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.fns = append(h.fns, fn)
+}
+
+func (h *heldAnswers) len() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.fns)
+}
+
+func (h *heldAnswers) takeOne() (func(), bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.fns) == 0 {
+		return nil, false
+	}
+	fn := h.fns[0]
+	h.fns = h.fns[1:]
+	return fn, true
+}
+
+func (h *heldAnswers) takeAll() []func() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	fns := h.fns
+	h.fns = nil
+	return fns
 }
 
 func newFirstFrameRig(t *testing.T) *firstFrameRig { return newFirstFrameRigOf(t, 1) }
@@ -45,10 +82,10 @@ func newFirstFrameRigOf(t *testing.T, icons int) *firstFrameRig {
 	r.a.wake = func(time.Duration) {}
 	r.a.arm = func(time.Time) {}
 	r.a.windows = []*hostWindow{r.h.wnd}
-	t.Cleanup(widget.SetInvoker(func(fn func()) { r.held = append(r.held, fn) }))
+	t.Cleanup(widget.SetInvoker(r.held.add))
 	r.h.wnd.rescale(120)
 	widget.WaitAssetLoads()
-	if len(r.held) == 0 {
+	if r.held.len() == 0 {
 		t.Fatal("the tree asked for no icon before its first frame")
 	}
 	return r
@@ -64,18 +101,15 @@ func (r *firstFrameRig) tick(after time.Duration) {
 
 func (r *firstFrameRig) answerOne() {
 	r.t.Helper()
-	if len(r.held) == 0 {
+	fn, ok := r.held.takeOne()
+	if !ok {
 		r.t.Fatal("no icon answer is held")
 	}
-	fn := r.held[0]
-	r.held = r.held[1:]
 	fn()
 }
 
 func (r *firstFrameRig) answer() {
-	held := r.held
-	r.held = nil
-	for _, fn := range held {
+	for _, fn := range r.held.takeAll() {
 		fn()
 	}
 }
@@ -148,7 +182,7 @@ func TestIconsThatKeepLandingHoldTheFirstFrameOnlyToTheLimit(t *testing.T) {
 	}
 	r.tick(firstFrameAssetLimit - waited)
 	if got := r.h.surf.commits; got != 1 {
-		t.Errorf("%d commits at the limit with %d icons still owed, want the first frame without them", got, len(r.held))
+		t.Errorf("%d commits at the limit with %d icons still owed, want the first frame without them", got, r.held.len())
 	}
 }
 
