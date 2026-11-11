@@ -14,6 +14,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/stubbedev/lys-lib/dbusx"
 	"github.com/stubbedev/lys-lib/debug"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
@@ -29,9 +30,19 @@ const (
 
 	portalCreateSession = portalShortcutsIface + ".CreateSession"
 	portalBindShortcuts = portalShortcutsIface + ".BindShortcuts"
+)
 
-	portalActivated   = portalShortcutsIface + ".Activated"
-	portalDeactivated = portalShortcutsIface + ".Deactivated"
+// shortcutTrigger is what Activated and Deactivated carry before their
+// options: the session, the shortcut, and when, in microseconds.
+type shortcutTrigger struct {
+	Session   dbus.ObjectPath `dbus:"session_handle"`
+	ID        string          `dbus:"shortcut_id"`
+	Timestamp uint64          `dbus:"timestamp"`
+}
+
+var (
+	shortcutActivated   = dbusx.NewSignal[shortcutTrigger](portalShortcutsIface, "Activated")
+	shortcutDeactivated = dbusx.NewSignal[shortcutTrigger](portalShortcutsIface, "Deactivated")
 )
 
 // portalShortcut is one entry of BindShortcuts' a(sa{sv}).
@@ -86,32 +97,29 @@ func (p *portalShortcuts) connect() error {
 	if p.live == nil {
 		p.live = map[string]*GlobalShortcut{}
 	}
-	p.onSignal = p.shortcutSignal
+	p.routes = p.shortcutRoutes()
 	p.mu.Unlock()
 	return p.portalClient.connect()
 }
 
-// shortcutSignal fires the live shortcut an Activated or Deactivated
-// names, on the loop through Invoke.
-func (p *portalShortcuts) shortcutSignal(sig *dbus.Signal) {
-	if sig.Name != portalActivated && sig.Name != portalDeactivated || len(sig.Body) < 2 {
-		return
-	}
-	id, _ := sig.Body[1].(string)
-	p.mu.Lock()
-	s := p.live[id]
-	p.mu.Unlock()
-	if s == nil {
-		return
-	}
-	pressed := sig.Name == portalActivated
-	var sec uint64
-	if len(sig.Body) >= 3 {
-		if us, ok := sig.Body[2].(uint64); ok {
-			sec = us / 1_000_000
+// shortcutRoutes fire the live shortcut an Activated or Deactivated
+// names, on the loop through Invoke, with the timestamp's Unix seconds.
+func (p *portalShortcuts) shortcutRoutes() []dbusx.Route {
+	fire := func(pressed bool) func(shortcutTrigger, dbus.Sequence) error {
+		return func(trigger shortcutTrigger, _ dbus.Sequence) error {
+			p.mu.Lock()
+			s := p.live[trigger.ID]
+			p.mu.Unlock()
+			if s != nil {
+				p.app.Invoke(func() { s.on(pressed, trigger.Timestamp/1_000_000) })
+			}
+			return nil
 		}
 	}
-	p.app.Invoke(func() { s.on(pressed, sec) })
+	return []dbusx.Route{
+		dbusx.On(shortcutActivated, portalPath, fire(true)),
+		dbusx.On(shortcutDeactivated, portalPath, fire(false)),
+	}
 }
 
 func (p *portalShortcuts) call(method string, opts map[string]dbus.Variant, args ...any) (portalResponseData, error) {

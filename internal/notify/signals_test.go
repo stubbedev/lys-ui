@@ -1,12 +1,17 @@
 package notify
 
 import (
+	"os"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stubbedev/lys-lib/dbustest"
+	"github.com/stubbedev/lys-lib/dbusx"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
+
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 )
 
 type classicDaemon struct{ sent chan uint32 }
@@ -69,7 +74,7 @@ func TestClassicBroadcastSignalsArrive(t *testing.T) {
 	id := n.Notify(Notification{Title: "t"})
 	<-d.sent
 	got := awaitOne(t, actions, func() {
-		if err := conn.Emit(classicPath, classicActionSig, uint32(7), "open"); err != nil {
+		if err := conn.Emit(classicPath, classicActionInvoked.Name(), uint32(7), "open"); err != nil {
 			t.Error(err)
 		}
 	})
@@ -77,7 +82,7 @@ func TestClassicBroadcastSignalsArrive(t *testing.T) {
 		t.Errorf("action = %q, want %q", got, id+"/open")
 	}
 	reason := awaitOne(t, closes, func() {
-		if err := conn.Emit(classicPath, classicClosedSig, uint32(7), uint32(ReasonDismissed)); err != nil {
+		if err := conn.Emit(classicPath, classicNotificationClosed.Name(), uint32(7), uint32(ReasonDismissed)); err != nil {
 			t.Error(err)
 		}
 	})
@@ -101,7 +106,7 @@ func TestPortalBroadcastSignalsArrive(t *testing.T) {
 	id := n.Notify(Notification{Title: "t"})
 	<-d.sent
 	got := awaitOne(t, actions, func() {
-		if err := conn.Emit(portalPath, portalActionSig, id, "open", []dbus.Variant{}); err != nil {
+		if err := conn.Emit(portalPath, portalActionInvoked.Name(), id, "open", []dbus.Variant{}); err != nil {
 			t.Error(err)
 		}
 	})
@@ -118,11 +123,15 @@ func TestClosedClassicNotificationIsForgotten(t *testing.T) {
 	n.Close(id)
 	awaitMethod(t, f, classicCloseCall)
 	f.mu.Lock()
-	ch := f.ch
+	routes := f.routes
 	f.mu.Unlock()
 	closed := make(chan struct{})
 	n.OnClosed(func(string, CloseReason) { close(closed) })
-	ch <- &dbus.Signal{Name: classicClosedSig, Body: []any{uint32(9), uint32(ReasonClosedByCall)}}
+	const daemon = ":1.9"
+	sig := &dbus.Signal{Sender: daemon, Path: classicPath, Name: classicNotificationClosed.Name(), Body: []any{uint32(9), uint32(ReasonClosedByCall)}}
+	if err := dbusx.Dispatch(sig, daemon, routes); err != nil {
+		t.Fatal(err)
+	}
 	<-closed
 	deadline := time.Now().Add(patience)
 	for n.classicID(9) != "" {
@@ -131,4 +140,63 @@ func TestClosedClassicNotificationIsForgotten(t *testing.T) {
 		}
 		runtime.Gosched()
 	}
+}
+
+// Every signal the notifier is sent closes its descriptors: those the
+// daemon appends to the spec's arguments, and those of an ActionInvoked
+// another peer sends in the daemon's place, which fires nothing.
+func TestSignalsCloseTheirDescriptors(t *testing.T) {
+	bus := dbustest.Session(t)
+	conn := bus.Conn(t)
+	d := &classicDaemon{sent: make(chan uint32, 4)}
+	if err := conn.ExportAll(d, classicPath, classicIface); err != nil {
+		t.Fatal(err)
+	}
+	claim(t, conn, classicName)
+	impostor := bus.Conn(t)
+	n := New()
+	defer n.Shutdown()
+	actions := make(chan string, 64)
+	n.OnAction(func(_, action string) { actions <- action })
+	n.Notify(Notification{Title: "t"})
+	<-d.sent
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close(); _ = w.Close() }()
+	fd := dbus.UnixFD(w.Fd())
+	emit := func(from *dbus.Conn, action string) {
+		t.Helper()
+		if err := from.Emit(classicPath, classicActionInvoked.Name(), uint32(7), action, fd); err != nil {
+			t.Error(err)
+		}
+	}
+	await := func(want string) {
+		t.Helper()
+		select {
+		case got := <-actions:
+			if got != want {
+				t.Fatalf("action %q, want %q", got, want)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatalf("the daemon's ActionInvoked %q never arrived", want)
+		}
+	}
+	emit(conn, "warm")
+	await("warm")
+	before := fdtest.Own(t)
+	const events = 16
+	for range events {
+		emit(impostor, "forged")
+	}
+	if err := impostor.BusObject().Call("org.freedesktop.DBus.GetId", 0).Err; err != nil {
+		t.Fatal(err)
+	}
+	for i := range events {
+		want := "open" + strconv.Itoa(i)
+		emit(conn, want)
+		await(want)
+	}
+	fdtest.RequireNoneBeyond(t, before, "the notifier read what the daemon and another peer sent")
 }

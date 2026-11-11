@@ -14,10 +14,12 @@ package notify
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/stubbedev/lys-lib/dbusx"
 	"github.com/stubbedev/lys-lib/logutil"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
@@ -83,11 +85,12 @@ const (
 	ReasonUnspecified  CloseReason = 4
 )
 
-// Bus is the session-bus connection a Notifier sends through.
+// Bus is the session-bus connection a Notifier sends through. Watch
+// follows the routes' signals from from until ctx ends or stop is
+// called, as dbusx.WatchSignals does.
 type Bus interface {
 	Call(ctx context.Context, dest string, path dbus.ObjectPath, method string, flags dbus.Flags, ret any, args ...any) error
-	Signal(ch chan<- *dbus.Signal)
-	AddMatch(ctx context.Context, iface string, path dbus.ObjectPath) error
+	Watch(ctx context.Context, from dbusx.Sender, failed func(error), routes ...dbusx.Route) (stop func() error, err error)
 	Close() error
 }
 
@@ -101,10 +104,12 @@ func (b connBus) Call(ctx context.Context, dest string, path dbus.ObjectPath, me
 	return call.Store(ret)
 }
 
-func (b connBus) Signal(ch chan<- *dbus.Signal) { b.conn.Signal(ch) }
-
-func (b connBus) AddMatch(ctx context.Context, iface string, path dbus.ObjectPath) error {
-	return b.conn.AddMatchSignalContext(ctx, dbus.WithMatchInterface(iface), dbus.WithMatchObjectPath(path))
+func (b connBus) Watch(ctx context.Context, from dbusx.Sender, failed func(error), routes ...dbusx.Route) (func() error, error) {
+	w, err := dbusx.WatchSignals(ctx, b.conn, from, failed, routes...)
+	if err != nil {
+		return nil, err
+	}
+	return w.Stop, nil
 }
 
 func (b connBus) Close() error { return b.conn.Close() }
@@ -124,11 +129,12 @@ type Notifier struct {
 	// probed, read and written on the worker alone, says the dial ran.
 	probed bool
 
-	mu     sync.Mutex
-	bus    Bus
-	mode   transport
-	nextID atomic.Int64
-	closed bool
+	mu      sync.Mutex
+	bus     Bus
+	unwatch func() error
+	mode    transport
+	nextID  atomic.Int64
+	closed  bool
 	// classicIDs maps the classic daemon's numeric ids to lys-ui's
 	// string ids (the portal transport uses the string id directly);
 	// classicOf is the reverse, for Close.
@@ -159,23 +165,16 @@ const (
 	portalIface       = "org.freedesktop.portal.Notification"
 	portalAdd         = portalIface + ".AddNotification"
 	portalRemove      = portalIface + ".RemoveNotification"
-	portalActionSig   = portalIface + ".ActionInvoked"
 
 	classicName      = "org.freedesktop.Notifications"
 	classicPath      = dbus.ObjectPath("/org/freedesktop/Notifications")
 	classicIface     = "org.freedesktop.Notifications"
 	classicNotify    = classicIface + ".Notify"
 	classicCloseCall = classicIface + ".CloseNotification"
-	classicActionSig = classicIface + ".ActionInvoked"
-	classicClosedSig = classicIface + ".NotificationClosed"
 
 	// callTimeout bounds every bus call; notifications are fire and
 	// forget, never worth hanging a caller for the godbus default 25s.
 	callTimeout = 3 * time.Second
-
-	// signalBuffer rides a slow app handler without godbus spawning a
-	// goroutine per signal.
-	signalBuffer = 16
 
 	queueDepth = 64
 )
@@ -219,25 +218,19 @@ func (n *Notifier) dialAndProbe() {
 		return
 	}
 	mode := n.probe(bus)
-	n.mu.Lock()
-	inert := n.closed || mode == transportNone
-	if !inert {
-		n.bus, n.mode = bus, mode
-	}
-	n.mu.Unlock()
-	if inert {
+	if mode == transportNone {
 		_ = bus.Close()
 		return
 	}
-	n.subscribe(bus)
-	iface, path := portalIface, portalPath
-	if mode == transportClassic {
-		iface, path = classicIface, classicPath
+	unwatch := n.subscribe(bus, mode)
+	n.mu.Lock()
+	closed := n.closed
+	if !closed {
+		n.bus, n.unwatch, n.mode = bus, unwatch, mode
 	}
-	ctx, cancel := context.WithTimeout(n.base, callTimeout)
-	defer cancel()
-	if err := bus.AddMatch(ctx, iface, path); err != nil {
-		logutil.L().Debug("notify: no signal match; actions and closes will not arrive", "iface", iface, "err", err)
+	n.mu.Unlock()
+	if closed {
+		n.release(bus, unwatch)
 	}
 }
 
@@ -262,40 +255,73 @@ func (n *Notifier) probe(bus Bus) transport {
 	return transportNone
 }
 
-// subscribe routes ActionInvoked and NotificationClosed signals to the
-// callbacks on one goroutine, which ends when the bus closes.
-func (n *Notifier) subscribe(bus Bus) {
-	ch := make(chan *dbus.Signal, signalBuffer)
-	bus.Signal(ch)
-	go func() {
-		for sig := range ch {
-			switch sig.Name {
-			case portalActionSig:
-				if len(sig.Body) >= 2 {
-					id, _ := sig.Body[0].(string)
-					action, _ := sig.Body[1].(string)
-					n.fireAction(id, action)
+type portalAction struct {
+	ID     string `dbus:"id"`
+	Action string `dbus:"action"`
+}
+
+type classicAction struct {
+	ID     uint32 `dbus:"id"`
+	Action string `dbus:"action_key"`
+}
+
+type classicClosed struct {
+	ID     uint32 `dbus:"id"`
+	Reason uint32 `dbus:"reason"`
+}
+
+var (
+	portalActionInvoked       = dbusx.NewSignal[portalAction](portalIface, "ActionInvoked")
+	classicActionInvoked      = dbusx.NewSignal[classicAction](classicIface, "ActionInvoked")
+	classicNotificationClosed = dbusx.NewSignal[classicClosed](classicIface, "NotificationClosed")
+)
+
+// subscribe routes the transport's ActionInvoked and NotificationClosed,
+// from the owner of its name alone, to the callbacks on one goroutine,
+// which ends when the bus closes or the notifier shuts down. A bus that
+// refuses the watch still sends; nothing it does is reported back, and
+// the returned stop is nil.
+func (n *Notifier) subscribe(bus Bus, mode transport) (stop func() error) {
+	from, routes := dbusx.FromOwner(portalDesktopName), []dbusx.Route{
+		dbusx.On(portalActionInvoked, portalPath, func(a portalAction, _ dbus.Sequence) error {
+			n.fireAction(a.ID, a.Action)
+			return nil
+		}),
+	}
+	if mode == transportClassic {
+		from, routes = dbusx.FromOwner(classicName), []dbusx.Route{
+			dbusx.On(classicActionInvoked, classicPath, func(a classicAction, _ dbus.Sequence) error {
+				if known := n.classicID(a.ID); known != "" {
+					n.fireAction(known, a.Action)
 				}
-			case classicActionSig:
-				if len(sig.Body) >= 2 {
-					id, _ := sig.Body[0].(uint32)
-					action, _ := sig.Body[1].(string)
-					if known := n.classicID(id); known != "" {
-						n.fireAction(known, action)
-					}
+				return nil
+			}),
+			dbusx.On(classicNotificationClosed, classicPath, func(c classicClosed, _ dbus.Sequence) error {
+				if known := n.classicID(c.ID); known != "" {
+					n.fireClosed(known, CloseReason(min(c.Reason, uint32(ReasonUnspecified))))
+					n.forgetClassic(c.ID)
 				}
-			case classicClosedSig:
-				if len(sig.Body) >= 2 {
-					id, _ := sig.Body[0].(uint32)
-					reason, _ := sig.Body[1].(uint32)
-					if known := n.classicID(id); known != "" {
-						n.fireClosed(known, CloseReason(min(reason, uint32(ReasonUnspecified))))
-						n.forgetClassic(id)
-					}
-				}
-			}
+				return nil
+			}),
 		}
-	}()
+	}
+	unread := func(err error) { logutil.L().Debug("notify: a signal was not read", "err", err) }
+	stop, err := bus.Watch(n.base, from, unread, routes...)
+	if err != nil {
+		logutil.L().Debug("notify: no signal watch; actions and closes will not arrive", "err", err)
+		return nil
+	}
+	return stop
+}
+
+// release ends the watch on bus, when there is one, and closes it.
+func (n *Notifier) release(bus Bus, unwatch func() error) {
+	if unwatch != nil {
+		if err := unwatch(); err != nil && !errors.Is(err, dbusx.ErrDisconnected) {
+			logutil.L().Debug("notify: stop watching the signals", "err", err)
+		}
+	}
+	_ = bus.Close()
 }
 
 // Notify queues nf for the worker and returns its id at once: generated
@@ -371,17 +397,17 @@ func (n *Notifier) Shutdown() {
 	settled := n.queue.Stop(callTimeout)
 	n.cancel()
 	n.mu.Lock()
-	bus := n.bus
-	n.bus, n.mode, n.closed = nil, transportNone, true
+	bus, unwatch := n.bus, n.unwatch
+	n.bus, n.unwatch, n.mode, n.closed = nil, nil, transportNone, true
 	n.mu.Unlock()
 	if bus == nil {
 		return
 	}
 	if settled {
-		_ = bus.Close()
+		n.release(bus, unwatch)
 		return
 	}
-	go func() { _ = bus.Close() }()
+	go n.release(bus, unwatch)
 }
 
 // OnAction registers the activation callback (id, action key); nil

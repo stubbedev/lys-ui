@@ -1,4 +1,4 @@
-package headlesstest
+package fdtest
 
 import (
 	"os"
@@ -21,27 +21,27 @@ func TestBeyondNamesWhatIsHeldMoreOftenThanTheBaselineHoldsIt(t *testing.T) {
 		{"nothing held", nil, []string{"/a"}, nil},
 		{"no baseline", []string{"/a", "socket"}, nil, []string{"/a", "socket"}},
 	} {
-		if got := beyond(tc.held, tc.baseline); !slices.Equal(got, tc.want) {
-			t.Errorf("%s: beyond(%q, %q) = %q, want %q", tc.name, tc.held, tc.baseline, got, tc.want)
+		if got := Beyond(tc.held, tc.baseline); !slices.Equal(got, tc.want) {
+			t.Errorf("%s: Beyond(%q, %q) = %q, want %q", tc.name, tc.held, tc.baseline, got, tc.want)
 		}
 	}
 }
 
 func TestDescriptorsNameAFileAProcessOpenedUntilItClosesIt(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "held")
-	before := descriptors(t, os.Getpid())
+	before := Own(t)
 	f, err := os.Create(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := beyond(descriptors(t, os.Getpid()), before); !slices.Equal(got, []string{path}) {
+	if got := Beyond(Own(t), before); !slices.Equal(got, []string{path}) {
 		_ = f.Close()
 		t.Fatalf("with %s open the process holds %q beyond what it did, want that file alone", path, got)
 	}
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if got := descriptorsLeftBeyond(t, os.Getpid(), before); len(got) != 0 {
+	if got := Beyond(Own(t), before); len(got) != 0 {
 		t.Errorf("with the file closed the process still holds %q beyond what it did", got)
 	}
 }
@@ -61,9 +61,9 @@ func openPipe(t *testing.T) (closePipe func()) {
 func TestDescriptorsCompareSocketsAndPipesByKind(t *testing.T) {
 	// The first pipe of a process brings the runtime's poller with it.
 	openPipe(t)()
-	before := descriptors(t, os.Getpid())
+	before := Own(t)
 	defer openPipe(t)()
-	if got := beyond(descriptors(t, os.Getpid()), before); !slices.Equal(got, []string{"pipe", "pipe"}) {
+	if got := Beyond(Own(t), before); !slices.Equal(got, []string{"pipe", "pipe"}) {
 		t.Errorf("with a pipe open the process holds %q beyond what it did, want its two ends by kind", got)
 	}
 }

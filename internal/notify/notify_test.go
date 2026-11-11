@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/dbusx"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 )
 
@@ -30,7 +31,7 @@ type fakeBus struct {
 	onCall  int
 	methods []string
 	closed  bool
-	ch      chan<- *dbus.Signal
+	routes  []dbusx.Route
 }
 
 func (f *fakeBus) Call(ctx context.Context, _ string, _ dbus.ObjectPath, method string, _ dbus.Flags, ret any, args ...any) error {
@@ -57,13 +58,12 @@ func (f *fakeBus) Call(ctx context.Context, _ string, _ dbus.ObjectPath, method 
 	return nil
 }
 
-func (f *fakeBus) Signal(ch chan<- *dbus.Signal) {
+func (f *fakeBus) Watch(_ context.Context, _ dbusx.Sender, _ func(error), routes ...dbusx.Route) (func() error, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.ch = ch
+	f.routes = routes
+	return func() error { return nil }, nil
 }
-
-func (f *fakeBus) AddMatch(context.Context, string, dbus.ObjectPath) error { return nil }
 
 func (f *fakeBus) Close() error {
 	f.mu.Lock()

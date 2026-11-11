@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/stubbedev/lys-lib/dbustest"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
+
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 )
 
 type mockDesktop struct {
@@ -24,6 +27,7 @@ type mockDesktop struct {
 	monitor dbus.ObjectPath
 	owner   string
 	print   mockPrint
+	handout *dbus.UnixFD
 }
 
 type mockRequest struct {
@@ -48,6 +52,10 @@ func (d *mockDesktop) handle(sender dbus.Sender, opts map[string]dbus.Variant) d
 }
 
 func (d *mockDesktop) unicast(dest string, path dbus.ObjectPath, member string, body ...any) {
+	unicastFrom(d.conn, dest, path, member, body...)
+}
+
+func unicastFrom(conn *dbus.Conn, dest string, path dbus.ObjectPath, member string, body ...any) {
 	iface, name, _ := strings.Cut(member, "|")
 	msg := &dbus.Message{
 		Type: dbus.TypeSignal,
@@ -62,10 +70,15 @@ func (d *mockDesktop) unicast(dest string, path dbus.ObjectPath, member string, 
 	if len(body) > 0 {
 		msg.Headers[dbus.FieldSignature] = dbus.MakeVariant(dbus.SignatureOf(body...))
 	}
-	d.conn.Send(msg, nil)
+	conn.Send(msg, nil)
 }
 
 func (d *mockDesktop) respond(sender dbus.Sender, path dbus.ObjectPath, code uint32, results map[string]dbus.Variant) {
+	d.mu.Lock()
+	if d.handout != nil {
+		results["handout"] = dbus.MakeVariant(*d.handout)
+	}
+	d.mu.Unlock()
 	go func() {
 		time.Sleep(10 * time.Millisecond)
 		d.unicast(string(sender), path, "org.freedesktop.portal.Request|Response", code, results)
@@ -396,4 +409,77 @@ func TestPortalCloseEndsAStuckRequest(t *testing.T) {
 	case <-time.After(portalRequestTimeout / 2):
 		t.Fatal("close waited on the portal")
 	}
+}
+
+// Every portal signal the application is sent closes its descriptors:
+// a Response's results, a StateChanged's state and the arguments after
+// those it declares, and a StateChanged another peer sends in the
+// portal's place, which reaches no listener.
+func TestPortalSignalsCloseTheirDescriptors(t *testing.T) {
+	d := startMockDesktop(t)
+	a := testApp(nil)
+	defer a.desktop().close()
+	impostor, err := dbus.ConnectSessionBus()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = impostor.Close() }()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close(); _ = w.Close() }()
+	fd := dbus.UnixFD(w.Fd())
+	d.mu.Lock()
+	d.handout = &fd
+	d.mu.Unlock()
+	var states []SessionState
+	monitoring := false
+	a.OnSessionStateChange(func(s SessionState, _ bool) { states = append(states, s) }, func(err error) {
+		if err != nil {
+			t.Error(err)
+		}
+		monitoring = true
+	})
+	pumpUntil(t, a, func() bool { return monitoring })
+	d.mu.Lock()
+	monitor, owner := d.monitor, d.owner
+	d.mu.Unlock()
+	change := func(from *dbus.Conn, state SessionState) {
+		unicastFrom(from, owner, portalPath, portalInhibitIface+"|StateChanged", monitor, map[string]dbus.Variant{
+			"session-state": dbus.MakeVariant(uint32(state)),
+			"handout":       dbus.MakeVariant(fd),
+		}, fd)
+	}
+	background := func() {
+		t.Helper()
+		answered := false
+		a.RequestBackground(BackgroundRequest{Reason: "sync"}, func(_ BackgroundResult, err error) {
+			if err != nil {
+				t.Error(err)
+			}
+			answered = true
+		})
+		pumpUntil(t, a, func() bool { return answered })
+	}
+	change(d.conn, SessionRunning)
+	pumpUntil(t, a, func() bool { return len(states) == 1 })
+	background()
+	before := fdtest.Own(t)
+	const events = 16
+	for range events {
+		change(impostor, SessionEnding)
+	}
+	if err := impostor.BusObject().Call("org.freedesktop.DBus.GetId", 0).Err; err != nil {
+		t.Fatal(err)
+	}
+	for i := range events {
+		change(d.conn, SessionRunning)
+		pumpUntil(t, a, func() bool { return len(states) == 2+i })
+		background()
+	}
+	if slices.Contains(states, SessionEnding) {
+		t.Errorf("states %v: another peer's StateChanged reached the listener", states)
+	}
+	fdtest.RequireNoneBeyond(t, before, "the application read the portal's Responses and StateChanged, and another peer's")
 }

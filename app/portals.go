@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/stubbedev/lys-lib/dbusx"
 	"github.com/stubbedev/lys-lib/debug"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
@@ -16,7 +17,6 @@ const (
 	portalInhibitIface    = "org.freedesktop.portal.Inhibit"
 	portalInhibit         = portalInhibitIface + ".Inhibit"
 	portalCreateMonitor   = portalInhibitIface + ".CreateMonitor"
-	portalStateChanged    = portalInhibitIface + ".StateChanged"
 	portalQueryEnd        = portalInhibitIface + ".QueryEndResponse"
 	portalBackgroundIface = "org.freedesktop.portal.Background"
 	portalRequestBg       = portalBackgroundIface + ".RequestBackground"
@@ -76,7 +76,7 @@ type desktopPortals struct {
 func (a *Application) desktop() *desktopPortals {
 	a.portalsOnce.Do(func() {
 		a.portals = &desktopPortals{app: a, queue: worker.New(portalQueueDepth)}
-		a.portals.onSignal = a.portals.signal
+		a.portals.routes = []dbusx.Route{dbusx.On(sessionStateChanged, portalPath, a.portals.stateChanged)}
 	})
 	return a.portals
 }
@@ -180,29 +180,39 @@ func objectPath(v dbus.Variant) (dbus.ObjectPath, bool) {
 	return "", false
 }
 
-func (d *desktopPortals) signal(sig *dbus.Signal) {
-	if sig.Name != portalStateChanged || len(sig.Body) < 2 {
-		return
-	}
-	handle, _ := sig.Body[0].(dbus.ObjectPath)
-	info, _ := sig.Body[1].(map[string]dbus.Variant)
+// sessionStateChange is what the Inhibit portal's StateChanged
+// carries: the monitor's session, and the state as a vardict.
+type sessionStateChange struct {
+	Session dbus.ObjectPath         `dbus:"session_handle"`
+	State   map[string]dbus.Variant `dbus:"state"`
+}
+
+var sessionStateChanged = dbusx.NewSignal[sessionStateChange](portalInhibitIface, "StateChanged")
+
+// stateChanged hands the session state of this application's monitor
+// to its listener on the loop, and answers a query-end once the
+// listener has had its say. The state carries no descriptor this
+// reads, so those it holds are closed.
+func (d *desktopPortals) stateChanged(c sessionStateChange, _ dbus.Sequence) error {
+	closed := dbus.CloseFDs([]any{c.State})
 	d.mu.Lock()
-	fn, mine := d.onState, handle == d.monitor
+	fn, mine := d.onState, c.Session == d.monitor
 	d.mu.Unlock()
 	if !mine || fn == nil {
-		return
+		return closed
 	}
 	state := SessionRunning
-	if v, ok := info["session-state"].Value().(uint32); ok {
+	if v, ok := c.State["session-state"].Value().(uint32); ok {
 		state = SessionState(v)
 	}
-	screensaver, _ := info["screensaver-active"].Value().(bool)
+	screensaver, _ := c.State["screensaver-active"].Value().(bool)
 	d.app.Invoke(func() {
 		fn(state, screensaver)
 		if state == SessionQueryEnd {
-			d.post("answer the query-end", func() error { return d.callPlain(portalQueryEnd, handle) }, nil)
+			d.post("answer the query-end", func() error { return d.callPlain(portalQueryEnd, c.Session) }, nil)
 		}
 	})
+	return closed
 }
 
 // BackgroundRequest asks to keep running without windows and,

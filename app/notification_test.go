@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/dbusx"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-ui/internal/notify"
@@ -119,9 +120,9 @@ func (f *fakeNotifyBus) Call(ctx context.Context, _ string, _ dbus.ObjectPath, m
 	return nil
 }
 
-func (f *fakeNotifyBus) Signal(chan<- *dbus.Signal) {}
-
-func (f *fakeNotifyBus) AddMatch(context.Context, string, dbus.ObjectPath) error { return nil }
+func (f *fakeNotifyBus) Watch(context.Context, dbusx.Sender, func(error), ...dbusx.Route) (func() error, error) {
+	return func() error { return nil }, nil
+}
 
 func (f *fakeNotifyBus) Close() error { return nil }
 
