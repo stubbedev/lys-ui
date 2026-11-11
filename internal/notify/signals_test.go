@@ -39,6 +39,19 @@ func claim(t *testing.T, conn *dbus.Conn, name string) {
 	}
 }
 
+func receive[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
+	timer := time.NewTimer(patience)
+	defer timer.Stop()
+	select {
+	case v := <-ch:
+		return v
+	case <-timer.C:
+	}
+	t.Fatalf("%s did not arrive within %v", what, patience)
+	panic("unreachable")
+}
+
 func awaitOne[T any](t *testing.T, got chan T, emit func()) T {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
@@ -72,7 +85,7 @@ func TestClassicBroadcastSignalsArrive(t *testing.T) {
 	n.OnAction(func(id, action string) { actions <- id + "/" + action })
 	n.OnClosed(func(_ string, reason CloseReason) { closes <- reason })
 	id := n.Notify(Notification{Title: "t"})
-	<-d.sent
+	receive(t, d.sent, "the Notify call at the daemon")
 	got := awaitOne(t, actions, func() {
 		if err := conn.Emit(classicPath, classicActionInvoked.Name(), uint32(7), "open"); err != nil {
 			t.Error(err)
@@ -104,7 +117,7 @@ func TestPortalBroadcastSignalsArrive(t *testing.T) {
 	actions := make(chan string, 64)
 	n.OnAction(func(id, action string) { actions <- id + "/" + action })
 	id := n.Notify(Notification{Title: "t"})
-	<-d.sent
+	receive(t, d.sent, "the Notify call at the daemon")
 	got := awaitOne(t, actions, func() {
 		if err := conn.Emit(portalPath, portalActionInvoked.Name(), id, "open", []dbus.Variant{}); err != nil {
 			t.Error(err)
@@ -132,7 +145,7 @@ func TestClosedClassicNotificationIsForgotten(t *testing.T) {
 	if err := dbusx.Dispatch(sig, daemon, routes); err != nil {
 		t.Fatal(err)
 	}
-	<-closed
+	receive(t, closed, "the NotificationClosed callback")
 	deadline := time.Now().Add(patience)
 	for n.classicID(9) != "" {
 		if time.Now().After(deadline) {
@@ -159,7 +172,7 @@ func TestSignalsCloseTheirDescriptors(t *testing.T) {
 	actions := make(chan string, 64)
 	n.OnAction(func(_, action string) { actions <- action })
 	n.Notify(Notification{Title: "t"})
-	<-d.sent
+	receive(t, d.sent, "the Notify call at the daemon")
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)

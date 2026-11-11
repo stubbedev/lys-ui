@@ -101,9 +101,11 @@ xkb_symbols "(unnamed)" {
 };
 `
 
+const backgroundPatience = 10 * time.Second
+
 func settleBackground(t *testing.T, s *Session) {
 	t.Helper()
-	if !s.background().Settle(10 * time.Second) {
+	if !s.background().Settle(backgroundPatience) {
 		t.Fatal("the background goroutine never settled")
 	}
 	s.runPosted()

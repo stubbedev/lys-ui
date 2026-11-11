@@ -1,12 +1,14 @@
 package wlsession
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stubbedev/lys-lib/testbuild"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -28,13 +30,51 @@ type blockedCompile struct {
 	ran     chan string
 }
 
-func holdCompiles(s *Session) *blockedCompile {
+var errCompileAbandoned = errors.New("the test ended with the keymap compile held")
+
+func holdCompiles(t *testing.T, s *Session) *blockedCompile {
 	b := &blockedCompile{release: make(chan compiledKeymap), ran: make(chan string, 8)}
+	ended := make(chan struct{})
+	t.Cleanup(func() { close(ended) })
 	s.compileKeymap = func(uintptr, uint32, uint32) compiledKeymap {
-		b.ran <- goroutineID()
-		return <-b.release
+		select {
+		case b.ran <- goroutineID():
+		case <-ended:
+			return compiledKeymap{err: errCompileAbandoned}
+		}
+		select {
+		case compiled := <-b.release:
+			return compiled
+		case <-ended:
+			return compiledKeymap{err: errCompileAbandoned}
+		}
 	}
 	return b
+}
+
+func (b *blockedCompile) started(t *testing.T) string {
+	t.Helper()
+	timer := time.NewTimer(backgroundPatience)
+	defer timer.Stop()
+	select {
+	case id := <-b.ran:
+		return id
+	case <-timer.C:
+	}
+	t.Fatalf("no keymap compile started within %v", backgroundPatience)
+	panic("unreachable")
+}
+
+func (b *blockedCompile) finish(t *testing.T, compiled compiledKeymap) {
+	t.Helper()
+	timer := time.NewTimer(backgroundPatience)
+	defer timer.Stop()
+	select {
+	case b.release <- compiled:
+		return
+	case <-timer.C:
+	}
+	t.Fatalf("no keymap compile was there to finish within %v", backgroundPatience)
 }
 
 // keymapEvent is a keymap event handing over the read end of a pipe,
@@ -68,15 +108,15 @@ const (
 
 func TestKeymapCompilesOffTheLoop(t *testing.T) {
 	s := usKeymap(t)
-	held := holdCompiles(s)
+	held := holdCompiles(t, s)
 	s.HandleKeyboardKeymap(keymapEvent(t))
-	if ran := <-held.ran; ran == goroutineID() {
+	if ran := held.started(t); ran == goroutineID() {
 		t.Error("the keymap compiled on the loop goroutine")
 	}
 	if !s.KeymapPending() {
 		t.Error("a keymap compiling is not reported pending")
 	}
-	held.release <- compiledLayout(t, "de")
+	held.finish(t, compiledLayout(t, "de"))
 	settleBackground(t, s)
 	if s.KeymapPending() {
 		t.Error("a settled keymap still reports pending")
@@ -87,12 +127,12 @@ func TestKeysBehindACompilingKeymapTranslateThroughIt(t *testing.T) {
 	s := usKeymap(t)
 	var typed []string
 	s.OnKey = func(code uint32, _ Mods) { typed = append(typed, s.KeyUTF8(code)) }
-	held := holdCompiles(s)
+	held := holdCompiles(t, s)
 	german := compiledLayout(t, "de")
 
 	s.HandleKeyboardKey(wl.KeyboardKeyEvent{Key: evdevY, State: 1, Serial: 1})
 	s.HandleKeyboardKeymap(keymapEvent(t))
-	<-held.ran
+	held.started(t)
 	s.HandleKeyboardKey(wl.KeyboardKeyEvent{Key: evdevY, State: 1, Serial: 2})
 	s.HandleKeyboardModifiers(wl.KeyboardModifiersEvent{ModsDepressed: 1})
 	s.HandleKeyboardKey(wl.KeyboardKeyEvent{Key: evdevZ, State: 1, Serial: 3})
@@ -105,7 +145,7 @@ func TestKeysBehindACompilingKeymapTranslateThroughIt(t *testing.T) {
 		t.Errorf("input serial %d moved ahead of its event", s.InputSerial())
 	}
 
-	held.release <- german
+	held.finish(t, german)
 	settleBackground(t, s)
 	if want := []string{"y", "z", "Y", "y"}; !slices.Equal(typed, want) {
 		t.Errorf("typed %q, want %q: the old keymap ahead of the event, the new one behind it", typed, want)
@@ -119,7 +159,7 @@ func TestKeymapsInARowEachKeepTheirKeys(t *testing.T) {
 	s := usKeymap(t)
 	var typed []string
 	s.OnKey = func(code uint32, _ Mods) { typed = append(typed, s.KeyUTF8(code)) }
-	held := holdCompiles(s)
+	held := holdCompiles(t, s)
 	german, american := compiledLayout(t, "de"), compiledLayout(t, "us")
 
 	s.HandleKeyboardKeymap(keymapEvent(t))
@@ -127,10 +167,10 @@ func TestKeymapsInARowEachKeepTheirKeys(t *testing.T) {
 	s.HandleKeyboardKeymap(keymapEvent(t))
 	s.HandleKeyboardKey(wl.KeyboardKeyEvent{Key: evdevY, State: 1, Serial: 2})
 
-	<-held.ran
-	held.release <- german
-	<-held.ran
-	held.release <- american
+	held.started(t)
+	held.finish(t, german)
+	held.started(t)
+	held.finish(t, american)
 	settleBackground(t, s)
 	if want := []string{"z", "y"}; !slices.Equal(typed, want) {
 		t.Errorf("typed %q, want %q", typed, want)
@@ -139,13 +179,13 @@ func TestKeymapsInARowEachKeepTheirKeys(t *testing.T) {
 
 func TestFocusWaitsWithTheKeys(t *testing.T) {
 	s := usKeymap(t)
-	held := holdCompiles(s)
+	held := holdCompiles(t, s)
 	first, second := &wl.Surface{}, &wl.Surface{}
 	var focusAtKey []*wl.Surface
 	s.OnKey = func(uint32, Mods) { focusAtKey = append(focusAtKey, s.KeyboardFocus()) }
 
 	s.HandleKeyboardKeymap(keymapEvent(t))
-	<-held.ran
+	held.started(t)
 	s.HandleKeyboardEnter(wl.KeyboardEnterEvent{Surface: first})
 	s.HandleKeyboardKey(wl.KeyboardKeyEvent{Key: evdevY, State: 1})
 	s.HandleKeyboardLeave(wl.KeyboardLeaveEvent{})
@@ -154,7 +194,7 @@ func TestFocusWaitsWithTheKeys(t *testing.T) {
 	if s.KeyboardFocus() != nil {
 		t.Error("focus moved ahead of the keymap")
 	}
-	held.release <- compiledLayout(t, "us")
+	held.finish(t, compiledLayout(t, "us"))
 	settleBackground(t, s)
 	if len(focusAtKey) != 2 || focusAtKey[0] != first || focusAtKey[1] != second {
 		t.Errorf("keys saw focus %v, want first then second", focusAtKey)
@@ -165,11 +205,11 @@ func TestKeysBehindAFailedKeymapStayUntranslated(t *testing.T) {
 	s := usKeymap(t)
 	var typed []string
 	s.OnKey = func(code uint32, _ Mods) { typed = append(typed, s.KeyUTF8(code)) }
-	held := holdCompiles(s)
+	held := holdCompiles(t, s)
 	s.HandleKeyboardKeymap(keymapEvent(t))
 	s.HandleKeyboardKey(wl.KeyboardKeyEvent{Key: evdevY, State: 1})
-	<-held.ran
-	held.release <- compiledKeymap{err: os.ErrInvalid}
+	held.started(t)
+	held.finish(t, compiledKeymap{err: os.ErrInvalid})
 	settleBackground(t, s)
 	if !slices.Equal(typed, []string{""}) {
 		t.Errorf("typed %q, want one untranslated key", typed)
@@ -180,16 +220,16 @@ func TestKeyQueueIsBounded(t *testing.T) {
 	s := usKeymap(t)
 	delivered := 0
 	s.OnKey = func(uint32, Mods) { delivered++ }
-	held := holdCompiles(s)
+	held := holdCompiles(t, s)
 	s.HandleKeyboardKeymap(keymapEvent(t))
-	<-held.ran
+	held.started(t)
 	for range maxQueuedKeyEvents + 10 {
 		s.HandleKeyboardKey(wl.KeyboardKeyEvent{Key: evdevY, State: 1})
 	}
 	if got := len(s.keyQueue); got != maxQueuedKeyEvents {
 		t.Errorf("queue holds %d, want the bound %d", got, maxQueuedKeyEvents)
 	}
-	held.release <- compiledLayout(t, "us")
+	held.finish(t, compiledLayout(t, "us"))
 	settleBackground(t, s)
 	if delivered != maxQueuedKeyEvents-1 {
 		t.Errorf("delivered %d, want the %d queued behind the keymap", delivered, maxQueuedKeyEvents-1)
@@ -226,7 +266,8 @@ func TestKeyWithNoKeymapPendingAllocatesNothing(t *testing.T) {
 }
 
 // Every keymap event's fd is closed: one compiled, one whose compile
-// fails, and one the background queue refuses because it is full.
+// fails, and one the background queue refuses because it is full, which
+// it is once one compile runs and backgroundQueue more wait behind it.
 func TestKeymapEventsCloseTheirFds(t *testing.T) {
 	t.Setenv("XKB_CONFIG_ROOT", findXKBData(t))
 	s := usKeymap(t)
@@ -235,14 +276,21 @@ func TestKeymapEventsCloseTheirFds(t *testing.T) {
 	deliverKeymap(t, s, wtypeKeymap)
 	deliverKeymap(t, s, "xkb_keymap { this does not compile")
 	fdtest.RequireNoneBeyond(t, before, "compiling a keymap and failing to")
-	held := holdCompiles(s)
+	held := holdCompiles(t, s)
+	s.HandleKeyboardKeymap(keymapEvent(t))
+	held.started(t)
 	const refused = 16
-	for range backgroundQueue + 1 + refused {
+	for range backgroundQueue + refused {
 		s.HandleKeyboardKeymap(keymapEvent(t))
 	}
-	for range backgroundQueue + 1 {
-		<-held.ran
-		held.release <- compiledKeymap{err: os.ErrInvalid}
+	if taken := len(fdtest.Beyond(fdtest.Own(t), before)); taken != 1+backgroundQueue {
+		t.Errorf("with one keymap compiling, %d queued and %d refused the process holds %d descriptors beyond what it did, want the %d taken", backgroundQueue, refused, taken, 1+backgroundQueue)
+	}
+	failed := compiledKeymap{err: os.ErrInvalid}
+	held.finish(t, failed)
+	for range backgroundQueue {
+		held.started(t)
+		held.finish(t, failed)
 	}
 	settleBackground(t, s)
 	fdtest.RequireNoneBeyond(t, before, "keymaps compiled behind each other and keymaps the background queue refused")

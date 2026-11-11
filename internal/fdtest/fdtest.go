@@ -5,6 +5,7 @@ package fdtest
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"regexp"
@@ -12,6 +13,7 @@ import (
 	"strconv"
 	"syscall"
 	"testing"
+	"time"
 )
 
 var numberedInode = regexp.MustCompile(`^(socket|pipe):\[\d+\]$`)
@@ -73,15 +75,42 @@ func RequireNoneBeyond(t testing.TB, baseline []string, after string) {
 	}
 }
 
-// RawPipe is a pipe the Go runtime has never seen, as a compositor
-// hands a source client the write end of a consumer's: w is a plain
-// blocking descriptor, never registered with the poller, and the
-// handler's under test to close. The test reads r and closes it.
+// RawPipe is a pipe whose write end the Go runtime has never seen, as a
+// compositor hands a source client the write end of a consumer's: w is
+// a plain blocking descriptor, never registered with the poller, and the
+// handler's under test to close. The test reads r, which takes
+// deadlines, and closes it.
 func RawPipe(t testing.TB) (r *os.File, w uintptr) {
 	t.Helper()
 	var fds [2]int
 	if err := syscall.Pipe2(fds[:], syscall.O_CLOEXEC); err != nil {
 		t.Fatal(err)
 	}
+	if err := syscall.SetNonblock(fds[0], true); err != nil {
+		t.Fatalf("make the read end of a raw pipe pollable: %v", err)
+	}
 	return os.NewFile(uintptr(fds[0]), "raw-pipe-r"), uintptr(fds[1])
+}
+
+const receiveLimit = 10 * time.Second
+
+// Receive hands send the write end of a fresh RawPipe and returns what
+// was written to it by the time every write end closed, failing the test
+// when one is still open after receiveLimit.
+func Receive(t testing.TB, send func(w uintptr)) []byte {
+	t.Helper()
+	r, w := RawPipe(t)
+	defer r.Close()
+	if err := r.SetReadDeadline(time.Now().Add(receiveLimit)); err != nil {
+		t.Fatalf("bound the read of %s: %v", r.Name(), err)
+	}
+	send(w)
+	got, err := io.ReadAll(r)
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("the raw pipe's write end was still open %v after it was handed over, %d bytes read", receiveLimit, len(got))
+	}
+	if err != nil {
+		t.Fatalf("read what was sent through %s: %v", r.Name(), err)
+	}
+	return got
 }

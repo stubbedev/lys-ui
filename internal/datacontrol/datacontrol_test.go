@@ -714,15 +714,7 @@ func TestSendRequestsCloseTheirFds(t *testing.T) {
 	var served []string
 	request := func(send func(fd uintptr)) {
 		t.Helper()
-		r, w := fdtest.RawPipe(t)
-		defer r.Close()
-		send(w)
-		_ = r.SetReadDeadline(time.Now().Add(10 * time.Second))
-		got, err := io.ReadAll(r)
-		if err != nil {
-			t.Fatalf("receiver read: %v", err)
-		}
-		served = append(served, string(got))
+		served = append(served, string(fdtest.Receive(t, send)))
 	}
 	unknownExt, unknownWlr := extSource{sink: d}, wlrSource{sink: d}
 	request(func(fd uintptr) {

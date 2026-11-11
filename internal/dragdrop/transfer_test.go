@@ -197,12 +197,7 @@ func TestSourceSendClosesEveryFd(t *testing.T) {
 	c := newTestController()
 	request := func(c *Controller, mime string) {
 		t.Helper()
-		r, w := fdtest.RawPipe(t)
-		defer r.Close()
-		c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: mime, Fd: w})
-		if _, err := io.ReadAll(r); err != nil {
-			t.Fatal(err)
-		}
+		fdtest.Receive(t, func(w uintptr) { c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: mime, Fd: w}) })
 	}
 	empty := newTestController()
 	failing := newTestController()

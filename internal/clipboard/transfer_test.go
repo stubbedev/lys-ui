@@ -304,12 +304,7 @@ func TestSendHandlersCloseTheirFds(t *testing.T) {
 	}
 	request := func(send func(string, uintptr), mime string) {
 		t.Helper()
-		r, w := fdtest.RawPipe(t)
-		defer r.Close()
-		send(mime, w)
-		if _, err := io.ReadAll(r); err != nil {
-			t.Fatal(err)
-		}
+		fdtest.Receive(t, func(w uintptr) { send(mime, w) })
 	}
 	request(sends[0], transfer.MimeText)
 	before := fdtest.Own(t)

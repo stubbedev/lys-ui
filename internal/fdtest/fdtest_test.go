@@ -1,10 +1,13 @@
 package fdtest
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestBeyondNamesWhatIsHeldMoreOftenThanTheBaselineHoldsIt(t *testing.T) {
@@ -65,5 +68,32 @@ func TestDescriptorsCompareSocketsAndPipesByKind(t *testing.T) {
 	defer openPipe(t)()
 	if got := Beyond(Own(t), before); !slices.Equal(got, []string{"pipe", "pipe"}) {
 		t.Errorf("with a pipe open the process holds %q beyond what it did, want its two ends by kind", got)
+	}
+}
+
+func TestARawPipesReadEndGivesUpAtItsDeadline(t *testing.T) {
+	r, w := RawPipe(t)
+	defer r.Close()
+	defer syscall.Close(int(w))
+	if err := r.SetReadDeadline(time.Now()); err != nil {
+		t.Fatalf("the read end takes no deadline: %v", err)
+	}
+	if _, err := r.Read(make([]byte, 1)); !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Errorf("a read past the deadline with the write end open returned %v, want the deadline", err)
+	}
+}
+
+func TestReceiveReturnsWhatTheSenderWroteBeforeClosing(t *testing.T) {
+	got := Receive(t, func(w uintptr) {
+		f := os.NewFile(w, "raw-pipe-w")
+		if _, err := f.WriteString("payload"); err != nil {
+			t.Error(err)
+		}
+		if err := f.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if string(got) != "payload" {
+		t.Errorf("received %q, want what was written", got)
 	}
 }
