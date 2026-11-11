@@ -8,6 +8,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/transfer"
 )
@@ -642,7 +643,7 @@ func TestBindRoutesThroughSession(t *testing.T) {
 func TestSourceSendWritesAndCloses(t *testing.T) {
 	c := newTestController()
 	c.srcData = transfer.Drag{Mimes: []string{"text/plain"}, Write: fakeWriter}
-	r, w := rawWriteEnd(t)
+	r, w := fdtest.RawPipe(t)
 	defer r.Close()
 	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain", Fd: w})
 
@@ -657,7 +658,7 @@ func TestSourceSendWritesAndCloses(t *testing.T) {
 
 	// A send for a drag without content writes nothing and closes.
 	c2 := newTestController()
-	r2, w2 := rawWriteEnd(t)
+	r2, w2 := fdtest.RawPipe(t)
 	defer r2.Close()
 	c2.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain", Fd: w2})
 	if n, err := r2.Read(buf); n != 0 || !errors.Is(err, io.EOF) {

@@ -1,7 +1,6 @@
 package wlsession
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -33,7 +32,9 @@ type queuedKeyEvent struct {
 
 // HandleKeyboardKeymap implements wl.KeyboardKeymapHandler: the keymap
 // fd is mapped (keymapfd.Read), compiled, and closed on the background
-// goroutine, with the loop free to draw meanwhile.
+// goroutine, with the loop free to draw meanwhile. The fd is the
+// handler's whatever becomes of the keymap: closed once compiled, or at
+// once when the background queue refuses it.
 //
 // Key codes mean what the latest keymap says, so what follows this event
 // on the wire must not be read through the one before it, and the old
@@ -48,8 +49,8 @@ type queuedKeyEvent struct {
 func (s *Session) HandleKeyboardKeymap(ev wl.KeyboardKeymapEvent) {
 	pending := &pendingKeymap{}
 	s.keyQueue = append(s.keyQueue, queuedKeyEvent{keymap: pending})
-	if ev.FdError != nil || ev.Fd == 0 {
-		s.settleKeymap(pending, compiledKeymap{err: errors.Join(fmt.Errorf("a keymap event without an fd (format %d)", ev.Format), ev.FdError)})
+	if ev.FdError != nil {
+		s.settleKeymap(pending, compiledKeymap{err: fmt.Errorf("a keymap event without an fd (format %d): %w", ev.Format, ev.FdError)})
 		return
 	}
 	compile := s.compileKeymap
@@ -59,6 +60,7 @@ func (s *Session) HandleKeyboardKeymap(ev wl.KeyboardKeymapEvent) {
 	fd, size, format := ev.Fd, ev.Size, ev.Format
 	posted := s.background().Post(func() {
 		compiled := compile(fd, size, format)
+		keymapfd.Close(fd)
 		s.postToLoop(func() { s.settleKeymap(pending, compiled) })
 	})
 	if !posted {
@@ -69,7 +71,6 @@ func (s *Session) HandleKeyboardKeymap(ev wl.KeyboardKeymapEvent) {
 
 func (s *Session) compileKeymapFd(fd uintptr, size, format uint32) compiledKeymap {
 	data, err := keymapfd.Read(fd, size)
-	keymapfd.Close(fd)
 	if err != nil {
 		return compiledKeymap{err: fmt.Errorf("read the keymap: %w", err)}
 	}

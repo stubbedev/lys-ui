@@ -150,11 +150,8 @@ func Copy(w io.Writer, r *os.File, limit int64, timeout time.Duration) (int64, e
 // requesting client closed its hold on that description when it handed
 // the end over, so nothing else observes the switch.
 func DeadlineWriter(fd uintptr, timeout time.Duration) (*os.File, error) {
-	if fd == 0 {
-		return nil, errors.New("xfer: nil send descriptor")
-	}
 	if err := syscall.SetNonblock(int(fd), true); err != nil {
-		return nil, fmt.Errorf("xfer: unblock send descriptor: %w", err)
+		return nil, fmt.Errorf("xfer: unblock send descriptor %d: %w", fd, err)
 	}
 	f := os.NewFile(fd, "wayland-payload-send")
 	if f == nil {
@@ -334,11 +331,8 @@ func (t *Transfers) Send(fd uintptr, timeout time.Duration, write func(io.Writer
 }
 
 func closeDescriptor(fd uintptr) error {
-	if fd == 0 {
-		return nil
-	}
 	if err := syscall.Close(int(fd)); err != nil {
-		return fmt.Errorf("xfer: close send descriptor: %w", err)
+		return fmt.Errorf("xfer: close send descriptor %d: %w", fd, err)
 	}
 	return nil
 }

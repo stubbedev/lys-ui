@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
 
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/transfer"
 )
@@ -92,7 +93,7 @@ func TestPrimarySendHandlerWritesAndCloses(t *testing.T) {
 	// and only it: the regular selection's payload stays untouched.
 	c := testClipboard(t)
 	c.content, c.primaryContent = transfer.Text("clipboard payload"), transfer.Text("primary payload")
-	r, w := rawWriteEnd(t)
+	r, w := fdtest.RawPipe(t)
 	defer r.Close()
 	c.HandleZwpPrimarySelectionSourceV1Send(wlr.ZwpPrimarySelectionSourceV1SendEvent{MimeType: "text/plain;charset=utf-8", Fd: w})
 
@@ -110,10 +111,9 @@ func TestPrimarySendHandlerWritesAndCloses(t *testing.T) {
 func TestPrimarySendHandlerIgnoresBrokenFds(t *testing.T) {
 	c := testClipboard(t)
 	c.primaryContent = transfer.Text("primary payload")
-	// A failed descriptor dup arrives as FdError or a zero fd; the
-	// handler must drop both without writing anywhere.
+	// A descriptor that did not arrive is FdError; the handler drops
+	// the request without writing anywhere.
 	c.HandleZwpPrimarySelectionSourceV1Send(wlr.ZwpPrimarySelectionSourceV1SendEvent{FdError: errors.New("dup failed")})
-	c.HandleZwpPrimarySelectionSourceV1Send(wlr.ZwpPrimarySelectionSourceV1SendEvent{})
 }
 
 func TestSelectionPayloadsStayIndependent(t *testing.T) {
@@ -123,10 +123,10 @@ func TestSelectionPayloadsStayIndependent(t *testing.T) {
 	c := testClipboard(t)
 	c.content, c.primaryContent = transfer.Text("clipboard payload"), transfer.Text("primary payload")
 
-	cr, cw := rawWriteEnd(t)
+	cr, cw := fdtest.RawPipe(t)
 	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: cw})
 
-	pr, pw := rawWriteEnd(t)
+	pr, pw := fdtest.RawPipe(t)
 	c.HandleZwpPrimarySelectionSourceV1Send(wlr.ZwpPrimarySelectionSourceV1SendEvent{MimeType: transfer.MimeText, Fd: pw})
 
 	want := map[string]string{"clipboard": "clipboard payload", "primary": "primary payload"}

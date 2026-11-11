@@ -12,6 +12,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 	"github.com/stubbedev/lys-ui/transfer"
 )
 
@@ -53,7 +54,7 @@ func TestImageSendByMime(t *testing.T) {
 	c := testClipboard(t)
 	c.content = content
 	send := func(mime string) []byte {
-		r, w := rawWriteEnd(t)
+		r, w := fdtest.RawPipe(t)
 		defer r.Close()
 		c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: mime, Fd: w})
 		data, _ := io.ReadAll(r)

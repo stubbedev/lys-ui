@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/transfer"
 )
@@ -87,7 +88,7 @@ func TestSelectionSurvivesDragOffers(t *testing.T) {
 func TestSendHandlerWritesAndCloses(t *testing.T) {
 	c := testClipboard(t)
 	c.content = transfer.Text("clipboard payload")
-	r, w := rawWriteEnd(t)
+	r, w := fdtest.RawPipe(t)
 	defer r.Close()
 	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain;charset=utf-8", Fd: w, FdError: nil})
 

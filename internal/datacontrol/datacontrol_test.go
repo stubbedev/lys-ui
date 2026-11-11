@@ -6,12 +6,15 @@ import (
 	"io"
 	"os"
 	"slices"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-lib/wlr"
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 	"github.com/stubbedev/lys-ui/internal/xfer"
 )
 
@@ -699,5 +702,68 @@ func TestReadToStreamsIntoTheCallersWriter(t *testing.T) {
 	}
 	if err := d.Offer(Clipboard).ReadTo("text/plain", 4, nil, func(int64, error) {}); err == nil {
 		t.Error("ReadTo without a writer started a transfer")
+	}
+}
+
+// Every send request's fd is closed, through either protocol's source
+// and whichever way the claim answers: a payload served, a mime never
+// offered, a claim cancelled, a Send or Pass source that closes what it
+// is handed, and a source the device does not know.
+func TestSendRequestsCloseTheirFds(t *testing.T) {
+	d, mgr, _ := newTestDevice(true)
+	var served []string
+	request := func(send func(fd uintptr)) {
+		t.Helper()
+		r, w := fdtest.RawPipe(t)
+		defer r.Close()
+		send(w)
+		_ = r.SetReadDeadline(time.Now().Add(10 * time.Second))
+		got, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatalf("receiver read: %v", err)
+		}
+		served = append(served, string(got))
+	}
+	unknownExt, unknownWlr := extSource{sink: d}, wlrSource{sink: d}
+	request(func(fd uintptr) {
+		unknownExt.HandleDataControlSourceV1Send(wlr.DataControlSourceV1SendEvent{MimeType: "text/plain", Fd: fd})
+	})
+	before := fdtest.Own(t)
+	const events = 16
+	for range events {
+		request(func(fd uintptr) {
+			unknownExt.HandleDataControlSourceV1Send(wlr.DataControlSourceV1SendEvent{MimeType: "text/plain", Fd: fd})
+		})
+		request(func(fd uintptr) {
+			unknownWlr.HandleZwlrDataControlSourceV1Send(wlr.ZwlrDataControlSourceV1SendEvent{MimeType: "text/plain", Fd: fd})
+		})
+	}
+	for _, way := range []Source{
+		textSource("data", "text/plain"),
+		{Mimes: []string{"text/plain"}, Send: func(_ string, w io.WriteCloser) {
+			_, _ = io.WriteString(w, "sent")
+			_ = w.Close()
+		}},
+		{Mimes: []string{"text/plain"}, Pass: func(_ string, pipe *os.File) {
+			_, _ = io.WriteString(pipe, "passed")
+			_ = pipe.Close()
+		}},
+	} {
+		if _, err := d.SetSelection(Clipboard, way); err != nil {
+			t.Fatal(err)
+		}
+		src := mgr.sources[len(mgr.sources)-1]
+		for range events {
+			request(func(fd uintptr) { d.send(src, "text/plain", fd, nil) })
+			request(func(fd uintptr) { d.send(src, "image/png", fd, nil) })
+		}
+		d.cancelled(src)
+		request(func(fd uintptr) { d.send(src, "text/plain", fd, nil) })
+	}
+	fdtest.RequireNoneBeyond(t, before, "answering send requests every way a claim does")
+	for _, want := range []string{"data", "sent", "passed"} {
+		if n := strings.Count(strings.Join(served, " "), want); n != events {
+			t.Errorf("%q served %d times, want %d", want, n, events)
+		}
 	}
 }

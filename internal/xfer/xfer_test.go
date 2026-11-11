@@ -231,9 +231,10 @@ func TestDeadlineWriterEndsOnEPIPE(t *testing.T) {
 	}
 }
 
-func TestDeadlineWriterRejectsANilDescriptor(t *testing.T) {
-	if _, err := DeadlineWriter(0, time.Second); err == nil {
-		t.Error("a failed dup (fd 0) was accepted")
+func TestDeadlineWriterRefusesADescriptorThatIsNotOpen(t *testing.T) {
+	const notOpen = 1 << 20
+	if _, err := DeadlineWriter(notOpen, time.Second); !errors.Is(err, syscall.EBADF) {
+		t.Errorf("DeadlineWriter(%d) = %v, want EBADF", notOpen, err)
 	}
 }
 

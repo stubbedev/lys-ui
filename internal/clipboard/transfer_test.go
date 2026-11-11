@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wlr"
 
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 	"github.com/stubbedev/lys-ui/internal/xfer"
 	"github.com/stubbedev/lys-ui/transfer"
 )
@@ -63,20 +64,6 @@ func shortTransferTimeout(t *testing.T) {
 	orig := transferTimeout
 	transferTimeout = 100 * time.Millisecond
 	t.Cleanup(func() { transferTimeout = orig })
-}
-
-// rawWriteEnd creates a pipe the Go runtime has never seen, so the
-// send handler's DeadlineWriter gets a descriptor like the compositor
-// hands out: never registered with the poller before, and the handler's
-// to close. (An os.Pipe end is already registered, which the deadline
-// arming would refuse.)
-func rawWriteEnd(t *testing.T) (*os.File, uintptr) {
-	t.Helper()
-	var fds [2]int
-	if err := syscall.Pipe2(fds[:], 0); err != nil {
-		t.Fatal(err)
-	}
-	return os.NewFile(uintptr(fds[0]), "clipboard-test-raw-r"), uintptr(fds[1])
 }
 
 func testClipboard(t *testing.T) *Clipboard {
@@ -232,7 +219,7 @@ func TestReadWithoutASchedulerFailsLoudly(t *testing.T) {
 func TestSendToAStuckConsumerIsBounded(t *testing.T) {
 	c := testClipboard(t)
 	c.content = transfer.Text(string(bytes.Repeat([]byte("p"), 1<<20)))
-	r, w := rawWriteEnd(t)
+	r, w := fdtest.RawPipe(t)
 	defer r.Close()
 	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: w})
 	c.Stop()
@@ -241,7 +228,7 @@ func TestSendToAStuckConsumerIsBounded(t *testing.T) {
 func TestPrimarySendToAStuckConsumerIsBounded(t *testing.T) {
 	c := testClipboard(t)
 	c.primaryContent = transfer.Text(string(bytes.Repeat([]byte("p"), 1<<20)))
-	r, w := rawWriteEnd(t)
+	r, w := fdtest.RawPipe(t)
 	defer r.Close()
 	c.HandleZwpPrimarySelectionSourceV1Send(wlr.ZwpPrimarySelectionSourceV1SendEvent{MimeType: transfer.MimeText, Fd: w})
 	c.Stop()
@@ -251,7 +238,7 @@ func TestSendDeadlineEndsAStuckConsumer(t *testing.T) {
 	shortTransferTimeout(t)
 	c := testClipboard(t)
 	c.content = transfer.Text(string(bytes.Repeat([]byte("p"), 1<<20)))
-	r, w := rawWriteEnd(t)
+	r, w := fdtest.RawPipe(t)
 	defer r.Close()
 	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: w})
 	data, err := io.ReadAll(r)
@@ -268,7 +255,7 @@ func TestSendDeadlineEndsAStuckConsumer(t *testing.T) {
 func TestSendToAClosedConsumerEndsOnEPIPE(t *testing.T) {
 	c := testClipboard(t)
 	c.content = transfer.Text("nobody reads this")
-	r, w := rawWriteEnd(t)
+	r, w := fdtest.RawPipe(t)
 	r.Close()
 	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: w})
 	c.Stop()
@@ -302,4 +289,42 @@ func pickTextMime(present func(string) bool) string {
 
 func pickImageMime(present func(string) bool) string {
 	return transfer.Pick(transfer.ImageMimes, present)
+}
+
+// Every send request's fd is closed, regular and primary: one served,
+// one for a mime the content does not offer, and one past Stop.
+func TestSendHandlersCloseTheirFds(t *testing.T) {
+	c := testClipboard(t)
+	c.content, c.primaryContent = transfer.Text("clipboard payload"), transfer.Text("primary payload")
+	sends := []func(mime string, fd uintptr){
+		func(mime string, fd uintptr) { c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: mime, Fd: fd}) },
+		func(mime string, fd uintptr) {
+			c.HandleZwpPrimarySelectionSourceV1Send(wlr.ZwpPrimarySelectionSourceV1SendEvent{MimeType: mime, Fd: fd})
+		},
+	}
+	request := func(send func(string, uintptr), mime string) {
+		t.Helper()
+		r, w := fdtest.RawPipe(t)
+		defer r.Close()
+		send(mime, w)
+		if _, err := io.ReadAll(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	request(sends[0], transfer.MimeText)
+	before := fdtest.Own(t)
+	const events = 16
+	for range events {
+		for _, send := range sends {
+			request(send, transfer.MimeText)
+			request(send, "image/png")
+		}
+	}
+	c.Stop()
+	for range events {
+		for _, send := range sends {
+			request(send, transfer.MimeText)
+		}
+	}
+	fdtest.RequireNoneBeyond(t, before, "serving, refusing and stopping send requests")
 }

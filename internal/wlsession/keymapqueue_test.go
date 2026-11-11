@@ -11,6 +11,9 @@ import (
 	"github.com/stubbedev/lys-lib/testbuild"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/xkb"
+	"golang.org/x/sys/unix"
+
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 )
 
 func goroutineID() string {
@@ -34,14 +37,18 @@ func holdCompiles(s *Session) *blockedCompile {
 	return b
 }
 
+// keymapEvent is a keymap event handing over the read end of a pipe,
+// which the handler then owns.
 func keymapEvent(t *testing.T) wl.KeyboardKeymapEvent {
 	t.Helper()
-	r, _, err := os.Pipe()
-	if err != nil {
+	var ends [2]int
+	if err := unix.Pipe2(ends[:], unix.O_CLOEXEC); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = r.Close() })
-	return wl.KeyboardKeymapEvent{Format: 1, Fd: r.Fd(), Size: 1}
+	if err := unix.Close(ends[1]); err != nil {
+		t.Fatal(err)
+	}
+	return wl.KeyboardKeymapEvent{Format: 1, Fd: uintptr(ends[0]), Size: 1}
 }
 
 func compiledLayout(t *testing.T, layout string) compiledKeymap {
@@ -216,4 +223,27 @@ func TestKeyWithNoKeymapPendingAllocatesNothing(t *testing.T) {
 	}); got != 0 {
 		t.Errorf("a key allocates %.1f times", got)
 	}
+}
+
+// Every keymap event's fd is closed: one compiled, one whose compile
+// fails, and one the background queue refuses because it is full.
+func TestKeymapEventsCloseTheirFds(t *testing.T) {
+	t.Setenv("XKB_CONFIG_ROOT", findXKBData(t))
+	s := usKeymap(t)
+	deliverKeymap(t, s, wtypeKeymap)
+	before := fdtest.Own(t)
+	deliverKeymap(t, s, wtypeKeymap)
+	deliverKeymap(t, s, "xkb_keymap { this does not compile")
+	fdtest.RequireNoneBeyond(t, before, "compiling a keymap and failing to")
+	held := holdCompiles(s)
+	const refused = 16
+	for range backgroundQueue + 1 + refused {
+		s.HandleKeyboardKeymap(keymapEvent(t))
+	}
+	for range backgroundQueue + 1 {
+		<-held.ran
+		held.release <- compiledKeymap{err: os.ErrInvalid}
+	}
+	settleBackground(t, s)
+	fdtest.RequireNoneBeyond(t, before, "keymaps compiled behind each other and keymaps the background queue refused")
 }

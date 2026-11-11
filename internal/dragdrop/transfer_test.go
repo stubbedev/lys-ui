@@ -11,6 +11,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 	"github.com/stubbedev/lys-ui/internal/xfer"
 	"github.com/stubbedev/lys-ui/transfer"
 )
@@ -82,19 +83,6 @@ func shortTransferTimeout(t *testing.T) {
 	orig := transferTimeout
 	transferTimeout = 100 * time.Millisecond
 	t.Cleanup(func() { transferTimeout = orig })
-}
-
-// rawWriteEnd creates a pipe the Go runtime has never seen, so the
-// send handler's DeadlineWriter gets a descriptor like the compositor
-// hands out: never registered with the poller before. (An os.Pipe end
-// is already registered, which the deadline arming would refuse.)
-func rawWriteEnd(t *testing.T) (*os.File, uintptr) {
-	t.Helper()
-	var fds [2]int
-	if err := syscall.Pipe2(fds[:], 0); err != nil {
-		t.Fatal(err)
-	}
-	return os.NewFile(uintptr(fds[0]), "dragdrop-test-raw-r"), uintptr(fds[1])
 }
 
 type receiveResult struct {
@@ -197,8 +185,40 @@ func TestDropReturnsBeforeASilentSource(t *testing.T) {
 func TestSourceSendToAStuckConsumerIsBounded(t *testing.T) {
 	c := newTestController()
 	c.srcData = transfer.Drag{Mimes: []string{"text/plain"}, Write: fakeSourceWriter(bytes.Repeat([]byte("d"), 1<<20))}
-	r, w := rawWriteEnd(t)
+	r, w := fdtest.RawPipe(t)
 	defer r.Close()
 	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: "text/plain", Fd: w})
 	c.Stop()
+}
+
+// Every send request's fd is closed: one served, one for a drag
+// without content, one whose provider fails, and one past Stop.
+func TestSourceSendClosesEveryFd(t *testing.T) {
+	c := newTestController()
+	request := func(c *Controller, mime string) {
+		t.Helper()
+		r, w := fdtest.RawPipe(t)
+		defer r.Close()
+		c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: mime, Fd: w})
+		if _, err := io.ReadAll(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	empty := newTestController()
+	failing := newTestController()
+	failing.srcData = transfer.Drag{Mimes: []string{"text/plain"}, Write: func(string, io.Writer) error { return io.ErrShortWrite }}
+	c.srcData = transfer.Drag{Mimes: []string{"text/plain"}, Write: fakeWriter}
+	request(c, "text/plain")
+	before := fdtest.Own(t)
+	const events = 16
+	for range events {
+		request(c, "text/plain")
+		request(empty, "text/plain")
+		request(failing, "text/plain")
+	}
+	c.Stop()
+	for range events {
+		request(c, "text/plain")
+	}
+	fdtest.RequireNoneBeyond(t, before, "serving, failing and stopping drag send requests")
 }

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"syscall"
 	"testing"
 )
 
@@ -70,4 +71,17 @@ func RequireNoneBeyond(t testing.TB, baseline []string, after string) {
 	if extra := Beyond(Own(t), baseline); len(extra) != 0 {
 		t.Errorf("after %s the process holds %q beyond what it did", after, extra)
 	}
+}
+
+// RawPipe is a pipe the Go runtime has never seen, as a compositor
+// hands a source client the write end of a consumer's: w is a plain
+// blocking descriptor, never registered with the poller, and the
+// handler's under test to close. The test reads r and closes it.
+func RawPipe(t testing.TB) (r *os.File, w uintptr) {
+	t.Helper()
+	var fds [2]int
+	if err := syscall.Pipe2(fds[:], syscall.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	return os.NewFile(uintptr(fds[0]), "raw-pipe-r"), uintptr(fds[1])
 }
