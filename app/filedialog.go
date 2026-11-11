@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/debug"
+	"github.com/stubbedev/lys-lib/xdg"
 
 	"github.com/stubbedev/lys-ui/internal/recentfiles"
 	"github.com/stubbedev/lys-ui/widget"
@@ -96,8 +97,9 @@ func (a *Application) fileDialog(parent *Window, mode widget.FileMode, defTitle,
 		chooser.SetSaveName(cfg.StartName)
 	}
 	if cfg.Recents {
-		m := a.recentsManager()
-		chooser.SetRecentsSource(func() []string { return existingRecents(m) })
+		if m, ok := a.recentsManager(); ok {
+			chooser.SetRecentsSource(func() []string { return existingRecents(m) })
+		}
 	}
 	var chosen []string
 	var d *Dialog
@@ -224,12 +226,18 @@ const recentsStopTimeout = 3 * time.Second
 
 // recentsManager lazily owns the desktop shared recents list. The list
 // lives on the manager's worker, its load first in line; touch it only
-// through Post.
-func (a *Application) recentsManager() *recentfiles.Manager {
+// through Post. It is false, and logged, when the environment names no
+// place to keep the list.
+func (a *Application) recentsManager() (*recentfiles.Manager, bool) {
 	if a.recentFiles != nil {
-		return a.recentFiles
+		return a.recentFiles, true
 	}
-	m := recentfiles.New(recentfiles.DefaultPath())
+	path, err := recentfiles.DefaultPath(xdg.OS)
+	if err != nil {
+		debug.Log("config", "recents: %v", err)
+		return nil, false
+	}
+	m := recentfiles.New(path)
 	a.recentFiles = m
 	a.OnStop(func() {
 		if !m.Stop(recentsStopTimeout) {
@@ -241,7 +249,7 @@ func (a *Application) recentsManager() *recentfiles.Manager {
 			debug.Log("config", "recents: %v", err)
 		}
 	})
-	return m
+	return m, true
 }
 
 func postRecents(m *recentfiles.Manager, work func()) bool {
@@ -253,7 +261,10 @@ func postRecents(m *recentfiles.Manager, work func()) bool {
 }
 
 func (a *Application) addRecents(paths []string) {
-	m := a.recentsManager()
+	m, ok := a.recentsManager()
+	if !ok {
+		return
+	}
 	postRecents(m, func() {
 		if err := m.Add("lys-ui", paths...); err != nil {
 			debug.Log("config", "recents add %v: %v", paths, err)

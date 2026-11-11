@@ -144,7 +144,8 @@ portal), in a standard dialog:
 
 `FileChooser.SetSource` swaps the listing backend (`DirSource`).
 Recents are the XDG `recently-used.xbel`, shared with other desktop
-apps and written atomically.
+apps and written atomically. An environment where neither
+`XDG_DATA_HOME` nor `HOME` is an absolute path keeps no list.
 
 ## Clipboard and drag and drop
 

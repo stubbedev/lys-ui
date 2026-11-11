@@ -252,7 +252,11 @@ func TestFileCursorRefusesATruncatedFile(t *testing.T) {
 }
 
 func TestCursorSearchPathAddsTheLegacyDirectories(t *testing.T) {
-	env := map[string]string{"HOME": "/h"}
+	env := map[string]string{"HOME": "h"}
+	if dirs := cursorSearchPath(func(k string) string { return env[k] }); slices.ContainsFunc(dirs, func(dir string) bool { return !filepath.IsAbs(dir) }) {
+		t.Errorf("a relative HOME gave %v, with a directory relative to the working directory", dirs)
+	}
+	env["HOME"] = "/h"
 	dirs := cursorSearchPath(func(k string) string { return env[k] })
 	for _, want := range []string{"/h/.local/share/icons", "/h/.icons", "/usr/share/icons", "/usr/share/pixmaps", "/h/.cursors", "/usr/share/cursors/xorg-x11"} {
 		if !slices.Contains(dirs, want) {

@@ -14,6 +14,7 @@ import (
 	sys "github.com/stubbedev/lys-lib/third_party/wayland/os"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/xcursor"
+	"github.com/stubbedev/lys-lib/xdg"
 	"golang.org/x/sys/unix"
 )
 
@@ -107,7 +108,7 @@ func cursorThemeFromEnv(defaultSize uint32) (string, uint32) {
 
 func newCursorReaderFromEnv(defaultSize uint32) *cursorReader {
 	name, size := cursorThemeFromEnv(defaultSize)
-	lookup, openErr := openCursorThemes(name, cursorSearchPath(os.Getenv))
+	lookup, openErr := openCursorThemes(name, cursorSearchPath(xdg.OS))
 	return &cursorReader{size: size, lookup: lookup, openErr: openErr}
 }
 
@@ -121,12 +122,12 @@ func (r *cursorReader) frames(name string) ([]xcursor.Image, error) {
 
 // cursorSearchPath is xcursor's search path and, unless XCURSOR_PATH
 // replaces it, the two legacy directories libXcursor also looks in.
-func cursorSearchPath(getenv func(string) string) []string {
-	dirs := xcursor.SearchPath(getenv)
-	if getenv("XCURSOR_PATH") != "" {
+func cursorSearchPath(env xdg.Env) []string {
+	dirs := xcursor.SearchPath(env)
+	if env("XCURSOR_PATH") != "" {
 		return dirs
 	}
-	if home := getenv("HOME"); home != "" {
+	if home, ok := env.Home(); ok {
 		dirs = append(dirs, filepath.Join(home, ".cursors"))
 	}
 	return append(dirs, "/usr/share/cursors/xorg-x11")

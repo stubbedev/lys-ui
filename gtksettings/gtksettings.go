@@ -160,16 +160,12 @@ func Load(env xdg.Env) (Settings, error) {
 // system config dirs from least to most important ($XDG_CONFIG_DIRS
 // lists the most important first), then the user's.
 func Paths(env xdg.Env) []string {
-	dirs := env.ConfigDirs()
-	slices.Reverse(dirs)
-	if home, ok := env.ConfigHome(); ok {
-		dirs = append(dirs, home)
+	paths := env.ConfigSearchPath()
+	slices.Reverse(paths)
+	for i, dir := range paths {
+		paths[i] = filepath.Join(dir, "gtk-4.0", "settings.ini")
 	}
-	out := make([]string, len(dirs))
-	for i, d := range dirs {
-		out[i] = filepath.Join(d, "gtk-4.0", "settings.ini")
-	}
-	return out
+	return paths
 }
 
 // merge overlays the keys next sets.

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+	"github.com/stubbedev/lys-lib/xdg"
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/stubbedev/lys-ui/internal/recentfiles"
@@ -30,6 +31,15 @@ func openButtonApp(t *testing.T) *Application {
 		}
 	})
 	return a
+}
+
+func sharedRecents(t *testing.T) *recentfiles.Manager {
+	t.Helper()
+	path, err := recentfiles.DefaultPath(xdg.OS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return recentfiles.New(path)
 }
 
 func openButtonFiles(t *testing.T, names ...string) []string {
@@ -65,7 +75,7 @@ func TestOpenButtonChoose(t *testing.T) {
 	if rec := ob.Recents(); rec[0] != path {
 		t.Fatalf("recents = %v, want [%s]", rec, path)
 	}
-	m := recentfiles.New(recentfiles.DefaultPath())
+	m := sharedRecents(t)
 	if err := m.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +91,7 @@ func TestOpenButtonChoose(t *testing.T) {
 func TestOpenButtonRecentsDropdown(t *testing.T) {
 	a := openButtonApp(t)
 	paths := openButtonFiles(t, "a.txt", "b.txt", "c.txt")
-	m := recentfiles.New(recentfiles.DefaultPath())
+	m := sharedRecents(t)
 	if err := m.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +137,7 @@ func TestOpenButtonRecentsDropdown(t *testing.T) {
 func TestOpenButtonDropdownPick(t *testing.T) {
 	a := openButtonApp(t)
 	paths := openButtonFiles(t, "a.txt", "b.txt", "c.txt")
-	m := recentfiles.New(recentfiles.DefaultPath())
+	m := sharedRecents(t)
 	if err := m.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +210,10 @@ func TestOpenButtonDialogRouting(t *testing.T) {
 func TestOpenButtonWaitsOnNoDisk(t *testing.T) {
 	a := openButtonApp(t)
 	path := openButtonFiles(t, "one.txt")[0]
-	m := a.recentsManager()
+	m, ok := a.recentsManager()
+	if !ok {
+		t.Fatal("no recents manager with a data home set")
+	}
 	hold := make(chan struct{})
 	if !m.Post(func() { <-hold }) {
 		t.Fatal("the worker refused the holding job")
@@ -223,7 +236,7 @@ func TestOpenButtonWaitsOnNoDisk(t *testing.T) {
 	if !m.Stop(5 * time.Second) {
 		t.Fatal("the worker never settled")
 	}
-	fresh := recentfiles.New(recentfiles.DefaultPath())
+	fresh := sharedRecents(t)
 	if err := fresh.Load(); err != nil {
 		t.Fatal(err)
 	}
@@ -237,11 +250,47 @@ func TestRecentsReachTheFileAtRunExit(t *testing.T) {
 	path := openButtonFiles(t, "one.txt")[0]
 	a.addRecents([]string{path})
 	a.watchers.shutdown()
-	fresh := recentfiles.New(recentfiles.DefaultPath())
+	fresh := sharedRecents(t)
 	if err := fresh.Load(); err != nil {
 		t.Fatal(err)
 	}
 	if l := fresh.List(); len(l) != 1 || l[0].Path != path {
 		t.Errorf("file holds %+v after the exit, want the choice", l)
+	}
+}
+
+// TestWithoutADataHomeAChoiceIsDeliveredAndNoListIsKept covers an
+// environment that names no user data directory: the choice still
+// reaches the app, and no recents file appears in the working
+// directory in the list's stead.
+func TestWithoutADataHomeAChoiceIsDeliveredAndNoListIsKept(t *testing.T) {
+	a := openButtonApp(t)
+	path := openButtonFiles(t, "one.txt")[0]
+	cwd := t.TempDir()
+	t.Chdir(cwd)
+	t.Setenv("XDG_DATA_HOME", "share")
+	t.Setenv("HOME", "")
+	var got []string
+	ob, err := a.NewOpenButton(nil, OpenButtonConfig{OnOpen: func(p string) { got = append(got, p) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ob.choose(path)
+	a.pump(time.Now())
+	if !slices.Equal(got, []string{path}) {
+		t.Fatalf("output = %v, want [%s]", got, path)
+	}
+	if a.recentFiles != nil {
+		t.Error("a recents manager exists with nowhere to keep its list")
+	}
+	if rec := ob.Recents(); len(rec) != 0 {
+		t.Errorf("recents = %v with nowhere to keep them", rec)
+	}
+	left, err := os.ReadDir(cwd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 0 {
+		t.Errorf("the choice left %s in the working directory", left[0].Name())
 	}
 }

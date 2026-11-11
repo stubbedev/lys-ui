@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/atomicfile"
+	"github.com/stubbedev/lys-lib/xdg"
 
 	"github.com/stubbedev/lys-ui/internal/worker"
 	"github.com/stubbedev/lys-ui/transfer"
@@ -46,18 +47,20 @@ type Manager struct {
 	work    *worker.Queue
 }
 
-// DefaultPath is the spec's location under the user data directory,
-// honoring XDG_DATA_HOME.
-func DefaultPath() string {
-	base := os.Getenv("XDG_DATA_HOME")
-	if base == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "recently-used.xbel"
-		}
-		base = filepath.Join(home, ".local", "share")
+// ErrNoDataHome is an environment that names no user data directory
+// for the list to live in.
+var ErrNoDataHome = errors.New("recentfiles: neither XDG_DATA_HOME nor HOME is an absolute path")
+
+// DefaultPath is the spec's location under env's user data directory,
+// $XDG_DATA_HOME or ~/.local/share. An environment with neither is
+// ErrNoDataHome: the list is never kept relative to the working
+// directory.
+func DefaultPath(env xdg.Env) (string, error) {
+	base, ok := env.DataHome()
+	if !ok {
+		return "", ErrNoDataHome
 	}
-	return filepath.Join(base, "recently-used.xbel")
+	return filepath.Join(base, "recently-used.xbel"), nil
 }
 
 // New returns the manager for the given xbel path (DefaultPath for the

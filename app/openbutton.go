@@ -69,7 +69,10 @@ func (ob *OpenButton) Recents() []string {
 // It looks at the disk off the loop, and the dropdown follows on the loop
 // once it knows.
 func (ob *OpenButton) RefreshRecents() {
-	m := ob.app.recentsManager()
+	m, ok := ob.app.recentsManager()
+	if !ok {
+		return
+	}
 	size := ob.cfg.recentSize()
 	postRecents(m, func() {
 		paths := existingPaths(m.List(), size)

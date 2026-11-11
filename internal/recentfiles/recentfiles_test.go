@@ -1,11 +1,14 @@
 package recentfiles
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stubbedev/lys-lib/xdg"
 )
 
 // TestRecentFilesRoundTrip pins the persistence contract: Add moves
@@ -157,5 +160,27 @@ func TestAddManyPersistsTheBatch(t *testing.T) {
 	got := fresh.List()
 	if len(got) != 3 || got[0].Path != "/tmp/c" || got[2].Path != "/tmp/a" {
 		t.Errorf("read back %+v, want the last path first", got)
+	}
+}
+
+// TestDefaultPathIsAbsoluteOrAnError pins where the shared list lives:
+// under the data home the environment names, and nowhere, least of all
+// relative to the working directory, when it names none.
+func TestDefaultPathIsAbsoluteOrAnError(t *testing.T) {
+	env := func(vars map[string]string) xdg.Env {
+		return func(name string) string { return vars[name] }
+	}
+	for want, vars := range map[string]map[string]string{
+		"/data/recently-used.xbel":                 {"XDG_DATA_HOME": "/data", "HOME": "/home/me"},
+		"/home/me/.local/share/recently-used.xbel": {"XDG_DATA_HOME": "data", "HOME": "/home/me"},
+	} {
+		if got, err := DefaultPath(env(vars)); err != nil || got != want {
+			t.Errorf("%v: %q, %v, want %q", vars, got, err, want)
+		}
+	}
+	for _, vars := range []map[string]string{nil, {"XDG_DATA_HOME": "data", "HOME": "me"}} {
+		if got, err := DefaultPath(env(vars)); !errors.Is(err, ErrNoDataHome) || got != "" {
+			t.Errorf("%v: %q, %v, want ErrNoDataHome", vars, got, err)
+		}
 	}
 }

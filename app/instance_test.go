@@ -5,10 +5,12 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stubbedev/lys-lib/wltest"
+	"github.com/stubbedev/lys-lib/xdg"
 )
 
 // feedForward hands the primary a forwarded invocation the way a
@@ -125,7 +127,7 @@ func TestInstanceChildProcess(t *testing.T) {
 func TestClaimReclaimsStaleSocket(t *testing.T) {
 	wltest.RuntimeDir(t)
 	appID := "dev.stubbe.test.stale"
-	path, err := instanceSocketPath(appID)
+	path, err := instanceSocketPath(xdg.OS, appID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +231,7 @@ func TestInstanceDiesWithLoop(t *testing.T) {
 	if err != nil || !primary {
 		t.Fatalf("claim: primary=%v err=%v", primary, err)
 	}
-	path, err := instanceSocketPath("dev.stubbe.test.dies")
+	path, err := instanceSocketPath(xdg.OS, "dev.stubbe.test.dies")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,5 +257,29 @@ func TestOSInvocation(t *testing.T) {
 	}
 	if inv.Token != "tok-1" {
 		t.Errorf("token = %q, want the environment's", inv.Token)
+	}
+}
+
+// TestInstanceSocketPathIsAbsolute pins where the socket goes: under
+// the runtime directory, and under the temp dir, never relative to the
+// working directory, when the environment names no absolute one.
+func TestInstanceSocketPathIsAbsolute(t *testing.T) {
+	env := func(runtime string) xdg.Env {
+		return func(name string) string {
+			if name == "XDG_RUNTIME_DIR" {
+				return runtime
+			}
+			return ""
+		}
+	}
+	const sock = "lys-ui-dev.stubbe.test.sock"
+	for runtime, want := range map[string]string{
+		"/run/user/7": filepath.Join("/run/user/7", sock),
+		"":            filepath.Join(os.TempDir(), sock),
+		"run":         filepath.Join(os.TempDir(), sock),
+	} {
+		if got, err := instanceSocketPath(env(runtime), "dev.stubbe.test"); err != nil || got != want {
+			t.Errorf("XDG_RUNTIME_DIR=%q: %q, %v, want %q", runtime, got, err, want)
+		}
 	}
 }

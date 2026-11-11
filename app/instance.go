@@ -14,6 +14,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/intconv"
+	"github.com/stubbedev/lys-lib/xdg"
 
 	"github.com/stubbedev/lys-ui/internal/mailbox"
 )
@@ -129,7 +130,7 @@ func ClaimInstance(cfg InstanceConfig, inv Invocation) (*Instance, bool, error) 
 	if cfg.AllowMultipleInstances {
 		return &Instance{cfg: cfg}, true, nil
 	}
-	path, err := instanceSocketPath(cfg.AppID)
+	path, err := instanceSocketPath(xdg.OS, cfg.AppID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -325,12 +326,12 @@ func readInvocation(conn net.Conn) (Invocation, error) {
 	return Invocation(wire), nil
 }
 
-// instanceSocketPath keys the AppID under the runtime directory (the
+// instanceSocketPath keys the AppID under env's runtime directory (the
 // per-user, tmpfs-backed XDG_RUNTIME_DIR, falling back to the temp dir
-// where it is unset).
-func instanceSocketPath(appID string) (string, error) {
-	dir := os.Getenv("XDG_RUNTIME_DIR")
-	if dir == "" {
+// where it names no absolute path).
+func instanceSocketPath(env xdg.Env, appID string) (string, error) {
+	dir, ok := env.RuntimeHome()
+	if !ok {
 		dir = os.TempDir()
 	}
 	safe := make([]rune, 0, len(appID))
