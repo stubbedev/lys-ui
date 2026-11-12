@@ -1,6 +1,8 @@
 package widget
 
 import (
+	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
@@ -62,24 +64,114 @@ func TestFloatingPanelMoves(t *testing.T) {
 	}
 }
 
-// The corner grip resizes within the limits, the top left fixed.
+// The corner grip resizes within the limits, the top left fixed,
+// pressed at the panel's very corner or on its painted mark.
 func TestFloatingPanelResizes(t *testing.T) {
 	f, _, r := newTestPanel(t)
 	f.SetSizeLimits(Size{W: 150, H: 120}, Size{W: 500, H: 0})
 	arrangeTree(t, f, 800, 600)
 	p := f.PanelRect()
-	corner := Point{X: p.X + p.W - 4, Y: p.Y + p.H - 4}
+	corner := Point{X: p.X + p.W - 1, Y: p.Y + p.H - 1}
 	drag(r, corner, Point{X: corner.X + 1000, Y: corner.Y + 40})
 	arrangeTree(t, f, 800, 600)
 	got := f.PanelRect()
 	if got.X != p.X || got.Y != p.Y || got.W != 500 || got.H != p.H+40 {
 		t.Errorf("resized to %v from %v, want 500 wide (the max) and 40 taller, the corner fixed", got, p)
 	}
-	corner = Point{X: got.X + got.W - 4, Y: got.Y + got.H - 4}
-	drag(r, corner, Point{X: corner.X - 1000, Y: corner.Y - 1000})
+	m := f.grip.mark
+	mark := Point{X: m.X + m.W/2, Y: m.Y + m.H/2}
+	drag(r, mark, Point{X: mark.X - 1000, Y: mark.Y - 1000})
 	arrangeTree(t, f, 800, 600)
 	if got := f.PanelRect(); got.W != 150 || got.H != 120 {
 		t.Errorf("shrunk to %v, want the 150x120 minimum", got)
+	}
+}
+
+// The panel asks for its chosen size, else its content's natural one,
+// within its limits: a window sized to it opened at the content's size
+// whatever the panel was set to.
+func TestFloatingPanelMeasuresItsSize(t *testing.T) {
+	measure := func(set, lo, hi Size) Size {
+		t.Helper()
+		f := NewFloatingPanel(nil, NewSpacer(200, 100))
+		f.SetSizeLimits(lo, hi)
+		f.SetPanelSize(set.W, set.H)
+		arrangeTree(t, f, 2000, 2000)
+		return SizeWithin(f, Size{W: 2000, H: 2000})
+	}
+	nat := measure(Size{}, Size{}, Size{})
+	if nat.W < 200 || nat.H < 100 {
+		t.Fatalf("natural %v, want at least the 200x100 content", nat)
+	}
+	for _, tc := range []struct {
+		name        string
+		set, lo, hi Size
+		want        Size
+	}{
+		{"set", Size{W: 760, H: 520}, Size{W: 480, H: 320}, Size{W: 1600, H: 1100}, Size{W: 760, H: 520}},
+		{"set above the max", Size{W: 760, H: 520}, Size{W: 480, H: 320}, Size{W: 700, H: 0}, Size{W: 700, H: 520}},
+		{"set below the floor", Size{W: 300, H: 200}, Size{W: 480, H: 320}, Size{}, Size{W: 480, H: 320}},
+		{"set on one axis", Size{W: 760}, Size{}, Size{}, Size{W: 760, H: nat.H}},
+		{"natural", Size{}, Size{W: 10, H: 10}, Size{W: 1000, H: 1000}, nat},
+		{"natural below the floor", Size{}, Size{W: 480, H: 320}, Size{}, Size{W: 480, H: 320}},
+		{"natural above the max", Size{}, Size{}, Size{W: 150, H: 80}, Size{W: 150, H: 80}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := measure(tc.set, tc.lo, tc.hi); got != tc.want {
+				t.Errorf("measured %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// insideRounded reports whether (x, y) lies in r with every corner
+// rounded by radius.
+func insideRounded(r render.Rect, radius int, x, y float64) bool {
+	left, top := float64(r.X), float64(r.Y)
+	right, bottom := left+float64(r.W), top+float64(r.H)
+	if x < left || x > right || y < top || y > bottom {
+		return false
+	}
+	rad := float64(radius)
+	cx := min(max(x, left+rad), right-rad)
+	cy := min(max(y, top+rad), bottom-rad)
+	return (x-cx)*(x-cx)+(y-cy)*(y-cy) <= rad*rad
+}
+
+// The grip paints inside the panel's border and its rounded corner:
+// pinned to the outer corner, it drew on and past the border.
+func TestFloatingPanelGripInsideRoundedBorder(t *testing.T) {
+	const border = 6
+	for _, radius := range []int{4, 40} {
+		t.Run(strconv.Itoa(radius), func(t *testing.T) {
+			f := NewFloatingPanel(nil, NewSpacer(200, 100))
+			root := NewBox(Column, 0, 0)
+			root.Append(f, true)
+			root.AttachStylesheet(NewStylesheet(fmt.Sprintf("floatingpanel > panel { border: %dpx solid red; border-radius: %dpx; }", border, radius), StylePriorityUser))
+			arrangeTree(t, root, 800, 600)
+			const w, h = 800, 600
+			data := make([]byte, render.Stride(w)*h)
+			f.grip.Paint(render.New(data, render.Stride(w), w, h))
+			inner := render.UniformInsets(border).Shrink(f.PanelRect())
+			painted := 0
+			for y := range h {
+				for x := range w {
+					if data[y*render.Stride(w)+x*4+3] == 0 {
+						continue
+					}
+					painted++
+					fx, fy := float64(x), float64(y)
+					for _, c := range [][2]float64{{fx, fy}, {fx + 1, fy}, {fx, fy + 1}, {fx + 1, fy + 1}} {
+						if !insideRounded(inner, radius-border, c[0], c[1]) {
+							t.Fatalf("grip pixel (%d,%d) outside the panel's inner shape %v rounded %d", x, y, inner, radius-border)
+						}
+					}
+				}
+			}
+			if painted == 0 {
+				t.Fatal("the grip painted nothing")
+			}
+		})
 	}
 }
 

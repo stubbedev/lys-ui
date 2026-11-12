@@ -1,6 +1,10 @@
 package widget
 
-import "github.com/stubbedev/lys-lib/render"
+import (
+	"math"
+
+	"github.com/stubbedev/lys-lib/render"
+)
 
 // InputRegioner is a window's content that takes input only inside its
 // region: outside it, pointer input passes through the surface to
@@ -118,44 +122,43 @@ func (f *FloatingPanel) PanelRect() render.Rect {
 	return r
 }
 
-// limit holds s within the size limits and the area.
-func (f *FloatingPanel) limit(s Size, area Size) Size {
-	axis := func(n, lo, hi, room int) int {
-		if hi > 0 {
-			n = min(n, hi)
-		}
-		return min(max(n, lo), room)
+// extent is the panel's size along axis for content of natural extent
+// nat: its chosen size there, else nat, within its size limits.
+func (f *FloatingPanel) extent(axis Axis, nat int) int {
+	n := nat
+	if set := f.size.Along(axis); set > 0 {
+		n = set
 	}
-	return Size{W: axis(s.W, f.min.W, f.max.W, area.W), H: axis(s.H, f.min.H, f.max.H, area.H)}
+	if hi := f.max.Along(axis); hi > 0 {
+		n = min(n, hi)
+	}
+	return max(n, f.min.Along(axis))
 }
 
-// Measure asks for the panel's natural size and needs none: the area
+// Measure asks for the panel's size (its chosen size, else its
+// content's natural one, within the limits) and needs none: the area
 // takes whatever it is given and keeps the panel inside it.
 func (f *FloatingPanel) Measure(axis Axis, forSize int) Sizes {
-	return Sizes{Nat: measureChild(f, f.panel, axis, forSize).Nat}
+	return Sizes{Nat: f.extent(axis, measureChild(f, f.panel, axis, forSize).Nat)}
 }
 
 // Arrange sizes the panel (its chosen size, else its natural one,
-// within the limits), centers it until placed, keeps it inside the
-// area, and pins the grip to its corner.
+// within the limits and the area), centers it until placed, keeps it
+// inside the area, and pins the grip to its corner.
 func (f *FloatingPanel) Arrange(r render.Rect) {
 	f.node.Arrange(r)
 	area := Size{W: r.W, H: r.H}
-	want := childWithin(f, f.panel, area)
-	if f.size.W > 0 {
-		want.W = f.size.W
-	}
-	if f.size.H > 0 {
-		want.H = f.size.H
-	}
-	sz := f.limit(want, area)
+	nat := childWithin(f, f.panel, area)
+	sz := Size{W: min(f.extent(Row, nat.W), area.W), H: min(f.extent(Column, nat.H), area.H)}
 	if !f.placed {
 		f.offset = Point{X: (area.W - sz.W) / 2, Y: (area.H - sz.H) / 2}
 	}
 	f.offset = Point{X: min(max(f.offset.X, 0), area.W-sz.W), Y: min(max(f.offset.Y, 0), area.H-sz.H)}
 	f.rect = render.Rect{X: r.X + f.offset.X, Y: r.Y + f.offset.Y, W: sz.W, H: sz.H}
 	ArrangeAsChild(f.panel, f.rect)
-	f.grip.Arrange(render.Rect{X: f.rect.X + f.rect.W - panelGripPx, Y: f.rect.Y + f.rect.H - panelGripPx, W: panelGripPx, H: panelGripPx})
+	f.grip.mark = f.gripRect()
+	corner := render.Rect{X: f.rect.X + f.rect.W - panelGripPx, Y: f.rect.Y + f.rect.H - panelGripPx, W: panelGripPx, H: panelGripPx}
+	f.grip.Arrange(corner.Union(f.grip.mark))
 	setParents(f, f.grip)
 	if f.settling {
 		f.settling = false
@@ -163,6 +166,19 @@ func (f *FloatingPanel) Arrange(r render.Rect) {
 			f.OnGeometryChanged(f.PanelRect())
 		}
 	}
+}
+
+// gripRect is the grip's painted square in the panel's bottom right
+// corner, inside its border and clear of that corner's rounding: the
+// square's outer corner sits on or within the arc of the padding box's
+// corner.
+func (f *FloatingPanel) gripRect() render.Rect {
+	v := styleOf(f.panel)
+	bw := borderOf(v)
+	inner := bw.Shrink(f.rect)
+	r := insetCorners(radiusOr(v, 0), bw).BottomRight
+	in := r - int(float64(r)/math.Sqrt2)
+	return render.Rect{X: inner.X + inner.W - in - panelGripPx, Y: inner.Y + inner.H - in - panelGripPx, W: panelGripPx, H: panelGripPx}
 }
 
 // Paint draws the panel, then its grip.
@@ -327,10 +343,13 @@ func (h *panelHandle) PressEnd() { h.f.settled() }
 // CursorName is the move cursor.
 func (h *panelHandle) CursorName() string { return "grab" }
 
-// panelGrip is a panel's corner resize grip.
+// panelGrip is a panel's corner resize grip: it takes presses from the
+// panel's outer corner to its mark, which it paints inside the panel's
+// rounded border.
 type panelGrip struct {
 	node
 	f            *FloatingPanel
+	mark         render.Rect
 	anchor, from Point
 }
 
@@ -338,9 +357,9 @@ func (g *panelGrip) Measure(axis Axis, forSize int) Sizes {
 	return FixedSizes(panelGripPx)
 }
 
-// Paint draws two short diagonal strokes in the corner.
+// Paint draws two short diagonal strokes in the mark's corner.
 func (g *panelGrip) Paint(cv *render.Canvas) {
-	b := g.bounds
+	b := g.mark
 	col := Current().TextMuted
 	for _, n := range []int{4, 8} {
 		for i := range n {
