@@ -3,15 +3,16 @@ package widget
 import (
 	"os"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 // chooserFace builds the test font.
@@ -301,23 +302,24 @@ func installChooserLoop(t *testing.T) *chooserLoop {
 	return l
 }
 
+func (l *chooserLoop) drain() int {
+	l.mu.Lock()
+	fns := l.queued
+	l.queued = nil
+	l.mu.Unlock()
+	for _, fn := range fns {
+		fn()
+	}
+	return len(fns)
+}
+
 func (l *chooserLoop) pumpFor(t *testing.T, n int) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for ran := 0; ran < n; {
-		l.mu.Lock()
-		fns := l.queued
-		l.queued = nil
-		l.mu.Unlock()
-		for _, fn := range fns {
-			fn()
-			ran++
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%d of %d listing answers arrived", ran, n)
-		}
-		runtime.Gosched()
-	}
+	ran := 0
+	waittest.Until(t, func() bool {
+		ran += l.drain()
+		return ran >= n
+	}, strconv.Itoa(n)+" listing answers")
 }
 
 func countedSource(release chan struct{}) (DirSource, *atomic.Int32, *atomic.Int32) {
@@ -389,13 +391,7 @@ func TestFileChooserBoundsListingsOut(t *testing.T) {
 		c.navigate("/home/Documents")
 	}
 	c.navigate("/home")
-	deadline := time.Now().Add(10 * time.Second)
-	for reads.Load() < maxChooserListings {
-		if time.Now().After(deadline) {
-			t.Fatalf("%d reads started", reads.Load())
-		}
-		runtime.Gosched()
-	}
+	waittest.Until(t, func() bool { return reads.Load() >= maxChooserListings }, strconv.Itoa(maxChooserListings)+" reads to start")
 	if got := c.listings; got != maxChooserListings {
 		t.Errorf("%d listings out, want the bound %d", got, maxChooserListings)
 	}
@@ -435,7 +431,7 @@ func countedStat(release chan struct{}, exists map[string]bool) (StatSource, *at
 	}, &stats, &onLoop
 }
 
-func saveProbe(t *testing.T, name string) (exists, answered bool, stats, onLoop int32) {
+func saveProbe(t *testing.T, name string) (exists bool, stats, onLoop int32) {
 	t.Helper()
 	loop := installChooserLoop(t)
 	c := NewFileChooser(chooserFace(t), 14, FileModeSave, "/home/Documents", chooserFilters)
@@ -448,22 +444,23 @@ func saveProbe(t *testing.T, name string) (exists, answered bool, stats, onLoop 
 	if !ok || len(paths) != 1 {
 		t.Fatalf("Apply = %v, %v", paths, ok)
 	}
+	answered := false
 	c.ProbeExists(paths[0], func(e bool) { exists, answered = e, true })
 	if answered {
 		t.Fatal("the probe answered before its stat was released")
 	}
 	close(release)
-	deadline := time.Now().Add(10 * time.Second)
-	for !answered && time.Now().Before(deadline) {
-		loop.pumpFor(t, 1)
-	}
-	return exists, answered, statCount.Load(), onLoopCount.Load()
+	waittest.Until(t, func() bool {
+		loop.drain()
+		return answered
+	}, "the probe to answer")
+	return exists, statCount.Load(), onLoopCount.Load()
 }
 
 func TestASaveOntoAnExistingNameStatsOffTheLoop(t *testing.T) {
-	exists, answered, stats, onLoop := saveProbe(t, "report.pdf")
-	if !answered || !exists {
-		t.Errorf("probe answered %v exists %v, want an existing file", answered, exists)
+	exists, stats, onLoop := saveProbe(t, "report.pdf")
+	if !exists {
+		t.Error("probe answered missing, want an existing file")
 	}
 	if stats != 1 || onLoop != 0 {
 		t.Errorf("%d stats, %d on the loop, want one off the loop", stats, onLoop)
@@ -471,9 +468,9 @@ func TestASaveOntoAnExistingNameStatsOffTheLoop(t *testing.T) {
 }
 
 func TestASaveOntoANewNameIsReportedMissing(t *testing.T) {
-	exists, answered, stats, onLoop := saveProbe(t, "new.pdf")
-	if !answered || exists {
-		t.Errorf("probe answered %v exists %v, want a missing file", answered, exists)
+	exists, stats, onLoop := saveProbe(t, "new.pdf")
+	if exists {
+		t.Error("probe answered existing, want a missing file")
 	}
 	if stats != 1 || onLoop != 0 {
 		t.Errorf("%d stats, %d on the loop, want one off the loop", stats, onLoop)

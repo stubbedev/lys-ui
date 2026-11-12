@@ -19,6 +19,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/app"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/media"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -418,13 +419,7 @@ func TestVideoTagsItsRangeAndWritesNV12(t *testing.T) {
 func TestVideoWithoutYUVDmabufsPaintsIntoTheWindow(t *testing.T) {
 	c := newVideoCompositor(fourcc.ARGB8888)
 	a, v, mem := showVideo(t, c, false)
-	deadline := time.Now().Add(10 * time.Second)
-	for c.counts().windowCommits < 10 {
-		if time.Now().After(deadline) {
-			t.Fatalf("the window committed %d frames of the playing video, want 10", c.counts().windowCommits)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	waittest.Until(t, func() bool { return c.counts().windowCommits >= 10 }, "the window to commit 10 frames of the playing video")
 	if err := offloadErr(a, v); !errors.Is(err, app.ErrNoYUVDmabuf) {
 		t.Errorf("OffloadErr = %v, want ErrNoYUVDmabuf", err)
 	}

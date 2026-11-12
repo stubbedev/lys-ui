@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"runtime"
 	"strconv"
 	"sync"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-ui/internal/notify"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 // TestNotifyRoutesActionsOntoLoop pins the loop bridge: an activation
@@ -155,22 +155,15 @@ func TestNotifyOnLoopSurvivesAStuckDaemon(t *testing.T) {
 	if registered != 2 {
 		t.Errorf("registered %d notifications with locally made ids, want 2", registered)
 	}
-	deadline := time.Now().Add(10 * time.Second)
-	for {
+	waittest.Until(t, func() bool {
 		f.mu.Lock()
 		sends, onLoop := f.sends, f.onLoop
 		f.mu.Unlock()
 		if onLoop != 0 {
 			t.Fatalf("%d bus calls on the loop", onLoop)
 		}
-		if sends > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the worker never reached the daemon")
-		}
-		runtime.Gosched()
-	}
+		return sends > 0
+	}, "the worker to reach the daemon")
 }
 
 func TestNotifyLedgerDropsTheOldestPastItsCap(t *testing.T) {

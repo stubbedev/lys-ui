@@ -4,7 +4,8 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 // launchRecorder records transport calls race-safely.
@@ -46,18 +47,6 @@ func (r *launchRecorder) snapshot() []launchCall {
 	return out
 }
 
-// waitFor polls until cond turns true or the deadline passes.
-func waitFor(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-}
-
 // TestOpenURLPortalFirst pins the transport order: without activation
 // support the open runs immediately through the portal; a failing
 // portal falls back to the external opener exactly once.
@@ -68,7 +57,7 @@ func TestOpenURLPortalFirst(t *testing.T) {
 	a.launchState.openExternal = rec.external()
 
 	a.OpenURL("https://example.com")
-	waitFor(t, "the portal call", func() bool { return len(rec.snapshot()) == 1 })
+	waittest.Until(t, func() bool { return len(rec.snapshot()) == 1 }, "the portal call")
 	if got := rec.snapshot()[0]; got.uri != "https://example.com" || got.token != "" {
 		t.Errorf("portal call = %+v", got)
 	}
@@ -76,14 +65,14 @@ func TestOpenURLPortalFirst(t *testing.T) {
 	// A failing portal falls back.
 	rec.calls, rec.portalErr = nil, errors.New("portal down")
 	a.OpenURL("https://fallback.example")
-	waitFor(t, "the fallback", func() bool {
+	waittest.Until(t, func() bool {
 		for _, c := range rec.snapshot() {
 			if c.token == "external" {
 				return true
 			}
 		}
 		return false
-	})
+	}, "the fallback")
 	if got := rec.snapshot(); len(got) != 2 || got[1].uri != "https://fallback.example" {
 		t.Errorf("fallback calls = %+v", got)
 	}
@@ -96,7 +85,7 @@ func TestOpenPathEncodesFileURI(t *testing.T) {
 	rec := &launchRecorder{}
 	a.launchState.openPortal = rec.portal()
 	a.OpenPath("/tmp/report.pdf")
-	waitFor(t, "the portal call", func() bool { return len(rec.snapshot()) == 1 })
+	waittest.Until(t, func() bool { return len(rec.snapshot()) == 1 }, "the portal call")
 	if got := rec.snapshot()[0].uri; got != "file:///tmp/report.pdf" {
 		t.Errorf("opened %q, want the file URI", got)
 	}

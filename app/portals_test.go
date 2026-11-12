@@ -156,14 +156,13 @@ func startMockDesktop(t *testing.T) *mockDesktop {
 
 func pumpUntil(t *testing.T, a *Application, done func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !done() {
-		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting on the portal")
+	waittest.Until(t, func() bool {
+		if done() {
+			return true
 		}
 		a.pump(time.Now())
-		time.Sleep(5 * time.Millisecond)
-	}
+		return false
+	}, "the portal")
 }
 
 func TestInhibitHoldsUntilReleased(t *testing.T) {

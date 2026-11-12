@@ -12,6 +12,8 @@ import (
 
 	"github.com/stubbedev/lys-lib/pulse/native"
 	"github.com/stubbedev/lys-lib/pulse/pulsetest"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 const (
@@ -52,17 +54,6 @@ func openTestPulseAs(t *testing.T, pcm io.Reader, format AudioFormat) pulseHarne
 	return pulseHarness{srv: srv, out: out.(*pulseOut), p: srv.WaitPlaybacks(t, 1)[0]}
 }
 
-func eventually(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("never: %s", what)
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
 func pcmPattern(n int) []byte {
 	b := make([]byte, n)
 	for i := range b {
@@ -83,12 +74,12 @@ func TestPulseOutPlaysWholeFramesAsRequestedAndDrains(t *testing.T) {
 		t.Errorf("server saw %+v", h.p)
 	}
 	h.p.WaitData(t, firstRequest)
-	eventually(t, "the first request counted", func() bool { return h.out.frames.Load() == firstRequest/testFrame })
+	waittest.Until(t, func() bool { return h.out.frames.Load() == firstRequest/testFrame }, "the first request counted")
 	if h.out.Drained() {
 		t.Error("drained with audio still unrequested")
 	}
 	h.p.Request(250 * testFrame)
-	eventually(t, "drained", h.out.Drained)
+	waittest.Until(t, h.out.Drained, "drained")
 	if got := h.p.WaitData(t, len(pcm)-3); !bytes.Equal(got, pcm[:len(pcm)-3]) {
 		t.Errorf("server received %d bytes, want the %d of whole frames", len(got), len(pcm)-3)
 	}
@@ -129,7 +120,7 @@ func TestPulseOutReportsAKilledStream(t *testing.T) {
 	h := openTestPulse(t, endless{})
 	h.p.WaitData(t, firstRequest)
 	h.p.Kill()
-	eventually(t, "the kill reported", func() bool { return h.out.Err() != nil })
+	waittest.Until(t, func() bool { return h.out.Err() != nil }, "the kill reported")
 	if err := h.out.Err(); !errors.Is(err, native.ErrStreamKilled) {
 		t.Errorf("Err = %v, want ErrStreamKilled", err)
 	}
@@ -175,5 +166,5 @@ func TestPulseOutPlaysTheTracksOwnFormat(t *testing.T) {
 		t.Errorf("server saw %+v in %v, want 6 channels at 44.1 kHz in %v", h.p.SampleSpec, h.p.ChannelMap, layout)
 	}
 	h.p.WaitData(t, 44100/20*12)
-	eventually(t, "the first request counted in whole 6-channel frames", func() bool { return h.out.frames.Load() == 44100/20 })
+	waittest.Until(t, func() bool { return h.out.frames.Load() == 44100/20 }, "the first request counted in whole 6-channel frames")
 }

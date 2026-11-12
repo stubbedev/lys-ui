@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"reflect"
@@ -284,12 +285,7 @@ func TestWireFrameSendmsgPerPass(t *testing.T) {
 			if got > frames*tc.want {
 				t.Errorf("%d passes took %d sendmsg, want %d per pass", frames, got, tc.want)
 			}
-			for deadline := time.Now().Add(10 * time.Second); commits.Load()-committed < int64(frames*tc.windows); {
-				if time.Now().After(deadline) {
-					t.Fatalf("the peer saw %d commits, want %d", commits.Load()-committed, frames*tc.windows)
-				}
-				time.Sleep(time.Millisecond)
-			}
+			waittest.Until(t, func() bool { return commits.Load()-committed >= int64(frames*tc.windows) }, fmt.Sprintf("the peer to see %d commits", frames*tc.windows))
 		})
 	}
 }

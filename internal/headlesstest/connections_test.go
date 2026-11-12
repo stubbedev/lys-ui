@@ -2,7 +2,6 @@ package headlesstest
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/capture"
 
@@ -39,15 +38,15 @@ func TestTwoConnectionsBindAHotpluggedOutput(t *testing.T) {
 		t.Fatalf("create_output: %v", err)
 	}
 	name := ""
-	deadline := time.Now().Add(5 * time.Second)
-	for len(sess.Outputs()) <= before {
-		if time.Now().After(deadline) {
-			t.Fatalf("the application never saw the hotplugged output (%d outputs)", len(sess.Outputs()))
+	waittest.Until(t, func() bool {
+		if len(sess.Outputs()) > before {
+			return true
 		}
 		if err := sess.Roundtrip(); err != nil {
 			t.Fatalf("application roundtrip after the hotplug: %v", err)
 		}
-	}
+		return false
+	}, "the application to see the hotplugged output")
 	if err := sess.Roundtrip(); err != nil {
 		t.Fatalf("application roundtrip: %v", err)
 	}

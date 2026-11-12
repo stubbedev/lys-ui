@@ -165,8 +165,7 @@ func TestSessionLockLifecycle(t *testing.T) {
 			}
 			var added *app.Output
 			var name string
-			deadline := time.Now().Add(lockTimeout)
-			for name == "" && time.Now().Before(deadline) {
+			waittest.Until(t, func() bool {
 				holder.onLoop(func() {
 					outs := holder.app.SessionLock().Outputs()
 					if len(outs) > before {
@@ -174,11 +173,8 @@ func TestSessionLockLifecycle(t *testing.T) {
 						name = added.Name // lands via xdg-output after the global
 					}
 				})
-				time.Sleep(50 * time.Millisecond)
-			}
-			if name == "" {
-				t.Fatal("the hotplugged output never got a (named) lock surface")
-			}
+				return name != ""
+			}, "the hotplugged output to get a (named) lock surface")
 			if err := swayIPCCommand(testEnv.Dir, "output "+name+" unplug"); err != nil {
 				t.Fatal(err)
 			}

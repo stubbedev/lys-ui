@@ -148,22 +148,20 @@ func (r *fakeRegistry) Unembed(plug ref) {}
 // Matched signals are consumed; lookups are order-independent.
 func (r *fakeRegistry) nextSignal(t *testing.T, path dbus.ObjectPath, member string) *dbus.Signal {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for {
+	var found *dbus.Signal
+	waittest.Until(t, func() bool {
 		r.mu.Lock()
+		defer r.mu.Unlock()
 		for i, sig := range r.recorded {
 			if sig.Path == path && sig.Name == member {
 				r.recorded = append(r.recorded[:i], r.recorded[i+1:]...)
-				r.mu.Unlock()
-				return sig
+				found = sig
+				return true
 			}
 		}
-		r.mu.Unlock()
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s on %s", member, path)
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
+		return false
+	}, member+" on "+string(path))
+	return found
 }
 
 // drainSignals empties the recorded list.

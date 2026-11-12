@@ -7,6 +7,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -115,8 +116,8 @@ func TestStylesheetHotReloadWatchesAndNeverPolls(t *testing.T) {
 	if err := os.Rename(replacement, path); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the reload", func() bool {
+	waittest.Until(t, func() bool {
 		widget.WaitAssetLoads()
 		return widget.DamageGeneration() != before
-	})
+	}, "the reload")
 }

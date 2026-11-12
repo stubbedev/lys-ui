@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/imgcache"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/media"
 )
 
@@ -56,14 +57,13 @@ func testStream(t *testing.T, frames int) *media.Stream {
 
 func pumpUntil(t *testing.T, done func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for !done() {
-		if time.Now().After(deadline) {
-			t.Fatal("the stream never got there")
+	waittest.Until(t, func() bool {
+		if done() {
+			return true
 		}
 		animclock.Tick(time.Now())
-		time.Sleep(time.Millisecond)
-	}
+		return false
+	}, "the stream to get there")
 }
 
 func pixel(data []byte, stride, x, y int) render.Color {

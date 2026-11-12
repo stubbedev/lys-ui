@@ -16,12 +16,10 @@ import (
 	"github.com/stubbedev/lys-lib/testbuild"
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
-const (
-	fixtureStep = 40 * time.Millisecond
-	gpuWait     = 10 * time.Second
-)
+const fixtureStep = 40 * time.Millisecond
 
 func gpuDevice(t *testing.T) *gpu.Device {
 	t.Helper()
@@ -61,19 +59,19 @@ func gpuStream(t *testing.T, dev *gpu.Device, name string) *Stream {
 }
 
 // until advances s at now until done, the packets read on their own
-// goroutine meanwhile; it fails after gpuWait.
+// goroutine meanwhile.
 func until(t *testing.T, s *Stream, now time.Time, what string, done func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(gpuWait)
-	for s.advance(now); !done(); s.advance(now) {
+	waittest.Until(t, func() bool {
+		s.advance(now)
+		if done() {
+			return true
+		}
 		if err := s.Err(); err != nil {
 			t.Fatalf("waiting for %s: %v", what, err)
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("never: %s", what)
-		}
-		time.Sleep(time.Millisecond)
-	}
+		return false
+	}, what)
 }
 
 func wantShownDecoded(t *testing.T, s *Stream) {

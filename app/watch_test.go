@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 // loopApp is a testApp with a fake loop goroutine pumping each wake,
@@ -35,18 +37,6 @@ func loopApp(t *testing.T) *Application {
 		close(done)
 	})
 	return a
-}
-
-// eventually waits for cond, failing after a second.
-func eventually(t *testing.T, what string, cond func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(time.Second)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
 }
 
 // quiet asserts cond stays false for a while.
@@ -79,10 +69,10 @@ func TestWatchFDRunsOnTheLoopOncePerReadiness(t *testing.T) {
 	}
 	quiet(t, "an idle fd called back", func() bool { return calls.Load() != 0 })
 	_, _ = unix.Write(fds[1], []byte("x"))
-	eventually(t, "the first readiness", func() bool { return calls.Load() == 1 })
+	waittest.Until(t, func() bool { return calls.Load() == 1 }, "the first readiness")
 	quiet(t, "a drained fd called back again", func() bool { return calls.Load() != 1 })
 	_, _ = unix.Write(fds[1], []byte("y"))
-	eventually(t, "the second readiness", func() bool { return calls.Load() == 2 })
+	waittest.Until(t, func() bool { return calls.Load() == 2 }, "the second readiness")
 
 	stop()
 	stop() // twice is harmless
@@ -129,7 +119,7 @@ func TestWatchFilesCoalescesAndRecurses(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "a.scss"), []byte("a"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "a top-level change", func() bool { return flat.Load() >= 1 && deep.Load() >= 1 })
+	waittest.Until(t, func() bool { return flat.Load() >= 1 && deep.Load() >= 1 }, "a top-level change")
 	time.Sleep(30 * time.Millisecond)
 	flatBefore := flat.Load()
 
@@ -137,13 +127,13 @@ func TestWatchFilesCoalescesAndRecurses(t *testing.T) {
 	if err := os.Mkdir(sub, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "the new directory", func() bool { return flat.Load() > flatBefore })
+	waittest.Until(t, func() bool { return flat.Load() > flatBefore }, "the new directory")
 	time.Sleep(30 * time.Millisecond)
 	flatBefore, deepBefore := flat.Load(), deep.Load()
 	if err := os.WriteFile(filepath.Join(sub, "b.scss"), []byte("b"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	eventually(t, "a change in a directory created later", func() bool { return deep.Load() > deepBefore })
+	waittest.Until(t, func() bool { return deep.Load() > deepBefore }, "a change in a directory created later")
 	quiet(t, "a flat watch saw a nested change", func() bool { return flat.Load() != flatBefore })
 }
 
@@ -163,7 +153,7 @@ func TestWatchFDStopDropsAQueuedCallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _ = unix.Write(fds[1], []byte("x"))
-	eventually(t, "the queued callback", func() bool { return a.queues.pending() == 1 })
+	waittest.Until(t, func() bool { return a.queues.pending() == 1 }, "the queued callback")
 	stop()
 	a.pump(time.Now())
 	if calls.Load() != 0 {

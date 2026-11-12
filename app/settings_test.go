@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -273,15 +274,11 @@ func TestSettingsStuckWriteBlocksNoSet(t *testing.T) {
 	setVolume.Set(s, 0.1)
 	flushed := make(chan error, 1)
 	go func() { flushed <- s.Flush() }()
-	for {
+	waittest.Until(t, func() bool {
 		seams.mu.Lock()
-		n := len(seams.writes)
-		seams.mu.Unlock()
-		if n == 1 {
-			break
-		}
-		runtime.Gosched()
-	}
+		defer seams.mu.Unlock()
+		return len(seams.writes) == 1
+	}, "the first write to start")
 	setVolume.Set(s, 0.2)
 	if got := setVolume.Get(s); got != 0.2 {
 		t.Errorf("volume = %v during the stuck write, want 0.2", got)
