@@ -40,17 +40,18 @@ const springPrecision = 0.01
 // velocity, so retargeting it mid-flight continues from where and how
 // fast it is moving instead of restarting from rest - an interrupted
 // open turning into a close flows rather than jerks. Steps are the
-// closed-form solution, exact for any frame interval. It runs on the
-// application loop: onFrame sees every frame's position, and must not
+// closed-form solution, exact for any frame interval. It runs on its
+// owner's clock: onFrame sees every frame's position, and must not
 // keep the slice.
 type Spring struct {
+	owner   Owner
 	params  SpringParams
 	pos     []float64
 	vel     []float64
 	target  []float64
 	onFrame func(pos []float64)
 	last    time.Time
-	cancel  func()
+	cancel  Cancel
 	// precision is how close to its target, in value units per
 	// component, the spring must be before it counts as settled and
 	// snaps there; its velocity must be under precision times the
@@ -58,11 +59,12 @@ type Spring struct {
 	precision float64
 }
 
-// NewSpring returns a spring at rest at initial, which reports its
-// position to onFrame on every frame it moves.
-func NewSpring(p SpringParams, initial []float64, onFrame func(pos []float64)) *Spring {
+// NewSpring returns a spring owned by o, at rest at initial, which
+// reports its position to onFrame on every frame it moves.
+func NewSpring(o Owner, p SpringParams, initial []float64, onFrame func(pos []float64)) *Spring {
 	n := len(initial)
 	return &Spring{
+		owner:   o,
 		params:  p,
 		pos:     append(make([]float64, 0, n), initial...),
 		vel:     make([]float64, n),
@@ -83,9 +85,10 @@ func (s *Spring) SetPrecision(p float64) { s.precision = p }
 func (s *Spring) SetParams(p SpringParams) { s.params = p }
 
 // SetTarget retargets the spring, keeping its position and velocity,
-// and runs it until it settles. Under reduced motion (Instant) it lands
-// on the target at once, with one onFrame. target has one value per
-// component; a different count is a caller bug and panics.
+// and runs it on its owner's clock until it settles; it counts as
+// running while it waits for that clock. Under reduced motion (Instant)
+// it lands on the target at once, with one onFrame. target has one
+// value per component; a different count is a caller bug and panics.
 func (s *Spring) SetTarget(target ...float64) {
 	if len(target) != len(s.pos) {
 		panic("anim: Spring.SetTarget: component count differs from the spring's")
@@ -98,8 +101,10 @@ func (s *Spring) SetTarget(target ...float64) {
 	if s.cancel != nil {
 		return // running: the next frame steps toward the new target
 	}
-	s.last = animclock.Now()
-	s.cancel = animclock.Drive(s.step)
+	s.cancel = schedule(s.owner, func(c *Clock) func() {
+		s.last = animclock.Now()
+		return c.drive(s.step)
+	})
 }
 
 // Snap puts the spring at rest at v, stopping any motion, with one

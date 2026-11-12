@@ -74,7 +74,6 @@ func (c *countingLeaf) HitTest(p widget.Point) widget.Widget { return c.HitLeaf(
 func TestARevealerLayerRecordedInAnIncompleteGPUFrameIsRecordedAgain(t *testing.T) {
 	base := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return base }))
-	t.Cleanup(animclock.Reset)
 	leaf := &countingLeaf{}
 	rev := widget.NewRevealer(leaf)
 	rev.SetTransition(widget.RevealZoom)
@@ -94,8 +93,9 @@ func TestARevealerLayerRecordedInAnIncompleteGPUFrameIsRecordedAgain(t *testing.
 		return b, nil
 	}
 	w.pool = buffer.New(w.allocator(), 3)
+	h.frame()
 	rev.SetRevealed(true)
-	animclock.Tick(base.Add(100 * time.Millisecond))
+	w.anim.Tick(base.Add(100 * time.Millisecond))
 	h.frame()
 	rev.Invalidate()
 	h.frame()

@@ -77,7 +77,7 @@ func (im *Image) syncPlayback() {
 		return
 	}
 	gen := im.gen
-	im.play.cancel = anim.Play(anim.Delay(a.Delays[im.play.frame]), anim.Animate(0, func(float64) {
+	im.play.cancel = anim.Play(im, anim.Delay(a.Delays[im.play.frame]), anim.Animate(0, func(float64) {
 		im.play.cancel = nil
 		if gen != im.gen || !onScreen(im) {
 			return

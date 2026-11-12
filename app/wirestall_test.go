@@ -66,6 +66,7 @@ func (f *wireFixture) window(t *testing.T, a *Application) *paintHarness {
 	h := newPaintHarness(widget.NewDrawingArea(64, 48), 64, 48)
 	h.wnd.surf = wireSurface{wl: surf, comp: f.comp, sess: f.sess, sync: &h.wnd.surfSync}
 	h.wnd.sess = f.sess
+	h.wnd.anim = &a.anim
 	a.windows = append(a.windows, h.wnd)
 	return h
 }

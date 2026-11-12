@@ -234,7 +234,7 @@ func (s *Stack) Show(name string) {
 		return
 	}
 	s.prev, s.progress = prev, 0
-	s.cancel = anim.Play(anim.Animate(s.duration, func(t float64) {
+	s.cancel = anim.Play(s, anim.Animate(s.duration, func(t float64) {
 		s.progress = t
 		if t >= 1 {
 			s.prev, s.cancel = "", nil
@@ -697,7 +697,7 @@ func (s *Scroll) fadeTo(to float64) {
 	}
 	from := s.alpha
 	s.fadeTarget = to
-	s.cancelFade = anim.Start(barFade, func(t float64) {
+	s.cancelFade = anim.Start(s, barFade, func(t float64) {
 		s.alpha = from + float64((to-from)*t)
 		s.invalidateBars()
 	})
@@ -1138,7 +1138,7 @@ func (s *Scroll) ScrollPixels(dx, dy float64) {
 // glides on from the gesture's velocity, and the glow fades once the
 // motion is over.
 func (s *Scroll) ScrollEnd() {
-	s.kin.fling(func(dx, dy float64) bool {
+	s.kin.fling(s, func(dx, dy float64) bool {
 		s.showBars()
 		return s.movePixels(dx, dy)
 	}, func() {
@@ -1193,7 +1193,7 @@ func (s *Scroll) releaseGlow() {
 	if from == [2]float64{} {
 		return
 	}
-	s.cancelGlow = anim.Start(barFade, func(t float64) {
+	s.cancelGlow = anim.Start(s, barFade, func(t float64) {
 		s.overshoot = [2]float64{from[0] * (1 - t), from[1] * (1 - t)}
 		s.Invalidate()
 	})

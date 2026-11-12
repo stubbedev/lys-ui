@@ -12,7 +12,7 @@
 // and pipewire-pulse serve.
 //
 //	src, err := media.OpenFile("talk.mp4")
-//	stream := media.NewStream(src, "talk")
+//	stream := media.NewStream(application, src, "talk")
 //	video := widget.NewVideo(face, 13, stream)
 //	stream.Play()
 package media

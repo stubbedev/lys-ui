@@ -35,6 +35,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 	"github.com/stubbedev/lys-lib/wlr"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/blursync"
 	"github.com/stubbedev/lys-ui/internal/buffer"
@@ -97,7 +98,7 @@ type hostWindow struct {
 
 	pool       *buffer.Pool
 	surfSync   buffer.SurfaceSync
-	anim       *animclock.Clock
+	anim       *anim.Clock
 	animatedAt time.Time
 	// footprint is the pool's buffer count and bytes as last logged
 	// (LYS_DEBUG=frame).
@@ -244,7 +245,7 @@ func opaqueFor(background render.Color, opaque bool) bool {
 	return opaque || background.A() == 255
 }
 
-func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int, root widget.Widget, hooks windowHooks, dnd *dragdrop.Controller, primary *primarySelection, anim *animclock.Clock, animKind surfx.Kind, destroy func()) *hostWindow {
+func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int, root widget.Widget, hooks windowHooks, dnd *dragdrop.Controller, primary *primarySelection, clock *anim.Clock, animKind surfx.Kind, destroy func()) *hostWindow {
 	if initialScale < 1 {
 		initialScale = 1
 	}
@@ -255,7 +256,7 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 		scale:     initialScale,
 		router:    &widget.Router{Root: root},
 		dnd:       dnd,
-		anim:      anim,
+		anim:      clock,
 		tip:       &tooltipCtl{since: time.Now()},
 		dirty:     true,
 		destroy:   destroy,
@@ -268,7 +269,7 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 	if animKind != surfx.KindMenu {
 		w.morph = widget.NewMorph(root)
 		w.router.Root = w.morph
-		w.fx = surfx.NewCoordinator(animKind, w, func() bool { return widget.Current().Moves() })
+		w.fx = surfx.NewCoordinator(clock, animKind, w, func() bool { return widget.Current().Moves() })
 	}
 	// Toplevel hosts carry the size limits, the resize grab, and the
 	// decoration state; layer surfaces implement none of it.
@@ -336,7 +337,7 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 		input.resizeAt = w.resizeEdgeAt
 	}
 	input.Input = touchinput.Input{
-		Tracker: widget.TouchTracker{Router: w.router, Pointer: input},
+		Tracker: widget.TouchTracker{Router: w.router, Pointer: input, Owner: w.anim},
 		Pointer: func() widget.Point { return widget.Point{X: int(input.x), Y: int(input.y)} },
 		Blocked: input.blocked,
 		Changed: input.request,
@@ -380,7 +381,7 @@ func (w *hostWindow) hostRoot() {
 	if w.unhost != nil {
 		w.unhost()
 	}
-	w.hosted, w.unhost = w.router.Root, widget.Host(w.router.Root)
+	w.hosted, w.unhost = w.router.Root, widget.Host(w.router.Root, w.anim)
 }
 
 // release tears down the window's loop state: input handlers are

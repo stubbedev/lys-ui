@@ -9,11 +9,13 @@ import (
 
 // stackAt is a 40x20 stack at (20, 20) with a red "a" and a blue "b"
 // page.
-func stackAt(t StackTransition) *Stack {
+func stackAt(t *testing.T, c *animClock, tr StackTransition) *Stack {
+	t.Helper()
 	s := NewStack()
+	c.host(t, s)
 	s.Add("a", &solidLeaf{sz: Size{W: 40, H: 20}, col: render.RGB(255, 0, 0)})
 	s.Add("b", &solidLeaf{sz: Size{W: 40, H: 20}, col: render.RGB(0, 0, 255)})
-	s.SetTransition(t, 100*time.Millisecond)
+	s.SetTransition(tr, 100*time.Millisecond)
 	SizeWithin(s, Size{W: 80, H: 60})
 	s.Arrange(render.Rect{X: 20, Y: 20, W: 40, H: 20})
 	return s
@@ -31,7 +33,7 @@ func blueAt(data shot, x, y int) uint8 { return data[y*render.Stride(80)+x*4] }
 
 func TestStackWithoutTransitionSwitchesAtOnce(t *testing.T) {
 	c := pinAnimClock(t)
-	s := stackAt(StackNone)
+	s := stackAt(t, c, StackNone)
 	s.Show("b")
 	if s.Switching() || c.step() {
 		t.Error("a plain stack animated")
@@ -43,7 +45,7 @@ func TestStackWithoutTransitionSwitchesAtOnce(t *testing.T) {
 
 func TestStackCrossfade(t *testing.T) {
 	c := pinAnimClock(t)
-	s := stackAt(StackCrossfade)
+	s := stackAt(t, c, StackCrossfade)
 	s.Show("b")
 	if !s.Switching() {
 		t.Fatal("no switch running")
@@ -64,7 +66,7 @@ func TestStackCrossfade(t *testing.T) {
 
 func TestStackSlideFollowsPageOrder(t *testing.T) {
 	c := pinAnimClock(t)
-	s := stackAt(StackSlideLeftRight)
+	s := stackAt(t, c, StackSlideLeftRight)
 	s.Show("b") // a later page comes in from the right
 	advance(c, 30*time.Millisecond)
 	px := paintStack(s)

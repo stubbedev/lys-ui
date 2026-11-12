@@ -15,7 +15,7 @@ func TestBackgroundTransition(t *testing.T) {
 	c := pinAnimClock(t)
 	loadCSS(t, `button { background-color: #000000; transition: background-color 200ms; } button:hover { background-color: #ffffff; }`)
 	b := NewButton(NewSpacer(0, 0), 0, 0)
-	arrangeTree(t, b, 100, 40)
+	c.arrangeTree(t, b, 100, 40)
 	if got := b.style(b).Background; got != render.RGB(0, 0, 0) {
 		t.Fatalf("resting background %#08x, want black", uint32(got))
 	}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
@@ -18,17 +19,18 @@ func TestSharedElementMorphs(t *testing.T) {
 		.big { min-width: 60px; min-height: 60px; margin-left: 40px; margin-top: 40px; background-color: #0000ff; border-radius: 4px; }`)
 	now := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return now }))
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
+	var clock anim.Clock
 	t.Cleanup(func() { clear(sharedShots) })
 
 	const w, h = 120, 120
 	data := make([]byte, render.Stride(w)*h)
 	cv := render.New(data, render.Stride(w), w, h)
 	root := NewBox(Column, 0, 0)
+	t.Cleanup(Host(root, &clock))
 	frame := func() {
 		SizeWithin(root, Size{W: w, H: h})
 		root.Arrange(render.Rect{W: w, H: h})
+		AttachAnimations()
 		CollectDamage(root)
 		cv.Clear(cv.Rect(), 0)
 		root.Paint(cv)
@@ -59,8 +61,8 @@ func TestSharedElementMorphs(t *testing.T) {
 
 	sawBlend := false
 	for range 120 {
-		now = now.Add(animclock.FrameInterval)
-		animclock.Tick(now)
+		now = now.Add(anim.FrameInterval)
+		clock.Tick(now)
 		frame()
 		if c := at(45, 45); c.R() > 40 && c.B() > 40 {
 			sawBlend = true
@@ -86,16 +88,17 @@ func TestSharedElementReducedMotionCrossFades(t *testing.T) {
 	t.Cleanup(func() { SetTheme(nil) })
 	now := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return now }))
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
+	var clock anim.Clock
 	t.Cleanup(func() { clear(sharedShots) })
 	const w, h = 120, 120
 	data := make([]byte, render.Stride(w)*h)
 	cv := render.New(data, render.Stride(w), w, h)
 	root := NewBox(Column, 0, 0)
+	t.Cleanup(Host(root, &clock))
 	frame := func() {
 		SizeWithin(root, Size{W: w, H: h})
 		root.Arrange(render.Rect{W: w, H: h})
+		AttachAnimations()
 		CollectDamage(root)
 		cv.Clear(cv.Rect(), 0)
 		root.Paint(cv)
@@ -110,8 +113,8 @@ func TestSharedElementReducedMotionCrossFades(t *testing.T) {
 	big.AddClass("big")
 	big.SetSharedElement("hero")
 	root.Append(big, false)
-	now = now.Add(animclock.FrameInterval)
-	animclock.Tick(now)
+	now = now.Add(anim.FrameInterval)
+	clock.Tick(now)
 	frame()
 	if c := render.ColorFromBytes(data[20*render.Stride(w)+20*4:]); c.A() != 0 {
 		t.Errorf("reduced motion drew at the old rect: %v", c)
@@ -129,8 +132,6 @@ func TestSharedElementAcrossSurfaces(t *testing.T) {
 	loadCSS(t, `.hero { min-width: 20px; min-height: 20px; margin: 10px; background-color: #ff0000; }`)
 	now := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return now }))
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
 	t.Cleanup(func() { clear(sharedShots) })
 	window, popover := NewBox(Column, 0, 0), NewBox(Column, 0, 0)
 	placed := true

@@ -68,23 +68,27 @@ func (s Spec) moves() bool { return s.Duration > 0 || s.Spring != nil }
 // 0-to-1 fraction, so a thousandth.
 const revealPrecision = 0.001
 
-// Rise runs a rising motion from start to rest (1), calling fn with
-// every frame's reveal: the spec's spring when it has one - from
+// Rise runs a rising motion owned by o from start to rest (1), calling
+// fn with every frame's reveal: the spec's spring when it has one - from
 // wherever start is, overshoot included, until it settles - else its
 // tween over the rest of the way. A spec that does not move lands 1 at
 // once.
-func Rise(spec Spec, start float64, fn func(reveal float64)) anim.Cancel {
+func Rise(o anim.Owner, spec Spec, start float64, fn func(reveal float64)) anim.Cancel {
 	if spec.Spring != nil {
-		s := anim.NewSpring(*spec.Spring, []float64{start}, func(pos []float64) { fn(pos[0]) })
+		s := anim.NewSpring(o, *spec.Spring, []float64{start}, func(pos []float64) { fn(pos[0]) })
 		s.SetPrecision(revealPrecision)
 		s.SetTarget(1)
 		return anim.Cancel(s.Stop)
 	}
-	tween := anim.Animate(spec.Duration, func(p float64) { fn(start + float64((1-start)*p)) })
-	if spec.Easing != nil {
-		tween.Easing(spec.Easing)
+	return spec.play(o, func(p float64) { fn(start + float64((1-start)*p)) })
+}
+
+func (s Spec) play(o anim.Owner, fn func(p float64)) anim.Cancel {
+	tween := anim.Animate(s.Duration, fn)
+	if s.Easing != nil {
+		tween.Easing(s.Easing)
 	}
-	return anim.Play(tween)
+	return anim.Play(o, tween)
 }
 
 // Style is a kind's enter and exit motion. Morph surfaces grow out of
@@ -242,6 +246,7 @@ const (
 // whichever loop ticked the animation clock, while Dismiss usually
 // comes from an input path.
 type Coordinator struct {
+	owner  anim.Owner
 	kind   Kind
 	drv    Driver
 	motion func() bool // nil: package toggle only
@@ -262,12 +267,12 @@ type Coordinator struct {
 	morph bool
 }
 
-// NewCoordinator builds the machine for one surface of kind k. motion,
-// when non-nil, is consulted at every launch so a live theme change
+// NewCoordinator builds the machine for one surface of kind k, whose
+// tweens o owns. motion, when non-nil, is consulted at every launch so a live theme change
 // applies to the next tween; callers typically pass their theme's
 // animation flag there.
-func NewCoordinator(k Kind, drv Driver, motion func() bool) *Coordinator {
-	return &Coordinator{kind: k, drv: drv, motion: motion}
+func NewCoordinator(o anim.Owner, k Kind, drv Driver, motion func() bool) *Coordinator {
+	return &Coordinator{owner: o, kind: k, drv: drv, motion: motion}
 }
 
 // SetOnDismissed registers the exactly-once dismissal callback. It
@@ -413,13 +418,9 @@ func (c *Coordinator) play(spec Spec, rising bool, start float64) anim.Cancel {
 		}
 	}
 	if rising {
-		return Rise(spec, start, fn)
+		return Rise(c.owner, spec, start, fn)
 	}
-	tween := anim.Animate(spec.Duration, fn)
-	if spec.Easing != nil {
-		tween.Easing(spec.Easing)
-	}
-	return anim.Play(tween)
+	return spec.play(c.owner, fn)
 }
 
 // finishExit runs when the exit tween landed: the last frame has been

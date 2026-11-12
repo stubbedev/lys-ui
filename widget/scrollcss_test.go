@@ -35,7 +35,7 @@ func TestScrollBehaviorSmoothReveal(t *testing.T) {
 	loadCSS(t, `scrolledwindow { scroll-behavior: smooth; }`)
 	child := newStub(60, 200)
 	s := NewScroll(child)
-	arrangeTree(t, s, 60, 60)
+	c.arrangeTree(t, s, 60, 60)
 	RevealRect(child, render.Rect{X: 0, Y: 150, W: 60, H: 10})
 	if _, offY := s.Offset(); offY != 0 {
 		t.Fatalf("smooth reveal jumped at once to %d", offY)
@@ -53,7 +53,7 @@ func TestScrollBehaviorSmoothReveal(t *testing.T) {
 	loadCSS(t, ``)
 	child2 := newStub(60, 200)
 	s2 := NewScroll(child2)
-	arrangeTree(t, s2, 60, 60)
+	c.arrangeTree(t, s2, 60, 60)
 	RevealRect(child2, render.Rect{X: 0, Y: 150, W: 60, H: 10})
 	if _, offY := s2.Offset(); offY != 100 {
 		t.Fatalf("auto reveal at %d, want 100 at once", offY)
@@ -266,7 +266,7 @@ func TestTransitionAllowDiscreteFlip(t *testing.T) {
 	loadCSS(t, `button { isolation: isolate; transition: all 200ms allow-discrete; }
 		button:hover { isolation: auto; }`)
 	b := NewButton(NewSpacer(0, 0), 0, 0)
-	arrangeTree(t, b, 40, 40)
+	c.arrangeTree(t, b, 40, 40)
 	if !b.style(b).Isolate {
 		t.Fatal("resting isolation is not isolate")
 	}
@@ -289,7 +289,7 @@ func TestAnimationCompositionAdd(t *testing.T) {
 	loadCSS(t, `@keyframes half { from { opacity: 0.5; } to { opacity: 0.5; } }
 		button { opacity: 0.5; animation: half 200ms; animation-composition: add; }`)
 	b := NewButton(NewSpacer(0, 0), 0, 0)
-	arrangeTree(t, b, 40, 40)
+	c.arrangeTree(t, b, 40, 40)
 	c.step()
 	if got := b.style(b).Opacity; got < 0.99 {
 		t.Fatalf("add composed opacity %v, want 0.5 + 0.5 = 1", got)
@@ -306,7 +306,7 @@ func TestStartingStyleEntryTransition(t *testing.T) {
 	c := pinAnimClock(t)
 	loadCSS(t, `button { opacity: 1; transition: opacity 200ms; @starting-style { opacity: 0; } }`)
 	b := NewButton(NewSpacer(0, 0), 0, 0)
-	arrangeTree(t, b, 40, 40)
+	c.arrangeTree(t, b, 40, 40)
 	c.step()
 	if got := b.style(b).Opacity; got <= 0 || got >= 1 {
 		t.Fatalf("entry opacity %v, want it mid-flight from the starting 0", got)

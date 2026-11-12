@@ -45,7 +45,7 @@ func (b *Box) depart(w Widget) bool {
 	b.departing = append(b.departing, d)
 	n.departingFrom = b
 	var spring *anim.Spring
-	spring = anim.NewSpring(motionSpring(m), []float64{1}, func(pos []float64) {
+	spring = anim.NewSpring(b, motionSpring(m), []float64{1}, func(pos []float64) {
 		b.InvalidateRect(d.from)
 		d.left = min(1, max(0, pos[0]))
 		if pos[0] == 0 && spring.Velocity()[0] == 0 {

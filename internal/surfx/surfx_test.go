@@ -53,10 +53,10 @@ func last[T any](s []T) T { return s[len(s)-1] }
 func TestDismissFiresOnceAndDestroysAfterLastFrame(t *testing.T) {
 	restore := animclock.SetClock(func() time.Time { return time.Unix(1750000000, 0) })
 	defer restore()
-	animclock.Reset()
+	var clock anim.Clock
 
 	d := &recDriver{}
-	fx := NewCoordinator(KindMenu, d, func() bool { return true })
+	fx := NewCoordinator(&clock, KindMenu, d, func() bool { return true })
 	closed := 0
 	fx.SetOnDismissed(func() { closed++ })
 
@@ -86,15 +86,15 @@ func TestDismissFiresOnceAndDestroysAfterLastFrame(t *testing.T) {
 	framesBefore := d.frames
 	now := time.Unix(1750000000, 0)
 	for steps := 0; ; steps++ {
-		if _, ok := animclock.Next(animclock.Timer); !ok {
+		if _, ok := clock.Next(anim.PaceTimer); !ok {
 			break
 		}
 		steps++
 		if steps > 1000 {
 			t.Fatal("exit tween never landed")
 		}
-		now = now.Add(animclock.FrameInterval)
-		animclock.Tick(now)
+		now = now.Add(anim.FrameInterval)
+		clock.Tick(now)
 	}
 	if d.frames == framesBefore {
 		t.Error("exit tween painted no frames")
@@ -116,10 +116,10 @@ func TestDismissFiresOnceAndDestroysAfterLastFrame(t *testing.T) {
 func TestTeardownInterruptsTweenWithoutLeaks(t *testing.T) {
 	restore := animclock.SetClock(func() time.Time { return time.Unix(1750000000, 0) })
 	defer restore()
-	animclock.Reset()
+	var clock anim.Clock
 
 	d := &recDriver{}
-	fx := NewCoordinator(KindMenu, d, func() bool { return true })
+	fx := NewCoordinator(&clock, KindMenu, d, func() bool { return true })
 	closed := 0
 	fx.SetOnDismissed(func() { closed++ })
 
@@ -134,7 +134,7 @@ func TestTeardownInterruptsTweenWithoutLeaks(t *testing.T) {
 		t.Errorf("destroyed %d times after teardown, want exactly 1", d.destroyed)
 	}
 	// A tick after teardown runs nothing: the surface is gone.
-	if _, ok := animclock.Next(animclock.Timer); ok {
+	if _, ok := clock.Next(anim.PaceTimer); ok {
 		t.Error("canceled tween still holds a wake deadline")
 	}
 	// Teardown is idempotent.
@@ -145,9 +145,9 @@ func TestTeardownInterruptsTweenWithoutLeaks(t *testing.T) {
 }
 
 func TestTeardownWithoutDismissFiresOnce(t *testing.T) {
-	animclock.Reset()
+	var clock anim.Clock
 	d := &recDriver{}
-	fx := NewCoordinator(KindMenu, d, nil)
+	fx := NewCoordinator(&clock, KindMenu, d, nil)
 	closed := 0
 	fx.SetOnDismissed(func() { closed++ })
 	// The error path: never opened, never dismissed, surface dies.
@@ -160,10 +160,10 @@ func TestTeardownWithoutDismissFiresOnce(t *testing.T) {
 func TestEnterFirstFrameAtZeroAndRestAtCompletion(t *testing.T) {
 	restore := animclock.SetClock(func() time.Time { return time.Unix(1750000000, 0) })
 	defer restore()
-	animclock.Reset()
+	var clock anim.Clock
 
 	d := &recDriver{}
-	fx := NewCoordinator(KindMenu, d, func() bool { return true })
+	fx := NewCoordinator(&clock, KindMenu, d, func() bool { return true })
 	fx.Enter()
 	// The first frame is at progress 0 — hidden or offset — applied
 	// synchronously, so the surface's first paint can never flash the
@@ -179,11 +179,11 @@ func TestEnterFirstFrameAtZeroAndRestAtCompletion(t *testing.T) {
 	// Drive to rest.
 	now := time.Unix(1750000000, 0)
 	for steps := 0; ; steps++ {
-		if _, ok := animclock.Next(animclock.Timer); !ok {
+		if _, ok := clock.Next(anim.PaceTimer); !ok {
 			break
 		}
-		now = now.Add(animclock.FrameInterval)
-		animclock.Tick(now)
+		now = now.Add(anim.FrameInterval)
+		clock.Tick(now)
 		if steps > 1000 {
 			t.Fatal("enter tween never landed")
 		}
@@ -215,11 +215,11 @@ func TestInstantPathsRunTheSameMachine(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			animclock.Reset()
+			var clock anim.Clock
 			tc.setup(t)
 
 			d := &recDriver{}
-			fx := NewCoordinator(KindMenu, d, tc.motion)
+			fx := NewCoordinator(&clock, KindMenu, d, tc.motion)
 			closed := 0
 			fx.SetOnDismissed(func() { closed++ })
 
@@ -239,7 +239,7 @@ func TestInstantPathsRunTheSameMachine(t *testing.T) {
 			}
 			// The instant surface holds no wake deadlines: the loop
 			// parks immediately after.
-			if _, ok := animclock.Next(animclock.Timer); ok {
+			if _, ok := clock.Next(anim.PaceTimer); ok {
 				t.Error("instant path left a tween scheduled")
 			}
 		})
@@ -271,15 +271,15 @@ func TestPerKindDefaults(t *testing.T) {
 }
 
 // driveClock steps the pinned animation clock until nothing runs.
-func driveClock(t *testing.T, onFrame func()) {
+func driveClock(t *testing.T, clock *anim.Clock, onFrame func()) {
 	t.Helper()
 	now := time.Unix(1750000000, 0)
 	for steps := 0; ; steps++ {
-		if _, ok := animclock.Next(animclock.Timer); !ok {
+		if _, ok := clock.Next(anim.PaceTimer); !ok {
 			return
 		}
-		now = now.Add(animclock.FrameInterval)
-		animclock.Tick(now)
+		now = now.Add(anim.FrameInterval)
+		clock.Tick(now)
 		if onFrame != nil {
 			onFrame()
 		}
@@ -293,21 +293,21 @@ func driveClock(t *testing.T, onFrame func()) {
 // morphs all the way; reduced motion only fades.
 func TestSpringEnterOvershootsAndSettles(t *testing.T) {
 	t.Cleanup(animclock.SetClock(func() time.Time { return time.Unix(1750000000, 0) }))
-	animclock.Reset()
+	var clock anim.Clock
 	d := &recDriver{}
-	fx := NewCoordinator(KindMenu, d, func() bool { return true })
+	fx := NewCoordinator(&clock, KindMenu, d, func() bool { return true })
 	fx.Enter()
 	peak := 0.0
-	driveClock(t, func() { peak = max(peak, d.reveal) })
+	driveClock(t, &clock, func() { peak = max(peak, d.reveal) })
 	if peak <= 1 || d.reveal != 1 || !d.morph {
 		t.Errorf("peak %v, rest %v, morph %v: want an overshoot settling at exactly 1, morphing", peak, d.reveal, d.morph)
 	}
 
-	animclock.Reset()
+	var reduced anim.Clock
 	d = &recDriver{}
-	fx = NewCoordinator(KindMenu, d, func() bool { return false })
+	fx = NewCoordinator(&reduced, KindMenu, d, func() bool { return false })
 	fx.Enter()
-	driveClock(t, nil)
+	driveClock(t, &reduced, nil)
 	if d.reveal != 1 || d.morph || d.frames < 3 {
 		t.Errorf("reduced motion: rest %v, morph %v over %d frames; want a plain fade over a few frames", d.reveal, d.morph, d.frames)
 	}
@@ -317,26 +317,26 @@ func TestSpringEnterOvershootsAndSettles(t *testing.T) {
 // first frame starts at the enter's last reveal, not at rest.
 func TestDismissMidEnterReverses(t *testing.T) {
 	t.Cleanup(animclock.SetClock(func() time.Time { return time.Unix(1750000000, 0) }))
-	animclock.Reset()
+	var clock anim.Clock
 	d := &recDriver{}
-	fx := NewCoordinator(KindDialog, d, func() bool { return true })
+	fx := NewCoordinator(&clock, KindDialog, d, func() bool { return true })
 	fx.Enter()
 	now := time.Unix(1750000000, 0)
 	for range 4 {
-		now = now.Add(animclock.FrameInterval)
-		animclock.Tick(now)
+		now = now.Add(anim.FrameInterval)
+		clock.Tick(now)
 	}
 	mid := d.reveal
 	if mid <= 0 || mid >= 1 {
 		t.Fatalf("mid-enter reveal %v, want a fraction", mid)
 	}
 	fx.Dismiss()
-	now = now.Add(animclock.FrameInterval)
-	animclock.Tick(now)
+	now = now.Add(anim.FrameInterval)
+	clock.Tick(now)
 	if d.reveal >= mid || d.reveal <= 0 {
 		t.Errorf("first exit frame at %v from %v: want it heading down from the mid-enter reveal", d.reveal, mid)
 	}
-	driveClock(t, nil)
+	driveClock(t, &clock, nil)
 	if d.destroyed != 1 {
 		t.Errorf("destroyed %d times, want once", d.destroyed)
 	}

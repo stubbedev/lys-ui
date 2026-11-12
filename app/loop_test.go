@@ -7,7 +7,6 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -21,9 +20,9 @@ func repNext(rep *keyRepeater) time.Time {
 	return t
 }
 
-// animNext adapts animclock.Next the same way.
-func animNext() time.Time {
-	t, ok := animclock.Next(animclock.Timer)
+// animNext adapts Clock.Next the same way.
+func animNext(clock *anim.Clock) time.Time {
+	t, ok := clock.Next(anim.PaceTimer)
 	if !ok {
 		return time.Time{}
 	}
@@ -31,15 +30,12 @@ func animNext() time.Time {
 }
 
 func TestNextWake(t *testing.T) {
-	// The clock is global: tweens other tests left running (a switch's
-	// slide) must not count as this loop's (#323).
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
+	var clock anim.Clock
 	never := time.Time{}
 	now := time.Now()
 
 	t.Run("a fully idle loop never wakes", func(t *testing.T) {
-		if _, ok := nextWake(repNext(newKeyRepeater(0, 0)), animNext(), never, never, now); ok {
+		if _, ok := nextWake(repNext(newKeyRepeater(0, 0)), animNext(&clock), never, never, now); ok {
 			t.Errorf("idle loop scheduled a wakeup")
 		}
 	})
@@ -49,7 +45,7 @@ func TestNextWake(t *testing.T) {
 		before := time.Now()
 		rep.press(30, 0)
 		after := time.Now()
-		wake, ok := nextWake(repNext(rep), animNext(), never, never, now)
+		wake, ok := nextWake(repNext(rep), animNext(&clock), never, never, now)
 		if !ok {
 			t.Fatal("held key did not schedule a wakeup")
 		}
@@ -62,15 +58,15 @@ func TestNextWake(t *testing.T) {
 		rep := newKeyRepeater(0, 0)
 		rep.press(30, 0)
 		rep.release(30)
-		if _, ok := nextWake(repNext(rep), animNext(), never, never, now); ok {
+		if _, ok := nextWake(repNext(rep), animNext(&clock), never, never, now); ok {
 			t.Errorf("released key still scheduled wakeups")
 		}
 	})
 
 	t.Run("a running animation wakes at its end", func(t *testing.T) {
-		animclock.Reset()
-		anim.Start(250*time.Millisecond, func(float64) {})
-		wake, ok := nextWake(repNext(newKeyRepeater(0, 0)), animNext(), never, never, now)
+		var clock anim.Clock
+		anim.Start(&clock, 250*time.Millisecond, func(float64) {})
+		wake, ok := nextWake(repNext(newKeyRepeater(0, 0)), animNext(&clock), never, never, now)
 		if !ok {
 			t.Fatal("animation did not schedule a wakeup")
 		}
@@ -80,11 +76,11 @@ func TestNextWake(t *testing.T) {
 	})
 
 	t.Run("the earliest deadline wins", func(t *testing.T) {
-		animclock.Reset()
-		anim.Start(20*time.Millisecond, func(float64) {})
+		var clock anim.Clock
+		anim.Start(&clock, 20*time.Millisecond, func(float64) {})
 		rep := newKeyRepeater(0, 0)
 		rep.press(30, 0)
-		wake, ok := nextWake(repNext(rep), animNext(), never, never, now)
+		wake, ok := nextWake(repNext(rep), animNext(&clock), never, never, now)
 		if !ok {
 			t.Fatal("no wakeup scheduled")
 		}
@@ -105,12 +101,12 @@ func TestNextWake(t *testing.T) {
 // pending, zero wakeups may be scheduled. This is the acceptance hook
 // for the parked event loop; the pre-park loop burned a core here.
 func TestIdleLoopDoesNotWake(t *testing.T) {
-	animclock.Reset()
+	var clock anim.Clock
 	rep := newKeyRepeater(0, 0)
 	wakes := 0
 	start := time.Now()
 	for time.Since(start) < 200*time.Millisecond {
-		if _, ok := nextWake(repNext(rep), animNext(), time.Time{}, time.Time{}, time.Now()); ok {
+		if _, ok := nextWake(repNext(rep), animNext(&clock), time.Time{}, time.Time{}, time.Now()); ok {
 			wakes++
 		}
 		// A real loop parks in Session.Step here, waking on events.
@@ -182,34 +178,33 @@ func TestShouldDraw(t *testing.T) {
 // when the tween ends the loop parks again - the acceptance half of
 // the timer-driven animation clock.
 func TestAnimatingLoopWakesOnFrameDeadlines(t *testing.T) {
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
+	var clock anim.Clock
 	rep := newKeyRepeater(0, 0)
 	never := time.Time{}
 
-	if _, ok := nextWake(repNext(rep), animNext(), never, never, time.Now()); ok {
+	if _, ok := nextWake(repNext(rep), animNext(&clock), never, never, time.Now()); ok {
 		t.Fatal("static tree scheduled a wakeup")
 	}
 
-	anim.Start(70*time.Millisecond, func(float64) {})
+	anim.Start(&clock, 70*time.Millisecond, func(float64) {})
 	now := time.Now()
 	wakes := 0
-	for animclock.Active() {
-		wake, ok := nextWake(repNext(rep), animNext(), never, never, now)
+	for clock.Active() {
+		wake, ok := nextWake(repNext(rep), animNext(&clock), never, never, now)
 		if !ok {
 			t.Fatal("animating tree did not schedule a wake")
 		}
-		if d := wake.Sub(now); d <= 0 || d > animclock.FrameInterval {
-			t.Fatalf("wake in %v, want one animation frame period (%v) or less", d, animclock.FrameInterval)
+		if d := wake.Sub(now); d <= 0 || d > anim.FrameInterval {
+			t.Fatalf("wake in %v, want one animation frame period (%v) or less", d, anim.FrameInterval)
 		}
 		wakes++
 		now = wake
-		animclock.Tick(now) // the loop ticks its animation clock on the wake
+		clock.Tick(now) // the loop ticks its animation clock on the wake
 	}
 	if wakes < 3 {
-		t.Errorf("wakes over a 70ms tween = %d, want the ~%v frame cadence", wakes, animclock.FrameInterval)
+		t.Errorf("wakes over a 70ms tween = %d, want the ~%v frame cadence", wakes, anim.FrameInterval)
 	}
-	if _, ok := nextWake(repNext(rep), animNext(), never, never, now); ok {
+	if _, ok := nextWake(repNext(rep), animNext(&clock), never, never, now); ok {
 		t.Error("finished tween still scheduled wakeups")
 	}
 }

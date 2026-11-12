@@ -8,7 +8,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/imgcache"
 	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/media"
@@ -44,15 +44,26 @@ func testStream(t *testing.T, frames int) *media.Stream {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := media.NewStream(src, "test")
+	s := media.NewStream(pumpClock(t), src, "test")
 	t.Cleanup(func() {
 		s.Close()
 		if err := s.Wait(); err != nil {
 			t.Error(err)
 		}
-		animclock.Reset()
 	})
 	return s
+}
+
+var pumpClocks = map[testing.TB]*anim.Clock{}
+
+func pumpClock(t testing.TB) *anim.Clock {
+	if c, ok := pumpClocks[t]; ok {
+		return c
+	}
+	c := new(anim.Clock)
+	pumpClocks[t] = c
+	t.Cleanup(func() { delete(pumpClocks, t) })
+	return c
 }
 
 func pumpUntil(t *testing.T, done func() bool) {
@@ -61,7 +72,7 @@ func pumpUntil(t *testing.T, done func() bool) {
 		if done() {
 			return true
 		}
-		animclock.Tick(time.Now())
+		pumpClock(t).Tick(time.Now())
 		return false
 	}, "the stream to get there")
 }

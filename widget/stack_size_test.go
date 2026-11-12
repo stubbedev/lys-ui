@@ -39,6 +39,7 @@ func TestStackSizesToItsVisiblePage(t *testing.T) {
 func TestStackInterpolatesItsSizeThroughASwitch(t *testing.T) {
 	c := pinAnimClock(t)
 	s := sizedStack()
+	c.host(t, s)
 	s.SetHomogeneous(false)
 	s.SetInterpolateSize(true)
 	s.SetTransition(StackCrossfade, 200*time.Millisecond)

@@ -3,16 +3,13 @@ package widget
 import (
 	"testing"
 	"time"
-
-	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
 // typeClock steps past the type-ahead idle timeout without disturbing
 // the rest of the schedule.
 func typeClock(c *animClock, t *testing.T) {
 	t.Helper()
-	c.set(c.now().Add(typeAheadTimeout + time.Millisecond))
-	animclock.Tick(c.now())
+	c.tick(c.now().Add(typeAheadTimeout + time.Millisecond))
 }
 
 // TestDropdownTypeAheadOpen pins the open-list behavior (#62): a
@@ -27,6 +24,7 @@ func TestDropdownTypeAheadOpen(t *testing.T) {
 
 	dd.Open()
 	list := openedList(t, dd, host)
+	c.hostTree(t, list)
 	if got := list.highlight; got != 0 {
 		t.Fatalf("open highlight = %d, want the selected row 0", got)
 	}
@@ -61,6 +59,7 @@ func TestDropdownTypeAheadOpen(t *testing.T) {
 	// Case-insensitive: "B" jumps to banana.
 	dd.Open()
 	list = openedList(t, dd, host)
+	c.hostTree(t, list)
 	list.InsertRune('B')
 	if got := list.highlight; got != 2 {
 		t.Errorf("highlight after \"B\" = %d, want 2 (banana)", got)
@@ -83,6 +82,7 @@ func TestDropdownTypeAheadOpen(t *testing.T) {
 func TestDropdownTypeAheadClosed(t *testing.T) {
 	c := pinAnimClock(t)
 	dd, _ := newDropdown(t, "apple", "apricot", "banana")
+	c.host(t, dd)
 	var picked []int
 	dd.OnSelect = func(i int) { picked = append(picked, i) }
 

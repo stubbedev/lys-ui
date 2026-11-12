@@ -215,6 +215,7 @@ func TestSliderValueModel(t *testing.T) {
 func TestSwitchSlidesItsKnob(t *testing.T) {
 	c := pinAnimClock(t)
 	s := NewSwitch(false)
+	c.host(t, s)
 	s.Arrange(render.Rect{W: 40, H: 22})
 	offX := s.knob.Bounds().X
 	offTrack := render.ColorFromBytes(paintTree(s, 40, 22)[2*render.Stride(40)+16*4:])

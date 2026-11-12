@@ -12,7 +12,6 @@ import (
 	"github.com/stubbedev/lys-lib/media/demux"
 	"github.com/stubbedev/lys-lib/render"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/media"
 )
 
@@ -89,11 +88,8 @@ func withTextureHost(t *testing.T, host TextureHost) {
 
 func textureVideo(t *testing.T, src *fakeTextureSource) (*Video, *media.Stream) {
 	t.Helper()
-	s := media.NewStream(src, "texture")
-	t.Cleanup(func() {
-		s.Close()
-		animclock.Reset()
-	})
+	s := media.NewStream(pumpClock(t), src, "texture")
+	t.Cleanup(s.Close)
 	v := NewVideo(testFace(t), 13, s)
 	SizeWithin(v, Size{W: 80, H: 80})
 	return v, s

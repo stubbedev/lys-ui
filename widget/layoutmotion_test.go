@@ -13,10 +13,11 @@ import (
 // motionScene is a column of 20px swatches over a 100x120 canvas, with
 // a pinned animation clock the test steps.
 type motionScene struct {
-	root *Box
-	data []byte
-	cv   *render.Canvas
-	now  time.Time
+	clock anim.Clock
+	root  *Box
+	data  []byte
+	cv    *render.Canvas
+	now   time.Time
 }
 
 func newMotionScene(t *testing.T) *motionScene {
@@ -24,8 +25,7 @@ func newMotionScene(t *testing.T) *motionScene {
 	loadCSS(t, `.sw { min-width: 100px; min-height: 20px; background-color: #ff0000; } .new { background-color: #0000ff; } .moving { -lys-layout-motion: smooth; }`)
 	s := &motionScene{root: NewBox(Column, 0, 0), now: time.Unix(1750000000, 0)}
 	t.Cleanup(animclock.SetClock(func() time.Time { return s.now }))
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
+	t.Cleanup(Host(s.root, &s.clock))
 	s.data = make([]byte, render.Stride(100)*120)
 	s.cv = render.New(s.data, render.Stride(100), 100, 120)
 	return s
@@ -40,14 +40,15 @@ func swatch(classes ...string) *Box {
 func (s *motionScene) frame() {
 	SizeWithin(s.root, Size{W: 100, H: 120})
 	s.root.Arrange(render.Rect{W: 100, H: 120})
+	AttachAnimations()
 	CollectDamage(s.root)
 	s.cv.Clear(s.cv.Rect(), 0)
 	s.root.Paint(s.cv)
 }
 
 func (s *motionScene) step() {
-	s.now = s.now.Add(animclock.FrameInterval)
-	animclock.Tick(s.now)
+	s.now = s.now.Add(anim.FrameInterval)
+	s.clock.Tick(s.now)
 }
 
 func (s *motionScene) red(y int) bool {

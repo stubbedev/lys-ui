@@ -7,7 +7,6 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/style"
 )
 
@@ -16,6 +15,7 @@ func TestExpanderToggleAnimates(t *testing.T) {
 	c := pinAnimClock(t)
 	child := &fixedWidget{sz: Size{W: 120, H: 60}}
 	e := NewExpander(face, "Advanced", child)
+	c.host(t, e)
 	con := Size{W: 300, H: 500}
 	rect := render.Rect{X: 0, Y: 0, W: 300, H: 500}
 	// relayout is the frame's layout pass: the draw loop re-measures
@@ -59,7 +59,7 @@ func TestExpanderToggleAnimates(t *testing.T) {
 		if !e.Open() {
 			t.Error("state not open after opening")
 		}
-		if animActiveNow(t) {
+		if c.scheduled() {
 			t.Error("settled expander still scheduled wakes")
 		}
 	})
@@ -86,7 +86,7 @@ func TestExpanderToggleAnimates(t *testing.T) {
 		if kids := e.Children(); len(kids) != 0 {
 			t.Errorf("collapsed expander exposed %d children, want 0", len(kids))
 		}
-		if animActiveNow(t) {
+		if c.scheduled() {
 			t.Error("collapsed expander still scheduled wakes")
 		}
 	})
@@ -124,6 +124,7 @@ func TestExpanderRemembersStateWhileHidden(t *testing.T) {
 	t0 := c.now()
 	child := &fixedWidget{sz: Size{W: 100, H: 40}}
 	e := NewExpander(face, "Details", child)
+	c.host(t, e)
 	con := Size{W: 300, H: 500}
 	SizeWithin(e, con)
 
@@ -132,7 +133,7 @@ func TestExpanderRemembersStateWhileHidden(t *testing.T) {
 	if e.progress != 1 {
 		t.Errorf("hidden toggle left progress = %v, want the settled 1", e.progress)
 	}
-	if animActiveNow(t) {
+	if c.scheduled() {
 		t.Error("hidden toggle scheduled animation work")
 	}
 
@@ -142,7 +143,7 @@ func TestExpanderRemembersStateWhileHidden(t *testing.T) {
 	if got := SizeWithin(e, con); got.H != e.headerH()+40 {
 		t.Errorf("shown height = %d, want fully open %d", got.H, e.headerH()+40)
 	}
-	if animActiveNow(t) {
+	if c.scheduled() {
 		t.Error("shown expander scheduled animation work")
 	}
 
@@ -150,7 +151,7 @@ func TestExpanderRemembersStateWhileHidden(t *testing.T) {
 	e.SetOpen(false)
 	c.step()
 	e.Arrange(render.Rect{})
-	if animActiveNow(t) {
+	if c.scheduled() {
 		t.Error("hidden expander kept its tween")
 	}
 	// ...and the state is still "closing", remembered for the return.
@@ -158,7 +159,7 @@ func TestExpanderRemembersStateWhileHidden(t *testing.T) {
 		t.Error("hidden expander forgot its closing state")
 	}
 	c.set(t0.Add(time.Second))
-	animclock.Tick(c.now())
+	c.tick(c.now())
 }
 
 func TestExpanderClickAndKeyToggle(t *testing.T) {
@@ -166,6 +167,7 @@ func TestExpanderClickAndKeyToggle(t *testing.T) {
 	c := pinAnimClock(t)
 	child := &fixedWidget{sz: Size{W: 100, H: 40}}
 	e := NewExpander(face, "Details", child)
+	c.host(t, e)
 	con := Size{W: 300, H: 500}
 	relayout := func() {
 		SizeWithin(e, con)
@@ -225,6 +227,7 @@ func TestExpanderPaint(t *testing.T) {
 	c := pinAnimClock(t)
 	child := &fixedWidget{sz: Size{W: 100, H: 40}}
 	e := NewExpander(face, "Details", child)
+	c.host(t, e)
 	con := Size{W: 300, H: 500}
 	relayout := func() {
 		SizeWithin(e, con)

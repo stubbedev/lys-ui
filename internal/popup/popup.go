@@ -21,6 +21,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 	"github.com/stubbedev/lys-lib/wlr"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/touchinput"
@@ -48,6 +49,8 @@ type Popup struct {
 	XdgSurface *xdg.Surface
 	XdgPopup   *xdg.Popup
 
+	clock *anim.Clock
+
 	// sc carries the surface's scale state (viewport destination or
 	// integer set_buffer_scale); Run applies the parent window's scale.
 	sc *scale.Controller
@@ -71,7 +74,7 @@ type Popup struct {
 	mu sync.Mutex
 	// dirty is set by MarkFrame (tween callbacks) and the input
 	// handlers, and consumed by Run's loop; atomic because tween ticks
-	// run on whichever goroutine called animclock.Tick.
+	// run on whichever goroutine ticked the clock.
 	dirty atomic.Bool
 	sess  *wlsession.Session
 	// gravity orients the enter/exit slide toward the anchor.
@@ -161,12 +164,13 @@ type Config struct {
 	BlurRoot widget.Widget
 }
 
-// New positions a popup, grabs the seat so clicks outside dismiss it,
-// and sends the initial commit. It never waits for the compositor: the
+// New positions a popup that animates on clock, its application's,
+// grabs the seat so clicks outside dismiss it, and sends the initial
+// commit. It never waits for the compositor: the
 // popup stays pending until its first configure dispatches, EnsureUsable
 // says so, a Painter holds its frames back, and the enter tween starts
 // then, so its first frame is the first on screen.
-func New(sess *wlsession.Session, cfg Config) (*Popup, error) {
+func New(sess *wlsession.Session, clock *anim.Clock, cfg Config) (*Popup, error) {
 	serial := sess.InputSerial()
 	if !cfg.NoGrab && serial == 0 {
 		return nil, fmt.Errorf("popup: grab: %w", wlsession.ErrNoInputEvent)
@@ -192,9 +196,9 @@ func New(sess *wlsession.Session, cfg Config) (*Popup, error) {
 		return nil, fmt.Errorf("popup: create surface: %w", err)
 	}
 	debug.Log("input", "popup surface %d created", surf.Id())
-	p := &Popup{WLSurface: surf, w: intconv.Clamp[int32](cfg.Width), h: intconv.Clamp[int32](cfg.Height), sess: sess, gravity: cfg.Gravity, gutter: cfg.Gutter, cfg: cfg}
+	p := &Popup{WLSurface: surf, clock: clock, w: intconv.Clamp[int32](cfg.Width), h: intconv.Clamp[int32](cfg.Height), sess: sess, gravity: cfg.Gravity, gutter: cfg.Gutter, cfg: cfg}
 	p.sc = scale.New(sess, surf, nil)
-	p.fx = surfx.NewCoordinator(cfg.Kind, p, func() bool { return widget.Current().Moves() })
+	p.fx = surfx.NewCoordinator(clock, cfg.Kind, p, func() bool { return widget.Current().Moves() })
 	// The gutter is display-only: clicks in it route to whatever is
 	// beneath instead of landing on a shadow pixel. Sealed at open (and
 	// at each resize); the dismissal state machine re-seals it empty,
@@ -578,7 +582,7 @@ func (p *Popup) AttachInput(sess inputSession, router *widget.Router, onPress fu
 	}
 	pointerAt = func() widget.Point { return widget.Point{X: int(pointer.x), Y: int(pointer.y)} }
 	input.Input = touchinput.Input{
-		Tracker: widget.TouchTracker{Router: router},
+		Tracker: widget.TouchTracker{Router: router, Owner: p.clock},
 		Pointer: pointerAt,
 		Blocked: p.Dismissed,
 		Changed: input.markDirty,

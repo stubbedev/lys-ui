@@ -87,7 +87,7 @@ func (n *node) startTransitions(start, end style.Values) {
 		apply(0)
 		steps[i] = transitionStep(g.timing, apply)
 	}
-	n.trCancel = anim.Play(anim.Parallel(steps...))
+	n.trCancel = anim.Play(n, anim.Parallel(steps...))
 }
 
 // paddingMarginBorder are the box longhands whose change remeasures.

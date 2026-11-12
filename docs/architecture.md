@@ -129,7 +129,9 @@ An occluded surface gets no frame callbacks. Dirty input still forces
 the next redraw, and a running animation paces itself by timer once a
 callback is a frame and a half late. Apps declare animations with the
 `anim` package (`Animate`, `Easing`, `Sequence`, `Parallel`, `Delay`,
-`Play`); nothing running means no deadline.
+`Play`, `NewSpring`, `Drive`), each launched for an owner, usually the
+widget that moves, whose window's application clock runs it; nothing
+running means no deadline.
 
 ### 6. Logical coordinates; device scale only at paint
 

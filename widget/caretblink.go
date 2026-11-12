@@ -34,6 +34,7 @@ const (
 
 // CaretBlink is a caret's blink phase and the one pending piece toggling it.
 type CaretBlink struct {
+	owner  anim.Owner
 	hidden bool
 	cancel anim.Cancel
 	dirty  func()
@@ -42,9 +43,10 @@ type CaretBlink struct {
 	flips  int
 }
 
-// Bind sets the repaint that damages the caret on each flip; a field
-// binds it once, at construction.
-func (b *CaretBlink) Bind(repaint func()) { b.dirty = repaint }
+// Bind sets the widget whose caret blinks, which owns the blink, and the
+// repaint that damages the caret on each flip; a field binds them once,
+// at construction.
+func (b *CaretBlink) Bind(owner anim.Owner, repaint func()) { b.owner, b.dirty = owner, repaint }
 
 // Hidden reports whether the caret is in its off phase.
 func (b *CaretBlink) Hidden() bool { return b.hidden }
@@ -70,7 +72,7 @@ func (b *CaretBlink) arm(after time.Duration) {
 	if b.land == nil {
 		b.land = b.landed
 	}
-	b.cancel = anim.Play(anim.Delay(after), anim.Animate(0, b.land))
+	b.cancel = anim.Play(b.owner, anim.Delay(after), anim.Animate(0, b.land))
 }
 
 func (b *CaretBlink) landed(float64) {

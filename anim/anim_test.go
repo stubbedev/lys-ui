@@ -8,10 +8,10 @@ import (
 )
 
 func TestTweenProgress(t *testing.T) {
-	animclock.Reset()
+	var c Clock
 	calls := 0
 	last := -1.0
-	Start(100*time.Millisecond, func(p float64) {
+	Start(&c, 100*time.Millisecond, func(p float64) {
 		calls++
 		last = p
 	})
@@ -23,7 +23,7 @@ func TestTweenProgress(t *testing.T) {
 	})
 
 	t.Run("a tick mid-flight eases between 0 and 1", func(t *testing.T) {
-		animclock.Tick(time.Now().Add(50 * time.Millisecond))
+		c.Tick(time.Now().Add(50 * time.Millisecond))
 		if calls != 1 {
 			t.Fatalf("calls = %d, want 1", calls)
 		}
@@ -33,15 +33,15 @@ func TestTweenProgress(t *testing.T) {
 	})
 
 	t.Run("a tick past the end delivers 1 and prunes", func(t *testing.T) {
-		animclock.Tick(time.Now().Add(2 * time.Second))
+		c.Tick(time.Now().Add(2 * time.Second))
 		if last != 1 {
 			t.Errorf("final progress = %v, want 1", last)
 		}
-		if animclock.Active() {
+		if c.Active() {
 			t.Error("finished tween still counts as active")
 		}
 		before := calls
-		animclock.Tick(time.Now())
+		c.Tick(time.Now())
 		if calls != before {
 			t.Error("finished tween kept firing after pruning")
 		}
@@ -49,9 +49,9 @@ func TestTweenProgress(t *testing.T) {
 }
 
 func TestZeroDurationRunsOnce(t *testing.T) {
-	animclock.Reset()
+	var c Clock
 	ran := 0
-	Start(0, func(p float64) {
+	Start(&c, 0, func(p float64) {
 		ran++
 		if p != 1 {
 			t.Errorf("progress = %v, want 1 immediately", p)
@@ -60,43 +60,43 @@ func TestZeroDurationRunsOnce(t *testing.T) {
 	if ran != 1 {
 		t.Errorf("calls = %d, want exactly 1", ran)
 	}
-	if animclock.Active() {
+	if c.Active() {
 		t.Error("zero-duration tween must not be active")
 	}
 }
 
 func TestMultipleTweensIndependent(t *testing.T) {
-	animclock.Reset()
+	var c Clock
 	aDone, bDone := false, false
-	Start(50*time.Millisecond, func(float64) { aDone = true })
-	Start(10*time.Second, func(float64) {})
-	animclock.Tick(time.Now().Add(time.Second))
+	Start(&c, 50*time.Millisecond, func(float64) { aDone = true })
+	Start(&c, 10*time.Second, func(float64) {})
+	c.Tick(time.Now().Add(time.Second))
 	if !aDone {
 		t.Error("short tween did not fire")
 	}
-	if !animclock.Active() {
+	if !c.Active() {
 		t.Error("long tween pruned alongside the short one")
 	}
 
-	Start(time.Second, func(float64) { bDone = true })
-	animclock.Tick(time.Now().Add(3 * time.Second))
+	Start(&c, time.Second, func(float64) { bDone = true })
+	c.Tick(time.Now().Add(3 * time.Second))
 	if !bDone {
 		t.Error("the one-second tween never finished")
 	}
-	if !animclock.Active() {
+	if !c.Active() {
 		t.Error("the ten-second tween vanished early")
 	}
 
-	animclock.Tick(time.Now().Add(20 * time.Second))
-	if animclock.Active() {
+	c.Tick(time.Now().Add(20 * time.Second))
+	if c.Active() {
 		t.Error("tweens still active after every duration elapsed")
 	}
 }
 
 func TestNilFunctionIgnored(t *testing.T) {
-	animclock.Reset()
-	Start(time.Second, nil)
-	if animclock.Active() {
+	var c Clock
+	Start(&c, time.Second, nil)
+	if c.Active() {
 		t.Error("nil tween registered")
 	}
 }
@@ -116,25 +116,25 @@ func pinClock(t *testing.T, t0 time.Time) {
 func TestTickDeterminism(t *testing.T) {
 	t0 := time.Unix(0, 0)
 	pinClock(t, t0)
-	animclock.Reset()
+	var c Clock
 
 	var got []float64
 	end := t0.Add(100 * time.Millisecond)
-	Start(100*time.Millisecond, func(p float64) { got = append(got, p) })
+	Start(&c, 100*time.Millisecond, func(p float64) { got = append(got, p) })
 
-	for i := 0; animclock.Active(); i++ {
-		wake, ok := animclock.Next(animclock.Timer)
+	for i := 0; c.Active(); i++ {
+		wake, ok := c.Next(PaceTimer)
 		if !ok {
 			t.Fatal("active tween scheduled no wake")
 		}
-		want := t0.Add(time.Duration(i+1) * animclock.FrameInterval)
+		want := t0.Add(time.Duration(i+1) * FrameInterval)
 		if want.After(end) {
 			want = end // the landing tick is the tween's end, not a frame
 		}
 		if wake != want {
 			t.Fatalf("wake %d at %v, want exactly %v", i, wake, want)
 		}
-		animclock.Tick(wake)
+		c.Tick(wake)
 	}
 
 	// 100ms at 60Hz: six in-flight ticks, then the end-of-tween tick.
@@ -144,11 +144,11 @@ func TestTickDeterminism(t *testing.T) {
 	if last := got[len(got)-1]; last != 1 {
 		t.Errorf("final progress = %v, want exactly 1", last)
 	}
-	mid := EaseOutCubic(float64(animclock.FrameInterval) / float64(100*time.Millisecond))
+	mid := EaseOutCubic(float64(FrameInterval) / float64(100*time.Millisecond))
 	if got[0] != mid {
 		t.Errorf("first progress = %v, want eased %v for one frame in", got[0], mid)
 	}
-	if _, ok := animclock.Next(animclock.Timer); ok {
+	if _, ok := c.Next(PaceTimer); ok {
 		t.Error("finished tween still scheduled a wake")
 	}
 }
@@ -159,31 +159,31 @@ func TestTickDeterminism(t *testing.T) {
 func TestCancelMidFlight(t *testing.T) {
 	t0 := time.Unix(0, 0)
 	pinClock(t, t0)
-	animclock.Reset()
+	var c Clock
 
 	calls, last := 0, -1.0
-	cancel := Start(time.Second, func(p float64) {
+	cancel := Start(&c, time.Second, func(p float64) {
 		calls++
 		last = p
 	})
-	animclock.Tick(t0.Add(50 * time.Millisecond))
+	c.Tick(t0.Add(50 * time.Millisecond))
 	if calls != 1 {
 		t.Fatalf("calls = %d, want 1 before the cancel", calls)
 	}
 
 	cancel()
-	animclock.Tick(t0.Add(100 * time.Millisecond))
-	animclock.Tick(t0.Add(2 * time.Second))
+	c.Tick(t0.Add(100 * time.Millisecond))
+	c.Tick(t0.Add(2 * time.Second))
 	if calls != 1 {
 		t.Errorf("calls = %d after cancel, want no further callbacks", calls)
 	}
 	if last < 0 || last >= 1 {
 		t.Errorf("last value = %v, want the mid-flight value kept", last)
 	}
-	if animclock.Active() {
+	if c.Active() {
 		t.Error("canceled tween still counts as active")
 	}
-	if _, ok := animclock.Next(animclock.Timer); ok {
+	if _, ok := c.Next(PaceTimer); ok {
 		t.Error("canceled tween still scheduled a wake")
 	}
 	cancel() // repeated cancels do nothing
@@ -194,23 +194,23 @@ func TestCancelMidFlight(t *testing.T) {
 func TestCancelStopsTimeline(t *testing.T) {
 	t0 := time.Unix(0, 0)
 	pinClock(t, t0)
-	animclock.Reset()
+	var c Clock
 
 	ran := false
-	cancel := Play(Sequence(
+	cancel := Play(&c, Sequence(
 		Delay(500*time.Millisecond),
 		Animate(100*time.Millisecond, func(float64) { ran = true }),
 	))
-	animclock.Tick(t0.Add(100 * time.Millisecond))
-	if !animclock.Active() {
+	c.Tick(t0.Add(100 * time.Millisecond))
+	if !c.Active() {
 		t.Fatal("timeline in a delay no longer counts as active")
 	}
 	cancel()
-	animclock.Tick(t0.Add(2 * time.Second))
+	c.Tick(t0.Add(2 * time.Second))
 	if ran {
 		t.Error("tween after a canceled delay ran anyway")
 	}
-	if animclock.Active() {
+	if c.Active() {
 		t.Error("canceled timeline still counts as active")
 	}
 }
@@ -221,7 +221,7 @@ func TestCancelStopsTimeline(t *testing.T) {
 func TestSequenceOrdering(t *testing.T) {
 	t0 := time.Unix(0, 0)
 	pinClock(t, t0)
-	animclock.Reset()
+	var c Clock
 
 	var order []string
 	land := func(name string) func(float64) {
@@ -231,26 +231,26 @@ func TestSequenceOrdering(t *testing.T) {
 			}
 		}
 	}
-	Play(Sequence(
+	Play(&c, Sequence(
 		Animate(100*time.Millisecond, land("a")),
 		Delay(50*time.Millisecond),
 		Animate(100*time.Millisecond, land("b")),
 	))
 
-	animclock.Tick(t0.Add(100 * time.Millisecond)) // a lands; b starts only now
+	c.Tick(t0.Add(100 * time.Millisecond)) // a lands; b starts only now
 	if len(order) != 1 || order[0] != "a" {
 		t.Fatalf("order after the first tween = %v, want [a]", order)
 	}
-	animclock.Tick(t0.Add(140 * time.Millisecond)) // still inside the hold
+	c.Tick(t0.Add(140 * time.Millisecond)) // still inside the hold
 	if len(order) != 1 {
 		t.Errorf("callbacks during the delay: %v", order)
 	}
-	animclock.Tick(t0.Add(150 * time.Millisecond)) // b starts (progress 0)
-	animclock.Tick(t0.Add(250 * time.Millisecond)) // b lands
+	c.Tick(t0.Add(150 * time.Millisecond)) // b starts (progress 0)
+	c.Tick(t0.Add(250 * time.Millisecond)) // b lands
 	if len(order) != 2 || order[1] != "b" {
 		t.Fatalf("order at the end = %v, want [a b]", order)
 	}
-	if animclock.Active() {
+	if c.Active() {
 		t.Error("sequence still active after its last tween ended")
 	}
 }
@@ -260,29 +260,29 @@ func TestSequenceOrdering(t *testing.T) {
 func TestParallel(t *testing.T) {
 	t0 := time.Unix(0, 0)
 	pinClock(t, t0)
-	animclock.Reset()
+	var c Clock
 
 	aDone, bDone := false, false
-	Play(Parallel(
+	Play(&c, Parallel(
 		Animate(50*time.Millisecond, func(float64) { aDone = true }),
 		Animate(150*time.Millisecond, func(float64) { bDone = true }),
 	))
 
-	animclock.Tick(t0.Add(50 * time.Millisecond))
+	c.Tick(t0.Add(50 * time.Millisecond))
 	if !aDone {
 		t.Error("short parallel tween did not land at its end")
 	}
-	if !animclock.Active() {
+	if !c.Active() {
 		t.Fatal("long parallel tween dropped with the short one")
 	}
-	if wake, ok := animclock.Next(animclock.Timer); !ok || wake != t0.Add(50*time.Millisecond).Add(animclock.FrameInterval) {
+	if wake, ok := c.Next(PaceTimer); !ok || wake != t0.Add(50*time.Millisecond).Add(FrameInterval) {
 		t.Errorf("wake = %v, %v; want the frame period past the last tick", wake, ok)
 	}
-	animclock.Tick(t0.Add(150 * time.Millisecond))
+	c.Tick(t0.Add(150 * time.Millisecond))
 	if !bDone {
 		t.Error("long parallel tween did not land at its end")
 	}
-	if animclock.Active() {
+	if c.Active() {
 		t.Error("parallel still active after both tweens ended")
 	}
 }
@@ -293,16 +293,16 @@ func TestParallel(t *testing.T) {
 func TestNextWakesForStepStarts(t *testing.T) {
 	t0 := time.Unix(0, 0)
 	pinClock(t, t0)
-	animclock.Reset()
+	var c Clock
 
-	Play(Sequence(Delay(100*time.Millisecond), Animate(50*time.Millisecond, func(float64) {})))
-	wake, ok := animclock.Next(animclock.Timer)
+	Play(&c, Sequence(Delay(100*time.Millisecond), Animate(50*time.Millisecond, func(float64) {})))
+	wake, ok := c.Next(PaceTimer)
 	if !ok || wake != t0.Add(100*time.Millisecond) {
 		t.Fatalf("wake = %v, %v; want the next step's start", wake, ok)
 	}
-	animclock.Tick(wake) // the tween starts (progress 0)
-	wake, ok = animclock.Next(animclock.Timer)
-	want := t0.Add(100 * time.Millisecond).Add(animclock.FrameInterval)
+	c.Tick(wake) // the tween starts (progress 0)
+	wake, ok = c.Next(PaceTimer)
+	want := t0.Add(100 * time.Millisecond).Add(FrameInterval)
 	if !ok || wake != want {
 		t.Errorf("wake after the step started = %v, %v; want the frame deadline %v", wake, ok, want)
 	}
@@ -313,10 +313,10 @@ func TestNextWakesForStepStarts(t *testing.T) {
 func TestZeroDurationInsideTimeline(t *testing.T) {
 	t0 := time.Unix(0, 0)
 	pinClock(t, t0)
-	animclock.Reset()
+	var c Clock
 
 	ran := 0
-	cancel := Play(Animate(0, func(p float64) {
+	cancel := Play(&c, Animate(0, func(p float64) {
 		ran++
 		if p != 1 {
 			t.Errorf("progress = %v, want 1", p)
@@ -325,7 +325,7 @@ func TestZeroDurationInsideTimeline(t *testing.T) {
 	if ran != 1 {
 		t.Fatalf("calls = %d at launch, want 1", ran)
 	}
-	animclock.Tick(t0.Add(time.Second))
+	c.Tick(t0.Add(time.Second))
 	if ran != 1 {
 		t.Errorf("calls = %d after a tick, want 1", ran)
 	}
@@ -335,13 +335,13 @@ func TestZeroDurationInsideTimeline(t *testing.T) {
 // TestPlayWithoutSteps: an empty timeline launches, cancels, and
 // animates nothing.
 func TestPlayWithoutSteps(t *testing.T) {
-	animclock.Reset()
-	cancel := Play()
-	if animclock.Active() {
+	var c Clock
+	cancel := Play(&c)
+	if c.Active() {
 		t.Error("empty timeline is active")
 	}
 	cancel()
-	cancel = Play(nil)
+	cancel = Play(&c, nil)
 	cancel()
 }
 
@@ -353,7 +353,6 @@ func TestPlayWithoutSteps(t *testing.T) {
 func TestCallbackReentrancy(t *testing.T) {
 	t0 := time.Unix(0, 0)
 	pinClock(t, t0)
-	animclock.Reset()
 
 	t.Run("a landing tick may relaunch", func(t *testing.T) {
 		// A mutable clock, not a constant pin: a relaunch reads the
@@ -363,25 +362,25 @@ func TestCallbackReentrancy(t *testing.T) {
 		cur := t0
 		restore := animclock.SetClock(func() time.Time { return cur })
 		t.Cleanup(restore)
-		animclock.Reset()
+		var c Clock
 		generations := 0
 		var spin *Tween
 		spin = Animate(50*time.Millisecond, func(p float64) {
 			if p >= 1 {
 				generations++
 				if generations < 3 {
-					Play(spin) // launches at cur
+					Play(&c, spin) // launches at cur
 				}
 			}
 		}).Easing(Linear)
-		Play(spin)
-		for animclock.Active() {
-			wake, ok := animclock.Next(animclock.Timer)
+		Play(&c, spin)
+		for c.Active() {
+			wake, ok := c.Next(PaceTimer)
 			if !ok {
 				t.Fatal("relaunched tween scheduled no wake")
 			}
 			cur = wake
-			animclock.Tick(wake)
+			c.Tick(wake)
 		}
 		if generations != 3 {
 			t.Errorf("generations = %d, want 3 relaunches then a stop", generations)
@@ -389,30 +388,30 @@ func TestCallbackReentrancy(t *testing.T) {
 	})
 
 	t.Run("a landing tick may cancel", func(t *testing.T) {
-		animclock.Reset()
+		var c Clock
 		finished := false
 		var cancelMid Cancel
-		Start(100*time.Millisecond, func(p float64) {
+		Start(&c, 100*time.Millisecond, func(p float64) {
 			if p >= 1 {
 				finished = true
 				cancelMid() // teardown from inside the tick
 			}
 		})
-		cancelMid = Start(10*time.Second, func(float64) {})
-		animclock.Tick(t0.Add(100 * time.Millisecond))
+		cancelMid = Start(&c, 10*time.Second, func(float64) {})
+		c.Tick(t0.Add(100 * time.Millisecond))
 		if !finished {
 			t.Fatal("the landing never ran")
 		}
-		if animclock.Active() {
+		if c.Active() {
 			t.Error("the canceled tween outlived its cancel")
 		}
 	})
 
 	t.Run("canceling from a callback stops later steps in the same tick", func(t *testing.T) {
-		animclock.Reset()
+		var c Clock
 		second := 0
 		var cancelTimeline Cancel
-		cancelTimeline = Play(Sequence(
+		cancelTimeline = Play(&c, Sequence(
 			Animate(50*time.Millisecond, func(p float64) {
 				if p >= 1 {
 					cancelTimeline()
@@ -422,11 +421,11 @@ func TestCallbackReentrancy(t *testing.T) {
 		))
 		// One tick lands both tweens' ends; the first's cancel must
 		// skip the second's callback in that same tick.
-		animclock.Tick(t0.Add(2 * time.Second))
+		c.Tick(t0.Add(2 * time.Second))
 		if second != 0 {
 			t.Errorf("canceled timeline's later step fired %d times, want 0", second)
 		}
-		if animclock.Active() {
+		if c.Active() {
 			t.Error("canceled timeline still counts as active")
 		}
 	})

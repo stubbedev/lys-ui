@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/testbuild"
+
+	"github.com/stubbedev/lys-ui/anim"
 )
 
 func yuvPlanes(w, h, frame int) []byte {
@@ -184,7 +186,7 @@ func TestStreamSkippingRGBAConvertsNothing(t *testing.T) {
 			t.Error("the decoder kept skipping RGBA after SkipRGBA(false)")
 		}
 	})
-	if _, ok := newStream(&fakeSource{frames: 1}, "rgba", noAudio).YUV(); ok {
+	if _, ok := newStream(new(anim.Clock), &fakeSource{frames: 1}, "rgba", noAudio).YUV(); ok {
 		t.Error("an RGBA source's stream reports YUV frames")
 	}
 }

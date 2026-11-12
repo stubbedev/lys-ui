@@ -10,7 +10,6 @@ import (
 	"github.com/stubbedev/lys-lib/testbuild"
 
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
 // A focused entry's caret spans the font's extents and blinks as GTK's
@@ -24,6 +23,7 @@ func TestCaretBlinks(t *testing.T) {
 	other := newFocusTarget()
 	root := NewBox(Column, 0, 0)
 	root.Append(e, false).Append(other, false)
+	clock.host(t, root)
 	SizeWithin(root, Size{W: 160, H: 80})
 	root.Arrange(render.Rect{W: 160, H: 80})
 	r := &Router{Root: root}
@@ -135,24 +135,25 @@ func TestTextAreaClickRepaintsTheCaret(t *testing.T) {
 // for up to gtk-cursor-blink-timeout, for a widget nobody can see, and
 // race whatever the next surface's owner is doing to the theme.
 func TestDetachingATreeStopsItsCaret(t *testing.T) {
-	pinAnimClock(t)
+	c := pinAnimClock(t)
 	for name, field := range map[string]Widget{
 		"entry":    NewEntry(testFace(t), 14, render.RGB(255, 255, 255)),
 		"textarea": NewTextArea(testFace(t), 14, render.RGB(255, 255, 255)),
 	} {
 		root := NewBox(Column, 0, 0)
 		root.Append(NewBox(Column, 0, 0).Append(field, false), false)
+		c.host(t, root)
 		SizeWithin(root, Size{W: 160, H: 80})
 		root.Arrange(render.Rect{W: 160, H: 80})
 		r := &Router{Root: root}
 		if err := r.SetFocus(field); err != nil {
 			t.Fatal(err)
 		}
-		if !animclock.Active() {
+		if !c.active() {
 			t.Fatalf("%s: focus should start the blink", name)
 		}
 		Detach(root)
-		if animclock.Active() {
+		if c.active() {
 			t.Errorf("%s: the blink outlived its surface", name)
 		}
 	}
@@ -163,6 +164,7 @@ func TestTypingMovesTheNextFlipAndLaunchesNothing(t *testing.T) {
 	e := NewEntry(testFace(t), 14, render.RGB(255, 255, 255))
 	e.SetText("hello")
 	root := NewBox(Column, 0, 0).Append(e, false)
+	clock.host(t, root)
 	SizeWithin(root, Size{W: 160, H: 80})
 	root.Arrange(render.Rect{W: 160, H: 80})
 	r := &Router{Root: root}
@@ -194,7 +196,7 @@ func TestInputOTPCaretBlinks(t *testing.T) {
 	o := NewInputOTP(testFace(t), OTPDigits, 6)
 	root := NewBox(Column, 0, 0)
 	root.Append(o, false)
-	arrangeTree(t, root, 400, 80)
+	clock.arrangeTree(t, root, 400, 80)
 	r := &Router{Root: root}
 	if err := r.SetFocus(o); err != nil {
 		t.Fatal(err)

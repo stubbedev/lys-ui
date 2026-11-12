@@ -186,7 +186,7 @@ func (n *node) driveAnimations(now time.Time) {
 	na.driveID++
 	id := na.driveID
 	var drive anim.Cancel
-	drive = anim.Play(anim.Animate(span, func(t float64) {
+	drive = anim.Play(n, anim.Animate(span, func(t float64) {
 		// The on-screen check may restyle the node, and the restyle
 		// may drop the animations or drive them afresh; this tween is
 		// then no longer the node's and must not touch its state.

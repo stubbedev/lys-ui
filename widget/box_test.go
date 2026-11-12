@@ -240,6 +240,7 @@ func TestBoxTransform(t *testing.T) {
 	sw.AddClass("swatch")
 	root.Append(NewLabel(face, 10, "pad", render.RGBA(0, 0, 0, 255)), false)
 	root.Append(sw, false)
+	c.host(t, root)
 	sz := SizeWithin(root, Size{W: 200, H: 200})
 	root.Arrange(render.Rect{W: sz.W, H: sz.H})
 

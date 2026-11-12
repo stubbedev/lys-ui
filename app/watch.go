@@ -242,5 +242,6 @@ func (a *Application) endLoop() {
 	for _, remove := range a.widgetHooks {
 		remove()
 	}
+	a.anim.Stop()
 	widget.StopAssetLoads()
 }

@@ -22,7 +22,7 @@ func TestTransformTransitionRotates(t *testing.T) {
 		box.hot { transform: rotate(90deg); }`)
 	b := NewBox(Column, 0, 0)
 	b.AddClass("pane")
-	frame(t, b, 40, 40)
+	c.frame(t, b, 40, 40)
 	b.AddClass("hot")
 	b.style(b)
 	c.step()
@@ -48,7 +48,7 @@ func TestTransformTransitionRevertsToIdentity(t *testing.T) {
 	c := pinAnimClock(t)
 	loadCSS(t, `box { transform: scale(2); transition: transform 50ms linear; }`)
 	b := NewBox(Column, 0, 0)
-	frame(t, b, 40, 40)
+	c.frame(t, b, 40, 40)
 	loadCSS(t, `box { transition: transform 50ms linear; }`)
 	// The restyle starts the transition at its start value.
 	if m := b.style(b).Transform.M; !affineEq(m, render.Scale(2, 2)) {
@@ -71,7 +71,7 @@ func TestKeyframesAnimateBackground(t *testing.T) {
 	}
 	box { animation: wash 100ms linear infinite; }`)
 	b := NewBox(Column, 0, 0)
-	frame(t, b, 40, 40)
+	c.frame(t, b, 40, 40)
 	c.step()
 	got := b.style(b).Background
 	if got == 0xff000000 || got == 0xffffffff {
@@ -86,7 +86,7 @@ func TestAnimationFillForwardsHolds(t *testing.T) {
 	loadCSS(t, `@keyframes dim { from { opacity: 1; } to { opacity: 0.25; } }
 		box { opacity: 1; animation: dim 50ms linear 1 forwards; }`)
 	b := NewBox(Column, 0, 0)
-	frame(t, b, 40, 40)
+	c.frame(t, b, 40, 40)
 	for c.step() {
 	}
 	if got := b.style(b).Opacity; got != 0.25 {
@@ -120,7 +120,7 @@ func TestAnimationReverseDirection(t *testing.T) {
 	loadCSS(t, `@keyframes dim { from { opacity: 1; } to { opacity: 0; } }
 		box { animation: dim 100ms linear reverse; }`)
 	b := NewBox(Column, 0, 0)
-	frame(t, b, 40, 40)
+	c.frame(t, b, 40, 40)
 	c.step()
 	if got := b.style(b).Opacity; mathAbs(got-0.1666) > 0.01 {
 		t.Errorf("reversed opacity after one frame %v, want ~0.167", got)

@@ -26,7 +26,7 @@ func TestSpinnerDamagesItsSquareInStretchedBounds(t *testing.T) {
 	s := NewSpinner(24)
 	s.SetSpinning(true)
 	root := NewBox(Column, 0, 0).Append(s, true)
-	t.Cleanup(Host(root))
+	c.host(t, root)
 	r := render.Rect{W: 800, H: 600}
 	SizeWithin(root, Size{W: 800, H: 600})
 	rects := stepDamage(t, c, root, r)
@@ -45,7 +45,7 @@ func TestSpinnerDamageIsItsSizeWhenCentered(t *testing.T) {
 	s.SetSpinning(true)
 	s.SetHAlign(AlignCenter)
 	root := NewBox(Row, 0, 0).Append(s, true)
-	t.Cleanup(Host(root))
+	c.host(t, root)
 	r := render.Rect{W: 800, H: 24}
 	SizeWithin(root, Size{W: 800, H: 24})
 	rects := stepDamage(t, c, root, r)
@@ -58,7 +58,7 @@ func TestProgressRingEasesInsideItsSquare(t *testing.T) {
 	c := pinAnimClock(t)
 	ring := NewProgressRing(0)
 	root := NewBox(Column, 0, 0).Append(ring, true)
-	t.Cleanup(Host(root))
+	c.host(t, root)
 	r := render.Rect{W: 400, H: 100}
 	SizeWithin(root, Size{W: 400, H: 100})
 	root.Arrange(r)
@@ -78,7 +78,7 @@ func TestProgressPulseDamagesItsTroughAlone(t *testing.T) {
 	bar := NewProgressBar(0)
 	bar.SetPulsing(true)
 	root := NewBox(Column, 0, 0).Append(bar, true)
-	t.Cleanup(Host(root))
+	c.host(t, root)
 	r := render.Rect{W: 400, H: 100}
 	SizeWithin(root, Size{W: 400, H: 100})
 	rects := stepDamage(t, c, root, r)

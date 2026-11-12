@@ -56,7 +56,7 @@ type SwipeDismiss struct {
 func NewSwipeDismiss(child Widget) *SwipeDismiss {
 	s := &SwipeDismiss{child: child}
 	s.SetElement("swipedismiss")
-	s.spring = anim.NewSpring(anim.SpringSnappy, []float64{0}, func(pos []float64) { s.settled(pos[0]) })
+	s.spring = anim.NewSpring(s, anim.SpringSnappy, []float64{0}, func(pos []float64) { s.settled(pos[0]) })
 	return s
 }
 

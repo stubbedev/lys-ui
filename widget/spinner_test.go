@@ -6,19 +6,17 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
-
-	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
 func TestSpinnerNeedsSpinningAndVisible(t *testing.T) {
 	c := pinAnimClock(t)
 	s := NewSpinner(24)
-	t.Cleanup(Host(s))
+	c.host(t, s)
 	con := Size{W: 100, H: 100}
 
 	t.Run("spinning but unarranged holds no timer", func(t *testing.T) {
 		s.SetSpinning(true)
-		if animActiveNow(t) {
+		if c.scheduled() {
 			t.Error("hidden spinner scheduled rotation work")
 		}
 	})
@@ -26,7 +24,7 @@ func TestSpinnerNeedsSpinningAndVisible(t *testing.T) {
 	t.Run("visible and spinning ticks", func(t *testing.T) {
 		SizeWithin(s, con)
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 24, H: 24})
-		if !animActiveNow(t) {
+		if !c.scheduled() {
 			t.Fatal("visible spinning spinner scheduled nothing")
 		}
 		before := s.angle
@@ -43,12 +41,12 @@ func TestSpinnerNeedsSpinningAndVisible(t *testing.T) {
 		if s.Spinning() {
 			t.Error("Spinning() still true")
 		}
-		if animActiveNow(t) {
+		if c.scheduled() {
 			t.Error("stopped spinner kept its tween")
 		}
 		frozen := s.angle
 		c.set(c.now().Add(time.Second))
-		animclock.Tick(c.now())
+		c.tick(c.now())
 		if s.angle != frozen {
 			t.Errorf("angle moved after stop: %v -> %v", frozen, s.angle)
 		}
@@ -56,7 +54,7 @@ func TestSpinnerNeedsSpinningAndVisible(t *testing.T) {
 
 	t.Run("restarting resumes", func(t *testing.T) {
 		s.SetSpinning(true)
-		if !animActiveNow(t) {
+		if !c.scheduled() {
 			t.Fatal("restarted spinner scheduled nothing")
 		}
 		if !c.step() {
@@ -66,13 +64,13 @@ func TestSpinnerNeedsSpinningAndVisible(t *testing.T) {
 
 	t.Run("hiding stops the rotation", func(t *testing.T) {
 		s.Arrange(render.Rect{})
-		if animActiveNow(t) {
+		if c.scheduled() {
 			t.Error("hidden spinner kept its tween")
 		}
 		// Back on screen, still spinning: it resumes without a
 		// SetSpinning round-trip.
 		s.Arrange(render.Rect{X: 0, Y: 0, W: 24, H: 24})
-		if !animActiveNow(t) {
+		if !c.scheduled() {
 			t.Error("re-shown spinner did not resume")
 		}
 	})
@@ -81,7 +79,7 @@ func TestSpinnerNeedsSpinningAndVisible(t *testing.T) {
 func TestSpinnerAngleWraps(t *testing.T) {
 	c := pinAnimClock(t)
 	s := NewSpinner(24)
-	t.Cleanup(Host(s))
+	c.host(t, s)
 	s.SetSpinning(true)
 	SizeWithin(s, Size{W: 100, H: 100})
 	s.Arrange(render.Rect{X: 0, Y: 0, W: 24, H: 24})
@@ -204,26 +202,26 @@ func TestHiddenIndicatorsScheduleNoFrames(t *testing.T) {
 				.pulse { animation: beat 1s infinite; }`)
 			c := pinAnimClock(t)
 			host, hide := tc.place(tc.indicator())
-			frame(t, host, 200, 100)
+			c.frame(t, host, 200, 100)
 			if !c.step() {
 				t.Fatal("visible indicator scheduled no frame")
 			}
 			hide.SetVisible(false)
-			frame(t, host, 200, 100)
+			c.frame(t, host, 200, 100)
 			CollectDamage(host)
 			gen := DamageGeneration()
 			for range 3 {
 				c.step()
 			}
-			if animActiveNow(t) {
+			if c.scheduled() {
 				t.Error("hidden indicator still schedules frames")
 			}
 			if DamageGeneration() != gen {
 				t.Error("hidden indicator still damages the tree")
 			}
 			hide.SetVisible(true)
-			frame(t, host, 200, 100)
-			if !animActiveNow(t) {
+			c.frame(t, host, 200, 100)
+			if !c.scheduled() {
 				t.Error("shown again, the indicator did not resume")
 			}
 		})
@@ -250,7 +248,7 @@ func TestDetachedIndicatorsScheduleNoFrames(t *testing.T) {
 			l.AddClass("pulse")
 			card := NewBox(Column, 0, 0).Append(s, false).Append(l, false)
 			box := NewBox(Column, 0, 0).Append(card, false)
-			unhost := Host(box)
+			unhost := Host(box, &c.clock)
 			defer func() { unhost() }()
 			layout(box, 200, 100)
 			if !c.step() {
@@ -262,7 +260,7 @@ func TestDetachedIndicatorsScheduleNoFrames(t *testing.T) {
 			for range 3 {
 				c.step()
 			}
-			if animActiveNow(t) {
+			if c.scheduled() {
 				t.Error("detached indicators still schedule frames")
 			}
 			if DamageGeneration() != gen {
@@ -271,9 +269,9 @@ func TestDetachedIndicatorsScheduleNoFrames(t *testing.T) {
 			if len(box.child) == 0 {
 				box.Append(card, false)
 			}
-			unhost = Host(box)
+			unhost = Host(box, &c.clock)
 			layout(box, 200, 100)
-			if !animActiveNow(t) {
+			if !c.scheduled() {
 				t.Error("attached again, the indicators did not resume")
 			}
 		})
@@ -283,14 +281,15 @@ func TestDetachedIndicatorsScheduleNoFrames(t *testing.T) {
 func TestUnhostedTreeSchedulesNoFrames(t *testing.T) {
 	loadCSS(t, `@keyframes beat { from { opacity: 1; } to { opacity: 0.5; } }
 		.pulse { animation: beat 1s infinite; }`)
-	pinAnimClock(t)
+	c := pinAnimClock(t)
 	s := NewSpinner(24)
 	s.SetSpinning(true)
 	l := NewLabel(testFace(t), 12, "x", 0)
 	l.AddClass("pulse")
 	page := NewScroll(NewBox(Column, 0, 0).Append(s, false).Append(l, false))
 	layout(page, 200, 100)
-	if animActiveNow(t) {
+	AttachAnimations()
+	if c.scheduled() {
 		t.Error("a tree arranged without a host schedules frames")
 	}
 }

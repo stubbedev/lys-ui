@@ -201,6 +201,7 @@ func (f *confFixture) values(id string) *style.Values {
 func (f *confFixture) settle() {
 	f.t.Helper()
 	settle(f.t, f.root, f.vp.W, f.vp.H)
+	AttachAnimations()
 	stride := render.Stride(f.vp.W)
 	f.frame = make([]byte, stride*f.vp.H)
 	cv := render.New(f.frame, stride, f.vp.W, f.vp.H)
@@ -428,7 +429,7 @@ func (c confCase) run(t *testing.T) {
 	body.Append(f.build(c.tree), false)
 	f.name(body, "#root")
 	f.root = body
-	t.Cleanup(Host(body))
+	f.clock.host(t, body)
 	loadCSS(t, c.css)
 	f.settle()
 	if c.act != nil {

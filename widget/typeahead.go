@@ -25,7 +25,7 @@ type typeAhead struct {
 // current. A key that matches nothing reports false and leaves every
 // bit of state alone, so it never fights the keys around it. Each
 // accepted key restarts the idle timer.
-func (t *typeAhead) next(r rune, current, n int, label func(i int) (string, bool)) (int, bool) {
+func (t *typeAhead) next(owner anim.Owner, r rune, current, n int, label func(i int) (string, bool)) (int, bool) {
 	key := strings.ToLower(string(r))
 	prefix := t.typed + key
 	rows := prefixRows(prefix, n, label)
@@ -51,7 +51,7 @@ func (t *typeAhead) next(r rune, current, n int, label func(i int) (string, bool
 		}
 	}
 	t.typed = prefix
-	t.arm()
+	t.arm(owner)
 	return target, true
 }
 
@@ -69,11 +69,11 @@ func prefixRows(prefix string, n int, label func(i int) (string, bool)) []int {
 
 // arm (re)starts the idle timer that clears the chain; the delay keeps
 // its duration under reduced motion, like every timing skeleton.
-func (t *typeAhead) arm() {
+func (t *typeAhead) arm(owner anim.Owner) {
 	if t.cancel != nil {
 		t.cancel()
 	}
-	t.cancel = anim.Play(anim.Sequence(
+	t.cancel = anim.Play(owner, anim.Sequence(
 		anim.Delay(typeAheadTimeout),
 		anim.Animate(0, func(float64) {
 			t.typed = ""

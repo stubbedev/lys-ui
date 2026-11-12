@@ -15,7 +15,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wlclient"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/blursync"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/repaint"
@@ -40,6 +40,7 @@ type Renderer interface {
 // once per pass and parks however it likes between passes.
 type Painter struct {
 	p      *Popup
+	clock  *anim.Clock
 	unhost func()
 
 	sess    *wlsession.Session
@@ -96,6 +97,7 @@ func (p *Popup) NewPainter(sess *wlsession.Session, gpu Renderer, frac120 uint32
 	defer p.mu.Unlock()
 	pc := &Painter{
 		p:       p,
+		clock:   p.clock,
 		sess:    sess,
 		gpu:     gpu,
 		surf:    p.WLSurface,
@@ -109,7 +111,7 @@ func (p *Popup) NewPainter(sess *wlsession.Session, gpu Renderer, frac120 uint32
 	p.anim = newAnimView(root, reveal, morph, p.gravity, p.gutter, pc.paintPlate)
 	p.anim.morph.SetPlateOpaque(!pc.noPlate && bg.A() == 0xff)
 	pc.visual = p.anim.morph
-	pc.unhost = widget.Host(pc.visual)
+	pc.unhost = widget.Host(pc.visual, pc.clock)
 	pc.w, pc.h = p.Size()
 	pc.dirty.Store(true)
 	p.painter = pc
@@ -309,7 +311,7 @@ func (pc *Painter) presented(b *buffer.Buffer, changed *buffer.Region, outcome b
 		pc.dirty.Store(true)
 	}
 	pc.framePending = true
-	if animclock.Active() {
+	if pc.clock.Active() {
 		return pc.pool.Prepare()
 	}
 	return nil

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/widget"
@@ -19,27 +20,26 @@ import (
 // instants from the same hand (the pinAnimClock pattern, driven from
 // outside the anim package).
 type animClock struct {
-	cur time.Time
+	cur   time.Time
+	clock anim.Clock
 }
 
 func pinAnimClock(t *testing.T) *animClock {
 	t.Helper()
 	c := &animClock{cur: time.Unix(1750000000, 0)}
 	t.Cleanup(animclock.SetClock(func() time.Time { return c.cur }))
-	t.Cleanup(animclock.Reset)
-	animclock.Reset()
 	return c
 }
 
 // step advances one animation wake — one frame deadline — and ticks
 // there. False when nothing is scheduled: the loop may park.
 func (c *animClock) step() bool {
-	wake, ok := animclock.Next(animclock.Timer)
+	wake, ok := c.clock.Next(anim.PaceTimer)
 	if !ok {
 		return false
 	}
 	c.cur = wake
-	animclock.Tick(wake)
+	c.clock.Tick(wake)
 	return true
 }
 
@@ -70,14 +70,13 @@ type exitHarness struct {
 	destroyed int
 }
 
-func newExitHarness(t *testing.T, kind surfx.Kind) *exitHarness {
+func newExitHarness(t *testing.T, c *animClock, kind surfx.Kind) *exitHarness {
 	t.Helper()
-	// The caller must have pinned the animation clock first, so tween
-	// launches land on the test's hand.
 	host := &closableHost{}
 	host.w, host.h = 200, 100
 	root := widget.NewBox(widget.Row, 4, 4)
 	ph := newPaintHarness(root, 200, 100)
+	ph.wnd.anim = &c.clock
 	ph.wnd.host = host
 	ph.wnd.lastW, ph.wnd.lastH = 200, 100
 	h := &exitHarness{ph: ph, host: host}
@@ -89,7 +88,7 @@ func newExitHarness(t *testing.T, kind surfx.Kind) *exitHarness {
 	// morph over the tree, coordinator driving this window.
 	ph.wnd.morph = widget.NewMorph(root)
 	ph.wnd.router.Root = ph.wnd.morph
-	ph.wnd.fx = surfx.NewCoordinator(kind, ph.wnd, func() bool { return true })
+	ph.wnd.fx = surfx.NewCoordinator(ph.wnd.anim, kind, ph.wnd, func() bool { return true })
 	ph.wnd.destroy = func() {
 		h.destroyed++
 		host.closed = true
@@ -99,7 +98,7 @@ func newExitHarness(t *testing.T, kind surfx.Kind) *exitHarness {
 
 func TestLayerOverlayExitKeepsLoopParkedBetweenFrames(t *testing.T) {
 	c := pinAnimClock(t)
-	h := newExitHarness(t, surfx.KindOverlay)
+	h := newExitHarness(t, c, surfx.KindOverlay)
 	hw := h.ph.wnd
 
 	// The enter starts on the first usable pass; its first visual is
@@ -159,7 +158,7 @@ func TestLayerOverlayExitKeepsLoopParkedBetweenFrames(t *testing.T) {
 	if !h.host.closed {
 		t.Error("raw close did not flip the host's closed flag")
 	}
-	if _, ok := animclock.Next(animclock.Timer); ok {
+	if _, ok := c.clock.Next(anim.PaceTimer); ok {
 		t.Error("tween schedule not empty after the exit landed")
 	}
 }
@@ -168,7 +167,7 @@ func TestNonAnimatedWindowClosesImmediately(t *testing.T) {
 	// Plain toplevels carry no coordinator: beginExit is false and the
 	// caller falls through to the raw close, exactly the pre-tween
 	// behavior.
-	h := newExitHarness(t, surfx.KindMenu)
+	h := newExitHarness(t, pinAnimClock(t), surfx.KindMenu)
 	if h.ph.wnd.beginExit() {
 		t.Fatal("a non-animated kind began an exit")
 	}
@@ -179,7 +178,7 @@ func TestNonAnimatedWindowClosesImmediately(t *testing.T) {
 
 func TestDismissedWindowSealsInputAndIgnoresDoubleClose(t *testing.T) {
 	c := pinAnimClock(t)
-	h := newExitHarness(t, surfx.KindDialog)
+	h := newExitHarness(t, c, surfx.KindDialog)
 	hw := h.ph.wnd
 	hw.enterIfDue()
 	c.drive()
@@ -205,7 +204,7 @@ func TestDismissedWindowSealsInputAndIgnoresDoubleClose(t *testing.T) {
 	if h.destroyed != 1 {
 		t.Errorf("destroyed %d times, want exactly 1", h.destroyed)
 	}
-	if _, ok := animclock.Next(animclock.Timer); ok {
+	if _, ok := c.clock.Next(anim.PaceTimer); ok {
 		t.Error("schedule not drained")
 	}
 }
@@ -216,7 +215,7 @@ func TestDismissedWindowSealsInputAndIgnoresDoubleClose(t *testing.T) {
 // for the last frame.
 func TestExitTweenPaintsFadingFrames(t *testing.T) {
 	c := pinAnimClock(t)
-	h := newExitHarness(t, surfx.KindOverlay)
+	h := newExitHarness(t, c, surfx.KindOverlay)
 	hw := h.ph.wnd
 	hw.enterIfDue()
 	c.drive()

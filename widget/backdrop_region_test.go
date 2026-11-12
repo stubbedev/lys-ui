@@ -18,7 +18,7 @@ func glassTree(t *testing.T) (root, glass *Box, spin *Spinner, c *animClock) {
 	spin = NewSpinner(24)
 	spin.SetSpinning(true)
 	root = NewBox(Column, 0, 0).Append(glass, false).Append(spin, false)
-	t.Cleanup(Host(root))
+	c.host(t, root)
 	return root, glass, spin, c
 }
 

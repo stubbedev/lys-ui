@@ -14,6 +14,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/touchinput"
@@ -109,12 +110,11 @@ func wireFreePopup(t *testing.T, kind surfx.Kind) (*Popup, func()) {
 	t.Helper()
 	base := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return base }))
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
+	var clock anim.Clock
 	now := base
 	drive := func() {
 		for i := 0; ; i++ {
-			wake, ok := animclock.Next(animclock.Timer)
+			wake, ok := clock.Next(anim.PaceTimer)
 			if !ok {
 				return
 			}
@@ -124,11 +124,11 @@ func wireFreePopup(t *testing.T, kind surfx.Kind) (*Popup, func()) {
 			if wake.After(now) {
 				now = wake
 			}
-			animclock.Tick(now)
+			clock.Tick(now)
 		}
 	}
-	p := &Popup{}
-	p.fx = surfx.NewCoordinator(kind, p, nil)
+	p := &Popup{clock: &clock}
+	p.fx = surfx.NewCoordinator(&clock, kind, p, nil)
 	p.fx.Enter()
 	drive()
 	return p, drive
@@ -301,10 +301,10 @@ func TestPopupWheelScrolls(t *testing.T) {
 
 func TestGrabWithoutAnInputEventIsRefused(t *testing.T) {
 	sess := &wlsession.Session{}
-	if _, err := New(sess, Config{Width: 10, Height: 10}); !errors.Is(err, wlsession.ErrNoInputEvent) {
+	if _, err := New(sess, new(anim.Clock), Config{Width: 10, Height: 10}); !errors.Is(err, wlsession.ErrNoInputEvent) {
 		t.Errorf("grabbing popup before any input: err = %v, want ErrNoInputEvent", err)
 	}
-	if _, err := New(sess, Config{Width: 10, Height: 10, NoGrab: true}); errors.Is(err, wlsession.ErrNoInputEvent) {
+	if _, err := New(sess, new(anim.Clock), Config{Width: 10, Height: 10, NoGrab: true}); errors.Is(err, wlsession.ErrNoInputEvent) {
 		t.Errorf("a popup without a grab needs no input event: %v", err)
 	}
 }
@@ -350,7 +350,7 @@ func TestPopupInputHearsPresses(t *testing.T) {
 		mods:      func() widget.Mods { return 0 },
 		markDirty: func() {},
 	}
-	in.Input = touchinput.Input{Tracker: widget.TouchTracker{Router: in.router}, Blocked: in.dismissed}
+	in.Input = touchinput.Input{Tracker: widget.TouchTracker{Router: in.router, Owner: new(anim.Clock)}, Blocked: in.dismissed}
 	in.HandlePointerButton(widget.BTNLeft, 1, 0)
 	in.HandlePointerButton(widget.BTNLeft, 0, 0)
 	in.HandleTouchDown(1, 0, 0, 1)
@@ -398,10 +398,9 @@ func TestDetachReachesTheDestroyedSurface(t *testing.T) {
 func TestFirstConfigureStartsTheEnter(t *testing.T) {
 	base := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return base }))
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
-	p := &Popup{}
-	p.fx = surfx.NewCoordinator(surfx.KindMenu, p, func() bool { return true })
+	var clock anim.Clock
+	p := &Popup{clock: &clock}
+	p.fx = surfx.NewCoordinator(&clock, surfx.KindMenu, p, func() bool { return true })
 	painter := &Painter{p: p}
 	painter.dirty.Store(true)
 
@@ -417,7 +416,7 @@ func TestFirstConfigureStartsTheEnter(t *testing.T) {
 	if !painter.Owes() {
 		t.Error("the frame a pending popup owes was spent")
 	}
-	if animclock.Active() {
+	if clock.Active() {
 		t.Error("the enter tween started before the configure")
 	}
 
@@ -425,15 +424,18 @@ func TestFirstConfigureStartsTheEnter(t *testing.T) {
 	if err := p.EnsureUsable(); err != nil {
 		t.Errorf("after the configure: %v", err)
 	}
-	if !animclock.Active() {
+	if !clock.Active() {
 		t.Fatal("the first configure did not start the enter")
 	}
 	if reveal, _ := p.fx.Visual(); reveal != 0 {
 		t.Errorf("reveal %v at the first frame, want 0", reveal)
 	}
-	animclock.Reset()
+	clock.Tick(base.Add(time.Hour))
+	if clock.Active() {
+		t.Fatal("the enter did not land")
+	}
 	p.HandleSurfaceConfigure(xdg.SurfaceConfigureEvent{Serial: 2})
-	if animclock.Active() {
+	if clock.Active() {
 		t.Error("a later configure restarted the enter")
 	}
 }
@@ -441,10 +443,9 @@ func TestFirstConfigureStartsTheEnter(t *testing.T) {
 func TestPopupDismissedBeforeItsConfigure(t *testing.T) {
 	base := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return base }))
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
-	p := &Popup{}
-	p.fx = surfx.NewCoordinator(surfx.KindMenu, p, nil)
+	var clock anim.Clock
+	p := &Popup{clock: &clock}
+	p.fx = surfx.NewCoordinator(&clock, surfx.KindMenu, p, nil)
 	closed := 0
 	p.SetOnClosed(func() { closed++ })
 	p.Close()
@@ -452,7 +453,7 @@ func TestPopupDismissedBeforeItsConfigure(t *testing.T) {
 	if closed != 1 || !p.Destroyed() {
 		t.Errorf("closed %d times, destroyed %v", closed, p.Destroyed())
 	}
-	if animclock.Active() {
+	if clock.Active() {
 		t.Error("a configure after the close started an enter")
 	}
 }

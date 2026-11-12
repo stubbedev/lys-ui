@@ -96,6 +96,7 @@ func TestAConfiguredMinimumGivesWayToTheContentsAgain(t *testing.T) {
 	a := accelApp()
 	w := &Window{app: a, win: limits}
 	h.wnd.win = w
+	h.wnd.anim = &a.anim
 	a.windows = []*hostWindow{h.wnd}
 	h.frame()
 	h.wantSent(t, "the first frame", widget.Size{W: 200, H: 260})

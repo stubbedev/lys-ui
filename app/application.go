@@ -27,6 +27,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/xkb"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/gtksettings"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/buffer"
@@ -82,7 +83,7 @@ type Application struct {
 	ime        *imeController
 	stalled    bool
 	frameClock animclock.FrameClock
-	anim       animclock.Clock
+	anim       anim.Clock
 	// clip enables ctrl+c/x/v via routeKey; primary carries the
 	// primary-selection behavior (middle-click paste, copy-on-select).
 	// SetClipboard fills both from one clipboard.
@@ -252,7 +253,6 @@ func NewApplication(sess *wlsession.Session, opts ...Option) *Application {
 	a.OnStop(func() { a.dnd.Stop() })
 	a.OnStop(startFontWarm(warmFonts))
 	a.widgetHooks = []func(){
-		animclock.Install(&a.anim),
 		// Async image loads (widget.Image file/URL sources) deliver through
 		// the loop queue - the only sanctioned bridge (docs/threading.md).
 		widget.SetInvoker(a.Invoke),
@@ -1090,6 +1090,7 @@ func (a *Application) tick(step func() error, now time.Time) error {
 	if err := a.drivePopovers(); err != nil {
 		return a.loopError(err)
 	}
+	widget.AttachAnimations()
 	if a.quit {
 		return ErrClosed
 	}
@@ -1126,10 +1127,16 @@ func (a *Application) tick(step func() error, now time.Time) error {
 	return nil
 }
 
-// Animating reports whether any animation this application launched is
+// ScheduleAnimation starts l on the application's clock, unless the
+// application has closed: anim.Owner, for an animation that belongs to
+// the application rather than to one of its widgets.
+func (a *Application) ScheduleAnimation(l *anim.Launch) { a.anim.ScheduleAnimation(l) }
+
+// Animating reports whether any animation on the application's clock is
 // still running or scheduled: a tween, a timeline holding in a delay, a
-// spring, a spinner on screen, a surface fade. A test waits for it to
-// turn false, polling on the loop, before it reads a settled frame, as
+// spring or a spinner of a widget its windows show, a surface fade, or
+// one the application owns itself. A test waits for it to turn false,
+// polling on the loop, before it reads a settled frame, as
 // widget.WaitAssetLoads lets it wait for assets. It is safe from any
 // goroutine, and false once the application has closed.
 func (a *Application) Animating() bool { return a.anim.Active() }
@@ -1151,22 +1158,22 @@ func (a *Application) tickAnimations(now time.Time) {
 	}
 }
 
-func (a *Application) framePacing() (pace animclock.Pace, arrived bool, ms uint32) {
+func (a *Application) framePacing() (pace anim.Pace, arrived bool, ms uint32) {
 	if a.stalled || len(a.windows) == 0 {
-		pace = animclock.Fallback
+		pace = anim.PaceFallback
 	}
 	for _, w := range a.windows {
 		switch {
 		case w.frame.Ready:
 			arrived, ms = true, w.frame.MS
 		case w.framePending:
-			pace = animclock.Fallback
+			pace = anim.PaceFallback
 		}
 		if w.tip.painter != nil {
 			if got, ok, pending := w.tip.painter.TakeFrame(); ok {
 				arrived, ms = true, got
 			} else if pending {
-				pace = animclock.Fallback
+				pace = anim.PaceFallback
 			}
 		}
 	}
@@ -1174,7 +1181,7 @@ func (a *Application) framePacing() (pace animclock.Pace, arrived bool, ms uint3
 		if got, ok, pending := op.painter.TakeFrame(); ok {
 			arrived, ms = true, got
 		} else if pending {
-			pace = animclock.Fallback
+			pace = anim.PaceFallback
 		}
 		if op.tip.painter == nil {
 			continue
@@ -1182,7 +1189,7 @@ func (a *Application) framePacing() (pace animclock.Pace, arrived bool, ms uint3
 		if got, ok, pending := op.tip.painter.TakeFrame(); ok {
 			arrived, ms = true, got
 		} else if pending {
-			pace = animclock.Fallback
+			pace = anim.PaceFallback
 		}
 	}
 	return pace, arrived, ms
@@ -1263,7 +1270,7 @@ func (a *Application) updateTip(tip *tooltipCtl, router *widget.Router, now time
 		// A nil *popup.Popup must not be wrapped: the interface
 		// would carry a typed nil that the nil checks below let
 		// through to a dereference.
-		tp, pc := openTooltip(a.sess, a.popupRenderer(), p, a.resolveFace(nil), a.tooltipOpts, frac120, at.X, at.Y, h, text)
+		tp, pc := openTooltip(a.sess, &a.anim, a.popupRenderer(), p, a.resolveFace(nil), a.tooltipOpts, frac120, at.X, at.Y, h, text)
 		if tp == nil {
 			return nil, nil
 		}

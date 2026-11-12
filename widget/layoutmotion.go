@@ -95,7 +95,7 @@ func (n *node) moving(w Widget) bool {
 		}
 		n.motion = &layoutMotionState{target: start, cur: start}
 		mo := n.motion
-		mo.spring = anim.NewSpring(motionSpring(m), rectComps(start), func(pos []float64) {
+		mo.spring = anim.NewSpring(n, motionSpring(m), rectComps(start), func(pos []float64) {
 			next := compsRect(pos)
 			n.InvalidateRect(mo.cur.Union(next))
 			shapeGen++

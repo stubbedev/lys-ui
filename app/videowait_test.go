@@ -16,7 +16,7 @@ func TestAVideoWaitingForTheGPUDeviceIsWokenOnce(t *testing.T) {
 	c := newVideoCompositor()
 	_, a := connectFakeWith(t, videoGlobals, c.setup)
 	release := a.HoldGPUOpen()
-	stream := media.NewStream(app.UndecodedTextures{}, "test")
+	stream := media.NewStream(a, app.UndecodedTextures{}, "test")
 	t.Cleanup(stream.Close)
 	face, err := render.LoadFont(goregular.TTF)
 	if err != nil {

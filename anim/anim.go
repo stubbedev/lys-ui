@@ -1,17 +1,18 @@
 // Package anim declares time-based animations: tweens with easing
 // curves, combined into timelines with Sequence, Parallel and Delay,
-// and launched with Play; and physics springs (Spring), which run until
-// they settle and keep their velocity when retargeted. The application loop advances them once per
-// frame and parks when none run. Callbacks run on the loop goroutine,
-// so a tween may mutate widgets directly.
+// and launched with Play; physics springs (Spring), which run until
+// they settle and keep their velocity when retargeted; and open-ended
+// drivers (Drive). Every launch names its Owner, usually the widget
+// that animates: it runs on the Clock of the application whose window
+// shows that widget, which the application loop advances once per
+// frame and parks on when nothing runs. Callbacks run on the loop
+// goroutine, so a tween may mutate widgets directly.
 package anim
 
 import (
 	"os"
 	"sync/atomic"
 	"time"
-
-	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
 var (
@@ -58,7 +59,7 @@ type Cancel func()
 // Step is one timed piece of a timeline: a tween (Animate), a hold
 // (Delay), or a composition (Sequence, Parallel).
 type Step interface {
-	expand(off time.Duration, out *[]animclock.Piece) time.Duration
+	expand(off time.Duration, out *[]piece) time.Duration
 }
 
 // Tween animates one value: fn runs once per frame with eased progress
@@ -81,7 +82,7 @@ func (t *Tween) Easing(e Easing) *Tween {
 	return t
 }
 
-func (t *Tween) expand(off time.Duration, out *[]animclock.Piece) time.Duration {
+func (t *Tween) expand(off time.Duration, out *[]piece) time.Duration {
 	if t.fn != nil {
 		easing := t.easing
 		if easing == nil {
@@ -91,7 +92,7 @@ func (t *Tween) expand(off time.Duration, out *[]animclock.Piece) time.Duration 
 		if instant.Load() {
 			dur = 0
 		}
-		*out = append(*out, animclock.Piece{At: off, Dur: dur, Fn: t.fn, Easing: easing})
+		*out = append(*out, piece{at: off, dur: dur, fn: t.fn, easing: easing})
 	}
 	return off + t.dur
 }
@@ -101,7 +102,7 @@ type delay time.Duration
 // Delay holds the timeline for d before its next step.
 func Delay(d time.Duration) Step { return delay(d) }
 
-func (d delay) expand(off time.Duration, _ *[]animclock.Piece) time.Duration {
+func (d delay) expand(off time.Duration, _ *[]piece) time.Duration {
 	return off + time.Duration(d)
 }
 
@@ -111,7 +112,7 @@ type sequence []Step
 // one ends.
 func Sequence(steps ...Step) Step { return sequence(steps) }
 
-func (s sequence) expand(off time.Duration, out *[]animclock.Piece) time.Duration {
+func (s sequence) expand(off time.Duration, out *[]piece) time.Duration {
 	for _, st := range s {
 		if st != nil {
 			off = st.expand(off, out)
@@ -125,7 +126,7 @@ type parallel []Step
 // Parallel runs steps together and ends when the last of them ends.
 func Parallel(steps ...Step) Step { return parallel(steps) }
 
-func (p parallel) expand(off time.Duration, out *[]animclock.Piece) time.Duration {
+func (p parallel) expand(off time.Duration, out *[]piece) time.Duration {
 	end := off
 	for _, st := range p {
 		if st != nil {
@@ -135,17 +136,30 @@ func (p parallel) expand(off time.Duration, out *[]animclock.Piece) time.Duratio
 	return end
 }
 
-// Play launches steps as one timeline, several steps running in
-// sequence, and returns its Cancel. The schedule is fixed at launch,
-// so ticks land on exact offsets however frames arrive.
-func Play(steps ...Step) Cancel {
-	var pieces []animclock.Piece
+// Play launches steps as one timeline owned by o, several steps running
+// in sequence, and returns its Cancel. A step with no duration at the
+// timeline's start lands at once, inside Play; the rest start on o's
+// clock, at once or once o has one. The schedule is fixed at that
+// start, so ticks land on exact offsets however frames arrive.
+func Play(o Owner, steps ...Step) Cancel {
+	var pieces []piece
 	_ = sequence(steps).expand(0, &pieces)
-	return Cancel(animclock.Launch(pieces))
+	timed := pieces[:0]
+	for _, p := range pieces {
+		if p.instant() {
+			p.fn(1)
+			continue
+		}
+		timed = append(timed, p)
+	}
+	if len(timed) == 0 {
+		return func() {}
+	}
+	return schedule(o, func(c *Clock) func() { return c.launch(timed) })
 }
 
 // Start runs fn once per frame for dur with EaseOutCubic progress from
-// 0 to 1: Play(Animate(dur, fn)).
-func Start(dur time.Duration, fn func(t float64)) Cancel {
-	return Play(Animate(dur, fn))
+// 0 to 1, owned by o: Play(o, Animate(dur, fn)).
+func Start(o Owner, dur time.Duration, fn func(t float64)) Cancel {
+	return Play(o, Animate(dur, fn))
 }

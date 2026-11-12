@@ -188,10 +188,11 @@ func TestFaderTweenDrivesOpacity(t *testing.T) {
 	f := NewFader(probe)
 	root := NewBox(Column, 0, 0)
 	root.Append(f, false)
+	c.host(t, root)
 	arrangeWidget(root, render.Rect{X: 0, Y: 0, W: 40, H: 20})
 	warmDamage(root)
 
-	anim.Start(100*time.Millisecond, f.SetOpacity)
+	anim.Start(f, 100*time.Millisecond, f.SetOpacity)
 
 	if !c.step() {
 		t.Fatal("tween scheduled no frame")

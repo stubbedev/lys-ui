@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/media"
 )
 
@@ -41,13 +40,12 @@ func y4mStream(t *testing.T, w, h, frames int) *media.Stream {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := media.NewStream(src, "test")
+	s := media.NewStream(pumpClock(t), src, "test")
 	t.Cleanup(func() {
 		s.Close()
 		if err := s.Wait(); err != nil {
 			t.Error(err)
 		}
-		animclock.Reset()
 	})
 	return s
 }

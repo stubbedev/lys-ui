@@ -7,15 +7,13 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/style"
 )
 
 // uiAdvance moves the pinned animation clock d past its current
 // instant and ticks every running tween there.
 func uiAdvance(f *confFixture, d time.Duration) {
-	f.clock.set(f.clock.now().Add(d))
-	animclock.Tick(f.clock.now())
+	f.clock.tick(f.clock.now().Add(d))
 }
 
 // uiRich is a selectable RichLabel holding s.

@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -42,7 +43,7 @@ func (s *spyRoot) Paint(*render.Canvas) { s.painted++ }
 func (s *spyRoot) HitTest(widget.Point) widget.Widget { return nil }
 
 func newToastLayerForTest(root *spyRoot) *toastLayer {
-	return &toastLayer{root: root, margin: toastMargin, max: toastMaxStack}
+	return &toastLayer{root: root, clock: new(anim.Clock), margin: toastMargin, max: toastMaxStack}
 }
 
 func TestToastLayerDropsOldestPastCap(t *testing.T) {
@@ -189,9 +190,10 @@ func TestToastsMoveOffAClosingWindow(t *testing.T) {
 	face := testFace(t)
 	h1, h2 := &fakeHost{w: 400, h: 300}, &fakeHost{w: 400, h: 300}
 	root1, root2 := &spyRoot{}, &spyRoot{}
-	w1 := &hostWindow{host: h1, router: &widget.Router{Root: root1}}
-	w2 := &hostWindow{host: h2, router: &widget.Router{Root: root2}}
-	a := &Application{sess: &wlsession.Session{}, windows: []*hostWindow{w1, w2}}
+	a := &Application{sess: &wlsession.Session{}}
+	w1 := &hostWindow{host: h1, router: &widget.Router{Root: root1}, anim: &a.anim}
+	w2 := &hostWindow{host: h2, router: &widget.Router{Root: root2}, anim: &a.anim}
+	a.windows = []*hostWindow{w1, w2}
 	a.SetToastHost(h1)
 	toast, err := a.ShowToast("saved", time.Minute, &ToastConfig{Face: face, Position: ToastTop})
 	if err != nil || w1.router.Root == widget.Widget(root1) {

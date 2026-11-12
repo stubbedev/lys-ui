@@ -10,7 +10,6 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/style"
 )
 
@@ -25,7 +24,7 @@ func TestCSSAnimationRunsAndLoops(t *testing.T) {
 	}
 	box { animation: fade 100ms linear infinite; }`)
 	b := NewBox(Column, 0, 0)
-	frame(t, b, 50, 50) // one pass so the animation starts
+	c.frame(t, b, 50, 50) // one pass so the animation starts
 	c.step()
 	if got := b.style(b).Opacity; got <= 0.5 || got >= 1 {
 		t.Fatalf("mid-flight opacity %v, want between the stops", got)
@@ -55,7 +54,7 @@ func TestCSSAnimationEndsAndReverts(t *testing.T) {
 	loadCSS(t, `@keyframes fade { from { opacity: 1; } to { opacity: 0.4; } }
 		box { opacity: 0.9; animation: fade 50ms linear 2; }`)
 	b := NewBox(Column, 0, 0)
-	frame(t, b, 50, 50)
+	c.frame(t, b, 50, 50)
 	for c.step() {
 	}
 	if got := b.style(b).Opacity; got != 0.9 {
@@ -86,7 +85,7 @@ func TestCSSAnimationDroppedDuringItsFrameCheck(t *testing.T) {
 	b.AddClass("spin")
 	b.SetSizeRequest(10, 10)
 	root.Append(b, false)
-	frame(t, root, 50, 50)
+	c.frame(t, root, 50, 50)
 	c.step()
 	b.classes = append(b.classes, "still")
 	b.styleDirty = true
@@ -104,7 +103,7 @@ func TestCSSAnimationInactive(t *testing.T) {
 	c := pinAnimClock(t)
 	loadCSS(t, `box { animation: nosuch 100ms linear infinite; }`)
 	b := NewBox(Column, 0, 0)
-	frame(t, b, 50, 50)
+	c.frame(t, b, 50, 50)
 	if c.step() {
 		t.Error("an unknown name scheduled a tween")
 	}
@@ -114,7 +113,7 @@ func TestCSSAnimationInactive(t *testing.T) {
 	restore := anim.SetInstant(true)
 	defer restore()
 	b2 := NewBox(Column, 0, 0)
-	frame(t, b2, 50, 50)
+	c.frame(t, b2, 50, 50)
 	if b2.style(b2).Has(style.PropOpacity) {
 		t.Errorf("reduced motion declared an opacity: %v", b2.style(b2).Opacity)
 	}
@@ -126,11 +125,11 @@ func TestCSSAnimationDriveSurvivesEasedEndBeforeItsSpan(t *testing.T) {
 		box { animation: fade 1s linear infinite; }`)
 	b := NewBox(Column, 0, 0)
 	start := c.now()
-	frame(t, b, 50, 50)
+	c.frame(t, b, 50, 50)
 	c.set(start.Add(time.Second - time.Microsecond))
-	animclock.Tick(c.now())
+	c.tick(c.now())
 	c.set(start.Add(time.Second + 100*time.Millisecond))
-	animclock.Tick(c.now())
+	c.tick(c.now())
 	if got := b.style(b).Opacity; math.Abs(got-0.95) > 1e-6 {
 		t.Fatalf("opacity %v a tenth into the second cycle, want 0.95", got)
 	}
@@ -138,7 +137,7 @@ func TestCSSAnimationDriveSurvivesEasedEndBeforeItsSpan(t *testing.T) {
 	loadCSS(t, `@keyframes fade { from { opacity: 1; } to { opacity: 0.5; } }
 		box { animation: none; }`)
 	_ = b.style(b)
-	if animclock.Active() {
+	if c.active() {
 		t.Fatal("a frame drive outlived animation: none")
 	}
 	for c.step() {
@@ -150,12 +149,12 @@ func TestCSSAnimationEndsWhenUnderANanosecondRemains(t *testing.T) {
 	loadCSS(t, `@keyframes fade { from { opacity: 1; } to { opacity: 0.4; } }
 		box { opacity: 0.9; animation: fade 0.1000000005s linear; }`)
 	b := NewBox(Column, 0, 0)
-	frame(t, b, 50, 50)
+	c.frame(t, b, 50, 50)
 	c.drive()
 	if got := b.style(b).Opacity; got != 0.9 {
 		t.Errorf("after the animation the opacity is %v, want the cascade's 0.9", got)
 	}
-	if animclock.Active() {
+	if c.active() {
 		t.Error("a frame drive outlived the animation's end")
 	}
 }
@@ -173,7 +172,7 @@ func TestIconRotationAnimation(t *testing.T) {
 	ic := NewThemeIcon("foo", 16)
 	host := NewBox(Column, 0, 0)
 	host.Append(ic, false)
-	frame(t, host, 50, 50)
+	c.frame(t, host, 50, 50)
 	c.step()
 	// Mid-flight: the icon transform is neither the identity nor the
 	// settled full turn.

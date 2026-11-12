@@ -66,7 +66,7 @@ func NewInputOTP(face render.Font, charset OTPCharset, groups ...int) *InputOTP 
 		panic(fmt.Sprintf("widget: NewInputOTP: groups %v, want one or more of at least one slot", groups))
 	}
 	o := &InputOTP{row: NewBox(Row, 8, 0), charset: charset}
-	o.blink.Bind(o.repaintCaret)
+	o.blink.Bind(o, o.repaintCaret)
 	o.SetElement("inputotp")
 	for g, n := range groups {
 		if g > 0 {

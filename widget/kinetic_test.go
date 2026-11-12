@@ -29,6 +29,7 @@ func flick(c *animClock, s PixelScroller, n int, dy float64) {
 func TestKineticGlide(t *testing.T) {
 	c := pinAnimClock(t)
 	s := kineticScroll()
+	c.host(t, s)
 	flick(c, s, 5, 10) // 1000 px/s
 	_, lifted := s.Offset()
 	s.ScrollEnd()
@@ -47,6 +48,7 @@ func TestKineticGlide(t *testing.T) {
 	}
 
 	slow := kineticScroll()
+	c.host(t, slow)
 	flick(c, slow, 5, 0.3) // 30 px/s
 	_, y0 := slow.Offset()
 	slow.ScrollEnd()
@@ -73,6 +75,7 @@ func TestKineticGlide(t *testing.T) {
 func TestOvershootGlow(t *testing.T) {
 	c := pinAnimClock(t)
 	s := kineticScroll()
+	c.host(t, s)
 	s.ScrollPixels(0, -80)
 	if s.overshoot[1] != -0.5 {
 		t.Fatalf("overshoot past the top = %v, want -0.5", s.overshoot[1])
@@ -95,6 +98,7 @@ func TestOvershootGlow(t *testing.T) {
 func TestRouterAxisEnd(t *testing.T) {
 	c := pinAnimClock(t)
 	s := kineticScroll()
+	c.host(t, s)
 	r := &Router{Root: s}
 	r.Move(Point{X: 50, Y: 50})
 	for range 5 {

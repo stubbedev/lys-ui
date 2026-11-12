@@ -10,23 +10,24 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
 // drainAnim runs every scheduled animation callback to completion at
 // clock speed, leaving the toast at rest.
-func drainAnim(t *testing.T, now *time.Time) {
+func drainAnim(t *testing.T, clock *anim.Clock, now *time.Time) {
 	t.Helper()
 	for i := 0; ; i++ {
-		wake, ok := animclock.Next(animclock.Timer)
+		wake, ok := clock.Next(anim.PaceTimer)
 		if !ok {
 			return
 		}
 		if wake.After(*now) {
 			*now = wake
 		}
-		animclock.Tick(*now)
+		clock.Tick(*now)
 		if i > 1000 {
 			t.Fatal("animation schedule did not drain")
 		}
@@ -47,12 +48,9 @@ func TestToastShadowDamageInWindow(t *testing.T) {
 
 	base := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return base }))
-	t.Cleanup(animclock.Reset)
-	animclock.Reset()
-
 	root := widget.NewBox(widget.Row, 0, 0)
 	h := newPaintHarness(root, 320, 200)
-	layer := &toastLayer{hw: h.wnd, root: root, margin: 16, max: 3}
+	layer := &toastLayer{hw: h.wnd, root: root, clock: h.wnd.anim, margin: 16, max: 3}
 	h.wnd.router.Root = layer
 	h.warm(nil, 3) // present the empty frame; the toast frame lands in a clean, presented buffer
 
@@ -79,7 +77,7 @@ func TestToastShadowDamageInWindow(t *testing.T) {
 
 	// The entrance tween drives the card to rest; its animated frames
 	// put ink in the ring.
-	drainAnim(t, &base)
+	drainAnim(t, h.wnd.anim, &base)
 	if painted, _ := h.frame(); painted == 0 {
 		t.Fatal("the toast at rest painted nothing")
 	}
@@ -108,7 +106,7 @@ func TestToastShadowDamageInWindow(t *testing.T) {
 	// a structural change the window flag repaints. Either way the
 	// frame after the dust settles owes nothing.
 	toast.Dismiss()
-	drainAnim(t, &base)
+	drainAnim(t, h.wnd.anim, &base)
 	h.frame()
 	if painted, damage := h.frame(); painted != 0 || len(damage) != 0 {
 		t.Errorf("frame after dismissal painted %d px with damage %v, want a skip", painted, damage)

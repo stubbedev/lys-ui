@@ -81,6 +81,7 @@ func newFirstFrameRigOf(t *testing.T, icons int) *firstFrameRig {
 	r.a.step = func() error { return nil }
 	r.a.wake = func(time.Duration) {}
 	r.a.arm = func(time.Time) {}
+	r.h.wnd.anim = &r.a.anim
 	r.a.windows = []*hostWindow{r.h.wnd}
 	t.Cleanup(widget.SetInvoker(r.held.add))
 	r.h.wnd.rescale(120)
@@ -216,6 +217,7 @@ func TestALaterFrameDoesNotWaitForAnIcon(t *testing.T) {
 func TestAnotherWindowsIconsDoNotHoldAWindowsFirstFrame(t *testing.T) {
 	r := newFirstFrameRig(t)
 	plain := newPaintHarness(widget.NewBox(widget.Column, 0, 0), 64, 48)
+	plain.wnd.anim = &r.a.anim
 	r.a.windows = append(r.a.windows, plain.wnd)
 	r.tick(0)
 	if got := plain.surf.commits; got != 1 {

@@ -891,7 +891,7 @@ func (l *List) updateAutoScroll() {
 	l.stopAutoScroll()
 	l.scrollDir = dir
 	base := l.offY
-	l.scrollAnim = anim.Play(anim.Animate(listScrollStep, func(t float64) {
+	l.scrollAnim = anim.Play(l, anim.Animate(listScrollStep, func(t float64) {
 		l.setOffset(base + int(float64(dir*row)*t))
 		l.applyDragSelection()
 		if t >= 1 {
@@ -1253,7 +1253,7 @@ func (l *List) ScrollPixels(_, dy float64) {
 // ScrollEnd implements ScrollEnder: the list glides on from the
 // gesture's velocity.
 func (l *List) ScrollEnd() {
-	l.kin.fling(func(_, dy float64) bool { return l.movePixels(dy) }, func() {})
+	l.kin.fling(l, func(_, dy float64) bool { return l.movePixels(dy) }, func() {})
 }
 
 // movePixels scrolls by a pixel delta, keeping the sub-pixel remainder;

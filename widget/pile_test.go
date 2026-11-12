@@ -140,6 +140,7 @@ func TestPilePeekShowsTheBoxInsideWrappers(t *testing.T) {
 func TestPileExpandAnimates(t *testing.T) {
 	c := pinAnimClock(t)
 	p := NewPile()
+	c.host(t, p)
 	cards := []*stub{newStub(200, 40), newStub(200, 40)}
 	for _, card := range cards {
 		p.Append(card)
@@ -165,6 +166,7 @@ func TestPileExpandAnimates(t *testing.T) {
 func TestPileBuriedCardsUnfoldFromUnderThePile(t *testing.T) {
 	c := pinAnimClock(t)
 	p := NewPile()
+	c.host(t, p)
 	cards := []*stub{newStub(200, 40), newStub(200, 40), newStub(200, 40), newStub(200, 40), newStub(200, 40)}
 	for _, card := range cards {
 		p.Append(card)

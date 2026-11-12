@@ -499,7 +499,7 @@ func (c *Carousel) snapTo(i int) {
 	if c.cancel != nil {
 		c.cancel()
 	}
-	c.cancel = anim.Start(220*time.Millisecond, func(t float64) {
+	c.cancel = anim.Start(c, 220*time.Millisecond, func(t float64) {
 		c.offset = from + float64((target-from)*easeOut(t))
 		c.syncNav()
 		c.Invalidate()

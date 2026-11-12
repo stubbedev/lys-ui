@@ -10,6 +10,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/style"
 )
 
@@ -83,9 +84,15 @@ func TestSetThemeBeforeFirstResolveParsesOnce(t *testing.T) {
 // so tests start from the steady state.
 func arrangeTree(t *testing.T, root Widget, w, h int) {
 	t.Helper()
-	t.Cleanup(Host(root))
+	arrangeTreeOn(t, new(anim.Clock), root, w, h)
+}
+
+func arrangeTreeOn(t *testing.T, clock *anim.Clock, root Widget, w, h int) {
+	t.Helper()
+	t.Cleanup(Host(root, clock))
 	SizeWithin(root, Size{W: w, H: h})
 	root.Arrange(render.Rect{X: 0, Y: 0, W: w, H: h})
+	AttachAnimations()
 	CollectDamage(root)
 }
 

@@ -17,6 +17,7 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/sys/unix"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -138,7 +139,7 @@ func TestAllocBudgetFileWatchDrain(t *testing.T) {
 // cached, so a walk with a toast on screen allocates nothing.
 func TestAllocBudgetToastDamageWalk(t *testing.T) {
 	testbuild.SkipAllocBudget(t)
-	layer := &toastLayer{root: widget.NewBox(widget.Row, 0, 0)}
+	layer := &toastLayer{root: widget.NewBox(widget.Row, 0, 0), clock: new(anim.Clock)}
 	layer.add(widget.NewToast(testFace(t), "Saved", 0))
 	widget.CollectDamage(layer)
 	const budget = 0

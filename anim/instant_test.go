@@ -3,8 +3,6 @@ package anim
 import (
 	"testing"
 	"time"
-
-	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
 // TestInstantKeepsDelayedLandings pins the reduced-motion contract for
@@ -16,9 +14,9 @@ func TestInstantKeepsDelayedLandings(t *testing.T) {
 	defer restore()
 	t0 := time.Unix(1750000000, 0)
 	pinClock(t, t0)
-	animclock.Reset()
+	var c Clock
 	fired := 0
-	cancel := Play(Sequence(
+	cancel := Play(&c, Sequence(
 		Delay(50*time.Millisecond),
 		Animate(0, func(p float64) {
 			if p >= 1 {
@@ -30,16 +28,16 @@ func TestInstantKeepsDelayedLandings(t *testing.T) {
 	if fired != 0 {
 		t.Fatalf("fired %d times at launch, want 0", fired)
 	}
-	animclock.Tick(t0.Add(20 * time.Millisecond)) // mid-delay: nothing lands
+	c.Tick(t0.Add(20 * time.Millisecond)) // mid-delay: nothing lands
 	if fired != 0 {
 		t.Fatalf("fired %d times mid-delay, want 0", fired)
 	}
 	step := func() bool {
-		wake, ok := animclock.Next(animclock.Timer)
+		wake, ok := c.Next(PaceTimer)
 		if !ok {
 			return false
 		}
-		animclock.Tick(wake)
+		c.Tick(wake)
 		return true
 	}
 	for range 10 {
@@ -50,7 +48,7 @@ func TestInstantKeepsDelayedLandings(t *testing.T) {
 	if fired != 1 {
 		t.Errorf("fired %d times after the delay, want exactly 1", fired)
 	}
-	if _, ok := animclock.Next(animclock.Timer); ok {
+	if _, ok := c.Next(PaceTimer); ok {
 		t.Error("the landed step kept scheduling")
 	}
 }

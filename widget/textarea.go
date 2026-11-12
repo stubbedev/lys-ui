@@ -191,7 +191,7 @@ func NewTextArea(face render.Font, sizePx float64, color render.Color) *TextArea
 		lines:  [][]rune{{}},
 		wrap:   true,
 	}
-	t.blink.Bind(t.repaintCaret)
+	t.blink.Bind(t, t.repaintCaret)
 	t.text.SetElement("text")
 	t.text.placeholder.SetElement("placeholder")
 	t.text.selection.SetElement("selection")

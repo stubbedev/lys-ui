@@ -39,13 +39,20 @@ func play(path string, loop bool) (err error) {
 	if err != nil {
 		return err
 	}
-	stream := media.NewStream(src, "lys-ui video")
+	var stream *media.Stream
 	defer func() {
+		if stream == nil {
+			err = errors.Join(err, src.Close())
+			return
+		}
 		stream.Close()
 		err = errors.Join(err, stream.Err(), stream.Wait())
 	}()
-	stream.SetLoop(loop)
-	return run(stream)
+	return run(src.Info(), func(a *app.Application) *media.Stream {
+		stream = media.NewStream(a, src, "lys-ui video")
+		stream.SetLoop(loop)
+		return stream
+	})
 }
 
 func openSource(path string) (media.Source, error) {
@@ -104,12 +111,12 @@ func newPlayer(stream *media.Stream) (*player, error) {
 	return &player{env: ui.Env{Face: app.FontFallback(face), Size: 13}, stream: stream}, nil
 }
 
-func run(stream *media.Stream) error {
-	w, h := stream.Size()
+func run(info media.Info, open func(*app.Application) *media.Stream) error {
 	return component.Run(app.WindowConfig{
 		Title: "lys-ui video", AppID: "dev.stubbe.lys.ui.video",
-		Width: pixels(max(w, clipW) + 24), Height: pixels(max(h, clipH) + 60), Background: widget.Current().Bg,
+		Width: pixels(max(info.Width, clipW) + 24), Height: pixels(max(info.Height, clipH) + 60), Background: widget.Current().Bg,
 	}, func(a *app.Application) (*player, error) {
+		stream := open(a)
 		if err := a.AddAccel("Escape", widget.NewAction("quit", a.Quit)); err != nil {
 			return nil, err
 		}

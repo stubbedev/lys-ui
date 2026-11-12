@@ -10,16 +10,16 @@ import (
 	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
-// fakeClock pins the scheduler's clock and steps it frame by frame.
-func fakeClock(t *testing.T) func(d time.Duration) {
+// fakeClock pins the time animations read and returns a clock with the
+// step that moves that time on and ticks the clock there.
+func fakeClock(t *testing.T) (*Clock, func(d time.Duration)) {
 	t.Helper()
 	now := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return now }))
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
-	return func(d time.Duration) {
+	c := &Clock{}
+	return c, func(d time.Duration) {
 		now = now.Add(d)
-		animclock.Tick(now)
+		c.Tick(now)
 	}
 }
 
@@ -33,15 +33,15 @@ func TestSpringSettles(t *testing.T) {
 		overshoot bool
 	}{{"smooth", SpringSmooth, false}, {"snappy", SpringSnappy, true}, {"bouncy", SpringBouncy, true}} {
 		t.Run(tc.name, func(t *testing.T) {
-			step := fakeClock(t)
+			c, step := fakeClock(t)
 			frames, peak := 0, 0.0
-			s := NewSpring(tc.p, []float64{0}, func(pos []float64) { frames++; peak = max(peak, pos[0]) })
+			s := NewSpring(c, tc.p, []float64{0}, func(pos []float64) { frames++; peak = max(peak, pos[0]) })
 			s.SetTarget(100)
 			for range 600 {
 				if !s.Running() {
 					break
 				}
-				step(animclock.FrameInterval)
+				step(FrameInterval)
 			}
 			if s.Running() || s.Position()[0] != 100 || s.Velocity()[0] != 0 {
 				t.Fatalf("after 10s: running %v at %v moving %v", s.Running(), s.Position(), s.Velocity())
@@ -75,11 +75,11 @@ func TestSpringStepIsExact(t *testing.T) {
 // Retargeting mid-flight keeps the position and the velocity: the
 // motion bends toward the new target instead of restarting from rest.
 func TestSpringRetargetKeepsMotion(t *testing.T) {
-	step := fakeClock(t)
-	s := NewSpring(SpringSnappy, []float64{0, 0}, nil)
+	c, step := fakeClock(t)
+	s := NewSpring(c, SpringSnappy, []float64{0, 0}, nil)
 	s.SetTarget(100, 50)
 	for range 6 {
-		step(animclock.FrameInterval)
+		step(FrameInterval)
 	}
 	pos := append([]float64(nil), s.Position()...)
 	vel := append([]float64(nil), s.Velocity()...)
@@ -93,9 +93,9 @@ func TestSpringRetargetKeepsMotion(t *testing.T) {
 	// A spring restarted from rest at the same spot is what a jerk
 	// looks like; the retargeted one is carried past it by its
 	// momentum.
-	rest := NewSpring(SpringSnappy, pos, nil)
+	rest := NewSpring(c, SpringSnappy, pos, nil)
 	rest.SetTarget(-100, 50)
-	step(animclock.FrameInterval)
+	step(FrameInterval)
 	if s.Position()[0] <= rest.Position()[0] {
 		t.Errorf("retargeted spring at %v, one restarted from rest at %v: the momentum was lost", s.Position()[0], rest.Position()[0])
 	}
@@ -103,10 +103,10 @@ func TestSpringRetargetKeepsMotion(t *testing.T) {
 
 // Under reduced motion a spring lands on its target at once.
 func TestSpringInstant(t *testing.T) {
-	fakeClock(t)
+	c, _ := fakeClock(t)
 	t.Cleanup(SetInstant(true))
 	got := 0.0
-	s := NewSpring(SpringBouncy, []float64{0}, func(pos []float64) { got = pos[0] })
+	s := NewSpring(c, SpringBouncy, []float64{0}, func(pos []float64) { got = pos[0] })
 	s.SetTarget(42)
 	if s.Running() || got != 42 || s.Position()[0] != 42 {
 		t.Errorf("instant spring: running %v, frame %v, position %v", s.Running(), got, s.Position())

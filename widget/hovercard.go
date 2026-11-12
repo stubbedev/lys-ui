@@ -87,7 +87,7 @@ func (h *HoverCard) settle() {
 	if want {
 		delay = hoverCardOpenDelay
 	}
-	h.timer = anim.Start(delay, func(t float64) {
+	h.timer = anim.Start(h, delay, func(t float64) {
 		if t < 1 {
 			return
 		}

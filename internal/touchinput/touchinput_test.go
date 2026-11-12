@@ -5,6 +5,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -22,7 +23,7 @@ func TestTabletBridge(t *testing.T) {
 	widget.SizeWithin(row, widget.Size{W: 200, H: 100})
 	row.Arrange(render.Rect{W: 200, H: 100})
 	r := &widget.Router{Root: row}
-	in := Input{Tracker: widget.TouchTracker{Router: r}}
+	in := Input{Tracker: widget.TouchTracker{Router: r, Owner: new(anim.Clock)}}
 	frame := func(s wlsession.TabletSample) { in.HandleTabletFrame(s) }
 	frame(wlsession.TabletSample{ProximityIn: true, X: 10, Y: 10})
 	if r.Hovered() != widget.Widget(area) {

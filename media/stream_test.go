@@ -11,7 +11,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/anim"
 )
 
 const fakeStep = 40 * time.Millisecond
@@ -123,8 +123,7 @@ type harness struct {
 
 func play(t *testing.T, src Source, open openAudioFunc, body func(h *harness)) {
 	synctest.Test(t, func(t *testing.T) {
-		defer animclock.Reset()
-		h := &harness{t: t, s: newStream(src, "test", open)}
+		h := &harness{t: t, s: newStream(new(anim.Clock), src, "test", open)}
 		h.s.Subscribe(func() { h.notices++ })
 		h.step(0)
 		body(h)
@@ -363,8 +362,7 @@ func TestClosedStreamRefusesWork(t *testing.T) {
 // Close, after which it hands out no frame (#413).
 func TestStreamFramesAreFreedOnClose(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		defer animclock.Reset()
-		s := newStream(&fakeSource{frames: 3, failAt: -1}, "test", noAudio)
+		s := newStream(new(anim.Clock), &fakeSource{frames: 3, failAt: -1}, "test", noAudio)
 		s.Play()
 		time.Sleep(0)
 		synctest.Wait()
@@ -411,9 +409,8 @@ func (f *stuckSource) Close() error {
 
 func TestCloseWaitsOnNoDecoder(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		defer animclock.Reset()
 		src := &stuckSource{release: make(chan struct{}), entered: make(chan struct{})}
-		s := newStream(src, "test", noAudio)
+		s := newStream(new(anim.Clock), src, "test", noAudio)
 		<-src.entered
 		s.Close()
 		synctest.Wait()
@@ -432,7 +429,6 @@ func TestCloseWaitsOnNoDecoder(t *testing.T) {
 
 func TestAudioWaitsOnNothingOnTheLoop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		defer animclock.Reset()
 		var opened []time.Duration
 		o := &outs{}
 		hold := make(chan struct{})
@@ -441,7 +437,7 @@ func TestAudioWaitsOnNothingOnTheLoop(t *testing.T) {
 			return o.open(pcm, format, name)
 		}
 		src := audibleFake{seekableFake{&fakeSource{frames: 5, failAt: -1}}, &opened}
-		s := newStream(src, "test", slow)
+		s := newStream(new(anim.Clock), src, "test", slow)
 		s.SetVolume(0.25)
 		s.Play()
 		s.SetMuted(true)
@@ -471,10 +467,9 @@ func TestAudioWaitsOnNothingOnTheLoop(t *testing.T) {
 
 func TestAudioOpenFailureReachesTheLoop(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		defer animclock.Reset()
 		var opened []time.Duration
 		src := audibleFake{seekableFake{&fakeSource{frames: 5, failAt: -1}}, &opened}
-		s := newStream(src, "test", func(io.Reader, AudioFormat, string) (audioOut, error) { return nil, errors.New("no server") })
+		s := newStream(new(anim.Clock), src, "test", func(io.Reader, AudioFormat, string) (audioOut, error) { return nil, errors.New("no server") })
 		s.Play()
 		synctest.Wait()
 		s.advance(time.Now())

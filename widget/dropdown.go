@@ -446,7 +446,7 @@ func (d *Dropdown) InsertRune(r rune) {
 		d.Open()
 		return
 	}
-	next, ok := d.typeAhead.next(r, d.selected, len(d.entries), func(i int) (string, bool) {
+	next, ok := d.typeAhead.next(d, r, d.selected, len(d.entries), func(i int) (string, bool) {
 		return d.entries[i].Label, !d.entries[i].Header
 	})
 	if ok {

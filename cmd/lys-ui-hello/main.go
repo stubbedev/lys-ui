@@ -419,7 +419,7 @@ func (s *showcase) Update(_ *component.Context[showMsg, struct{}], msg showMsg) 
 	case bump:
 		s.count++
 		s.progress.SetValue(0)
-		anim.Start(600*time.Millisecond, s.progress.SetValue)
+		anim.Start(s.progress, 600*time.Millisecond, s.progress.SetValue)
 		s.note(fmt.Sprintf("button clicked %d times", s.count))
 	case noted:
 		s.note(m.text)

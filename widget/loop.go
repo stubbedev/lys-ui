@@ -68,14 +68,14 @@ func (l *loop) start() {
 		return
 	}
 	started := animclock.Now()
-	l.cancel = anim.Cancel(animclock.Drive(func(now time.Time) bool {
+	l.cancel = anim.Drive(nodeOf(l.owner), func(now time.Time) bool {
 		if !onScreen(l.owner) {
 			l.cancel = nil
 			return false
 		}
 		l.step(float64(now.Sub(started)%l.period) / float64(l.period))
 		return true
-	}))
+	})
 }
 
 // stop cancels the running cycle.

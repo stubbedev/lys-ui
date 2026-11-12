@@ -16,14 +16,14 @@ type swipeCard struct {
 	dismiss []int
 }
 
-func newSwipeCard(t *testing.T) *swipeCard {
+func newSwipeCard(t *testing.T, c *animClock) *swipeCard {
 	t.Helper()
 	sc := &swipeCard{}
 	btn := NewButton(NewSpacer(200, 60), 0, 0)
 	btn.OnClick = func() { sc.clicks++ }
 	sc.s = NewSwipeDismiss(btn)
 	sc.s.OnDismiss = func(dir int) { sc.dismiss = append(sc.dismiss, dir) }
-	arrangeTree(t, sc.s, 200, 60)
+	c.arrangeTree(t, sc.s, 200, 60)
 	sc.r = &Router{Root: sc.s}
 	return sc
 }
@@ -54,7 +54,7 @@ func settleClock(c *animClock) {
 // (#333).
 func TestSwipeDismissThroughTheRouter(t *testing.T) {
 	c := pinAnimClock(t)
-	sc := newSwipeCard(t)
+	sc := newSwipeCard(t, c)
 	sc.drag(c, 50, 0, 60, 70, 80, 90, 100)
 	settleClock(c)
 	if sc.s.Offset() != 0 || len(sc.dismiss) != 0 || sc.clicks != 0 {
@@ -83,7 +83,7 @@ func TestSwipeDismissThroughTheRouter(t *testing.T) {
 // flick out left dismisses as a fling.
 func TestSwipeDismissLeavesClicksAndVerticalDrags(t *testing.T) {
 	c := pinAnimClock(t)
-	sc := newSwipeCard(t)
+	sc := newSwipeCard(t, c)
 	sc.drag(c, 100, 0, 103, 104)
 	settleClock(c)
 	if sc.clicks != 1 || sc.s.Offset() != 0 {
@@ -111,7 +111,7 @@ func TestSwipeDismissLeavesClicksAndVerticalDrags(t *testing.T) {
 // a vertical one is left to the scrollers beneath.
 func TestSwipeDismissTakesASidewaysFingerScroll(t *testing.T) {
 	c := pinAnimClock(t)
-	sc := newSwipeCard(t)
+	sc := newSwipeCard(t, c)
 	sc.r.Move(Point{X: 100, Y: 30})
 	sc.r.AxisPixels(0, 40, 0)
 	sc.r.AxisEnd()

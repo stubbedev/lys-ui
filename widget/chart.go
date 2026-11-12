@@ -107,7 +107,7 @@ func (c *Chart) SetData(labels []string, series ...ChartSeries) {
 	if c.cancel != nil {
 		c.cancel()
 	}
-	c.cancel = anim.Start(chartDuration, func(t float64) {
+	c.cancel = anim.Start(c, chartDuration, func(t float64) {
 		t = easeOut(t)
 		c.shown = make([][]float64, len(to))
 		for i, row := range to {

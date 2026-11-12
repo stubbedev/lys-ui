@@ -6,6 +6,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/style"
 )
 
@@ -275,10 +276,16 @@ func (s staticRows) Row(i int) Widget { return s[i] }
 // materialized and styled its row proxies.
 func frame(t *testing.T, host Widget, w, h int) {
 	t.Helper()
-	t.Cleanup(Host(host))
+	frameOn(t, new(anim.Clock), host, w, h)
+}
+
+func frameOn(t *testing.T, clock *anim.Clock, host Widget, w, h int) {
+	t.Helper()
+	t.Cleanup(Host(host, clock))
 	for range 2 {
 		SizeWithin(host, Size{W: w, H: h})
 		host.Arrange(render.Rect{W: w, H: h})
+		AttachAnimations()
 		data := make([]byte, render.Stride(w)*h)
 		host.Paint(render.New(data, render.Stride(w), w, h))
 	}

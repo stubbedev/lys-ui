@@ -84,7 +84,7 @@ func (s *SearchEntry) fireChanged(text string) {
 		}
 		return
 	}
-	s.cancel = anim.Start(s.delay, func(t float64) {
+	s.cancel = anim.Start(s, s.delay, func(t float64) {
 		if t >= 1 && s.OnSearchChanged != nil {
 			s.OnSearchChanged(s.Text())
 		}

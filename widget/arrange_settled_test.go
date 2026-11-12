@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/anim"
 )
 
 func arrangesUnder(root Widget, act func()) int {
@@ -131,7 +133,7 @@ func TestASpinnerBackOnScreenResumesUnderASettledBox(t *testing.T) {
 	inner.Append(spinner, false)
 	outer := NewBox(Column, 0, 0)
 	outer.Append(inner, true)
-	unhost := Host(outer)
+	unhost := Host(outer, new(anim.Clock))
 	defer unhost()
 	r := render.Rect{W: 100, H: 100}
 	settleArrange(outer, r)

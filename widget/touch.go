@@ -154,10 +154,12 @@ type contact struct {
 // - through Pointer. A second contact cancels that and makes the pair
 // a gesture: a pinch (scale and rotation) for a widget that claims
 // GesturePinch, otherwise a two-finger scroll down the precise-axis
-// path, ending in a kinetic glide when the fingers lift.
+// path, ending in a kinetic glide when the fingers lift. Owner owns the
+// long-press wait: the application of the surface the contacts land on.
 type TouchTracker struct {
 	Router  *Router
 	Pointer TouchPointer
+	Owner   anim.Owner
 
 	contacts  map[int32]*contact
 	order     []int32 // contact ids, oldest first
@@ -303,7 +305,7 @@ func (t *TouchTracker) pair() (Point, Point) {
 // armLongPress schedules the long-press check on the animation clock.
 func (t *TouchTracker) armLongPress(id int32) {
 	t.cancelLongPress()
-	t.longPress = anim.Play(anim.Delay(longPressDelay), anim.Animate(0, func(float64) {
+	t.longPress = anim.Play(t.Owner, anim.Delay(longPressDelay), anim.Animate(0, func(float64) {
 		t.longPress = nil
 		c := t.contacts[id]
 		if t.mode != touchPointer || c == nil {

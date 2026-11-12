@@ -107,7 +107,7 @@ func NewNavigationMenu(face render.Font, items ...NavigationMenuItem) *Navigatio
 		m.chevrons = append(m.chevrons, chevron)
 		m.row.AppendAligned(b, false, AlignCenter)
 	}
-	m.caret = anim.NewSpring(anim.SpringSnappy, m.at[:], func(pos []float64) {
+	m.caret = anim.NewSpring(m, anim.SpringSnappy, m.at[:], func(pos []float64) {
 		copy(m.at[:], pos)
 		m.Invalidate()
 	})
@@ -166,7 +166,7 @@ func (m *NavigationMenu) settle() {
 	want := m.pointer || m.inViewport
 	switch {
 	case !want && m.active >= 0:
-		m.timer = anim.Start(navMenuCloseDelay, func(t float64) {
+		m.timer = anim.Start(m, navMenuCloseDelay, func(t float64) {
 			if t >= 1 {
 				m.timer = nil
 				m.dismiss()
@@ -174,7 +174,7 @@ func (m *NavigationMenu) settle() {
 		})
 	case want && m.active < 0 && m.pending >= 0:
 		i := m.pending
-		m.timer = anim.Start(navMenuOpenDelay, func(t float64) {
+		m.timer = anim.Start(m, navMenuOpenDelay, func(t float64) {
 			if t >= 1 {
 				m.timer = nil
 				m.show(i, false)

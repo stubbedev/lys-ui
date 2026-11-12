@@ -250,6 +250,7 @@ type node struct {
 	// anims is the CSS animation state (animations.go), nil while the
 	// node runs no animation.
 	anims    *nodeAnim
+	awaiting []*anim.Launch
 	inkBox   render.Rect
 	solidBox render.Rect
 	slot     render.Rect
@@ -455,34 +456,6 @@ func IsVisible(w Widget) bool {
 		}
 	}
 	return true
-}
-
-func onScreen(w Widget) bool {
-	if n := nodeOf(w); n == nil || n.bounds.Empty() {
-		return false
-	}
-	top := w
-	for a := w; a != nil; a = parentOf(a) {
-		if !ownVisible(a) {
-			return false
-		}
-		top = a
-	}
-	_, ok := hosted[top]
-	return ok
-}
-
-var hosted = map[Widget]struct{}{}
-
-// Host marks root as the top of a tree a host shows on screen, a
-// window's or a popover's, and returns the call that ends it. Only
-// widgets under a hosted root animate: a subtree removed from its tree,
-// a tree whose window closed, or one a test arranged and dropped
-// schedules no frames. Hosting a widget twice is one hosting.
-func Host(root Widget) (unhost func()) {
-	checkLoop("Host")
-	hosted[root] = struct{}{}
-	return func() { delete(hosted, root) }
 }
 
 // ownVisible is IsVisible's per-widget half: w's own SetVisible flag

@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/lys-lib/gputest"
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/scale"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
@@ -154,7 +155,7 @@ func TestPopupFrameTheGPURefusedStaysOwedOnTheGPU(t *testing.T) {
 
 func TestAnIncompletePopupFrameStaysOwedAfterItsCommit(t *testing.T) {
 	v, _ := newTweenView(t, 1, GravityBottom)
-	pc := &Painter{gpu: &gpuFrames{incomplete: true}, frac120: scale.Denom, visual: v.morph}
+	pc := &Painter{clock: new(anim.Clock), gpu: &gpuFrames{incomplete: true}, frac120: scale.Denom, visual: v.morph}
 	bounds := render.Rect{W: 64, H: 24}
 	pc.damage.Full(bounds)
 	pc.pool = buffer.New(func() (*buffer.Buffer, error) {

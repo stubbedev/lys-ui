@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
@@ -37,13 +38,13 @@ func newPacingRig(t *testing.T) *pacingRig {
 		}
 	}
 	r.a.windows = []*hostWindow{r.h.wnd}
-	t.Cleanup(animclock.Reset)
+	r.h.wnd.anim = &r.a.anim
 	return r
 }
 
 func (r *pacingRig) drive(area *widget.DrawingArea) {
 	r.t.Helper()
-	cancel := animclock.Drive(func(at time.Time) bool {
+	cancel := anim.Drive(r.a, func(at time.Time) bool {
 		r.steps++
 		r.stamps = append(r.stamps, at)
 		area.QueueDraw()
@@ -98,7 +99,7 @@ func TestAnimationTicksOncePerCommitAndArmsOnce(t *testing.T) {
 	if got := r.arms - arms; got > frames {
 		t.Errorf("%d commits armed %d deadlines, want at most one each", frames, got)
 	}
-	want := r.now.Add(animclock.FallbackInterval)
+	want := r.now.Add(anim.FallbackInterval)
 	if got := r.armed; got.Sub(want) > 20*time.Millisecond || want.Sub(got) > 20*time.Millisecond {
 		t.Errorf("deadline armed for %v with a callback pending, want the fallback about %v", got, want)
 	}
@@ -114,7 +115,7 @@ func TestPointerPassesLeaveAnimationsWhereTheyAre(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			setup()
-			r.pass(animclock.FrameInterval)
+			r.pass(anim.FrameInterval)
 			steps, arms := r.steps, r.arms
 			for range 5 {
 				r.pass(time.Millisecond)
@@ -135,11 +136,7 @@ func TestOccludedWindowWakesAtTheLowRateAndItsTweenLands(t *testing.T) {
 	r.pass(time.Second)
 	steps, arms := r.steps, r.arms
 	landed := false
-	animclock.Launch([]animclock.Piece{{
-		Dur:    600 * time.Millisecond,
-		Easing: func(p float64) float64 { return p },
-		Fn:     func(p float64) { landed = p >= 1 },
-	}})
+	anim.Play(r.a, anim.Animate(600*time.Millisecond, func(p float64) { landed = p >= 1 }).Easing(anim.Linear))
 	const wakes = 16
 	for range wakes {
 		r.pass(r.armed.Sub(r.now))
@@ -154,7 +151,7 @@ func TestOccludedWindowWakesAtTheLowRateAndItsTweenLands(t *testing.T) {
 		t.Errorf("%d wakes armed %d deadlines", wakes, got)
 	}
 	if got := r.now.Sub(time.Unix(1000, 0).Add(time.Second)); got < 3*time.Second {
-		t.Errorf("%d wakes took only %v, want the low rate of %v each", wakes, got, animclock.FallbackInterval)
+		t.Errorf("%d wakes took only %v, want the low rate of %v each", wakes, got, anim.FallbackInterval)
 	}
 }
 
@@ -163,11 +160,7 @@ func TestAnimationWithNoWindowLandsAtTheLowRate(t *testing.T) {
 	r.a.holds = 1
 	r.a.windows = nil
 	landed := false
-	animclock.Launch([]animclock.Piece{{
-		Dur:    400 * time.Millisecond,
-		Easing: func(p float64) float64 { return p },
-		Fn:     func(p float64) { landed = p >= 1 },
-	}})
+	anim.Play(r.a, anim.Animate(400*time.Millisecond, func(p float64) { landed = p >= 1 }).Easing(anim.Linear))
 	r.pass(time.Second)
 	for wakes := 0; !landed; wakes++ {
 		if wakes > 4 {
@@ -178,7 +171,7 @@ func TestAnimationWithNoWindowLandsAtTheLowRate(t *testing.T) {
 		}
 		r.pass(r.armed.Sub(r.now))
 	}
-	if animclock.Active() {
+	if r.a.Animating() {
 		t.Error("the landed tween stayed active")
 	}
 }
@@ -194,7 +187,7 @@ func TestAnimationTimeIsTheCompositorsAndNeverRunsBack(t *testing.T) {
 		t.Errorf("tick at %v, want the callback's timestamp %v, not the wake's", got, want)
 	}
 	r.h.wnd.framePending = true
-	r.pass(animclock.FallbackInterval)
+	r.pass(anim.FallbackInterval)
 	r.callback(time.Millisecond, 7017)
 	for i := 1; i < len(r.stamps); i++ {
 		if r.stamps[i].Before(r.stamps[i-1]) {

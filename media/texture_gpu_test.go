@@ -15,7 +15,7 @@ import (
 	"github.com/stubbedev/lys-lib/media/demux"
 	"github.com/stubbedev/lys-lib/testbuild"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
@@ -44,13 +44,12 @@ func gpuStream(t *testing.T, dev *gpu.Device, name string) *Stream {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := newStream(WithoutAudio(src), "test", noAudio)
+	s := newStream(new(anim.Clock), WithoutAudio(src), "test", noAudio)
 	t.Cleanup(func() {
 		s.Close()
 		if err := s.Wait(); err != nil {
 			t.Error(err)
 		}
-		animclock.Reset()
 	})
 	if err := s.UseDevice(dev, nil); err != nil {
 		t.Fatal(err)
@@ -223,13 +222,12 @@ func TestAVideoCodecTheGPUDoesNotDecodeSaysSo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := newStream(src, "test", noAudio)
+	s := newStream(new(anim.Clock), src, "test", noAudio)
 	defer func() {
 		s.Close()
 		if err := s.Wait(); err != nil {
 			t.Error(err)
 		}
-		animclock.Reset()
 	}()
 	err = s.UseDevice(dev, nil)
 	var unsupported *demux.UnsupportedCodecError

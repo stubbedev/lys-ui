@@ -174,10 +174,10 @@ func (n *node) startShared(from sharedShot) {
 		return
 	}
 	if !tr.geometry {
-		tr.fade = anim.Start(sharedFade, step)
+		tr.fade = anim.Start(n, sharedFade, step)
 		return
 	}
-	tr.spring = anim.NewSpring(anim.SpringSmooth, []float64{0}, func(pos []float64) { step(pos[0]) })
+	tr.spring = anim.NewSpring(n, anim.SpringSmooth, []float64{0}, func(pos []float64) { step(pos[0]) })
 	tr.spring.SetPrecision(0.001)
 	tr.spring.SetTarget(1)
 }

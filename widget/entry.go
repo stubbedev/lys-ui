@@ -140,7 +140,7 @@ type Entry struct {
 // here (see requireFace) instead of failing later, in shaping.
 func NewEntry(face render.Font, sizePx float64, color render.Color) *Entry {
 	e := &Entry{face: requireFace("widget.NewEntry", face), sizePx: sizePx, color: color}
-	e.blink.Bind(e.repaintCaret)
+	e.blink.Bind(e, e.repaintCaret)
 	e.text.SetElement("text")
 	e.text.placeholder.SetElement("placeholder")
 	e.text.selection.SetElement("selection")

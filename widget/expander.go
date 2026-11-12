@@ -157,7 +157,7 @@ func (e *Expander) animate() {
 		return
 	}
 	from := e.progress
-	e.cancel = anim.Play(anim.Animate(expanderDuration, func(t float64) {
+	e.cancel = anim.Play(e, anim.Animate(expanderDuration, func(t float64) {
 		if t >= 1 {
 			e.progress = e.target() // the landing lands exactly
 		} else {

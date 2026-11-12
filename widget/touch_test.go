@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/anim"
 )
 
 // gestureProbe is a leaf that records and claims gestures of one kind.
@@ -28,10 +30,10 @@ func (g *gestureProbe) Gesture(e Gesture) bool {
 }
 
 // touchFixture lays root out at 200x200 behind a tracker.
-func touchFixture(root Widget) *TouchTracker {
+func touchFixture(root Widget, owner anim.Owner) *TouchTracker {
 	SizeWithin(root, Size{W: 200, H: 200})
 	root.Arrange(render.Rect{W: 200, H: 200})
-	return &TouchTracker{Router: &Router{Root: root}}
+	return &TouchTracker{Router: &Router{Root: root}, Owner: owner}
 }
 
 // A tap clicks, a drag past the slop moves without long-pressing, and
@@ -41,7 +43,7 @@ func TestTouchTapAndCancel(t *testing.T) {
 	b := NewButton(NewLabel(face, 14, "Tap", DarkTheme().Text), 8, 4)
 	clicks := 0
 	b.OnClick = func() { clicks++ }
-	tr := touchFixture(b)
+	tr := touchFixture(b, new(anim.Clock))
 	tr.Down(1, Point{X: 10, Y: 10})
 	tr.Up(1)
 	if clicks != 1 {
@@ -60,7 +62,7 @@ func TestTouchTapAndCancel(t *testing.T) {
 func TestTouchLongPress(t *testing.T) {
 	c := pinAnimClock(t)
 	probe := &gestureProbe{kind: GestureLongPress}
-	tr := touchFixture(probe)
+	tr := touchFixture(probe, &c.clock)
 	tr.Down(1, Point{X: 50, Y: 50})
 	c.set(c.now().Add(longPressDelay + time.Millisecond))
 	c.drive()
@@ -81,7 +83,7 @@ func TestTouchLongPress(t *testing.T) {
 // start, the gesture ending with the first lift.
 func TestTouchPinch(t *testing.T) {
 	probe := &gestureProbe{kind: GesturePinch}
-	tr := touchFixture(probe)
+	tr := touchFixture(probe, new(anim.Clock))
 	tr.Down(1, Point{X: 40, Y: 50})
 	tr.Down(2, Point{X: 60, Y: 50})
 	tr.Motion(2, Point{X: 80, Y: 50})
@@ -101,7 +103,7 @@ func TestTouchPinch(t *testing.T) {
 func TestTouchTwoFingerScroll(t *testing.T) {
 	pinAnimClock(t)
 	s := NewScroll(NewSpacer(200, 2000))
-	tr := touchFixture(s)
+	tr := touchFixture(s, new(anim.Clock))
 	s.SetOffset(0, 500)
 	tr.Down(1, Point{X: 80, Y: 100})
 	tr.Down(2, Point{X: 120, Y: 100})

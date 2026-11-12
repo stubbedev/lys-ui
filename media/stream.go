@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/worker"
 )
@@ -24,8 +25,6 @@ const (
 var ErrNotSeekable = errors.New("media: the stream cannot seek")
 
 var errStreamClosed = errors.New("media: the stream is closed")
-
-const tickSpan = time.Hour
 
 type subscription struct {
 	id int
@@ -42,6 +41,7 @@ type subscription struct {
 // server: those are behind goroutines of their own. Subscribers hear
 // every change: the frame, the position while playing, and the state.
 type Stream struct {
+	owner   anim.Owner
 	name    string
 	src     Source
 	info    Info
@@ -77,18 +77,20 @@ type Stream struct {
 	err     error
 	subs    []subscription
 	nextSub int
-	ticker  func()
+	ticker  anim.Cancel
 }
 
-// NewStream plays src, named name in the desktop's volume mixer. It
-// starts paused and decodes the first frame right away; Close releases
-// the source and its decoders.
-func NewStream(src Source, name string) *Stream {
-	return newStream(src, name, openPulse)
+// NewStream plays src, named name in the desktop's volume mixer, on
+// owner's frame clock: an app.Application, or a widget, whose
+// application's windows pace it once one shows the widget. It starts
+// paused and decodes the first frame right away; Close releases the
+// source and its decoders.
+func NewStream(owner anim.Owner, src Source, name string) *Stream {
+	return newStream(owner, src, name, openPulse)
 }
 
-func newStream(src Source, name string, openOut openAudioFunc) *Stream {
-	s := &Stream{name: name, src: src, info: src.Info(), openOut: openOut, curGen: -1, eofGen: -1, volume: 1, audioWork: worker.New(audioQueueDepth)}
+func newStream(owner anim.Owner, src Source, name string, openOut openAudioFunc) *Stream {
+	s := &Stream{owner: owner, name: name, src: src, info: src.Info(), openOut: openOut, curGen: -1, eofGen: -1, volume: 1, audioWork: worker.New(audioQueueDepth)}
 	s.seeker, _ = src.(Seeker)
 	s.audible, _ = src.(Audible)
 	switch v := src.(type) {
@@ -706,16 +708,10 @@ func (s *Stream) sync() {
 }
 
 func (s *Stream) launchTicker() {
-	s.ticker = animclock.Launch([]animclock.Piece{{
-		Dur:    tickSpan,
-		Easing: func(t float64) float64 { return t },
-		Fn: func(t float64) {
-			if t >= 1 {
-				s.ticker = nil
-			}
-			s.advance(animclock.Now())
-		},
-	}})
+	s.ticker = anim.Drive(s.owner, func(time.Time) bool {
+		s.advance(animclock.Now())
+		return true
+	})
 }
 
 func (s *Stream) notify() {

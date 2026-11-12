@@ -7,7 +7,6 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/anim"
-	"github.com/stubbedev/lys-ui/internal/animclock"
 )
 
 // solidLeaf fills its rect with one color.
@@ -31,12 +30,13 @@ var (
 	revealFill = render.RGB(255, 255, 255)
 )
 
-// revealerAt arranges a 40x20 white child revealer at (20, 20) on an
+// revealerAt hosts on c and arranges a 40x20 white child revealer at (20, 20) on an
 // 80x60 canvas.
-func revealerAt(t *testing.T, tr RevealTransition) (*Revealer, *solidLeaf) {
+func revealerAt(t *testing.T, c *animClock, tr RevealTransition) (*Revealer, *solidLeaf) {
 	t.Helper()
 	leaf := &solidLeaf{sz: Size{W: 40, H: 20}, col: revealFill}
 	r := NewRevealer(leaf)
+	c.host(t, r)
 	r.SetTransition(tr)
 	r.SetDuration(100 * time.Millisecond)
 	SizeWithin(r, Size{W: 80, H: 60})
@@ -80,7 +80,7 @@ func redAt(data shot, x, y int) uint8 {
 func advance(c *animClock, d time.Duration) {
 	until := c.now().Add(d)
 	for {
-		wake, ok := animclock.Next(animclock.Timer)
+		wake, ok := c.clock.Next(anim.PaceTimer)
 		if !ok || wake.After(until) {
 			return
 		}
@@ -90,7 +90,7 @@ func advance(c *animClock, d time.Duration) {
 
 func TestRevealerRevealsAndHides(t *testing.T) {
 	c := pinAnimClock(t)
-	r, _ := revealerAt(t, RevealFade)
+	r, _ := revealerAt(t, c, RevealFade)
 	var landed []bool
 	r.SetOnTransitionDone(func(v bool) { landed = append(landed, v) })
 
@@ -154,7 +154,7 @@ func slicesEqualBool(a, b []bool) bool {
 
 func TestRevealerZeroDurationSnaps(t *testing.T) {
 	c := pinAnimClock(t)
-	r, _ := revealerAt(t, RevealZoom)
+	r, _ := revealerAt(t, c, RevealZoom)
 	r.SetDuration(0)
 	landed := 0
 	r.SetOnTransitionDone(func(bool) { landed++ })
@@ -168,8 +168,8 @@ func TestRevealerZeroDurationSnaps(t *testing.T) {
 }
 
 func TestRevealerNoneTakesNoSpaceHidden(t *testing.T) {
-	pinAnimClock(t)
-	r, _ := revealerAt(t, RevealNone)
+	c := pinAnimClock(t)
+	r, _ := revealerAt(t, c, RevealNone)
 	if sz := SizeWithin(r, Size{W: 80, H: 60}); sz != (Size{}) {
 		t.Errorf("hidden none measures %v, want nothing", sz)
 	}
@@ -190,7 +190,7 @@ func TestRevealerNoneTakesNoSpaceHidden(t *testing.T) {
 
 func TestRevealerSlideStaysInItsSlot(t *testing.T) {
 	c := pinAnimClock(t)
-	r, _ := revealerAt(t, RevealSlideUp)
+	r, _ := revealerAt(t, c, RevealSlideUp)
 	r.SetRevealed(true)
 	advance(c, 50*time.Millisecond)
 	cv := paintReveal(r)
@@ -206,7 +206,7 @@ func TestRevealerSlideStaysInItsSlot(t *testing.T) {
 
 func TestRevealerTransformsAndDamage(t *testing.T) {
 	c := pinAnimClock(t)
-	r, _ := revealerAt(t, RevealZoom)
+	r, _ := revealerAt(t, c, RevealZoom)
 	r.SetRevealed(true)
 	advance(c, 50*time.Millisecond)
 	cv := paintReveal(r)
@@ -219,7 +219,7 @@ func TestRevealerTransformsAndDamage(t *testing.T) {
 
 	// A bounce overshoots its slot near the end; the damage covers it,
 	// and the frame after repaints what the overshoot left behind.
-	b, _ := revealerAt(t, RevealBounce)
+	b, _ := revealerAt(t, c, RevealBounce)
 	b.SetRevealed(true)
 	advance(c, 85*time.Millisecond) // the last frame before landing, still overshooting
 	cv = paintReveal(b)
@@ -248,7 +248,7 @@ func coversRect(rects []render.Rect, want render.Rect) bool {
 
 func TestRevealerGenieCollapsesTowardItsEdge(t *testing.T) {
 	c := pinAnimClock(t)
-	r, _ := revealerAt(t, RevealGenie)
+	r, _ := revealerAt(t, c, RevealGenie)
 	r.SetGenieEdge(EdgeTop)
 	r.SetRevealed(true)
 	advance(c, 50*time.Millisecond)
@@ -260,7 +260,7 @@ func TestRevealerGenieCollapsesTowardItsEdge(t *testing.T) {
 
 func TestRevealerFinishLandsAtOnce(t *testing.T) {
 	c := pinAnimClock(t)
-	r, _ := revealerAt(t, RevealFade)
+	r, _ := revealerAt(t, c, RevealFade)
 	var landed []bool
 	r.SetOnTransitionDone(func(v bool) { landed = append(landed, v) })
 	r.Finish() // nothing running
@@ -280,9 +280,9 @@ func TestRevealerFinishLandsAtOnce(t *testing.T) {
 
 // collapsingAt is revealerAt with a collapsing slide, laid out like a
 // box would: measured, then arranged at (20, 20) in what it measured.
-func collapsingAt(t *testing.T, tr RevealTransition) (*Revealer, *solidLeaf) {
+func collapsingAt(t *testing.T, c *animClock, tr RevealTransition) (*Revealer, *solidLeaf) {
 	t.Helper()
-	r, leaf := revealerAt(t, tr)
+	r, leaf := revealerAt(t, c, tr)
 	r.SetCollapse(true)
 	relayout(r)
 	return r, leaf
@@ -296,7 +296,7 @@ func relayout(r *Revealer) Size {
 
 func TestRevealerCollapsingSlideGrowsWithItsProgress(t *testing.T) {
 	c := pinAnimClock(t)
-	r, leaf := collapsingAt(t, RevealSlideDown)
+	r, leaf := collapsingAt(t, c, RevealSlideDown)
 	if sz := relayout(r); sz != (Size{W: 40}) {
 		t.Errorf("hidden collapsing slide measures %v, want no height", sz)
 	}
@@ -345,7 +345,7 @@ func TestRevealerCollapsingSlidesPlaceTheirLeadingEdge(t *testing.T) {
 		{RevealSlideRight, func(sz Size) render.Rect { return render.Rect{X: 20 + sz.W - 40, Y: 20, W: 40, H: 20} }},
 		{RevealSlideLeft, func(sz Size) render.Rect { return render.Rect{X: 20, Y: 20, W: 40, H: 20} }},
 	} {
-		r, leaf := collapsingAt(t, tc.tr)
+		r, leaf := collapsingAt(t, c, tc.tr)
 		r.SetRevealed(true)
 		advance(c, 50*time.Millisecond)
 		sz := relayout(r)
@@ -361,9 +361,9 @@ func TestRevealerCollapsingSlidesPlaceTheirLeadingEdge(t *testing.T) {
 }
 
 func TestRevealerCollapseLeavesOtherTransitionsTheirSlot(t *testing.T) {
-	pinAnimClock(t)
+	c := pinAnimClock(t)
 	for _, tr := range []RevealTransition{RevealFade, RevealZoom} {
-		r, leaf := collapsingAt(t, tr)
+		r, leaf := collapsingAt(t, c, tr)
 		if sz := relayout(r); sz != (Size{W: 40, H: 20}) {
 			t.Errorf("hidden collapsing transition %d measures %v, want the child held", tr, sz)
 		}
@@ -371,7 +371,7 @@ func TestRevealerCollapseLeavesOtherTransitionsTheirSlot(t *testing.T) {
 			t.Errorf("transition %d child at %v", tr, leaf.bounds)
 		}
 	}
-	r, _ := collapsingAt(t, RevealSlideDown)
+	r, _ := collapsingAt(t, c, RevealSlideDown)
 	r.SetCollapse(false)
 	if r.Collapse() {
 		t.Error("Collapse reports true after SetCollapse(false)")
@@ -432,7 +432,7 @@ func driveFrames(c *animClock, r *Revealer) (frames int) {
 
 func TestRevealerFadeAtItsSurfaceRootPaintsNoChild(t *testing.T) {
 	c := pinAnimClock(t)
-	r, leaf := revealerAt(t, RevealFade)
+	r, leaf := revealerAt(t, c, RevealFade)
 	alphas := surfaceFadeFor(t, r)
 	r.SetRevealed(true)
 	r.Finish()
@@ -472,7 +472,7 @@ func TestRevealerFadeAtItsSurfaceRootPaintsNoChild(t *testing.T) {
 
 func TestRevealerFadeWithoutSurfaceAlphaPaintsTheChild(t *testing.T) {
 	c := pinAnimClock(t)
-	r, leaf := revealerAt(t, RevealFade)
+	r, leaf := revealerAt(t, c, RevealFade)
 	SetSurfaceFade(func(Widget, float64) bool { return false })
 	t.Cleanup(func() { SetSurfaceFade(nil) })
 	r.SetRevealed(true)
@@ -493,7 +493,7 @@ func TestRevealerFadeWithoutSurfaceAlphaPaintsTheChild(t *testing.T) {
 
 func TestRevealerLeavingTheSurfaceFadeRestoresItsAlpha(t *testing.T) {
 	c := pinAnimClock(t)
-	r, _ := revealerAt(t, RevealFade)
+	r, _ := revealerAt(t, c, RevealFade)
 	alphas := surfaceFadeFor(t, r)
 	r.SetRevealed(true)
 	advance(c, 50*time.Millisecond)
@@ -517,7 +517,7 @@ func stepTransform(c *animClock, r *Revealer) (frames int) {
 func TestRevealerTransformPaintsItsChildOnce(t *testing.T) {
 	for _, tr := range []RevealTransition{RevealZoom, RevealFlip, RevealSlideUp} {
 		c := pinAnimClock(t)
-		r, leaf := revealerAt(t, tr)
+		r, leaf := revealerAt(t, c, tr)
 		r.SetRevealed(true)
 		if frames := stepTransform(c, r); frames < 3 {
 			t.Fatalf("transition %d ran %d frames", tr, frames)
@@ -530,7 +530,7 @@ func TestRevealerTransformPaintsItsChildOnce(t *testing.T) {
 
 func TestRevealerReusedLayerCompositesAsRepainted(t *testing.T) {
 	c := pinAnimClock(t)
-	r, leaf := revealerAt(t, RevealZoom)
+	r, leaf := revealerAt(t, c, RevealZoom)
 	r.SetRevealed(true)
 	advance(c, 30*time.Millisecond)
 	paintReveal(r)
@@ -551,7 +551,7 @@ func TestRevealerReusedLayerCompositesAsRepainted(t *testing.T) {
 
 func TestRevealerChildDamageRecordsItsLayerAgain(t *testing.T) {
 	c := pinAnimClock(t)
-	r, leaf := revealerAt(t, RevealZoom)
+	r, leaf := revealerAt(t, c, RevealZoom)
 	r.SetRevealed(true)
 	advance(c, 50*time.Millisecond)
 	paintReveal(r)
@@ -571,7 +571,7 @@ func TestRevealerChildDamageRecordsItsLayerAgain(t *testing.T) {
 
 func TestRevealerLayerIsReusedOnlyByItsOwnList(t *testing.T) {
 	c := pinAnimClock(t)
-	r, leaf := revealerAt(t, RevealZoom)
+	r, leaf := revealerAt(t, c, RevealZoom)
 	r.SetRevealed(true)
 	advance(c, 30*time.Millisecond)
 	a, b := render.NewRecorder(80, 60, 1, 1), render.NewRecorder(80, 60, 1, 1)
@@ -601,7 +601,7 @@ func TestRevealerLayerIsReusedOnlyByItsOwnList(t *testing.T) {
 
 func TestRevealerFadeFromHiddenAtItsSurfaceRootPaintsNoChild(t *testing.T) {
 	c := pinAnimClock(t)
-	r, leaf := revealerAt(t, RevealFade)
+	r, leaf := revealerAt(t, c, RevealFade)
 	alphas := surfaceFadeFor(t, r)
 	paintReveal(r)
 	if n := len(*alphas); n == 0 || (*alphas)[n-1] != 0 {
@@ -620,7 +620,7 @@ func TestRevealerFadeFromHiddenAtItsSurfaceRootPaintsNoChild(t *testing.T) {
 
 func TestRevealerFadeInStartsAtItsFadeFrom(t *testing.T) {
 	c := pinAnimClock(t)
-	r, _ := revealerAt(t, RevealFade)
+	r, _ := revealerAt(t, c, RevealFade)
 	r.SetFadeFrom(0.4)
 	r.SetRevealed(true)
 	if p := r.Progress(); p != 0.4 {
@@ -646,8 +646,8 @@ func TestRevealerFadeInStartsAtItsFadeFrom(t *testing.T) {
 }
 
 func TestRevealerFadeFromStartsASurfaceFade(t *testing.T) {
-	pinAnimClock(t)
-	r, _ := revealerAt(t, RevealFade)
+	c := pinAnimClock(t)
+	r, _ := revealerAt(t, c, RevealFade)
 	alphas := surfaceFadeFor(t, r)
 	r.SetFadeFrom(0.4)
 	r.SetRevealed(true)
@@ -658,7 +658,7 @@ func TestRevealerFadeFromStartsASurfaceFade(t *testing.T) {
 
 func TestRevealerFadeFromLeavesTransformsAndReversalsAlone(t *testing.T) {
 	c := pinAnimClock(t)
-	r, _ := revealerAt(t, RevealZoom)
+	r, _ := revealerAt(t, c, RevealZoom)
 	r.SetFadeFrom(0.4)
 	r.SetRevealed(true)
 	if p := r.Progress(); p != 0 {
@@ -696,7 +696,7 @@ func TestRevealerFadeFromClamps(t *testing.T) {
 func TestRevealerTransformLandsWithoutPaintingItsChildAgain(t *testing.T) {
 	for _, tr := range []RevealTransition{RevealZoom, RevealFlip, RevealSlideUp} {
 		c := pinAnimClock(t)
-		r, leaf := revealerAt(t, tr)
+		r, leaf := revealerAt(t, c, tr)
 		r.SetRevealed(true)
 		var landed shot
 		for c.step() {
@@ -710,7 +710,7 @@ func TestRevealerTransformLandsWithoutPaintingItsChildAgain(t *testing.T) {
 		if leaf.paints != 1 {
 			t.Errorf("transition %d painted the child %d times through its landing, want once", tr, leaf.paints)
 		}
-		rest, _ := revealerAt(t, tr)
+		rest, _ := revealerAt(t, c, tr)
 		rest.SetRevealed(true)
 		rest.Finish()
 		if want := paintReveal(rest); lit(want, render.Rect{W: 80, H: 60}) == 0 || string(landed) != string(want) {
@@ -724,7 +724,7 @@ func TestRevealerTransformLandsWithoutPaintingItsChildAgain(t *testing.T) {
 
 func TestRevealerLandingInAListCompositesBeforeItsLayerIsFreed(t *testing.T) {
 	c := pinAnimClock(t)
-	r, leaf := revealerAt(t, RevealZoom)
+	r, leaf := revealerAt(t, c, RevealZoom)
 	r.SetRevealed(true)
 	rec := render.NewRecorder(80, 60, 1, 1)
 	var got shot
@@ -742,7 +742,7 @@ func TestRevealerLandingInAListCompositesBeforeItsLayerIsFreed(t *testing.T) {
 	if leaf.paints != 1 {
 		t.Errorf("a recorded zoom painted the child %d times through its landing, want once", leaf.paints)
 	}
-	rest, _ := revealerAt(t, RevealZoom)
+	rest, _ := revealerAt(t, c, RevealZoom)
 	rest.SetRevealed(true)
 	rest.Finish()
 	if want := paintReveal(rest); string(got) != string(want) {
@@ -752,7 +752,7 @@ func TestRevealerLandingInAListCompositesBeforeItsLayerIsFreed(t *testing.T) {
 
 func TestRevealerRootFadeInFromHiddenPaintsItsChildOnce(t *testing.T) {
 	c := pinAnimClock(t)
-	r, leaf := revealerAt(t, RevealFade)
+	r, leaf := revealerAt(t, c, RevealFade)
 	alphas := surfaceFadeFor(t, r)
 	CollectDamage(r)
 	paintReveal(r)

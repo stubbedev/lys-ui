@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/render"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/sysfont"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -108,7 +109,7 @@ type toastPlacement struct {
 // with the layer on the first toast.
 func (a *Application) hostToast(hw *hostWindow, t *widget.Toast, pl toastPlacement) {
 	layer := a.toasts.layerFor(hw.host, func() *toastLayer {
-		l := &toastLayer{hw: hw, root: hw.router.Root}
+		l := &toastLayer{hw: hw, root: hw.router.Root, clock: hw.anim}
 		// The first toast wraps the window's tree; the last removal
 		// unwraps it.
 		hw.router.Root = l
@@ -238,9 +239,11 @@ func (r *toastRegistry) takeHost(h Host) (movedToasts, bool) {
 // each toast invalidates its own pixels through the damage collector
 // (which descends through Children).
 type toastLayer struct {
-	hw   *hostWindow
-	root widget.Widget
-	pos  ToastPosition
+	hw      *hostWindow
+	root    widget.Widget
+	clock   *anim.Clock
+	unhosts map[*widget.Toast]func()
+	pos     ToastPosition
 	// margin, max are the stack geometry; add refreshes them from the
 	// latest toast's config.
 	margin, max int
@@ -342,12 +345,24 @@ func (l *toastLayer) add(t *widget.Toast) {
 	for len(l.slots) >= l.max && len(l.slots) > 0 {
 		oldest := l.slots[0]
 		l.slots = l.slots[1:]
+		l.unhost(oldest)
 		oldest.Close()
 		l.markDirty()
 	}
 	l.slots = append(l.slots, t)
+	if l.unhosts == nil {
+		l.unhosts = make(map[*widget.Toast]func())
+	}
+	l.unhosts[t] = widget.Host(t, l.clock)
 	l.syncChildren()
 	l.markDirty()
+}
+
+func (l *toastLayer) unhost(t *widget.Toast) {
+	if unhost, ok := l.unhosts[t]; ok {
+		unhost()
+		delete(l.unhosts, t)
+	}
 }
 
 // remove detaches a toast whose exit fade landed (or that the stack
@@ -360,6 +375,7 @@ func (l *toastLayer) remove(t *widget.Toast) {
 			break
 		}
 	}
+	l.unhost(t)
 	t.Close()
 	l.syncChildren()
 	l.markDirty()
@@ -374,6 +390,10 @@ func (l *toastLayer) close() {
 	for _, s := range l.slots {
 		s.Close()
 	}
+	for _, unhost := range l.unhosts {
+		unhost()
+	}
+	l.unhosts = nil
 	l.slots = nil
 	l.syncChildren()
 	if l.hw != nil && l.hw.router.Root == widget.Widget(l) {

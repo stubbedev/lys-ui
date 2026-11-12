@@ -6,7 +6,7 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/anim"
 )
 
 // fixedWidget is a leaf of constant natural size, the test child for
@@ -30,11 +30,12 @@ func TestToastAutoDismiss(t *testing.T) {
 	c := pinAnimClock(t)
 	t0 := c.now()
 	toast := NewToast(face, "Saved", 500*time.Millisecond)
+	c.host(t, toast)
 	fired := 0
 	toast.OnDismissed = func() { fired++ }
 
 	t.Run("a toast out of the tree holds no timer", func(t *testing.T) {
-		if animActiveNow(t) {
+		if c.scheduled() {
 			t.Error("unarranged toast scheduled animation work")
 		}
 	})
@@ -43,16 +44,16 @@ func TestToastAutoDismiss(t *testing.T) {
 	toast.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 32})
 
 	t.Run("arranging starts the entrance and the dismiss clock", func(t *testing.T) {
-		if !animActiveNow(t) {
+		if !c.scheduled() {
 			t.Fatal("visible toast scheduled nothing")
 		}
-		wake, ok := animclock.Next(animclock.Timer)
+		wake, ok := c.clock.Next(anim.PaceTimer)
 		if !ok {
 			t.Fatal("no wake scheduled")
 		}
 		// The entrance is mid-flight: the next wake is exactly one
 		// frame period past the last tick.
-		if want := t0.Add(animclock.FrameInterval); wake != want {
+		if want := t0.Add(anim.FrameInterval); wake != want {
 			t.Errorf("first wake = %v, want exactly %v", wake, want)
 		}
 	})
@@ -68,11 +69,11 @@ func TestToastAutoDismiss(t *testing.T) {
 		if fired != 1 {
 			t.Errorf("OnDismissed fired %d times, want 1", fired)
 		}
-		if animActiveNow(t) {
+		if c.scheduled() {
 			t.Error("finished toast still scheduled wakes")
 		}
 		c.set(t0.Add(10 * time.Second))
-		animclock.Tick(c.now())
+		c.tick(c.now())
 		if fired != 1 {
 			t.Errorf("fired = %d after the world moved on, want 1", fired)
 		}
@@ -81,20 +82,12 @@ func TestToastAutoDismiss(t *testing.T) {
 
 // animActiveNow reports whether the animation clock has anything
 // scheduled; the zero-wake contract is the "no idle burn" pin.
-func animActiveNow(tb testing.TB) bool {
-	tb.Helper()
-	if animclock.Active() {
-		return true
-	}
-	_, ok := animclock.Next(animclock.Timer)
-	return ok
-}
-
 func TestToastHoverCancelsDismissal(t *testing.T) {
 	face := entryFace(t)
 	c := pinAnimClock(t)
 	t0 := c.now()
 	toast := NewToast(face, "Syncing", 500*time.Millisecond)
+	c.host(t, toast)
 	fired := 0
 	toast.OnDismissed = func() { fired++ }
 	SizeWithin(toast, Size{W: 400, H: 100})
@@ -111,19 +104,19 @@ func TestToastHoverCancelsDismissal(t *testing.T) {
 	if fired != 0 {
 		t.Fatalf("toast dismissed despite hover, fired = %d", fired)
 	}
-	if animActiveNow(t) {
+	if c.scheduled() {
 		t.Error("hovered toast still holds a timer")
 	}
 	// The timeout elapses with the pointer resting: nothing fires.
 	c.set(t0.Add(5 * time.Second))
-	animclock.Tick(c.now())
+	c.tick(c.now())
 	if fired != 0 {
 		t.Errorf("dismissed while hovered, fired = %d", fired)
 	}
 
 	// Leaving arms a fresh full timeout from now.
 	toast.SetHovered(false)
-	wake, ok := animclock.Next(animclock.Timer)
+	wake, ok := c.clock.Next(anim.PaceTimer)
 	if !ok {
 		t.Fatal("unhovered toast armed no dismissal")
 	}
@@ -142,6 +135,7 @@ func TestToastHoverRescuesMidExit(t *testing.T) {
 	c := pinAnimClock(t)
 	t0 := c.now()
 	toast := NewToast(face, "Undo?", time.Second)
+	c.host(t, toast)
 	fired := 0
 	toast.OnDismissed = func() { fired++ }
 	SizeWithin(toast, Size{W: 400, H: 100})
@@ -172,11 +166,12 @@ func TestToastCloseStopsEverything(t *testing.T) {
 	face := entryFace(t)
 	c := pinAnimClock(t)
 	toast := NewToast(face, "bye", time.Second)
+	c.host(t, toast)
 	fired := 0
 	toast.OnDismissed = func() { fired++ }
 	SizeWithin(toast, Size{W: 400, H: 100})
 	toast.Arrange(render.Rect{X: 0, Y: 0, W: 200, H: 32})
-	if !animActiveNow(t) {
+	if !c.scheduled() {
 		t.Fatal("armed toast scheduled nothing")
 	}
 
@@ -184,11 +179,11 @@ func TestToastCloseStopsEverything(t *testing.T) {
 	if !toast.Closed() {
 		t.Error("closed toast not marked closed")
 	}
-	if animActiveNow(t) {
+	if c.scheduled() {
 		t.Error("closed toast kept its timer")
 	}
 	c.set(c.now().Add(5 * time.Second))
-	animclock.Tick(c.now())
+	c.tick(c.now())
 	if fired != 0 {
 		t.Errorf("Close fired OnDismissed %d times, want 0", fired)
 	}
@@ -198,6 +193,7 @@ func TestToastActionClick(t *testing.T) {
 	face := entryFace(t)
 	c := pinAnimClock(t)
 	toast := NewToast(face, "Update ready", time.Second)
+	c.host(t, toast)
 	acted, fired := 0, 0
 	toast.SetAction("Restart", func() { acted++ })
 	toast.OnDismissed = func() { fired++ }

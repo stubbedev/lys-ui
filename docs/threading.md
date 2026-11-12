@@ -41,10 +41,15 @@ timer.
   timestamp. Without one, they tick every 1/60 s while no surface awaits
   a callback and every 1/4 s while one does or none can show them, so an
   occluded tween still finishes. Each application has its own animation
-  clock: what is launched from `NewApplication` until it closes, and
-  what was launched while no application existed, runs on that
-  application's loop alone and is dropped when it closes, so a later
-  application in the process never steps it.
+  clock, which its loop alone ticks. Every launch names its owner
+  (`anim.Play(w, ...)`, `anim.NewSpring(w, ...)`): a widget's animation
+  runs on the clock of the application whose window, popover or toast
+  shows the widget, and one launched by a widget no window shows yet
+  (built before `Run`, or appended but not laid out) starts when a
+  window first lays it out. The clock stops when its application
+  closes, so an animation its widgets launch afterwards never runs, and
+  a later application in the process never steps it. What belongs to
+  no widget (a `media.Stream`) names the application.
 - **Requests.** Outgoing requests are buffered and flushed as one
   `sendmsg` before `Step` parks. When the socket is full, frames are
   skipped (not blocked) until it drains (`Session.Stalled`).

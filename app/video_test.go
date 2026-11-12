@@ -301,7 +301,7 @@ func showVideo(t *testing.T, c *videoCompositor, full bool) (*app.Application, *
 	if err != nil {
 		t.Fatal(err)
 	}
-	stream := media.NewStream(src, "test")
+	stream := media.NewStream(a, src, "test")
 	t.Cleanup(stream.Close)
 	stream.SetLoop(true)
 	face, err := render.LoadFont(goregular.TTF)

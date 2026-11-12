@@ -9,7 +9,6 @@ import (
 
 	"github.com/stubbedev/lys-lib/render"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/media"
 	"github.com/stubbedev/lys-ui/widget"
@@ -29,7 +28,6 @@ func (s *stopSet) added() int {
 
 func hooksOf(t *testing.T, a *Application) widgetHooks {
 	t.Helper()
-	t.Cleanup(animclock.Reset)
 	var got widgetHooks
 	box := render.Rect{W: 64, H: 48}
 
@@ -60,13 +58,13 @@ func hooksOf(t *testing.T, a *Application) widgetHooks {
 	if err != nil {
 		t.Fatal(err)
 	}
-	frames := media.NewStream(yuv, "hooks")
+	frames := media.NewStream(a, yuv, "hooks")
 	t.Cleanup(frames.Close)
 	painted := widget.NewVideo(testFace(t), 13, frames)
 	painted.Arrange(box)
 	got.videoHost = painted.OffloadErr() == nil
 
-	textures := media.NewStream(UndecodedTextures{}, "hooks")
+	textures := media.NewStream(a, UndecodedTextures{}, "hooks")
 	t.Cleanup(textures.Close)
 	widget.NewVideo(testFace(t), 13, textures).Arrange(box)
 	got.textureHost = textures.Err() == nil

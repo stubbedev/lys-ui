@@ -399,7 +399,7 @@ func (c *Command) InsertRune(r rune) {
 		c.pick()
 		return
 	}
-	next, ok := c.typeAhead.next(r, c.highlight, len(c.shown), func(i int) (string, bool) {
+	next, ok := c.typeAhead.next(c, r, c.highlight, len(c.shown), func(i int) (string, bool) {
 		return c.shown[i].item.Label, !c.shown[i].item.Disabled
 	})
 	if ok {

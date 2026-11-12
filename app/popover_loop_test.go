@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-lib/xkb"
 	"golang.org/x/image/font/gofont/goregular"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
@@ -59,7 +60,7 @@ func newLoopPopover(content widget.Widget) (*openPopover, *fakePopSurface, *fake
 	closed := 0
 	op := &openPopover{
 		host: &fakeHost{w: 100, h: 100}, pop: surf, painter: painter,
-		router: &widget.Router{Root: root}, keyRoot: root,
+		router: &widget.Router{Root: root}, keyRoot: root, unhost: func() {},
 		popover: &Popover{}, detach: func() {}, fireClosed: func() { closed++ }, unanchor: func() {},
 	}
 	return op, surf, painter, &closed
@@ -420,12 +421,12 @@ func TestPopoverFitHonorsTheContentsSizeRequest(t *testing.T) {
 func TestPopoverShrinkWaitsForTheContent(t *testing.T) {
 	now := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return now }))
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
+	var clock anim.Clock
 	content := widget.NewBox(widget.Column, 0, 0)
 	content.SetLayoutMotion(widget.LayoutMotionSmooth)
 	content.Append(widget.NewSpacer(50, 60), false)
 	op, surf, _, _ := newLoopPopover(content)
+	t.Cleanup(widget.Host(content, &clock))
 	surf.w, surf.h = 54, 64
 	a := &Application{openPopovers: []*openPopover{op}}
 	a.popovers.openOrReplace(op.host, op.popover)
@@ -437,6 +438,7 @@ func TestPopoverShrinkWaitsForTheContent(t *testing.T) {
 			t.Fatal(err)
 		}
 		op.keyRoot.Arrange(render.Rect{X: 2, Y: 2, W: surf.w - 4, H: surf.h - 4})
+		widget.AttachAnimations()
 		widget.CollectDamage(op.keyRoot)
 		op.keyRoot.Paint(cv)
 	}
@@ -449,8 +451,8 @@ func TestPopoverShrinkWaitsForTheContent(t *testing.T) {
 		t.Fatalf("the surface resized at once to %v", surf.resizes)
 	}
 	for range 60 {
-		now = now.Add(animclock.FrameInterval)
-		animclock.Tick(now)
+		now = now.Add(anim.FrameInterval)
+		clock.Tick(now)
 		frame()
 		if widget.ShownRect(content).H > 20 && len(surf.resizes) != 0 {
 			t.Fatalf("the surface resized to %v while the content was still shown %v", surf.resizes, widget.ShownRect(content))

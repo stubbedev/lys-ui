@@ -72,7 +72,7 @@ func TestAGPUVideoPlaysOnThroughALostDevice(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stream := media.NewStream(media.WithoutAudio(src), "test")
+	stream := media.NewStream(a, media.WithoutAudio(src), "test")
 	t.Cleanup(stream.Close)
 	stream.SetLoop(true)
 	face, err := render.LoadFont(goregular.TTF)

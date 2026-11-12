@@ -194,7 +194,7 @@ func (r *Revealer) SetRevealed(reveal bool) {
 		from = r.fadeFrom
 		r.setProgress(from)
 	}
-	r.cancel = anim.Play(anim.Animate(r.duration, func(t float64) {
+	r.cancel = anim.Play(r, anim.Animate(r.duration, func(t float64) {
 		if t >= 1 {
 			r.cancel = nil
 			r.land(target)

@@ -15,6 +15,7 @@ import (
 	"github.com/stubbedev/lys-lib/testbuild"
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/scale"
@@ -126,7 +127,6 @@ type paintHarness struct {
 }
 
 func newPaintHarness(root widget.Widget, w, hgt int) *paintHarness {
-	animclock.Reset()
 	ph := &paintHarness{
 		surf: &fakeSurface{},
 		wnd: &hostWindow{
@@ -134,7 +134,7 @@ func newPaintHarness(root widget.Widget, w, hgt int) *paintHarness {
 			cfg:    windowHooks{background: widget.Current().Bg},
 			scale:  1,
 			router: &widget.Router{Root: root},
-			anim:   animclock.Current(),
+			anim:   new(anim.Clock),
 			tip:    &tooltipCtl{since: time.Now()},
 			lastW:  w, lastH: hgt,
 			dirty: true,
@@ -170,6 +170,7 @@ func (h *paintHarness) frame() (int, []render.Rect) {
 	if !h.wnd.draw() {
 		panic(h.wnd.drawErr)
 	}
+	widget.AttachAnimations()
 	for _, b := range h.stale {
 		b.Release()
 	}
@@ -505,11 +506,8 @@ func spinnerHarness(t *testing.T) (*paintHarness, *widget.Spinner, *int, func(ti
 	t.Helper()
 	clock := time.Unix(1750000000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return clock }))
-	animclock.Reset()
-	t.Cleanup(animclock.Reset)
 	sp := widget.NewSpinner(24)
 	root := widget.NewBox(widget.Column, 0, 0).Append(sp, false)
-	t.Cleanup(widget.Host(root))
 	h := newPaintHarness(root, 200, 100)
 	made := 0
 	inner := h.wnd.newBuffer
@@ -519,7 +517,7 @@ func spinnerHarness(t *testing.T) (*paintHarness, *widget.Spinner, *int, func(ti
 	}
 	advance := func(d time.Duration) {
 		clock = clock.Add(d)
-		animclock.Tick(clock)
+		h.wnd.anim.Tick(clock)
 	}
 	return h, sp, &made, advance
 }

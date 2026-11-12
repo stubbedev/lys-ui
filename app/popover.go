@@ -571,7 +571,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		_, basePlaced = a.originOf(parent)
 	}
 	pcfg.NoEnter = basePlaced && widget.SharedMorphPending(cfg.Content)
-	pop, err := popup.New(a.sess, pcfg)
+	pop, err := popup.New(a.sess, &a.anim, pcfg)
 	if err != nil {
 		restoreKeys()
 		unanchor()
@@ -653,6 +653,7 @@ func (a *Application) OpenPopover(host Host, cfg PopoverConfig) (*Popover, error
 		painter:    pop.NewPainter(a.sess, a.popupRenderer(), p.frac, keyRoot, widget.Current().Surface),
 		router:     router,
 		keyRoot:    keyRoot,
+		unhost:     widget.Host(cfg.Content, &a.anim),
 		popover:    p,
 		fireClosed: fireClosed,
 		unanchor:   unanchor,
@@ -737,6 +738,7 @@ type openPopover struct {
 	released   bool
 	router     *widget.Router
 	keyRoot    *popoverKeyRoot
+	unhost     func()
 	popover    *Popover
 	detach     func()
 	fireClosed func()
@@ -793,6 +795,7 @@ func (op *openPopover) release() {
 	op.painter.Close()
 	op.detach()
 	op.unanchor()
+	op.unhost()
 	widget.Detach(op.keyRoot)
 }
 

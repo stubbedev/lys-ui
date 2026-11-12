@@ -6,7 +6,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/testbuild"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
+	"github.com/stubbedev/lys-ui/anim"
 )
 
 const dropCSS = `
@@ -33,7 +33,7 @@ func newDropRig(t *testing.T, edge BarEdge, n int) *dropRig {
 	r := &dropRig{t: t, clock: pinAnimClock(t), bar: NewBar(edge), segs: NewSegmentIndicator(n), w: 400, h: 400}
 	r.bar.Start().AppendAligned(r.segs, false, AlignCenter)
 	r.drop = r.segs.EnableDrop()
-	t.Cleanup(Host(r.bar))
+	r.clock.host(t, r.bar)
 	r.frame()
 	return r
 }
@@ -41,6 +41,7 @@ func newDropRig(t *testing.T, edge BarEdge, n int) *dropRig {
 func (r *dropRig) frame() {
 	SizeWithin(r.bar, Size{W: r.w, H: r.h})
 	r.bar.Arrange(render.Rect{W: r.w, H: r.h})
+	AttachAnimations()
 	CollectDamage(r.bar)
 }
 
@@ -68,10 +69,10 @@ func (r *dropRig) settled() {
 	if r.drop.Moving() {
 		r.t.Error("the drop still reports motion")
 	}
-	if animclock.Active() {
+	if r.clock.active() {
 		r.t.Error("the settled drop keeps the clock running")
 	}
-	if _, ok := animclock.Next(animclock.Timer); ok {
+	if _, ok := r.clock.clock.Next(anim.PaceTimer); ok {
 		r.t.Error("the settled drop schedules a frame")
 	}
 }
@@ -353,14 +354,15 @@ func TestSettledDropDoesNoWork(t *testing.T) {
 }
 
 func TestRowWithoutDropKeepsNoAnimationState(t *testing.T) {
-	pinAnimClock(t)
+	c := pinAnimClock(t)
 	segs := NewSegmentIndicator(3)
 	row := NewBox(Row, 0, 0).Append(segs, false)
-	arrangeTree(t, row, 200, 40)
+	c.host(t, row)
+	c.arrangeTree(t, row, 200, 40)
 	segs.SetActive(2)
-	arrangeTree(t, row, 200, 40)
-	if segs.drop != nil || animclock.Active() {
-		t.Errorf("drop %v, clock active %v, on a row that never enabled one", segs.drop, animclock.Active())
+	c.arrangeTree(t, row, 200, 40)
+	if segs.drop != nil || c.active() {
+		t.Errorf("drop %v, clock active %v, on a row that never enabled one", segs.drop, c.active())
 	}
 }
 

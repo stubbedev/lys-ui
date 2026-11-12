@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/anim"
 )
 
 type countLeaf struct {
@@ -166,7 +168,7 @@ func cullingTree(t *testing.T) (Widget, int, int) {
 	root.Append(NewButton(NewLabel(face, 14, "button", 0), 4, 4), false)
 	root.Append(NewSeparator(Horizontal), false)
 	const w, h = 320, 520
-	t.Cleanup(Host(root))
+	t.Cleanup(Host(root, new(anim.Clock)))
 	SizeWithin(root, Size{W: w, H: h})
 	root.Arrange(render.Rect{W: w, H: h})
 	CollectDamage(root)

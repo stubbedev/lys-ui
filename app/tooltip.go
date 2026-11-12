@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/xdg"
 	"github.com/stubbedev/lys-lib/wlr"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/popup"
 	"github.com/stubbedev/lys-ui/internal/surfx"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
@@ -227,7 +228,7 @@ func tooltipAnchor(hover widget.Widget, pointerX, pointerY int, window render.Re
 // use, without a second wayland dispatcher. Tooltips are ungrabbed
 // (NoGrab), so the fades never hold input hostage. A hovered widget
 // with markup (SetTooltipMarkup) renders through a RichLabel.
-func openTooltip(sess *wlsession.Session, gpu popup.Renderer, parent tooltipParent, face *render.Typeface, opts TooltipOptions, frac120 uint32, pointerX, pointerY int, hover widget.Widget, text string) (*popup.Popup, *popup.Painter) {
+func openTooltip(sess *wlsession.Session, clock *anim.Clock, gpu popup.Renderer, parent tooltipParent, face *render.Typeface, opts TooltipOptions, frac120 uint32, pointerX, pointerY int, hover widget.Widget, text string) (*popup.Popup, *popup.Painter) {
 	if face == nil {
 		debug.Log("input", "tooltip unavailable: no face")
 		return nil, nil
@@ -243,7 +244,7 @@ func openTooltip(sess *wlsession.Session, gpu popup.Renderer, parent tooltipPare
 	size := widget.SizeWithin(box, widget.Size{W: maxW, H: maxH})
 	gutter := widget.InkOutset(box).Max()
 	anchor := tooltipAnchor(hover, pointerX, pointerY, render.Rect{W: parent.w, H: parent.h})
-	tp, err := popup.New(sess, popup.Config{
+	tp, err := popup.New(sess, clock, popup.Config{
 		Parent:      parent.xdg,
 		LayerParent: parent.layer,
 		AnchorRect:  anchor,

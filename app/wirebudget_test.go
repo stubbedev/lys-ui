@@ -8,6 +8,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/testbuild"
 
+	"github.com/stubbedev/lys-ui/anim"
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -53,7 +54,6 @@ func TestAllocBudgetWireFrame(t *testing.T) {
 	testbuild.SkipAllocBudget(t)
 	f := newWireFixture(t, "wayland-budget")
 	f.ctx.SetBuffered(true)
-	animclock.Reset()
 	a := NewTestApplication(t, f.sess)
 	h := f.window(t, a)
 	area := h.wnd.router.Root.(*widget.DrawingArea)
@@ -96,13 +96,13 @@ func spinnerRig(t *testing.T) (*Application, *paintHarness, *time.Time) {
 	t.Helper()
 	clk := time.Unix(1000, 0)
 	t.Cleanup(animclock.SetClock(func() time.Time { return clk }))
-	t.Cleanup(animclock.Reset)
 	root := widget.NewBox(widget.Column, 8, 8)
 	sp := widget.NewSpinner(24)
 	sp.SetSpinning(true)
 	root.Append(sp, false)
 	h := newPaintHarness(root, 640, 470)
 	a := idleBudgetApp(t)
+	h.wnd.anim = &a.anim
 	a.windows = []*hostWindow{h.wnd}
 	return a, h, &clk
 }
@@ -139,7 +139,7 @@ func TestAllocBudgetWithheldWindowTick(t *testing.T) {
 	a, h, clk := spinnerRig(t)
 	h.surf.withholdFrames = true
 	tick := func() {
-		*clk = clk.Add(animclock.FallbackInterval)
+		*clk = clk.Add(anim.FallbackInterval)
 		if err := a.tick(a.step, *clk); err != nil {
 			t.Fatalf("tick: %v", err)
 		}
@@ -176,7 +176,7 @@ func TestAllocBudgetBlurredWindowTick(t *testing.T) {
 	}
 	tick()
 	tick()
-	if animclock.Active() {
+	if a.Animating() {
 		t.Error("a blurred field kept its caret blinking")
 	}
 	if allocs := testing.AllocsPerRun(100, tick); allocs != 0 {

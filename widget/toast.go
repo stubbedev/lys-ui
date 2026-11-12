@@ -189,7 +189,7 @@ func (t *Toast) armTimer() {
 	t.stopTimer()
 	st := toastPlan()
 	fade := min(st.Exit.Duration, t.timeout)
-	t.cancelTimer = anim.Play(
+	t.cancelTimer = anim.Play(t,
 		anim.Delay(t.timeout-fade),
 		anim.Animate(fade, t.fadeOut).Easing(st.Exit.Easing),
 	)
@@ -254,7 +254,7 @@ func (t *Toast) Dismiss() {
 	t.leaving = true
 	t.stopTimer()
 	st := toastPlan()
-	t.cancelTimer = anim.Play(anim.Animate(st.Exit.Duration, t.fadeOut).Easing(st.Exit.Easing))
+	t.cancelTimer = anim.Play(t, anim.Animate(st.Exit.Duration, t.fadeOut).Easing(st.Exit.Easing))
 }
 
 // Close tears the toast down without a fade and without firing
@@ -328,7 +328,7 @@ func (t *Toast) Arrange(r render.Rect) {
 		t.stopTimer()
 		t.progress = 0
 		t.lastDy = toastSlide
-		t.cancelSlide = surfx.Rise(toastPlan().Enter, 0, func(p float64) {
+		t.cancelSlide = surfx.Rise(t, toastPlan().Enter, 0, func(p float64) {
 			t.progress = min(p, 1)
 			t.invalidateFrame()
 		})

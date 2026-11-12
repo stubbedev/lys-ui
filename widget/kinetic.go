@@ -89,11 +89,11 @@ func (k *kinetic) velocity() [2]float64 {
 	return [2]float64{sum[0] / span, sum[1] / span}
 }
 
-// fling glides from the gesture's velocity: move applies each frame's
+// fling glides from the gesture's velocity, owned by owner: move applies each frame's
 // delta and reports false once the content can go no further that way
 // (an edge), which ends the glide. done runs when the glide stops,
 // however it stopped short of being halted.
-func (k *kinetic) fling(move func(dx, dy float64) bool, done func()) {
+func (k *kinetic) fling(owner anim.Owner, move func(dx, dy float64) bool, done func()) {
 	v := k.velocity()
 	k.n = 0
 	speed := gomath.Hypot(v[0], v[1])
@@ -106,7 +106,7 @@ func (k *kinetic) fling(move func(dx, dy float64) bool, done func()) {
 	var travelled [2]float64
 	var cancel anim.Cancel
 	finished := false
-	cancel = anim.Play(anim.Animate(dur, func(t float64) {
+	cancel = anim.Play(owner, anim.Animate(dur, func(t float64) {
 		if finished {
 			return
 		}

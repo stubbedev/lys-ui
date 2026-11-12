@@ -389,6 +389,7 @@ func TestListRubberBandAutoScroll(t *testing.T) {
 	c := pinAnimClock(t)
 	model := newCountingModel(12)
 	l := NewList(model, 20)
+	c.host(t, l)
 	l.SetSelectionMode(SelectionMultiple)
 	SizeWithin(l, Size{W: 100, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 60}) // 3 rows visible
@@ -407,7 +408,7 @@ func TestListRubberBandAutoScroll(t *testing.T) {
 	selEquals(t, l, rangeOf(0, 12)...)
 	r.Release(BTNLeft, Point{X: 50, Y: 50})
 
-	if animActiveNow(t) {
+	if c.scheduled() {
 		t.Error("auto-scroll kept scheduling after the gesture ended")
 	}
 }
@@ -428,6 +429,7 @@ func TestListAutoScrollPinsAtEnds(t *testing.T) {
 	c := pinAnimClock(t)
 	model := newCountingModel(4)
 	l := NewList(model, 20)
+	c.host(t, l)
 	l.SetSelectionMode(SelectionMultiple)
 	SizeWithin(l, Size{W: 100, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 60})
@@ -449,8 +451,10 @@ func TestListAutoScrollPinsAtEnds(t *testing.T) {
 func TestListAutoScrollReducedMotion(t *testing.T) {
 	restore := anim.SetInstant(true)
 	defer restore()
+	c := pinAnimClock(t)
 	model := newCountingModel(12)
 	l := NewList(model, 20)
+	c.host(t, l)
 	l.SetSelectionMode(SelectionMultiple)
 	SizeWithin(l, Size{W: 100, H: 1 << 20})
 	l.Arrange(render.Rect{X: 0, Y: 0, W: 100, H: 60})
@@ -467,7 +471,7 @@ func TestListAutoScrollReducedMotion(t *testing.T) {
 	if l.offY != 40 {
 		t.Errorf("offY = %d after a second motion, want 40", l.offY)
 	}
-	if animActiveNow(t) {
+	if c.scheduled() {
 		t.Error("reduced motion scheduled an auto-scroll tween")
 	}
 	r.Release(BTNLeft, Point{X: 50, Y: 50})

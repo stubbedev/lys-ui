@@ -42,7 +42,7 @@ func newSegmentDrop(owner *SegmentIndicator) *SegmentDrop {
 	d := &SegmentDrop{owner: owner}
 	d.SetElement("indicator")
 	for i := range d.edges {
-		d.edges[i] = anim.NewSpring(dropTrail, []float64{0}, func([]float64) { d.place() })
+		d.edges[i] = anim.NewSpring(d, dropTrail, []float64{0}, func([]float64) { d.place() })
 		d.edges[i].SetPrecision(layoutMotionPrecision)
 	}
 	setParents(owner, d)
