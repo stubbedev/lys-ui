@@ -1202,24 +1202,7 @@ func (e *Entry) Paint(cv *render.Canvas) {
 	c := e.contentRect()
 	disp := e.displayText()
 	if len(e.runes) == 0 && !e.composing() && e.placeholder != "" {
-		col := t.DisabledText()
-		if pv := e.text.placeholder.style(&e.text.placeholder); pv.Declares(style.PropColor) {
-			col = pv.Color
-		}
-		if !enabled {
-			col = scaleAlpha(col, disabledFade)
-		}
-		// On the text's baseline at the reading's start edge, unpanned.
-		ph := e.font().ShapeDir(e.placeholder, e.fontPx(), e.effDir())
-		x := c.X
-		if text.RTL(e.placeholder, e.effDir()) {
-			x = c.X + c.W - int(ph.Advance()+0.5)
-		}
-		prev := cv.PushClip(e.innerRect())
-		ph.Draw(cv, x, e.baseline(ph, c), col)
-		cv.PopClip(prev)
-		e.paintIcons(cv)
-		return
+		e.paintPlaceholder(cv, c, enabled)
 	}
 	// The highlight and the caret map through the display shape: in
 	// masked modes the band covers dots, never the runes behind them.
@@ -1298,6 +1281,26 @@ func (e *Entry) Paint(cv *render.Canvas) {
 	e.paintCompletion(cv)
 }
 
+// paintPlaceholder draws the placeholder on the text's baseline at the
+// reading's start edge, unpanned, in the text > placeholder color.
+func (e *Entry) paintPlaceholder(cv *render.Canvas, c render.Rect, enabled bool) {
+	col := Current().DisabledText()
+	if pv := e.text.placeholder.style(&e.text.placeholder); pv.Declares(style.PropColor) {
+		col = pv.Color
+	}
+	if !enabled {
+		col = scaleAlpha(col, disabledFade)
+	}
+	ph := e.font().ShapeDir(e.placeholder, e.fontPx(), e.effDir())
+	x := c.X
+	if text.RTL(e.placeholder, e.effDir()) {
+		x = c.X + c.W - int(ph.Advance()+0.5)
+	}
+	prev := cv.PushClip(e.innerRect())
+	ph.Draw(cv, x, e.baseline(ph, c), col)
+	cv.PopClip(prev)
+}
+
 // paintIcons draws the entry > image nodes, the primary and secondary
 // icons, each from its own cascade.
 func (e *Entry) paintIcons(cv *render.Canvas) {
@@ -1315,7 +1318,6 @@ func (e *Entry) paintIcons(cv *render.Canvas) {
 	}
 }
 
-// baseline centers sh's line in the text area c.
 // caretRect is the caret in its CSS shape after the text before it,
 // spanning the font's extents on the line's baseline, while the entry
 // has keyboard focus (GTK's rule); none while the input method hides
@@ -1353,6 +1355,7 @@ func (e *Entry) repaintCaret() {
 	}
 }
 
+// baseline centers sh's line in the text area c.
 func (e *Entry) baseline(sh *render.ShapedText, c render.Rect) int {
 	return c.Y + int(math.Round(float64((float64(c.H)-float64(sh.LineHeight()))/2)+sh.Ascent()))
 }
