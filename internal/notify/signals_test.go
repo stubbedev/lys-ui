@@ -2,16 +2,15 @@ package notify
 
 import (
 	"os"
-	"runtime"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/dbusx"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-ui/internal/fdtest"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 type classicDaemon struct{ sent chan uint32 }
@@ -39,19 +38,6 @@ func claim(t *testing.T, conn *dbus.Conn, name string) {
 	}
 }
 
-func receive[T any](t *testing.T, ch <-chan T, what string) T {
-	t.Helper()
-	timer := time.NewTimer(patience)
-	defer timer.Stop()
-	select {
-	case v := <-ch:
-		return v
-	case <-timer.C:
-	}
-	t.Fatalf("%s did not arrive within %v", what, patience)
-	panic("unreachable")
-}
-
 func TestClassicBroadcastSignalsArrive(t *testing.T) {
 	bus := dbustest.Session(t)
 	conn := bus.Conn(t)
@@ -66,18 +52,18 @@ func TestClassicBroadcastSignalsArrive(t *testing.T) {
 	n.OnAction(func(id, action string) { actions <- id + "/" + action })
 	n.OnClosed(func(_ string, reason CloseReason) { closes <- reason })
 	id := n.Notify(Notification{Title: "t"})
-	receive(t, d.sent, "the Notify call at the daemon")
-	awaitClassicID(t, n, 7, true, "the notifier never took the daemon's reply id 7")
+	waittest.For(t, d.sent, "the Notify call at the daemon")
+	awaitClassicID(t, n, 7, true, "the notifier to take the daemon's reply id 7")
 	if err := conn.Emit(classicPath, classicActionInvoked.Name(), uint32(7), "open"); err != nil {
 		t.Fatal(err)
 	}
-	if got := receive(t, actions, "the daemon's ActionInvoked"); got != id+"/open" {
+	if got := waittest.For(t, actions, "the daemon's ActionInvoked"); got != id+"/open" {
 		t.Errorf("action = %q, want %q", got, id+"/open")
 	}
 	if err := conn.Emit(classicPath, classicNotificationClosed.Name(), uint32(7), uint32(ReasonDismissed)); err != nil {
 		t.Fatal(err)
 	}
-	if reason := receive(t, closes, "the daemon's NotificationClosed"); reason != ReasonDismissed {
+	if reason := waittest.For(t, closes, "the daemon's NotificationClosed"); reason != ReasonDismissed {
 		t.Errorf("reason = %d", reason)
 	}
 }
@@ -95,11 +81,11 @@ func TestPortalBroadcastSignalsArrive(t *testing.T) {
 	actions := make(chan string, 64)
 	n.OnAction(func(id, action string) { actions <- id + "/" + action })
 	id := n.Notify(Notification{Title: "t"})
-	receive(t, d.sent, "the Notify call at the daemon")
+	waittest.For(t, d.sent, "the Notify call at the daemon")
 	if err := conn.Emit(portalPath, portalActionInvoked.Name(), id, "open", []dbus.Variant{}); err != nil {
 		t.Fatal(err)
 	}
-	if got := receive(t, actions, "the portal's ActionInvoked"); got != id+"/open" {
+	if got := waittest.For(t, actions, "the portal's ActionInvoked"); got != id+"/open" {
 		t.Errorf("action = %q, want %q", got, id+"/open")
 	}
 }
@@ -121,19 +107,13 @@ func TestClosedClassicNotificationIsForgotten(t *testing.T) {
 	if err := dbusx.Dispatch(sig, daemon, routes); err != nil {
 		t.Fatal(err)
 	}
-	receive(t, closed, "the NotificationClosed callback")
-	awaitClassicID(t, n, 9, false, "the closed notification stayed in the id maps")
+	waittest.For(t, closed, "the NotificationClosed callback")
+	awaitClassicID(t, n, 9, false, "the closed notification to leave the id maps")
 }
 
-func awaitClassicID(t *testing.T, n *Notifier, id uint32, known bool, failure string) {
+func awaitClassicID(t *testing.T, n *Notifier, id uint32, known bool, what string) {
 	t.Helper()
-	deadline := time.Now().Add(patience)
-	for (n.classicID(id) != "") != known {
-		if time.Now().After(deadline) {
-			t.Fatal(failure)
-		}
-		runtime.Gosched()
-	}
+	waittest.Until(t, func() bool { return (n.classicID(id) != "") == known }, what)
 }
 
 // Every signal the notifier is sent closes its descriptors: those the
@@ -153,8 +133,8 @@ func TestSignalsCloseTheirDescriptors(t *testing.T) {
 	actions := make(chan string, 64)
 	n.OnAction(func(_, action string) { actions <- action })
 	n.Notify(Notification{Title: "t"})
-	receive(t, d.sent, "the Notify call at the daemon")
-	awaitClassicID(t, n, 7, true, "the notifier never took the daemon's reply id 7")
+	waittest.For(t, d.sent, "the Notify call at the daemon")
+	awaitClassicID(t, n, 7, true, "the notifier to take the daemon's reply id 7")
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -169,7 +149,7 @@ func TestSignalsCloseTheirDescriptors(t *testing.T) {
 	}
 	await := func(want string) {
 		t.Helper()
-		if got := receive(t, actions, "the daemon's ActionInvoked "+strconv.Quote(want)); got != want {
+		if got := waittest.For(t, actions, "the daemon's ActionInvoked "+strconv.Quote(want)); got != want {
 			t.Fatalf("action %q, want %q", got, want)
 		}
 	}

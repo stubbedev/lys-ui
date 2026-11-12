@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/internal/fdtest"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/internal/xfer"
 	"github.com/stubbedev/lys-ui/transfer"
 )
@@ -94,18 +95,7 @@ func awaitReceive(t *testing.T, c *Controller, offer offerAPI, mime string) rece
 	t.Helper()
 	ch := make(chan receiveResult, 1)
 	c.receive(offer, mime, func(data []byte, err error) { ch <- receiveResult{data, err} })
-	return awaitDelivery(t, ch, "the drop payload")
-}
-
-func awaitDelivery[T any](t *testing.T, ch <-chan T, what string) T {
-	t.Helper()
-	select {
-	case v := <-ch:
-		return v
-	case <-time.After(10 * time.Second):
-		t.Fatalf("%s never delivered", what)
-		panic("unreachable")
-	}
+	return waittest.For(t, ch, "the drop payload")
 }
 
 // A cross-process drop keeps working for an honest source, and a
@@ -177,7 +167,7 @@ func TestDropReturnsBeforeASilentSource(t *testing.T) {
 	default:
 	}
 	c.Stop()
-	if err := awaitDelivery(t, delivered, "the stopped drop's result"); err == nil {
+	if err := waittest.For(t, delivered, "the stopped drop's result"); err == nil {
 		t.Error("a stopped transfer delivered no error")
 	}
 	if offer.finished != 0 {

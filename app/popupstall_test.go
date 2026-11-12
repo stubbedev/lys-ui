@@ -3,9 +3,9 @@ package app_test
 import (
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-ui/app"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -47,15 +47,6 @@ func (p *popupPeer) request(iface string, obj, opcode uint32, body []byte) {
 	}
 }
 
-func await(t *testing.T, ch <-chan struct{}, what string) {
-	t.Helper()
-	select {
-	case <-ch:
-	case <-time.After(10 * time.Second):
-		t.Fatalf("%s never happened", what)
-	}
-}
-
 func TestPopoverOpensWithoutWaitingForItsConfigure(t *testing.T) {
 	p := &popupPeer{surfaces: map[uint32]uint32{}, created: make(chan struct{}), buffered: make(chan struct{}, 1)}
 	f, a := connectFakeWith(t, kioskGlobals, func(f *fakeCompositor) {
@@ -77,15 +68,10 @@ func TestPopoverOpensWithoutWaitingForItsConfigure(t *testing.T) {
 		_, err := a.OpenPopover(win, app.PopoverConfig{Anchor: root, Content: square(), Dismissal: app.PopoverSticky})
 		opened <- err
 	})
-	select {
-	case err := <-opened:
-		if err != nil {
-			t.Fatalf("OpenPopover: %v", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("OpenPopover waited on a configure that has not come")
+	if err := waittest.For(t, opened, "OpenPopover to return before the configure has come"); err != nil {
+		t.Fatalf("OpenPopover: %v", err)
 	}
-	await(t, p.created, "get_popup")
+	waittest.For(t, p.created, "get_popup")
 	watch.await(t, pendingTicks)
 	if got := f.syncs.Load() - syncsBefore; got != 0 {
 		t.Errorf("opening the popover cost %d wl_display.sync, want 0", got)
@@ -96,7 +82,7 @@ func TestPopoverOpensWithoutWaitingForItsConfigure(t *testing.T) {
 
 	f.send(p.popup.Load(), popupConfigureEvent, 3, 4, 20, 20)
 	f.send(p.xdgSurface.Load(), configureEvent, 77)
-	await(t, p.buffered, "the first frame after the configure")
+	waittest.For(t, p.buffered, "the first frame after the configure")
 	if got := p.acks.Load(); got != 1 {
 		t.Errorf("%d acks of the configure, want 1", got)
 	}

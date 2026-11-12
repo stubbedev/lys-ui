@@ -3,12 +3,13 @@ package dragdrop
 import (
 	"errors"
 	"io"
+	"strconv"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 
 	"github.com/stubbedev/lys-ui/internal/fdtest"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/transfer"
 )
@@ -507,12 +508,7 @@ func loopController() (*Controller, chan func()) {
 
 func runLoopOnce(t *testing.T, loop chan func()) {
 	t.Helper()
-	select {
-	case fn := <-loop:
-		fn()
-	case <-time.After(10 * time.Second):
-		t.Fatal("nothing reached the loop")
-	}
+	waittest.For(t, loop, "a function posted to the loop")()
 }
 
 func TestReadPayloadShortCircuitsSelfDrops(t *testing.T) {
@@ -577,13 +573,7 @@ func readPayload(t *testing.T, c *Controller, mime string) receiveResult {
 	t.Helper()
 	ch := make(chan receiveResult, 1)
 	c.ReadPayload(mime, func(data []byte, err error) { ch <- receiveResult{data, err} })
-	select {
-	case r := <-ch:
-		return r
-	case <-time.After(10 * time.Second):
-		t.Fatalf("ReadPayload(%q) never delivered", mime)
-		return receiveResult{}
-	}
+	return waittest.For(t, ch, "the "+strconv.Quote(mime)+" payload")
 }
 
 func TestReadPayloadRequiresADrag(t *testing.T) {

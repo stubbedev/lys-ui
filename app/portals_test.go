@@ -13,6 +13,7 @@ import (
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
 	"github.com/stubbedev/lys-ui/internal/fdtest"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 type mockDesktop struct {
@@ -274,17 +275,6 @@ func TestSessionStateChangesReachTheLoopAndQueryEndIsAnswered(t *testing.T) {
 	}
 }
 
-const portalPatience = 10 * time.Second
-
-func await(t *testing.T, ch <-chan struct{}, what string) {
-	t.Helper()
-	select {
-	case <-ch:
-	case <-time.After(portalPatience):
-		t.Fatalf("%s did not happen within %v", what, portalPatience)
-	}
-}
-
 func holdWorker(t *testing.T, post func(func()) bool) (release func()) {
 	t.Helper()
 	held, entered := make(chan struct{}), make(chan struct{})
@@ -296,7 +286,7 @@ func holdWorker(t *testing.T, post func(func()) bool) (release func()) {
 		t.Fatal("the worker refused the holding job")
 	}
 	t.Cleanup(release)
-	await(t, entered, "the worker taking the holding job")
+	waittest.For(t, entered, "the worker taking the holding job")
 	return release
 }
 

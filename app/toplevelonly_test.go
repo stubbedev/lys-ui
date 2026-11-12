@@ -8,12 +8,12 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/wltest"
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/app"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -261,11 +261,7 @@ func (f *fakeCompositor) write(obj, opcode uint32, msg []byte) {
 
 func (f *fakeCompositor) awaitMapped(t *testing.T, what string) {
 	t.Helper()
-	select {
-	case <-f.mapped:
-	case <-time.After(10 * time.Second):
-		t.Fatalf("%s never committed a buffer", what)
-	}
+	waittest.For(t, f.mapped, what+" to commit a buffer")
 }
 
 func connectFake(t *testing.T, globals []fakeGlobal) (*fakeCompositor, *app.Application) {
@@ -295,11 +291,7 @@ func runUntilCleanup(t *testing.T, a *app.Application) {
 	}()
 	t.Cleanup(func() {
 		a.Invoke(a.Quit)
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Error("application did not quit")
-		}
+		waittest.For(t, done, "the application to quit")
 	})
 }
 

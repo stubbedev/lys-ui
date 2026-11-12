@@ -10,6 +10,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wltest"
 
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -91,13 +92,8 @@ func TestEventBurstCostsOneTickAndOneDraw(t *testing.T) {
 		t.Helper()
 		done := make(chan error, 1)
 		go func() { done <- a.tick(a.stepFn(), time.Now()) }()
-		select {
-		case err := <-done:
-			if err != nil {
-				t.Fatalf("tick: %v", err)
-			}
-		case <-time.After(5 * time.Second):
-			t.Fatal("tick parked in dispatch with events pending")
+		if err := waittest.For(t, done, "a tick with events pending to return from dispatch"); err != nil {
+			t.Fatalf("tick: %v", err)
 		}
 	}
 

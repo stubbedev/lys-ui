@@ -20,6 +20,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/buffer"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -234,12 +235,7 @@ func TestRunPanicSkipsTheWireSettle(t *testing.T) {
 		defer func() { got <- recover() }()
 		_ = a.Run()
 	}()
-	select {
-	case r := <-got:
-		if r != "loop panic" {
-			t.Errorf("Run recovered %v, want the loop's panic", r)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Run hung after a panic instead of propagating it")
+	if r := waittest.For(t, got, "Run to propagate the loop's panic"); r != "loop panic" {
+		t.Errorf("Run recovered %v, want the loop's panic", r)
 	}
 }

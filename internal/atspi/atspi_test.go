@@ -23,6 +23,7 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 
 	"github.com/stubbedev/lys-ui/internal/atspi/proto"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -611,11 +612,7 @@ func TestActionAndValue(t *testing.T) {
 	if !ok {
 		t.Fatal("DoAction declined a healthy button")
 	}
-	select {
-	case <-clicked:
-	case <-time.After(time.Second):
-		t.Fatal("DoAction never clicked the button")
-	}
+	waittest.For(t, clicked, "DoAction to click the button")
 
 	// Value: the slider's range and current value, and the setter
 	// applies through the widget.

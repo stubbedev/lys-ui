@@ -8,13 +8,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/dbusx"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
-)
 
-const patience = 10 * time.Second
+	"github.com/stubbedev/lys-ui/internal/waittest"
+)
 
 func goroutine() string {
 	buf := make([]byte, 64)
@@ -80,14 +79,7 @@ func (f *fakeBus) seen() []string {
 
 func awaitMethod(t *testing.T, f *fakeBus, method string) {
 	t.Helper()
-	deadline := time.Now().Add(patience)
-	for time.Now().Before(deadline) {
-		if slices.Contains(f.seen(), method) {
-			return
-		}
-		runtime.Gosched()
-	}
-	t.Fatalf("%s never reached the bus; saw %v", method, f.seen())
+	waittest.Until(t, func() bool { return slices.Contains(f.seen(), method) }, method+" to reach the bus")
 }
 
 func TestNotifyMakesNoBusCallOnTheCaller(t *testing.T) {

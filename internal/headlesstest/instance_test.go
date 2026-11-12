@@ -3,9 +3,10 @@ package headlesstest
 import (
 	"os"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/wltest"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 // The single-instance gate (#79) under a real compositor: two
@@ -40,11 +41,7 @@ func TestSingleInstanceForwardsToPrimary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer secondary.Stop()
-	select {
-	case <-secondary.Exited():
-	case <-time.After(traceTimeout):
-		t.Fatal("the secondary never exited after forwarding")
-	}
+	waittest.For(t, secondary.Exited(), "the secondary to exit after forwarding")
 	if err := secondary.Wait(); err != nil {
 		t.Fatalf("secondary exit: %v", err)
 	}

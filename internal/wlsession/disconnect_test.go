@@ -8,10 +8,11 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wltest"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 // deadSocketSession returns a Session wired to a real unix socket whose
@@ -39,20 +40,16 @@ func TestStepClassifiesDeadSocket(t *testing.T) {
 	s := deadSocketSession(t)
 	done := make(chan error, 1)
 	go func() { done <- s.Step() }()
-	select {
-	case err := <-done:
-		var de *DisconnectError
-		if !errors.As(err, &de) {
-			t.Fatalf("Step on a dead socket = %v, want a *DisconnectError", err)
-		}
-		if de.Reason != DisconnectConnectionLost {
-			t.Errorf("reason = %s, want connection lost", de.Reason)
-		}
-		if !errors.Is(err, ErrDisconnected) {
-			t.Errorf("errors.Is(err, ErrDisconnected) = false for %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Step spun on a dead socket instead of returning")
+	err := waittest.For(t, done, "Step on a dead socket to return")
+	var de *DisconnectError
+	if !errors.As(err, &de) {
+		t.Fatalf("Step on a dead socket = %v, want a *DisconnectError", err)
+	}
+	if de.Reason != DisconnectConnectionLost {
+		t.Errorf("reason = %s, want connection lost", de.Reason)
+	}
+	if !errors.Is(err, ErrDisconnected) {
+		t.Errorf("errors.Is(err, ErrDisconnected) = false for %v", err)
 	}
 }
 
@@ -63,13 +60,8 @@ func TestRoundtripReturnsOnDeadSocket(t *testing.T) {
 	s := deadSocketSession(t)
 	done := make(chan error, 1)
 	go func() { done <- s.Roundtrip() }()
-	select {
-	case err := <-done:
-		if !errors.Is(err, ErrDisconnected) {
-			t.Fatalf("Roundtrip on a dead socket = %v, want ErrDisconnected", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("Roundtrip spun on a dead socket instead of returning")
+	if err := waittest.For(t, done, "Roundtrip on a dead socket to return"); !errors.Is(err, ErrDisconnected) {
+		t.Fatalf("Roundtrip on a dead socket = %v, want ErrDisconnected", err)
 	}
 	// Post-close dispatch is classified too: it is the same dead
 	// connection, and a caller looping on it must see a disconnect.

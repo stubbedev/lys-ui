@@ -4,7 +4,6 @@ import (
 	"os"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/dbustest"
 	"github.com/stubbedev/lys-lib/dbusx"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/internal/atspi/proto"
 	"github.com/stubbedev/lys-ui/internal/fdtest"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 // fakeStatus plays at-spi-bus-launcher's org.a11y.Status properties.
@@ -63,13 +63,7 @@ func TestWatchStatus(t *testing.T) {
 	defer stop()
 	next := func() bool {
 		t.Helper()
-		select {
-		case on := <-got:
-			return on
-		case <-time.After(3 * time.Second):
-			t.Fatal("no status report")
-			return false
-		}
+		return waittest.For(t, got, "a status report")
 	}
 	if next() {
 		t.Fatal("initial status enabled, want disabled")
@@ -146,13 +140,8 @@ func TestAStatusWatchClosesTheDescriptorsOfEverySignal(t *testing.T) {
 	defer stop()
 	await := func(want bool) {
 		t.Helper()
-		select {
-		case on := <-got:
-			if on != want {
-				t.Fatalf("status %v, want %v", on, want)
-			}
-		case <-time.After(3 * time.Second):
-			t.Fatal("no status report")
+		if on := waittest.For(t, got, "a status report"); on != want {
+			t.Fatalf("status %v, want %v", on, want)
 		}
 	}
 	await(false)

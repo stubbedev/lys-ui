@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/fdtest"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/internal/xfer"
 )
 
@@ -227,13 +228,8 @@ func readSync(t *testing.T, o *Offer, mime string, limit int64) ([]byte, error) 
 	if err := o.Read(mime, limit, func(b []byte, err error) { ch <- result{b, err} }); err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	select {
-	case r := <-ch:
-		return r.data, r.err
-	case <-time.After(10 * time.Second):
-		t.Fatal("Read never delivered")
-		return nil, nil
-	}
+	r := waittest.For(t, ch, "the Read's result")
+	return r.data, r.err
 }
 
 func writer(payload []byte) func(*os.File) {
@@ -665,13 +661,8 @@ func TestReadToStreamsIntoTheCallersWriter(t *testing.T) {
 		if err := d.Offer(Clipboard).ReadTo("text/plain", limit, into, func(n int64, err error) { ch <- result{n, err} }); err != nil {
 			t.Fatalf("ReadTo: %v", err)
 		}
-		select {
-		case r := <-ch:
-			return r.n, r.err
-		case <-time.After(10 * time.Second):
-			t.Fatal("ReadTo never delivered")
-			return 0, nil
-		}
+		r := waittest.For(t, ch, "the ReadTo's result")
+		return r.n, r.err
 	}
 	announce(d, Clipboard, &fakeOffer{write: writer([]byte("hello world"))}, "text/plain")
 	var into bytes.Buffer

@@ -12,6 +12,7 @@ import (
 	"github.com/stubbedev/lys-lib/wlr"
 
 	"github.com/stubbedev/lys-ui/internal/fdtest"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/internal/xfer"
 	"github.com/stubbedev/lys-ui/transfer"
 )
@@ -72,17 +73,6 @@ func testClipboard(t *testing.T) *Clipboard {
 	return c
 }
 
-func awaitRead[T any](t *testing.T, ch <-chan T) T {
-	t.Helper()
-	select {
-	case v := <-ch:
-		return v
-	case <-time.After(10 * time.Second):
-		t.Fatal("the read never delivered")
-		panic("unreachable")
-	}
-}
-
 type readResult struct {
 	data []byte
 	mime string
@@ -93,7 +83,7 @@ func collectRead(t *testing.T, start func(done func([]byte, string, error))) rea
 	t.Helper()
 	ch := make(chan readResult, 1)
 	start(func(data []byte, mime string, err error) { ch <- readResult{data, mime, err} })
-	return awaitRead(t, ch)
+	return waittest.For(t, ch, "the read's result")
 }
 
 func collectText(t *testing.T, start func(done func(string, error))) (string, error) {
@@ -158,7 +148,7 @@ func TestReadOfferTextCutsOffASilentPeer(t *testing.T) {
 	ch := make(chan error, 1)
 	c.fetchText(selectionView{receive: receive, mimes: map[string]bool{"text/plain": true}}, transfer.TextMimes, bytesToString,
 		func(_ string, err error) { ch <- err })
-	if err := awaitRead(t, ch); !errors.Is(err, xfer.ErrTimeout) {
+	if err := waittest.For(t, ch, "the silent peer's read to time out"); !errors.Is(err, xfer.ErrTimeout) {
 		t.Fatalf("read = %v, want xfer.ErrTimeout", err)
 	}
 }
@@ -183,7 +173,7 @@ func TestReadReturnsBeforeASilentPeerAndStopEndsIt(t *testing.T) {
 	default:
 	}
 	c.Stop()
-	if err := awaitRead(t, delivered); err == nil {
+	if err := waittest.For(t, delivered, "the stopped read's result"); err == nil {
 		t.Error("a stopped transfer delivered no error")
 	}
 }
@@ -202,7 +192,7 @@ func TestReadsPastTheBoundAreRefused(t *testing.T) {
 	}
 	ch := make(chan error, 1)
 	c.fetchText(view, transfer.TextMimes, bytesToString, func(_ string, err error) { ch <- err })
-	if err := awaitRead(t, ch); !errors.Is(err, xfer.ErrBusy) {
+	if err := waittest.For(t, ch, "the refused read's result"); !errors.Is(err, xfer.ErrBusy) {
 		t.Errorf("read past the bound = %v, want xfer.ErrBusy", err)
 	}
 }

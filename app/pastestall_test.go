@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/app"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/transfer"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -100,11 +101,7 @@ func (p *selectionPeer) write(t *testing.T, payload string) {
 
 func (p *selectionPeer) awaitFd(t *testing.T) {
 	t.Helper()
-	select {
-	case <-p.gotFd:
-	case <-time.After(10 * time.Second):
-		t.Fatal("the paste never handed the compositor a pipe")
-	}
+	waittest.For(t, p.gotFd, "the paste to hand the compositor a pipe")
 }
 
 type loopWatch struct {
@@ -146,11 +143,7 @@ func awaitOffer(t *testing.T, a *app.Application, clip *app.Clipboard) {
 		}
 	})
 	defer stop()
-	select {
-	case <-offered:
-	case <-time.After(10 * time.Second):
-		t.Fatal("the selection never reached the clipboard")
-	}
+	waittest.For(t, offered, "the selection to reach the clipboard")
 }
 
 func TestPasteFromASilentPeerLeavesTheLoopRunning(t *testing.T) {
@@ -183,13 +176,8 @@ func TestPasteFromASilentPeerLeavesTheLoopRunning(t *testing.T) {
 	}
 
 	p.write(t, "late payload")
-	select {
-	case text := <-delivered:
-		if text != "late payload" {
-			t.Errorf("paste = %q, want the peer's payload", text)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the payload never landed")
+	if text := waittest.For(t, delivered, "the payload to land"); text != "late payload" {
+		t.Errorf("paste = %q, want the peer's payload", text)
 	}
 }
 
@@ -245,13 +233,8 @@ func TestPendingPasteLandsWhereItWasAsked(t *testing.T) {
 		}
 	})
 	defer stop()
-	select {
-	case texts := <-got:
-		if texts != [2]string{"typed pasted", ""} {
-			t.Errorf("asked %q, other %q; want the paste after what was typed, in the entry it was asked of", texts[0], texts[1])
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the paste never landed")
+	if texts := waittest.For(t, got, "the paste to land"); texts != [2]string{"typed pasted", ""} {
+		t.Errorf("asked %q, other %q; want the paste after what was typed, in the entry it was asked of", texts[0], texts[1])
 	}
 }
 
@@ -265,12 +248,7 @@ func TestPasteClosesItsWriteEnd(t *testing.T) {
 	a.Invoke(func() { clip.ReadText(func(_ string, err error) { delivered <- err }) })
 	p.awaitFd(t)
 	p.closeFds()
-	select {
-	case err := <-delivered:
-		if err != nil {
-			t.Errorf("an empty transfer ended with %v, want EOF", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the read never ended")
+	if err := waittest.For(t, delivered, "the read to end"); err != nil {
+		t.Errorf("an empty transfer ended with %v, want EOF", err)
 	}
 }

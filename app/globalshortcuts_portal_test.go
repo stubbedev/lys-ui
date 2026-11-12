@@ -11,6 +11,7 @@ import (
 	"github.com/stubbedev/lys-lib/dbusx"
 	dbus "github.com/stubbedev/lys-lib/third_party/godbus"
 
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 )
 
@@ -145,7 +146,7 @@ func TestRegisterGlobalShortcutReturnsWhileThePortalIsStuck(t *testing.T) {
 		}, func(s *GlobalShortcut, e error) { got, err, answered = s, e, true })
 	})
 	a.pump(time.Now())
-	await(t, m.entered, "the worker reaching the portal")
+	waittest.For(t, m.entered, "the worker reaching the portal")
 	a.pump(time.Now())
 	if answered || m.binds.Load() != 0 {
 		t.Fatalf("answered %v with %d binds while the portal held the session", answered, m.binds.Load())

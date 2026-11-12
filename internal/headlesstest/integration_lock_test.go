@@ -13,6 +13,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/app"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -91,15 +92,6 @@ func (r *lockRun) onLoop(fn func()) bool {
 	}
 }
 
-func waitSignal(t *testing.T, ch <-chan struct{}, what string) {
-	t.Helper()
-	select {
-	case <-ch:
-	case <-time.After(lockTimeout):
-		t.Fatalf("timed out waiting for %s", what)
-	}
-}
-
 // TestSessionLockLifecycle locks the headless session for real: the
 // compositor confirms the lock, a second client's lock is refused
 // while it holds, a hotplugged output gets a surface and an unplugged
@@ -139,7 +131,7 @@ func TestSessionLockLifecycle(t *testing.T) {
 	// Whatever fails below, never leave the shared compositor locked.
 	t.Cleanup(unlock)
 
-	waitSignal(t, holder.locked, "locked")
+	waittest.For(t, holder.locked, "locked")
 	holder.onLoop(func() {
 		l := holder.app.SessionLock()
 		if l == nil || !l.Locked() {
@@ -190,13 +182,8 @@ func TestSessionLockLifecycle(t *testing.T) {
 			if err := swayIPCCommand(testEnv.Dir, "output "+name+" unplug"); err != nil {
 				t.Fatal(err)
 			}
-			select {
-			case out := <-holder.closed:
-				if out != added {
-					t.Errorf("unplug closed the lock surface of %q, want %q", out.Name, name)
-				}
-			case <-time.After(lockTimeout):
-				t.Fatal("the unplugged output's lock surface never closed")
+			if out := waittest.For(t, holder.closed, "the unplugged output's lock surface to close"); out != added {
+				t.Errorf("unplug closed the lock surface of %q, want %q", out.Name, name)
 			}
 			holder.onLoop(func() {
 				if !holder.app.SessionLock().Locked() {

@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/fdtest"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 func goroutineID() string {
@@ -54,15 +55,7 @@ func holdCompiles(t *testing.T, s *Session) *blockedCompile {
 
 func (b *blockedCompile) started(t *testing.T) string {
 	t.Helper()
-	timer := time.NewTimer(backgroundPatience)
-	defer timer.Stop()
-	select {
-	case id := <-b.ran:
-		return id
-	case <-timer.C:
-	}
-	t.Fatalf("no keymap compile started within %v", backgroundPatience)
-	panic("unreachable")
+	return waittest.For(t, b.ran, "a keymap compile to start")
 }
 
 func (b *blockedCompile) finish(t *testing.T, compiled compiledKeymap) {

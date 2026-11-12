@@ -7,6 +7,7 @@ import (
 	"github.com/stubbedev/lys-lib/capture"
 
 	"github.com/stubbedev/lys-ui/app"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 // Two connections in one process (an application and a capture client,
@@ -63,12 +64,7 @@ func TestTwoConnectionsBindAHotpluggedOutput(t *testing.T) {
 		_, err := c.CaptureOutput(c.Outputs()[0], capture.Options{})
 		done <- err
 	}()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("capture after the hotplug: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the capture connection stalled after the application bound the hotplugged output")
+	if err := waittest.For(t, done, "the capture connection to finish after the application bound the hotplugged output"); err != nil {
+		t.Fatalf("capture after the hotplug: %v", err)
 	}
 }

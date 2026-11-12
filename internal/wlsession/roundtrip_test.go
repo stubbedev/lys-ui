@@ -4,10 +4,11 @@ import (
 	"encoding/binary"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wltest"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 type roundtripOnDone struct {
@@ -66,21 +67,11 @@ func TestRoundtripSurvivesARoundtripInsideItsDispatch(t *testing.T) {
 	sendCallbackDone(t, srv, outerID)
 	sendCallbackDone(t, srv, readSync(t, srv))
 
-	select {
-	case err := <-inner:
-		if err != nil {
-			t.Fatalf("inner roundtrip: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("the roundtrip run from inside a dispatch never returned")
+	if err := waittest.For(t, inner, "the roundtrip run from inside a dispatch to return"); err != nil {
+		t.Fatalf("inner roundtrip: %v", err)
 	}
-	select {
-	case err := <-outer:
-		if err != nil {
-			t.Fatalf("outer roundtrip: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("the outer roundtrip never returned: the nested one consumed its done")
+	if err := waittest.For(t, outer, "the outer roundtrip to return, its done not consumed by the nested one"); err != nil {
+		t.Fatalf("outer roundtrip: %v", err)
 	}
 }
 
@@ -89,13 +80,8 @@ func TestRoundtripFlushesABufferedSync(t *testing.T) {
 	s.Display.Context().SetBuffered(true)
 	done := make(chan error, 1)
 	go func() { done <- s.Roundtrip() }()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("a roundtrip stayed parked on a sync it never sent")
+	if err := waittest.For(t, done, "a roundtrip on a buffered sync to return"); err != nil {
+		t.Fatal(err)
 	}
 	if answered.Load() != 1 {
 		t.Fatalf("%d syncs reached the compositor, want 1", answered.Load())

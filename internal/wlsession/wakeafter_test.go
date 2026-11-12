@@ -10,6 +10,8 @@ import (
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wltest"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 // syncCompositor plays the compositor's half of wl_display.sync on c:
@@ -101,13 +103,8 @@ func TestAWakeReachesAStepAlreadyParked(t *testing.T) {
 	go func() { done <- s.Step() }()
 	time.Sleep(5 * time.Millisecond)
 	s.WakeAfter(0)
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("a parked Step never woke")
+	if err := waittest.For(t, done, "a parked Step to wake"); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -173,13 +170,8 @@ func TestManyWakesRaceWithADispatchingLoop(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	close(stop)
 	s.WakeAfter(0)
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the loop stayed parked past its wakes")
+	if err := waittest.For(t, done, "the loop to leave its park after its wakes"); err != nil {
+		t.Fatal(err)
 	}
 }
 

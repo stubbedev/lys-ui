@@ -6,7 +6,6 @@ import (
 	"image/color"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/capture"
 	"github.com/stubbedev/lys-lib/dmabuf"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/stubbedev/lys-ui/app"
 	"github.com/stubbedev/lys-ui/internal/headlesstest/inproc"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -123,16 +123,12 @@ func TestHeadlessGPUAreaPresentsDmabufs(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	select {
-	case err := <-imported:
-		if errors.Is(err, app.ErrNoDmabuf) || errors.Is(err, app.ErrDmabufLayout) {
-			t.Skipf("the compositor imports no linear XRGB8888 dmabufs: %v", err)
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-	case <-time.After(8 * time.Second):
-		t.Fatal("the area never asked for a frame")
+	err = waittest.For(t, imported, "the area to ask for a frame")
+	if errors.Is(err, app.ErrNoDmabuf) || errors.Is(err, app.ErrDmabufLayout) {
+		t.Skipf("the compositor imports no linear XRGB8888 dmabufs: %v", err)
+	}
+	if err != nil {
+		t.Fatal(err)
 	}
 	wantScreen(t, gpuDmabuf)
 }

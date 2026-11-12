@@ -13,6 +13,7 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wltest"
 
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -229,13 +230,8 @@ func TestStalledLoopWakesOnlyForWritableSocket(t *testing.T) {
 	}
 	stop.Store(true)
 	f.sess.WakeAfter(0)
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("step: %v", err)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("the loop did not stop on a wake")
+	if err := waittest.For(t, done, "the loop to stop on a wake"); err != nil {
+		t.Fatalf("step: %v", err)
 	}
 }
 
