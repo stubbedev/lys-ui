@@ -34,13 +34,7 @@ func TestRunStopsAFontWarmUpStillScanning(t *testing.T) {
 	default:
 		t.Fatal("Run returned with the font warm-up still scanning")
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for runtime.NumGoroutine() > baseline && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	if n := runtime.NumGoroutine(); n > baseline {
-		t.Errorf("goroutines after Run = %d, want the baseline %d from before the application", n, baseline)
-	}
+	settleGoroutines(t, baseline, "Run")
 }
 
 func TestAFontWarmUpThatFinishesIsNotWaitedOnAgain(t *testing.T) {

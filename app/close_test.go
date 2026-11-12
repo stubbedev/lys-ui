@@ -13,6 +13,24 @@ import (
 
 const closeBound = 5 * time.Second
 
+// settleGoroutines waits up to closeBound for the goroutine count to
+// fall to atMost, reporting the count it settled at when it does not.
+func settleGoroutines(t *testing.T, atMost int, after string) {
+	t.Helper()
+	poll := time.NewTicker(time.Millisecond)
+	defer poll.Stop()
+	deadline := time.NewTimer(closeBound)
+	defer deadline.Stop()
+	for runtime.NumGoroutine() > atMost {
+		select {
+		case <-poll.C:
+		case <-deadline.C:
+			t.Errorf("%d goroutines %v after %s, want at most %d", runtime.NumGoroutine(), closeBound, after, atMost)
+			return
+		}
+	}
+}
+
 func awaitBusPeer(t *testing.T, signals <-chan *dbus.Signal, what string, match func(name, newOwner string) bool) string {
 	t.Helper()
 	deadline := time.After(closeBound)
@@ -68,12 +86,7 @@ func TestCloseStopsWhatAnApplicationThatNeverRanStarted(t *testing.T) {
 	if ran {
 		t.Error("a closed application queued an Invoke")
 	}
-	for deadline := time.Now().Add(closeBound); runtime.NumGoroutine() > baseline && time.Now().Before(deadline); {
-		time.Sleep(time.Millisecond)
-	}
-	if n := runtime.NumGoroutine(); n > baseline {
-		t.Errorf("%d goroutines after Close, want the %d from before the application", n, baseline)
-	}
+	settleGoroutines(t, baseline, "Close")
 
 	a.Close()
 	if stops != 1 {

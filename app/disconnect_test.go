@@ -13,7 +13,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wltest"
@@ -133,15 +132,7 @@ func TestApplicationDisconnectPolicy(t *testing.T) {
 		t.Errorf("OnDisconnect fired again on a repeat disconnect: %d events", len(events))
 	}
 
-	// No goroutine left spinning: the count settles back to the
-	// pre-run baseline.
-	deadline := time.Now().Add(2 * time.Second)
-	for runtime.NumGoroutine() > baseline+2 && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if n := runtime.NumGoroutine(); n > baseline+2 {
-		t.Errorf("goroutines after the exit path = %d, want the pre-run baseline %d", n, baseline)
-	}
+	settleGoroutines(t, baseline+2, "the exit path")
 }
 
 // TestDisconnectDefaultPolicyCleansUp: without a hook the same teardown
