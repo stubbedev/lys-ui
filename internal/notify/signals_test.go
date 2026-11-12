@@ -146,10 +146,15 @@ func TestClosedClassicNotificationIsForgotten(t *testing.T) {
 		t.Fatal(err)
 	}
 	receive(t, closed, "the NotificationClosed callback")
+	awaitClassicID(t, n, 9, false, "the closed notification stayed in the id maps")
+}
+
+func awaitClassicID(t *testing.T, n *Notifier, id uint32, known bool, failure string) {
+	t.Helper()
 	deadline := time.Now().Add(patience)
-	for n.classicID(9) != "" {
+	for (n.classicID(id) != "") != known {
 		if time.Now().After(deadline) {
-			t.Fatal("the closed notification stayed in the id maps")
+			t.Fatal(failure)
 		}
 		runtime.Gosched()
 	}
@@ -173,6 +178,7 @@ func TestSignalsCloseTheirDescriptors(t *testing.T) {
 	n.OnAction(func(_, action string) { actions <- action })
 	n.Notify(Notification{Title: "t"})
 	receive(t, d.sent, "the Notify call at the daemon")
+	awaitClassicID(t, n, 7, true, "the notifier never took the daemon's reply id 7")
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
