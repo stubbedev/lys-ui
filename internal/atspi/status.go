@@ -36,18 +36,17 @@ func WatchStatus(conn *dbus.Conn, fn func(enabled bool)) (stop func(), err error
 		func(err error) { debug.Log("a11y", "a status change was not read: %v", err) },
 		dbusx.On(dbusx.PropertiesChanged, proto.BusPath, func(c dbusx.ChangedProperties, announced dbus.Sequence) error {
 			<-ready
-			closed := dbus.CloseFDs([]any{c.Changed})
 			if announced <= asOf {
-				return closed
+				return nil
 			}
 			was := status.on()
 			if err := status.apply(c.Changed); err != nil {
-				return errors.Join(err, closed)
+				return err
 			}
 			if now := status.on(); now != was {
 				fn(now)
 			}
-			return closed
+			return nil
 		}).WithArg0(proto.IfaceStatus))
 	if err != nil {
 		return nil, fmt.Errorf("atspi: watch status: %w", err)
