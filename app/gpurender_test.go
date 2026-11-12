@@ -19,6 +19,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -542,12 +543,7 @@ func TestATargetIsAllocatedOffTheLoopAndLandsThroughIt(t *testing.T) {
 	if answers != 0 {
 		t.Fatal("the target came back where it was asked, not through the loop")
 	}
-	select {
-	case fn := <-queued:
-		fn()
-	case <-time.After(time.Minute):
-		t.Fatal("the worker never answered")
-	}
+	waittest.ForSlow(t, queued, "the worker's answer")()
 	if got == nil || got.Size() != image.Pt(64, 32) {
 		t.Fatalf("the worker made %v", got)
 	}

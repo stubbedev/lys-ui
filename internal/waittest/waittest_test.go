@@ -21,9 +21,9 @@ func (r *fatalRecorder) Fatalf(format string, args ...any) {
 
 func failureOf(t *testing.T, wait func(testing.TB)) string {
 	t.Helper()
-	orig := limit
-	limit = 10 * time.Millisecond
-	t.Cleanup(func() { limit = orig })
+	orig, origSlow := limit, slowLimit
+	limit, slowLimit = 10*time.Millisecond, 20*time.Millisecond
+	t.Cleanup(func() { limit, slowLimit = orig, origSlow })
 	r := &fatalRecorder{TB: t}
 	done := make(chan struct{})
 	go func() {
@@ -66,6 +66,13 @@ func TestUntilReturnsOnceTheConditionHolds(t *testing.T) {
 func TestUntilFailsNamingWhatNeverHeld(t *testing.T) {
 	got := failureOf(t, func(tb testing.TB) { Until(tb, func() bool { return false }, "the condition") })
 	if want := "waited 10ms for the condition"; got != want {
+		t.Errorf("failure %q, want %q", got, want)
+	}
+}
+
+func TestForSlowWaitsForTheSlowLimit(t *testing.T) {
+	got := failureOf(t, func(tb testing.TB) { ForSlow(tb, make(chan int), "the GPU worker") })
+	if want := "waited 20ms for the GPU worker"; got != want {
 		t.Errorf("failure %q, want %q", got, want)
 	}
 }

@@ -3,11 +3,12 @@ package sysfont
 import (
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/render"
 	"golang.org/x/image/font/gofont/gomono"
 	"golang.org/x/image/font/gofont/goregular"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 func TestAFallbackReadsNoFontWhereItShapes(t *testing.T) {
@@ -38,11 +39,7 @@ func TestAFallbackReadsNoFontWhereItShapes(t *testing.T) {
 		t.Errorf("before the store answered: %d runs, want the primary alone", first.Runs())
 	}
 	close(release)
-	select {
-	case <-resolved:
-	case <-time.After(time.Minute):
-		t.Fatal("the store answered, and the chain's owner never heard")
-	}
+	waittest.ForSlow(t, resolved, "the chain's owner to hear the store's answer")
 	if s := ch.Shape("a你", 14); s.Runs() != 2 {
 		t.Errorf("after the store answered: %d runs, want 2", s.Runs())
 	}

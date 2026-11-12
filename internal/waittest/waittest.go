@@ -8,7 +8,10 @@ import (
 	"time"
 )
 
-var limit = 10 * time.Second
+var (
+	limit     = 10 * time.Second
+	slowLimit = time.Minute
+)
 
 const pollInterval = 2 * time.Millisecond
 
@@ -17,13 +20,25 @@ const pollInterval = 2 * time.Millisecond
 // a channel closed as a signal one to wait for too.
 func For[T any](t testing.TB, ch <-chan T, what string) T {
 	t.Helper()
-	timeout := time.NewTimer(limit)
+	return within(t, ch, limit, what)
+}
+
+// ForSlow is For for slow work, a GPU worker on a software rasterizer
+// or a scan of the system's fonts, with the longer slow limit.
+func ForSlow[T any](t testing.TB, ch <-chan T, what string) T {
+	t.Helper()
+	return within(t, ch, slowLimit, what)
+}
+
+func within[T any](t testing.TB, ch <-chan T, d time.Duration, what string) T {
+	t.Helper()
+	timeout := time.NewTimer(d)
 	defer timeout.Stop()
 	select {
 	case v := <-ch:
 		return v
 	case <-timeout.C:
-		t.Fatalf("waited %v for %s", limit, what)
+		t.Fatalf("waited %v for %s", d, what)
 		panic("unreachable")
 	}
 }

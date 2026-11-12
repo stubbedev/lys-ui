@@ -9,6 +9,7 @@ import (
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -40,11 +41,7 @@ func TestTheGPUDeviceOpensOffTheLoopAndTheWindowsMoveToIt(t *testing.T) {
 		t.Fatal("the window's first frame waited for the GPU instead of drawing on the CPU")
 	}
 	close(release)
-	select {
-	case <-woke:
-	case <-time.After(time.Minute):
-		t.Fatal("the worker never answered")
-	}
+	waittest.ForSlow(t, woke, "the worker's answer")
 	for _, fn := range a.queues.drain() {
 		fn()
 	}

@@ -17,6 +17,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/stubbedev/lys-ui/internal/buffer"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/widget"
 )
 
@@ -252,12 +253,7 @@ func TestDRMTimelinesHandAReleaseToTheLoop(t *testing.T) {
 	if err := tl.dev.Signal(s, 2); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case fn := <-queued:
-		fn()
-	case <-time.After(time.Minute):
-		t.Fatal("the signalled release point never reached the loop")
-	}
+	waittest.ForSlow(t, queued, "the signalled release point to reach the loop")()
 	if !released {
 		t.Error("the release ran something else")
 	}
