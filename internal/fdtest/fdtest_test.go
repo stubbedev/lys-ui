@@ -97,3 +97,33 @@ func TestReceiveReturnsWhatTheSenderWroteBeforeClosing(t *testing.T) {
 		t.Errorf("received %q, want what was written", got)
 	}
 }
+
+func TestStreamDeliversThePayloadThroughItsDup(t *testing.T) {
+	got := Receive(t, func(w uintptr) {
+		wait := Stream(t, w, []byte("from the peer"))
+		if err := syscall.Close(int(w)); err != nil {
+			t.Fatal(err)
+		}
+		if err := wait(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if string(got) != "from the peer" {
+		t.Errorf("received %q, want the streamed payload", got)
+	}
+}
+
+func TestHoldSilentKeepsThePipeOpenWithoutWriting(t *testing.T) {
+	r, w := RawPipe(t)
+	defer r.Close()
+	HoldSilent(t, w)
+	if err := syscall.Close(int(w)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SetReadDeadline(time.Now().Add(20 * time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.Read(make([]byte, 1)); !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Errorf("read %d bytes, %v; want the deadline while the silent peer holds the pipe", n, err)
+	}
+}

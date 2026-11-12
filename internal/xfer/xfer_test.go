@@ -13,35 +13,6 @@ import (
 	"github.com/stubbedev/lys-ui/internal/fdtest"
 )
 
-// peerStream plays the foreign client at the far end of a transfer
-// pipe: it dups the descriptor (the way the compositor hands one out),
-// streams payload from its own goroutine, and returns a wait func that
-// reports once every byte landed without error — a bounded wait, so a
-// regression that leaves the peer blocked on the pipe fails instead of
-// hanging.
-func peerStream(t *testing.T, fd uintptr, payload []byte) func() error {
-	t.Helper()
-	d, err := syscall.Dup(int(fd))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := os.NewFile(uintptr(d), "xfer-test-peer")
-	done := make(chan error, 1)
-	go func() {
-		_, werr := f.Write(payload)
-		_ = f.Close()
-		done <- werr
-	}()
-	return func() error {
-		select {
-		case err := <-done:
-			return err
-		case <-time.After(5 * time.Second):
-			return errors.New("peer still blocked on the pipe after 5s")
-		}
-	}
-}
-
 func TestReadReturnsTheWholeSmallPayload(t *testing.T) {
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -50,7 +21,7 @@ func TestReadReturnsTheWholeSmallPayload(t *testing.T) {
 	defer r.Close()
 	defer w.Close()
 
-	wait := peerStream(t, w.Fd(), []byte("hello paste"))
+	wait := fdtest.Stream(t, w.Fd(), []byte("hello paste"))
 	w.Close() // our end drops; the peer's dup keeps the pipe alive
 
 	got, err := Read(r, 1<<20, 5*time.Second)
@@ -74,7 +45,7 @@ func TestReadAcceptsAPayloadExactlyAtTheCap(t *testing.T) {
 	defer w.Close()
 
 	payload := bytes.Repeat([]byte("z"), 4096)
-	wait := peerStream(t, w.Fd(), payload)
+	wait := fdtest.Stream(t, w.Fd(), payload)
 	w.Close()
 
 	got, err := Read(r, int64(len(payload)), 5*time.Second)
@@ -103,7 +74,7 @@ func TestReadCapsAnOversizePayloadAndDrainsThePipe(t *testing.T) {
 	defer r.Close()
 	defer w.Close()
 
-	wait := peerStream(t, w.Fd(), payload)
+	wait := fdtest.Stream(t, w.Fd(), payload)
 	w.Close()
 
 	got, err := Read(r, limit, 5*time.Second)

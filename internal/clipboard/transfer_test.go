@@ -3,8 +3,6 @@ package clipboard
 import (
 	"bytes"
 	"errors"
-	"os"
-	"syscall"
 	"testing"
 	"time"
 
@@ -16,47 +14,6 @@ import (
 	"github.com/stubbedev/lys-ui/internal/xfer"
 	"github.com/stubbedev/lys-ui/transfer"
 )
-
-// fakePeer plays the foreign client at the far end of a transfer pipe:
-// it dups the descriptor (the way the compositor hands one out),
-// streams payload from its own goroutine, and returns a wait func that
-// reports once every byte landed without error — a bounded wait, so a
-// regression that leaves the peer blocked on the pipe fails instead of
-// hanging.
-func fakePeer(t *testing.T, fd uintptr, payload []byte) func() error {
-	t.Helper()
-	d, err := syscall.Dup(int(fd))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := os.NewFile(uintptr(d), "clipboard-test-peer")
-	done := make(chan error, 1)
-	go func() {
-		_, werr := f.Write(payload)
-		_ = f.Close()
-		done <- werr
-	}()
-	return func() error {
-		select {
-		case err := <-done:
-			return err
-		case <-time.After(5 * time.Second):
-			return errors.New("peer still blocked on the pipe after 5s")
-		}
-	}
-}
-
-// holdSilentPeer dups fd and leaves the peer's end open but silent, so
-// only the deadline can end the read; the dup closes with the test.
-func holdSilentPeer(t *testing.T, fd uintptr) {
-	t.Helper()
-	d, err := syscall.Dup(int(fd))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := os.NewFile(uintptr(d), "clipboard-test-silent-peer")
-	t.Cleanup(func() { _ = f.Close() })
-}
 
 // shortTransferTimeout shrinks the transfer deadline for one test.
 func shortTransferTimeout(t *testing.T) {
@@ -98,7 +55,7 @@ func collectText(t *testing.T, start func(done func(string, error))) (string, er
 func TestReadOfferTextRoundtripsASmallPayload(t *testing.T) {
 	var wait func() error
 	receive := func(mime string, fd uintptr) error {
-		wait = fakePeer(t, fd, []byte("pasted text"))
+		wait = fdtest.Stream(t, fd, []byte("pasted text"))
 		return nil
 	}
 	text, err := readOfferText(t, receive, map[string]bool{"text/plain;charset=utf-8": true})
@@ -121,7 +78,7 @@ func TestReadOfferTextRefusesAnOversizePeer(t *testing.T) {
 	payload := bytes.Repeat([]byte{0xE5}, xfer.MaxPayload+64)
 	var wait func() error
 	receive := func(mime string, fd uintptr) error {
-		wait = fakePeer(t, fd, payload)
+		wait = fdtest.Stream(t, fd, payload)
 		return nil
 	}
 	text, err := readOfferText(t, receive, map[string]bool{"text/plain": true})
@@ -142,7 +99,7 @@ func TestReadOfferTextCutsOffASilentPeer(t *testing.T) {
 	shortTransferTimeout(t)
 	c := testClipboard(t)
 	receive := func(mime string, fd uintptr) error {
-		holdSilentPeer(t, fd)
+		fdtest.HoldSilent(t, fd)
 		return nil
 	}
 	ch := make(chan error, 1)
@@ -158,7 +115,7 @@ func TestReadReturnsBeforeASilentPeerAndStopEndsIt(t *testing.T) {
 	receives := 0
 	receive := func(mime string, fd uintptr) error {
 		receives++
-		holdSilentPeer(t, fd)
+		fdtest.HoldSilent(t, fd)
 		return nil
 	}
 	delivered := make(chan error, 1)
@@ -183,7 +140,7 @@ func TestReadReturnsBeforeASilentPeerAndStopEndsIt(t *testing.T) {
 func TestReadsPastTheBoundAreRefused(t *testing.T) {
 	c := testClipboard(t)
 	receive := func(mime string, fd uintptr) error {
-		holdSilentPeer(t, fd)
+		fdtest.HoldSilent(t, fd)
 		return nil
 	}
 	view := selectionView{receive: receive, mimes: map[string]bool{"text/plain": true}}

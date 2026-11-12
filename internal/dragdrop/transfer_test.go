@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"os"
-	"syscall"
 	"testing"
 	"time"
 
@@ -37,47 +35,6 @@ func fakeSourceWriter(payload []byte) func(string, io.Writer) error {
 	}
 }
 
-// peerStream plays the foreign source at the far end of the transfer
-// pipe: it dups the descriptor (the way the compositor hands one out),
-// streams payload from its own goroutine, and returns a wait func that
-// reports once every byte landed without error — a bounded wait, so a
-// regression that leaves the peer blocked on the pipe fails instead of
-// hanging.
-func peerStream(t *testing.T, fd uintptr, payload []byte) func() error {
-	t.Helper()
-	d, err := syscall.Dup(int(fd))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := os.NewFile(uintptr(d), "dragdrop-test-peer")
-	done := make(chan error, 1)
-	go func() {
-		_, werr := f.Write(payload)
-		_ = f.Close()
-		done <- werr
-	}()
-	return func() error {
-		select {
-		case err := <-done:
-			return err
-		case <-time.After(5 * time.Second):
-			return errors.New("peer still blocked on the pipe after 5s")
-		}
-	}
-}
-
-// holdSilentPeer dups fd and leaves the peer's end open but silent, so
-// only the deadline can end the read; the dup closes with the test.
-func holdSilentPeer(t *testing.T, fd uintptr) {
-	t.Helper()
-	d, err := syscall.Dup(int(fd))
-	if err != nil {
-		t.Fatal(err)
-	}
-	f := os.NewFile(uintptr(d), "dragdrop-test-silent-peer")
-	t.Cleanup(func() { _ = f.Close() })
-}
-
 // shortTransferTimeout shrinks the transfer deadline for one test.
 func shortTransferTimeout(t *testing.T) {
 	t.Helper()
@@ -102,7 +59,7 @@ func awaitReceive(t *testing.T, c *Controller, offer offerAPI, mime string) rece
 // successful transfer still finishes the drag transaction.
 func TestReceivePayloadRoundtripsASmallDrop(t *testing.T) {
 	var wait func() error
-	offer := &capturingOffer{onReceive: func(fd uintptr) { wait = peerStream(t, fd, []byte("dropped text")) }}
+	offer := &capturingOffer{onReceive: func(fd uintptr) { wait = fdtest.Stream(t, fd, []byte("dropped text")) }}
 	r := awaitReceive(t, newTestController(), offer, "text/plain")
 	if r.err != nil {
 		t.Fatal(r.err)
@@ -125,7 +82,7 @@ func TestReceivePayloadRoundtripsASmallDrop(t *testing.T) {
 func TestReceivePayloadRefusesAnOversizeSource(t *testing.T) {
 	payload := bytes.Repeat([]byte{0xD5}, xfer.MaxPayload+64)
 	var wait func() error
-	offer := &capturingOffer{onReceive: func(fd uintptr) { wait = peerStream(t, fd, payload) }}
+	offer := &capturingOffer{onReceive: func(fd uintptr) { wait = fdtest.Stream(t, fd, payload) }}
 	r := awaitReceive(t, newTestController(), offer, "text/plain")
 	if !errors.Is(r.err, xfer.ErrTooLarge) {
 		t.Fatalf("read = %v, want xfer.ErrTooLarge", r.err)
@@ -145,7 +102,7 @@ func TestReceivePayloadRefusesAnOversizeSource(t *testing.T) {
 // the deadline ends it, unfinished.
 func TestReceivePayloadCutsOffASilentSource(t *testing.T) {
 	shortTransferTimeout(t)
-	offer := &capturingOffer{onReceive: func(fd uintptr) { holdSilentPeer(t, fd) }}
+	offer := &capturingOffer{onReceive: func(fd uintptr) { fdtest.HoldSilent(t, fd) }}
 	r := awaitReceive(t, newTestController(), offer, "text/plain")
 	if !errors.Is(r.err, xfer.ErrTimeout) {
 		t.Fatalf("read = %v, want xfer.ErrTimeout", r.err)
@@ -157,7 +114,7 @@ func TestReceivePayloadCutsOffASilentSource(t *testing.T) {
 
 func TestDropReturnsBeforeASilentSource(t *testing.T) {
 	c := newTestController()
-	offer := &capturingOffer{onReceive: func(fd uintptr) { holdSilentPeer(t, fd) }}
+	offer := &capturingOffer{onReceive: func(fd uintptr) { fdtest.HoldSilent(t, fd) }}
 	c.dragOffer, c.accepted = offer, "text/plain"
 	delivered := make(chan error, 1)
 	c.ReadPayload("text/plain", func(_ []byte, err error) { delivered <- err })

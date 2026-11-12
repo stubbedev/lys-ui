@@ -98,7 +98,7 @@ func TestReadOfferImage(t *testing.T) {
 			if mime != "image/png" {
 				t.Errorf("requested %q, want image/png", mime)
 			}
-			wait := fakePeer(t, fd, []byte("fake-png-bytes"))
+			wait := fdtest.Stream(t, fd, []byte("fake-png-bytes"))
 			return wait()
 		}
 		data, mime, err := readOfferImage(t, receive, map[string]bool{"image/png": true})

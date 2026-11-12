@@ -5,6 +5,7 @@ package fdtest
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -113,4 +114,48 @@ func Receive(t testing.TB, send func(w uintptr)) []byte {
 		t.Fatalf("read what was sent through %s: %v", r.Name(), err)
 	}
 	return got
+}
+
+// Stream plays the foreign client at the far end of a transfer: it dups
+// fd, the way the compositor hands one out, writes payload to the dup
+// from its own goroutine and closes it. wait reports the write's error,
+// or that the peer was still blocked on the pipe after receiveLimit;
+// it returns an error rather than failing the test so that it can be
+// called from any goroutine.
+func Stream(t testing.TB, fd uintptr, payload []byte) (wait func() error) {
+	t.Helper()
+	f := dupPeer(t, fd, "fdtest-peer")
+	done := make(chan error, 1)
+	go func() {
+		_, err := f.Write(payload)
+		_ = f.Close()
+		done <- err
+	}()
+	return func() error {
+		timeout := time.NewTimer(receiveLimit)
+		defer timeout.Stop()
+		select {
+		case err := <-done:
+			return err
+		case <-timeout.C:
+			return fmt.Errorf("the peer was still blocked on the pipe after %v", receiveLimit)
+		}
+	}
+}
+
+// HoldSilent dups fd and keeps the dup open and silent until the test
+// ends, so that only a deadline can end a read of the other end.
+func HoldSilent(t testing.TB, fd uintptr) {
+	t.Helper()
+	f := dupPeer(t, fd, "fdtest-silent-peer")
+	t.Cleanup(func() { _ = f.Close() })
+}
+
+func dupPeer(t testing.TB, fd uintptr, name string) *os.File {
+	t.Helper()
+	d, err := syscall.Dup(int(fd))
+	if err != nil {
+		t.Fatalf("dup the peer's end of descriptor %d: %v", fd, err)
+	}
+	return os.NewFile(uintptr(d), name)
 }
