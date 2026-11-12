@@ -414,9 +414,6 @@ func (e *Entry) fontPx() float64 {
 	return fontPx(e.style(e), e.sizePx)
 }
 
-// pad is the effective horizontal text inset: the stylesheet's
-// padding when set, else the built-in 8.
-
 // SetEllipsize truncates the shown text where mode says, as a Label
 // does, while the field is unfocused and too short for it: a path field
 // reads "/home/me/…/file" at rest and shows its full text to edit once
