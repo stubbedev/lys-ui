@@ -97,6 +97,7 @@ type hostWindow struct {
 
 	pool       *buffer.Pool
 	surfSync   buffer.SurfaceSync
+	anim       *animclock.Clock
 	animatedAt time.Time
 	// footprint is the pool's buffer count and bytes as last logged
 	// (LYS_DEBUG=frame).
@@ -243,7 +244,7 @@ func opaqueFor(background render.Color, opaque bool) bool {
 	return opaque || background.A() == 255
 }
 
-func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int, root widget.Widget, hooks windowHooks, dnd *dragdrop.Controller, primary *primarySelection, animKind surfx.Kind, destroy func()) *hostWindow {
+func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int, root widget.Widget, hooks windowHooks, dnd *dragdrop.Controller, primary *primarySelection, anim *animclock.Clock, animKind surfx.Kind, destroy func()) *hostWindow {
 	if initialScale < 1 {
 		initialScale = 1
 	}
@@ -254,6 +255,7 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 		scale:     initialScale,
 		router:    &widget.Router{Root: root},
 		dnd:       dnd,
+		anim:      anim,
 		tip:       &tooltipCtl{since: time.Now()},
 		dirty:     true,
 		destroy:   destroy,
@@ -1151,7 +1153,7 @@ func (w *hostWindow) draw() bool {
 		w.damage.Refuse()
 		w.dirty = true
 	}
-	if animclock.Active() {
+	if w.anim.Active() {
 		w.animatedAt = animclock.Now()
 		if err := w.pool.Prepare(); err != nil {
 			w.drawErr = fmt.Errorf("app: prepare a spare buffer: %w", err)

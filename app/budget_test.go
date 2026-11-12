@@ -17,7 +17,6 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/sys/unix"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
 	"github.com/stubbedev/lys-ui/widget"
 )
@@ -29,7 +28,6 @@ var budgetNow = time.Unix(1_700_000_000, 0).UTC()
 // real tick, no compositor.
 func idleBudgetApp(tb testing.TB) *Application {
 	tb.Helper()
-	animclock.Reset()
 	a := NewTestApplication(tb, &wlsession.Session{})
 	a.step = func() error { return nil }
 	a.wake = func(time.Duration) {}

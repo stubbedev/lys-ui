@@ -93,7 +93,7 @@ func TestWindowCloseWithNothingHeldSendsNoSync(t *testing.T) {
 func budgetWindow(a *Application, host *fakeHost) *hostWindow {
 	router := &widget.Router{Root: widget.NewBox(widget.Column, 8, 0)}
 	return &hostWindow{
-		host: host, sess: a.sess, router: router,
+		host: host, sess: a.sess, router: router, anim: &a.anim,
 		input: &surfaceInput{router: router}, tip: &tooltipCtl{since: time.Now()},
 		frac120: 120, scale: 1, lastW: host.w, lastH: host.h,
 		pool: buffer.New(func() (*buffer.Buffer, error) { return fakeBuffer(host.w, host.h), nil }, 3),

@@ -82,6 +82,7 @@ type Application struct {
 	ime        *imeController
 	stalled    bool
 	frameClock animclock.FrameClock
+	anim       animclock.Clock
 	// clip enables ctrl+c/x/v via routeKey; primary carries the
 	// primary-selection behavior (middle-click paste, copy-on-select).
 	// SetClipboard fills both from one clipboard.
@@ -251,6 +252,7 @@ func NewApplication(sess *wlsession.Session, opts ...Option) *Application {
 	a.OnStop(func() { a.dnd.Stop() })
 	a.OnStop(startFontWarm(warmFonts))
 	a.widgetHooks = []func(){
+		animclock.Install(&a.anim),
 		// Async image loads (widget.Image file/URL sources) deliver through
 		// the loop queue - the only sanctioned bridge (docs/threading.md).
 		widget.SetInvoker(a.Invoke),
@@ -794,7 +796,7 @@ func (a *Application) newWindow(host surfaceOwner, scale int, root widget.Widget
 	widget.SetStyleRoot(root)
 	ov := inspect.NewOverlay(root)
 	ov.SetOn(a.inspectOn)
-	w := newHostWindow(a.sess, host, scale, ov, hooks, a.dnd, a.primary, animKind, hostCloser(host))
+	w := newHostWindow(a.sess, host, scale, ov, hooks, a.dnd, a.primary, &a.anim, animKind, hostCloser(host))
 	w.styleRoot = root
 	// A renderer that failed draws nothing: Run reports the failure
 	// before the loop's first draw.
@@ -841,9 +843,10 @@ func outputWire(o *wlsession.Output) *wl.Output {
 }
 
 // Close stops everything the application started: the queued invokes
-// and timers, the watchers and OnStop hooks, the font warm-up, the
-// AT-SPI bridge, the desktop settings monitor with its session bus
-// connection, the notifier, the portal sessions and the GPU renderer.
+// and timers, the animations, the watchers and OnStop hooks, the font
+// warm-up, the AT-SPI bridge, the desktop settings monitor with its
+// session bus connection, the notifier, the portal sessions and the GPU
+// renderer.
 // The hooks NewApplication installed for the widgets go too, those
 // another application has replaced since left alone.
 // Run closes the application when it returns, whatever ended the loop,
@@ -1109,7 +1112,7 @@ func (a *Application) tick(step func() error, now time.Time) error {
 		repNext = t
 	}
 	pace, _, _ := a.framePacing()
-	if t, ok := animclock.Next(pace); ok {
+	if t, ok := a.anim.Next(pace); ok {
 		animFrame = t
 	}
 	wakeAt, _ := nextWake(repNext, animFrame, windowNext, a.queues.nextDeadline(), now)
@@ -1123,19 +1126,27 @@ func (a *Application) tick(step func() error, now time.Time) error {
 	return nil
 }
 
+// Animating reports whether any animation this application launched is
+// still running or scheduled: a tween, a timeline holding in a delay, a
+// spring, a spinner on screen, a surface fade. A test waits for it to
+// turn false, polling on the loop, before it reads a settled frame, as
+// widget.WaitAssetLoads lets it wait for assets. It is safe from any
+// goroutine, and false once the application has closed.
+func (a *Application) Animating() bool { return a.anim.Active() }
+
 func (a *Application) tickAnimations(now time.Time) {
-	if !animclock.Active() {
+	if !a.anim.Active() {
 		return
 	}
 	pace, arrived, ms := a.framePacing()
 	switch {
 	case arrived && !a.stalled:
 		now = a.frameClock.Instant(ms, now)
-	case !animclock.Due(now, pace):
+	case !a.anim.Due(now, pace):
 		return
 	}
 	gen := widget.DamageGeneration()
-	if animclock.Tick(now) {
+	if a.anim.Tick(now) {
 		a.markDirtyIfDamaged(gen)
 	}
 }

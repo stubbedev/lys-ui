@@ -7,27 +7,28 @@ import (
 )
 
 func TestTickKeepsNoDriverReachableFromItsSnapshot(t *testing.T) {
+	var c Clock
 	ticks := 0
-	cancel := Drive(func(time.Time) bool {
+	cancel := c.Drive(func(time.Time) bool {
 		ticks++
 		return ticks < 2
 	})
 	defer cancel()
 	now := time.Unix(100, 0)
-	if !Tick(now) {
+	if !c.Tick(now) {
 		t.Fatal("a live driver did not run")
 	}
-	if !Active() {
+	if !c.Active() {
 		t.Error("a driver that asked for another frame stopped")
 	}
-	Tick(now.Add(time.Millisecond))
+	c.Tick(now.Add(time.Millisecond))
 	if ticks != 2 {
 		t.Errorf("driver ran %d times, want 2", ticks)
 	}
-	if Active() {
+	if c.Active() {
 		t.Error("a settled driver is still active")
 	}
-	for i, d := range running[:cap(running)] {
+	for i, d := range c.running[:cap(c.running)] {
 		if d != nil {
 			t.Errorf("snapshot slot %d still holds a driver after the tick", i)
 		}
@@ -135,4 +136,64 @@ func TestADelayedPieceWakesAtItsStartWhateverThePace(t *testing.T) {
 		}
 	}
 	Reset()
+}
+
+func TestAnInstalledClockTakesLaunchesAndLosesThemOnRelease(t *testing.T) {
+	var owned Clock
+	release := Install(&owned)
+	fired := 0
+	Launch([]Piece{{Dur: time.Second, Fn: func(float64) { fired++ }, Easing: func(p float64) float64 { return p }}})
+	Drive(func(time.Time) bool { fired++; return true })
+	if !owned.Active() {
+		t.Fatal("a launch while the clock is installed did not land on it")
+	}
+	if detached.Active() {
+		t.Fatal("a launch while a clock is installed landed on the detached clock")
+	}
+	release()
+	if owned.Active() {
+		t.Error("the released clock still runs what was launched on it")
+	}
+	if Current() != &detached {
+		t.Error("the released clock is still current")
+	}
+	owned.Tick(time.Now().Add(time.Hour))
+	detached.Tick(time.Now().Add(time.Hour))
+	if fired != 0 {
+		t.Errorf("%d callbacks ran after their clock was released", fired)
+	}
+}
+
+func TestReleasingAReplacedClockLeavesItsSuccessorCurrent(t *testing.T) {
+	var first, second Clock
+	releaseFirst := Install(&first)
+	releaseSecond := Install(&second)
+	defer releaseSecond()
+	Launch([]Piece{{Dur: time.Second, Fn: func(float64) {}, Easing: func(p float64) float64 { return p }}})
+	releaseFirst()
+	if Current() != &second {
+		t.Fatal("releasing the replaced clock unseated its successor")
+	}
+	if !second.Active() {
+		t.Error("releasing the replaced clock dropped its successor's pieces")
+	}
+}
+
+func TestALaunchWithNoClockCurrentMovesToTheNextInstalled(t *testing.T) {
+	detached.Reset()
+	fired := false
+	Launch([]Piece{{Dur: time.Second, Fn: func(float64) { fired = true }, Easing: func(p float64) float64 { return p }}})
+	var owned Clock
+	release := Install(&owned)
+	defer release()
+	if detached.Active() {
+		t.Error("the detached clock kept what the installed clock took")
+	}
+	if !owned.Active() {
+		t.Fatal("the installed clock did not take the waiting launch")
+	}
+	owned.Tick(time.Now().Add(2 * time.Second))
+	if !fired {
+		t.Error("the moved launch never ran on its new clock")
+	}
 }

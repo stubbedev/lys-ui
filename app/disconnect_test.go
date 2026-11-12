@@ -17,7 +17,6 @@ import (
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
 	"github.com/stubbedev/lys-lib/wltest"
 
-	"github.com/stubbedev/lys-ui/internal/animclock"
 	"github.com/stubbedev/lys-ui/internal/buffer"
 	"github.com/stubbedev/lys-ui/internal/waittest"
 	"github.com/stubbedev/lys-ui/internal/wlsession"
@@ -49,11 +48,11 @@ func deadPeerSession(t *testing.T) (*wlsession.Session, string) {
 func disconnectApp(t *testing.T, sess *wlsession.Session) (*Application, *hostWindow, *paintHarness) {
 	t.Helper()
 	t.Setenv(rendererEnv, "cpu")
-	animclock.Reset()
 	root := widget.NewBox(widget.Row, 0, 0)
 	h := newPaintHarness(root, 320, 200)
 	h.wnd.sess = sess
 	a := NewTestApplication(t, sess)
+	h.wnd.anim = &a.anim
 	a.windows = append(a.windows, h.wnd)
 	t.Cleanup(func() { widget.SetInvoker(nil) })
 	return a, h.wnd, h

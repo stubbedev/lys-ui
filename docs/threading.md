@@ -40,7 +40,11 @@ timer.
 - **Animations.** They tick on frame callbacks at the compositor's
   timestamp. Without one, they tick every 1/60 s while no surface awaits
   a callback and every 1/4 s while one does or none can show them, so an
-  occluded tween still finishes.
+  occluded tween still finishes. Each application has its own animation
+  clock: what is launched from `NewApplication` until it closes, and
+  what was launched while no application existed, runs on that
+  application's loop alone and is dropped when it closes, so a later
+  application in the process never steps it.
 - **Requests.** Outgoing requests are buffered and flushed as one
   `sendmsg` before `Step` parks. When the socket is full, frames are
   skipped (not blocked) until it drains (`Session.Stalled`).
@@ -81,6 +85,7 @@ runs on it. Each of these runs on a worker and returns through
 | Area | Behaviour |
 | --- | --- |
 | Assets | Icons, stylesheet images, `@font-face` files and stylesheet reloads decode on one bounded queue. A paint draws what is decoded and never reads the disk. Without an `Application` loads run inline; tests wait with `widget.WaitAssetLoads`. Icons decode for the device scale passed by `widget.SetDeviceScale` before the first frame. |
+| Animations | Not off-loop work, but what a test waits on the same way: `Application.Animating` reports whether a tween, delay, spring, spinner or surface fade of that application still runs. A test polls it on the loop until it is false before reading a settled frame, instead of sleeping. A spinner on screen keeps it true. |
 | Font fallback | `app.FontFallback` resolves a missing rune on a goroutine and shapes with the primary face meanwhile; text reshapes once the answer lands. |
 | Clipboard, drag and drop | The request leaves on the loop, the pipe is read or written on a transfer goroutine, and the result returns on the loop. `transfer.Content` writers run there. |
 | Keymaps, cursors | A keymap compiles on the session's worker; keyboard events behind it wait, in order. Cursor files load there; common shapes are read ahead. |

@@ -134,6 +134,7 @@ func newPaintHarness(root widget.Widget, w, hgt int) *paintHarness {
 			cfg:    windowHooks{background: widget.Current().Bg},
 			scale:  1,
 			router: &widget.Router{Root: root},
+			anim:   animclock.Current(),
 			tip:    &tooltipCtl{since: time.Now()},
 			lastW:  w, lastH: hgt,
 			dirty: true,

@@ -1,12 +1,14 @@
 // Package animclock is the animation scheduler the application loop
 // drives: launched pieces, the frame deadlines the loop wakes on, and
-// the tick that advances them. The public timeline API lives in
-// package anim; only the loop and tests reach this package.
+// the tick that advances them. Each application owns a Clock; the
+// package-level calls act on the current one. The public timeline API
+// lives in package anim; only the loop and tests reach this package.
 package animclock
 
 import (
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -54,7 +56,7 @@ type step struct {
 }
 
 type group struct {
-	dead bool
+	dead atomic.Bool
 }
 
 // driver is an open-ended animation: fn steps it to now and reports
@@ -62,18 +64,27 @@ type group struct {
 // settles, not at a fixed end.
 type driver struct {
 	fn   func(now time.Time) bool
-	dead bool
+	dead atomic.Bool
 }
 
-var (
+// Clock is one schedule of launched pieces and drivers, with the frame
+// deadlines and the tick that advance them. An application owns one and
+// its loop alone ticks it; Install makes it the clock launches land on.
+// The zero Clock is empty and ready.
+type Clock struct {
 	mu       sync.Mutex
-	clock    = time.Now
 	active   []*step
 	drivers  []*driver
 	running  []*driver
 	firings  []firing
 	lastTick time.Time
 	launched time.Time
+}
+
+var (
+	source   atomic.Pointer[func() time.Time]
+	detached Clock
+	current  atomic.Pointer[Clock]
 )
 
 type firing struct {
@@ -85,21 +96,99 @@ type firing struct {
 // Now is the scheduler's current instant: the pinned one under
 // SetClock.
 func Now() time.Time {
-	mu.Lock()
-	defer mu.Unlock()
-	return clock()
+	if fn := source.Load(); fn != nil {
+		return (*fn)()
+	}
+	return time.Now()
+}
+
+// Current is the clock launches land on: the one Install made current,
+// or, with none, the detached clock, which no application ticks: tests
+// drive it with Tick, and the next Install takes what waits on it.
+func Current() *Clock {
+	if c := current.Load(); c != nil {
+		return c
+	}
+	return &detached
+}
+
+// Install makes c the clock launches land on, moves onto it what waits
+// on the detached clock (launched while no clock was current), and
+// returns its release, which drops every piece and driver still on c
+// and, unless a later Install replaced c, leaves the detached clock
+// current again.
+func Install(c *Clock) (release func()) {
+	current.Store(c)
+	c.adopt(&detached)
+	return func() {
+		current.CompareAndSwap(c, nil)
+		c.Reset()
+	}
+}
+
+// Launch schedules pieces on the current clock: Clock.Launch.
+func Launch(pieces []Piece) (cancel func()) { return Current().Launch(pieces) }
+
+// Drive runs fn on the current clock: Clock.Drive.
+func Drive(fn func(now time.Time) bool) (cancel func()) { return Current().Drive(fn) }
+
+// Active reports whether the current clock runs anything: Clock.Active.
+func Active() bool { return Current().Active() }
+
+// Next is the current clock's next deadline: Clock.Next.
+func Next(pace Pace) (time.Time, bool) { return Current().Next(pace) }
+
+// Due reports whether the current clock's deadline has come: Clock.Due.
+func Due(now time.Time, pace Pace) bool { return Current().Due(now, pace) }
+
+// Tick advances the current clock: Clock.Tick.
+func Tick(now time.Time) bool { return Current().Tick(now) }
+
+// Reset empties the current clock: Clock.Reset.
+func Reset() { Current().Reset() }
+
+// SetClock replaces the time source launches and deadlines read and
+// returns the restore function; nil restores time.Now. Both rewind the
+// current clock's last tick and launch.
+func SetClock(fn func() time.Time) (restore func()) {
+	var next *func() time.Time
+	if fn != nil {
+		next = &fn
+	}
+	old := source.Swap(next)
+	Current().rewind()
+	return func() {
+		source.Store(old)
+		Current().rewind()
+	}
+}
+
+func (c *Clock) adopt(from *Clock) {
+	from.mu.Lock()
+	active, drivers, launched := from.active, from.drivers, from.launched
+	from.active, from.drivers = nil, nil
+	from.mu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.active = append(c.active, active...)
+	c.drivers = append(c.drivers, drivers...)
+	if launched.After(c.launched) {
+		c.launched = launched
+	}
+}
+
+func (c *Clock) rewind() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lastTick, c.launched = time.Time{}, time.Time{}
 }
 
 // Launch schedules pieces from the current instant and returns the
 // cancel that stops every piece not yet finished. A piece with no
 // duration and no offset lands at once, outside the schedule.
-func Launch(pieces []Piece) (cancel func()) {
+func (c *Clock) Launch(pieces []Piece) (cancel func()) {
 	g := &group{}
-	cancel = func() {
-		mu.Lock()
-		g.dead = true
-		mu.Unlock()
-	}
+	cancel = func() { g.dead.Store(true) }
 	now := Now()
 	launch := make([]*step, 0, len(pieces))
 	for _, p := range pieces {
@@ -111,39 +200,35 @@ func Launch(pieces []Piece) (cancel func()) {
 		launch = append(launch, &step{start: start, end: start.Add(p.Dur), fn: p.Fn, easing: p.Easing, grp: g})
 	}
 	if len(launch) > 0 {
-		mu.Lock()
-		active = append(active, launch...)
-		launched = now
-		mu.Unlock()
+		c.mu.Lock()
+		c.active = append(c.active, launch...)
+		c.launched = now
+		c.mu.Unlock()
 	}
 	return cancel
 }
 
 // Drive runs fn once per frame with the frame's instant until it
 // reports false (settled) or the returned cancel runs.
-func Drive(fn func(now time.Time) bool) (cancel func()) {
+func (c *Clock) Drive(fn func(now time.Time) bool) (cancel func()) {
 	d := &driver{fn: fn}
-	mu.Lock()
-	drivers = append(drivers, d)
-	mu.Unlock()
-	return func() {
-		mu.Lock()
-		d.dead = true
-		mu.Unlock()
-	}
+	c.mu.Lock()
+	c.drivers = append(c.drivers, d)
+	c.mu.Unlock()
+	return func() { d.dead.Store(true) }
 }
 
 // Active reports whether any piece is still running or scheduled.
-func Active() bool {
-	mu.Lock()
-	defer mu.Unlock()
-	for _, d := range drivers {
-		if !d.dead {
+func (c *Clock) Active() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, d := range c.drivers {
+		if !d.dead.Load() {
 			return true
 		}
 	}
-	for _, s := range active {
-		if !s.done && !s.grp.dead {
+	for _, s := range c.active {
+		if !s.done && !s.grp.dead.Load() {
 			return true
 		}
 	}
@@ -155,17 +240,17 @@ func Active() bool {
 // mid-flight, or a later piece's start while a timeline holds in a delay. At
 // Timer a piece's end counts too, so its last frame lands on time. False means
 // nothing runs and the loop may park.
-func Next(pace Pace) (time.Time, bool) {
-	mu.Lock()
-	defer mu.Unlock()
-	now := clock()
-	if lastTick.After(now) {
-		now = lastTick
+func (c *Clock) Next(pace Pace) (time.Time, bool) {
+	now := Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.lastTick.After(now) {
+		now = c.lastTick
 	}
-	if lastTick.IsZero() {
-		lastTick = now
+	if c.lastTick.IsZero() {
+		c.lastTick = now
 	}
-	next, found := nextDeadline(now, pace)
+	next, found := c.nextDeadline(now, pace)
 	if found && next.Before(now) {
 		next = now
 	}
@@ -175,25 +260,25 @@ func Next(pace Pace) (time.Time, bool) {
 // Due reports whether the clock's deadline at pace has come by now, so a
 // pass that was not woken by a frame callback ticks it; a pass woken by
 // anything else leaves running pieces where they are.
-func Due(now time.Time, pace Pace) bool {
-	mu.Lock()
-	defer mu.Unlock()
-	next, found := nextDeadline(now, pace)
+func (c *Clock) Due(now time.Time, pace Pace) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	next, found := c.nextDeadline(now, pace)
 	return found && !next.After(now)
 }
 
-func nextDeadline(now time.Time, pace Pace) (time.Time, bool) {
-	frame := lastTick.Add(pace.interval())
+func (c *Clock) nextDeadline(now time.Time, pace Pace) (time.Time, bool) {
+	frame := c.lastTick.Add(pace.interval())
 	var next time.Time
 	found := false
-	for _, d := range drivers {
-		if !d.dead {
+	for _, d := range c.drivers {
+		if !d.dead.Load() {
 			next, found = frame, true
 			break
 		}
 	}
-	for _, s := range active {
-		if s.done || s.grp.dead {
+	for _, s := range c.active {
+		if s.done || s.grp.dead.Load() {
 			continue
 		}
 		at := frame
@@ -219,19 +304,19 @@ func nextDeadline(now time.Time, pace Pace) (time.Time, bool) {
 // released, so they may launch or cancel freely; a callback cancelling
 // its own timeline still stops that timeline's later pieces in the
 // same tick. It reports whether any callback ran.
-func Tick(now time.Time) bool {
-	mu.Lock()
-	if now.Before(lastTick) {
-		now = lastTick
+func (c *Clock) Tick(now time.Time) bool {
+	c.mu.Lock()
+	if now.Before(c.lastTick) {
+		now = c.lastTick
 	}
-	if now.Before(launched) {
-		now = launched
+	if now.Before(c.launched) {
+		now = c.launched
 	}
-	due := firings
-	firings = nil
-	keep := active[:0]
-	for _, s := range active {
-		if s.done || s.grp.dead {
+	due := c.firings
+	c.firings = nil
+	keep := c.active[:0]
+	for _, s := range c.active {
+		if s.done || s.grp.dead.Load() {
 			continue
 		}
 		if now.Before(s.start) {
@@ -248,18 +333,15 @@ func Tick(now time.Time) bool {
 			keep = append(keep, s)
 		}
 	}
-	clear(active[len(keep):])
-	active = keep
-	lastTick = now
-	stepped := append(running[:0], drivers...)
-	running = nil
-	mu.Unlock()
+	clear(c.active[len(keep):])
+	c.active = keep
+	c.lastTick = now
+	stepped := append(c.running[:0], c.drivers...)
+	c.running = nil
+	c.mu.Unlock()
 	ran := false
 	for _, f := range due {
-		mu.Lock()
-		dead := f.grp.dead
-		mu.Unlock()
-		if dead {
+		if f.grp.dead.Load() {
 			continue
 		}
 		f.fn(f.eased)
@@ -267,52 +349,29 @@ func Tick(now time.Time) bool {
 	}
 	clear(due)
 	for _, d := range stepped {
-		mu.Lock()
-		dead := d.dead
-		mu.Unlock()
-		if dead {
+		if d.dead.Load() {
 			continue
 		}
 		ran = true
 		if !d.fn(now) {
-			mu.Lock()
-			d.dead = true
-			mu.Unlock()
+			d.dead.Store(true)
 		}
 	}
 	clear(stepped)
-	mu.Lock()
-	firings, running = due[:0], stepped[:0]
-	drivers = slices.DeleteFunc(drivers, func(d *driver) bool { return d.dead })
-	mu.Unlock()
+	c.mu.Lock()
+	c.firings, c.running = due[:0], stepped[:0]
+	c.drivers = slices.DeleteFunc(c.drivers, func(d *driver) bool { return d.dead.Load() })
+	c.mu.Unlock()
 	return ran
 }
 
-// SetClock replaces the time source launches and deadlines read and
-// returns the restore function; nil restores time.Now.
-func SetClock(fn func() time.Time) (restore func()) {
-	if fn == nil {
-		fn = time.Now
-	}
-	mu.Lock()
-	old := clock
-	clock = fn
-	lastTick, launched = time.Time{}, time.Time{}
-	mu.Unlock()
-	return func() {
-		mu.Lock()
-		clock = old
-		lastTick, launched = time.Time{}, time.Time{}
-		mu.Unlock()
-	}
-}
-
 // Reset drops every scheduled piece and driver.
-func Reset() {
-	mu.Lock()
-	defer mu.Unlock()
-	active = nil
-	drivers = nil
-	lastTick = clock()
-	launched = time.Time{}
+func (c *Clock) Reset() {
+	now := Now()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.active = nil
+	c.drivers = nil
+	c.lastTick = now
+	c.launched = time.Time{}
 }
