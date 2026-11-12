@@ -21,6 +21,28 @@
         "type": "github"
       }
     },
+    "devtools_2": {
+      "inputs": {
+        "flake-parts": [
+          "lys-lib",
+          "flake-parts"
+        ],
+        "nixpkgs": "nixpkgs_2"
+      },
+      "locked": {
+        "lastModified": 1794483992,
+        "narHash": "sha256-OQJNL8Z4C9vuz4lubwPqN88SYtWh5Hn0UUeG/M1aKzw=",
+        "owner": "stubbedev",
+        "repo": "flakes.nix",
+        "rev": "c16d9554846d05da43083c90014b1921e7ed24b5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "stubbedev",
+        "repo": "flakes.nix",
+        "type": "github"
+      }
+    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": [
@@ -43,11 +65,11 @@
     },
     "lys-ci": {
       "locked": {
-        "lastModified": 1794445580,
-        "narHash": "sha256-T6AhQs87451fFvZ3GqawVb5/W9UnQKCmCxCi1ZzX4mo=",
+        "lastModified": 1794488447,
+        "narHash": "sha256-H+hfJksPd5hq4z8aEf2/JRBfTf6CWUVrPGs9H7bte4Y=",
         "owner": "stubbedev",
         "repo": "lys-ci",
-        "rev": "37c6b2aedb99b0624885591f547d0e580f6f13ad",
+        "rev": "14adb7d9a75c8ce4eb3080019df0450f2e64f1fa",
         "type": "github"
       },
       "original": {
@@ -73,6 +95,7 @@
     },
     "lys-lib": {
       "inputs": {
+        "devtools": "devtools_2",
         "flake-parts": [
           "flake-parts"
         ],
@@ -82,11 +105,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794473233,
-        "narHash": "sha256-xX6kr5UQWwCWIQbGkQOABAsdEnpoDJt/4DQC1rImyfk=",
+        "lastModified": 1794498943,
+        "narHash": "sha256-R+YpvS9tNRS8KQ6095MbPEPtRK7J+CkCcADSaIVV4Ac=",
         "owner": "stubbedev",
         "repo": "lys-lib",
-        "rev": "7486f28f5c0bd31bf261b85f8c17a37879feded7",
+        "rev": "c73de7dd131029255ba43365f3d51b4c692b6bbf",
         "type": "github"
       },
       "original": {
@@ -113,6 +136,22 @@
     },
     "nixpkgs_2": {
       "locked": {
+        "lastModified": 1794192123,
+        "narHash": "sha256-SvB8u5qaJAOwZZyZciqTVOg/rBoUs2w0sFTU6ED51AQ=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "177d0540942fb205af6993b1d5fa0b57799e09f8",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_3": {
+      "locked": {
         "lastModified": 1793110635,
         "narHash": "sha256-dhoW6VgFWlaodSY5jrBn+CF2FLmaUvDVgM7+C7T2+NM=",
         "owner": "NixOS",
@@ -133,7 +172,7 @@
         "flake-parts": "flake-parts",
         "lys-ci": "lys-ci",
         "lys-lib": "lys-lib",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs_3"
       }
     }
   },
