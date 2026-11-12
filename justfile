@@ -223,14 +223,13 @@ gallery:
 docshots dir="docs/public/components":
     #!/bin/sh
     env="{{test_dir}}-shots"
-    just test-env "$env" || exit 1
-    trap 'just test-env-stop "$env"' EXIT INT TERM
-    . "$env/client.env"
-    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$env"
     # Scale 2, so the shots stay sharp on high-density screens, on a
     # mode 1280 logical pixels wide: a floating window wider than the
     # output is centered over its edges, cropping the shot.
-    swaymsg -s "$(ls "$env"/sway-ipc.*.sock)" output '*' mode 2560x1600 scale 2 >/dev/null || exit 1
+    just test-env "$env" "mode 2560x1600 scale 2" || exit 1
+    trap 'just test-env-stop "$env"' EXIT INT TERM
+    . "$env/client.env"
+    export WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR="$env"
     go run ./cmd/lys-ui-gallery -shots "{{dir}}"
 
 # Run the application-model demo (lys-ui-multi): per-output bars,
@@ -270,7 +269,7 @@ test-build dir=test_dir:
 # (dev.stubbe.lys.ui.states) to a floating 420x280 window - keep those in
 # sync with internal/headlesstest (TestSwayRecipePinsTheShowcase and
 # the state test guard them).
-test-env dir=test_dir:
+test-env dir=test_dir output="mode 1280x800 scale 1":
     #!/bin/sh
     dir="{{dir}}"
     if [ -f "$dir/sway.pid" ] && kill -0 "$(cat "$dir/sway.pid")" 2>/dev/null; then
@@ -286,7 +285,7 @@ test-env dir=test_dir:
     mkdir -p "$dir" && chmod 700 "$dir"
     # focus_on_window_activation focus: a granted xdg-activation token
     # moves the focus, which the activation test checks.
-    printf '%s\n' 'output * mode 1280x800 scale 1' \
+    printf '%s\n' 'output * {{output}}' \
         'default_border none' \
         'default_floating_border none' \
         'input type:keyboard repeat_delay 5000' \

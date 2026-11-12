@@ -158,7 +158,8 @@ func TestSwayRecipePinsTheShowcase(t *testing.T) {
 	}
 	cfg := string(data)
 	for _, want := range []string{
-		"output * mode 1280x800",
+		`test-env dir=test_dir output="mode 1280x800 scale 1"`,
+		"'output * {{output}}'",
 		`for_window [app_id="` + AppID + `"] floating enable`,
 		"move position 0 0",
 		fmt.Sprintf("resize set %d %d", showcaseW, showcaseH),
