@@ -152,7 +152,9 @@ type hostWindow struct {
 	// axes unconstrained); sizes the compositor configures outside the
 	// limits are clamped before layout and buffers see them. Nil for
 	// hosts without limits (layer surfaces).
-	limits func() (minW, minH, maxW, maxH int)
+	limits     func() (minW, minH, maxW, maxH int)
+	publishMin func(widget.Size) error
+	minSent    widget.Size
 	// startResize engages the compositor's interactive resize grab;
 	// nil for hosts without edges (layer surfaces). startMove is its
 	// move-grab sibling, engaged by a CSD header press (#91).
@@ -270,6 +272,13 @@ func newHostWindow(sess *wlsession.Session, host surfaceOwner, initialScale int,
 	// decoration state; layer surfaces implement none of it.
 	if sl, ok := host.(sizeLimiter); ok {
 		w.limits = sl.SizeLimits
+		minW, minH, _, _ := sl.SizeLimits()
+		w.minSent = widget.Size{W: minW, H: minH}
+	}
+	if tl, ok := host.(*window.Window); ok && tl.Toplevel != nil {
+		w.publishMin = func(s widget.Size) error {
+			return tl.Toplevel.SetMinSize(intconv.Clamp[int32](s.W), intconv.Clamp[int32](s.H))
+		}
 	}
 	if rz, ok := host.(resizer); ok {
 		w.startResize = func(edges uint32, serial uint32) {
@@ -659,6 +668,33 @@ func (w *hostWindow) layoutSize() (int, int) {
 	return bw, bh
 }
 
+func minSizeFor(least widget.Size, minW, minH, maxW, maxH int) widget.Size {
+	axis := func(need, floor, ceiling int) int {
+		need = max(need, floor)
+		if ceiling > 0 {
+			return min(need, ceiling)
+		}
+		return need
+	}
+	return widget.Size{W: axis(least.W, minW, maxW), H: axis(least.H, minH, maxH)}
+}
+
+func (w *hostWindow) syncMinSize(width int) error {
+	if w.publishMin == nil || w.limits == nil || w.styleRoot == nil {
+		return nil
+	}
+	minW, minH, maxW, maxH := w.limits()
+	want := minSizeFor(leastSize(w.styleRoot, width), minW, minH, maxW, maxH)
+	if want == w.minSent {
+		return nil
+	}
+	if err := w.publishMin(want); err != nil {
+		return fmt.Errorf("app: set_min_size %dx%d: %w", want.W, want.H, err)
+	}
+	w.minSent, w.stateOwed = want, true
+	return nil
+}
+
 // syncSize picks up a configure-driven size change: the pool resizes
 // (retiring the free buffers, keeping those the compositor still holds
 // until their release - Resize must run before the next Acquire) and a
@@ -974,6 +1010,10 @@ func (w *hostWindow) draw() bool {
 	}
 	if report := widget.MeasureMissReport(); report != "" {
 		debug.Log("measure", "%dx%d layout missed the measure cache: %s", bw, bh, report)
+	}
+	if err := w.syncMinSize(bw); err != nil {
+		w.drawErr = err
+		return false
 	}
 	w.input.rehover()
 	w.applyInputRegion()

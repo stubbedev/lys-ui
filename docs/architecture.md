@@ -178,7 +178,7 @@ started on. A press on a resize edge is handled before the router.
 `widget.KeyActionForSym` is the single keysym-to-action map. See
 [Input model](input-model.md).
 
-### 11. Layer surfaces size a zero axis automatically
+### 11. Surfaces follow their content
 
 As in gtk4-layer-shell, a zero width or height in `LayerConfig`:
 
@@ -189,6 +189,17 @@ As in gtk4-layer-shell, a zero width or height in `LayerConfig`:
 Corner-anchored OSDs and notification stacks need no size. Concrete
 requests are validated against the protocol, and `Reshape` changes
 anchor and size as one validated state.
+
+An xdg toplevel cannot resize itself. As in GTK, its minimum is its
+content's: every frame, after layout, the window sends `set_min_size`
+as the root's least size (its minimum width, and its minimum height at
+the window's width), never below `WindowConfig.MinWidth`/`MinHeight`
+nor above `MaxWidth`/`MaxHeight`, and only when that changed. A
+compositor that honours a raised minimum (lys-wm) grows the floating
+window; a lowered one lets the user shrink it again, and the window
+keeps its size until they do. Content inside a `Scroll` has a small
+least size, so a scrolling window stays shrinkable. Layout clamps only
+to the configured limits.
 
 ### 12. Optional globals never gate Connect
 

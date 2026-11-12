@@ -19,6 +19,7 @@ import (
 	"github.com/stubbedev/lys-lib/debug"
 	"github.com/stubbedev/lys-lib/gpu"
 	"github.com/stubbedev/lys-lib/icons"
+	"github.com/stubbedev/lys-lib/intconv"
 	"github.com/stubbedev/lys-lib/logutil"
 	"github.com/stubbedev/lys-lib/portalsettings"
 	"github.com/stubbedev/lys-lib/render"
@@ -422,12 +423,17 @@ type WindowConfig struct {
 	// compositor leaves the size to the client (a zero configure).
 	Width, Height uint32
 	// MinWidth and MinHeight constrain how far the compositor may
-	// resize the window down (set_min_size on the wire); zero axes are
-	// unconstrained. Layout clamps to the same limits client-side.
+	// resize the window down; zero axes are unconstrained. Layout clamps
+	// to the same limits client-side. The minimum sent as set_min_size
+	// is GTK's, never below Root's least size (its minimum width, and
+	// its minimum height at the window's width), re-measured every
+	// frame: a floating window grows when its content outgrows it, and
+	// content that scrolls keeps it shrinkable.
 	MinWidth, MinHeight uint32
 	// MaxWidth and MaxHeight constrain how far the compositor may
-	// resize the window up (set_max_size); zero axes are unconstrained,
-	// in logical pixels like every size in the toolkit.
+	// resize the window up (set_max_size), and cap the minimum Root's
+	// least size raises; zero axes are unconstrained, in logical pixels
+	// like every size in the toolkit.
 	MaxWidth, MaxHeight uint32
 	// Scale is the initial integer output scale the surface renders at;
 	// zero means 1. With the fractional-scale protocol the compositor's
@@ -1488,21 +1494,32 @@ func (w *Window) SetCloseRequest(veto func() bool) {
 }
 
 // SetMinSize constrains how far the compositor may resize the window
-// down (set_min_size on the wire); zero axes are unconstrained. The
-// limits also clamp layout client-side.
+// down; zero axes are unconstrained. The limits also clamp layout
+// client-side. What goes out as set_min_size is never below the root's
+// least size, as WindowConfig.MinWidth says.
 func (w *Window) SetMinSize(width, height uint32) {
-	if w.win != nil {
-		// A failed request means the connection is dying; the next
-		// frame fails with the same cause.
-		_ = w.win.SetMinSize(width, height)
+	if w.win == nil {
+		return
+	}
+	// A failed request means the connection is dying; the next
+	// frame fails with the same cause.
+	_ = w.win.SetMinSize(width, height)
+	if hw := w.app.hostWindowOf(w); hw != nil {
+		hw.minSent = widget.Size{W: intconv.Clamp[int](width), H: intconv.Clamp[int](height)}
+		hw.dirty = true
 	}
 }
 
 // SetMaxSize constrains how far the compositor may resize the window
-// up (set_max_size); zero axes are unconstrained.
+// up (set_max_size), the root's least size included; zero axes are
+// unconstrained.
 func (w *Window) SetMaxSize(width, height uint32) {
-	if w.win != nil {
-		_ = w.win.SetMaxSize(width, height)
+	if w.win == nil {
+		return
+	}
+	_ = w.win.SetMaxSize(width, height)
+	if hw := w.app.hostWindowOf(w); hw != nil {
+		hw.dirty = true
 	}
 }
 

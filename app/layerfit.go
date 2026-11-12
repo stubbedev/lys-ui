@@ -77,6 +77,10 @@ func sizeIn(root widget.Widget, limit widget.Size, pinW bool) widget.Size {
 	return widget.Size{W: limit.W, H: root.Measure(widget.Column, limit.W).Within(limit.H)}
 }
 
+func leastSize(root widget.Widget, width int) widget.Size {
+	return widget.Size{W: sizeIn(root, widget.Size{}, false).W, H: sizeIn(root, widget.Size{W: width}, true).H}
+}
+
 // fittedSize resolves the requested size against the content: each
 // content-sized axis takes root's natural extent (at least one pixel,
 // the protocol's floor for a non-automatic axis), measured with the
