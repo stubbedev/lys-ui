@@ -3,6 +3,7 @@ package widget
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -13,11 +14,11 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/render"
 
 	"github.com/stubbedev/lys-ui/internal/imgcache"
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 // quadImage returns a 4x4 raster with solid 2x2 quadrants: red top
@@ -126,11 +127,7 @@ func (f *fakeInvoker) invoke(fn func()) {
 func (f *fakeInvoker) drain(t *testing.T, n int) {
 	t.Helper()
 	for i := range n {
-		select {
-		case <-f.got:
-		case <-time.After(5 * time.Second):
-			t.Fatalf("timed out waiting for invoke %d of %d", i+1, n)
-		}
+		waittest.For(t, f.got, fmt.Sprintf("invoke %d of %d", i+1, n))
 	}
 	f.mu.Lock()
 	fns := f.fns

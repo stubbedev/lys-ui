@@ -7,11 +7,12 @@ import (
 	"sync/atomic"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/icons"
 	"github.com/stubbedev/lys-lib/render"
 	"github.com/stubbedev/lys-lib/testbuild"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 func settleAssets(t *testing.T, f *fakeInvoker) {
@@ -21,11 +22,7 @@ func settleAssets(t *testing.T, f *fakeInvoker) {
 		defer close(finished)
 		WaitAssetLoads()
 	}()
-	select {
-	case <-finished:
-	case <-time.After(10 * time.Second):
-		t.Fatal("the asset queue never ran out of work")
-	}
+	waittest.For(t, finished, "the asset queue to run out of work")
 	f.mu.Lock()
 	fns := f.fns
 	f.fns = nil
@@ -45,11 +42,7 @@ func onTime(t *testing.T, what string, fn func()) {
 		defer close(done)
 		fn()
 	}()
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
-		t.Fatalf("%s blocked on the disk", what)
-	}
+	waittest.For(t, done, what+" to return without blocking on the disk")
 }
 
 func fifoPath(t *testing.T, path string) {

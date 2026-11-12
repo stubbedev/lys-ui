@@ -2,13 +2,15 @@ package widget
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stubbedev/lys-lib/assetfile"
 	"github.com/stubbedev/lys-lib/render"
+
+	"github.com/stubbedev/lys-ui/internal/waittest"
 )
 
 func TestAStuckReadAndAPipeHoldUpNoOtherIcon(t *testing.T) {
@@ -41,15 +43,8 @@ func TestAStuckReadAndAPipeHoldUpNoOtherIcon(t *testing.T) {
 		onTime(t, "a paint", func() { paintIcon(w, 16, 1, 1) })
 	}
 
-	completed := 0
-	deadline := time.After(10 * time.Second)
-	for completed < len(all) {
-		select {
-		case <-f.got:
-			completed++
-		case <-deadline:
-			t.Fatalf("%d of %d decodes completed while the stuck read held", completed, len(all))
-		}
+	for i := range all {
+		waittest.For(t, f.got, fmt.Sprintf("decode %d of %d while the stuck read held", i+1, len(all)))
 	}
 	f.mu.Lock()
 	fns := f.fns
@@ -57,9 +52,6 @@ func TestAStuckReadAndAPipeHoldUpNoOtherIcon(t *testing.T) {
 	f.mu.Unlock()
 	for _, fn := range fns {
 		fn()
-	}
-	if completed != len(all) {
-		t.Errorf("%d decodes completed while the stuck read held, want %d", completed, len(all))
 	}
 	for name, w := range others {
 		data, _ := paintIcon(w, 16, 1, 1)
