@@ -63,7 +63,7 @@
         # package builds set the same thing.
         CGO_ENABLED = "0";
 
-        # nixpkgs' go defaults to GOTOOLCHAIN=auto, which would fetch
+        # go defaults to GOTOOLCHAIN=auto, which would fetch
         # whatever toolchain a go.mod line asks for; the shell holds
         # to the pinned one, as the package builds do.
         GOTOOLCHAIN = "local";
