@@ -86,30 +86,53 @@ func assertPlaceholderCaret(t *testing.T, f placeholderCaretField) {
 	}
 }
 
+// startEdgeX is where a caret of width cw sits at the start edge of a
+// line in c under d.
+func startEdgeX(c render.Rect, cw int, d Direction) int {
+	if d == DirectionRTL {
+		return c.X + c.W - cw
+	}
+	return c.X
+}
+
+var placeholderCaretDirs = []struct {
+	name string
+	dir  Direction
+}{{"ltr", DirectionLTR}, {"rtl", DirectionRTL}}
+
 func TestEntryPaintsCaretOverPlaceholder(t *testing.T) {
-	for _, tc := range []struct {
+	for _, echo := range []struct {
 		name string
 		echo Echo
 	}{{"normal", EchoNormal}, {"password", EchoPassword}} {
-		t.Run(tc.name, func(t *testing.T) {
-			e := NewEntry(testFace(t), 14, render.RGB(0xff, 0xff, 0xff))
-			e.SetEcho(tc.echo)
-			e.SetPlaceholder("Password")
-			assertPlaceholderCaret(t, placeholderCaretField{e, func() (render.Rect, bool) {
-				return e.caretRect(e.shape(e.displayText()))
-			}})
-			if c, _ := e.caretRect(e.shape(e.displayText())); c.X != e.contentRect().X {
-				t.Errorf("caret x %d, want the start edge %d", c.X, e.contentRect().X)
-			}
-		})
+		for _, d := range placeholderCaretDirs {
+			t.Run(echo.name+"/"+d.name, func(t *testing.T) {
+				e := NewEntry(testFace(t), 14, render.RGB(0xff, 0xff, 0xff))
+				e.SetEcho(echo.echo)
+				e.SetDirection(d.dir)
+				e.SetPlaceholder("Password")
+				caret := func() (render.Rect, bool) { return e.caretRect(e.shape(e.displayText())) }
+				assertPlaceholderCaret(t, placeholderCaretField{e, caret})
+				c, _ := caret()
+				if want := startEdgeX(e.contentRect(), c.W, d.dir); c.X != want {
+					t.Errorf("caret x %d, want the start edge %d", c.X, want)
+				}
+			})
+		}
 	}
 }
 
 func TestTextAreaPaintsCaretOverPlaceholder(t *testing.T) {
-	ta := NewTextArea(testFace(t), 14, render.RGB(0xff, 0xff, 0xff))
-	ta.SetPlaceholder("Message")
-	assertPlaceholderCaret(t, placeholderCaretField{ta, ta.caretRect})
-	if c, _ := ta.caretRect(); c.X != ta.textRect().X {
-		t.Errorf("caret x %d, want the start edge %d", c.X, ta.textRect().X)
+	for _, d := range placeholderCaretDirs {
+		t.Run(d.name, func(t *testing.T) {
+			ta := NewTextArea(testFace(t), 14, render.RGB(0xff, 0xff, 0xff))
+			ta.SetDirection(d.dir)
+			ta.SetPlaceholder("Message")
+			assertPlaceholderCaret(t, placeholderCaretField{ta, ta.caretRect})
+			c, _ := ta.caretRect()
+			if want := startEdgeX(ta.textRect(), c.W, d.dir); c.X != want {
+				t.Errorf("caret x %d, want the start edge %d", c.X, want)
+			}
+		})
 	}
 }

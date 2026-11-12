@@ -1223,17 +1223,12 @@ func (t *TextArea) caretRectAt(caret pos) (render.Rect, bool) {
 		return render.Rect{}, false
 	}
 	lsh := t.shapeLine(t.lines[caret.line])
-	adv := 0
-	if caret.col < len(t.lines[caret.line]) {
-		for _, band := range lsh.AppendCaretBands(t.bands[:0], caret.col, caret.col+1) {
-			adv = int(band[1] - band[0] + 0.5)
-		}
-	}
+	adv, leftward := caretCluster(lsh, t.bands[:0], caret.col)
 	lineH := t.lineHeight()
 	top := t.textRect().Y + t.rowOf(caret)*lineH
 	baseline := top + int(math.Round(float64((float64(lineH)-float64(lsh.LineHeight()))/2)+lsh.Ascent()))
 	y, h := caretExtents(lsh, baseline)
-	return caretShapeRect(t.caretX(caret.line, caret.col), y, h, adv, t.style(t).CaretShape), true
+	return caretShapeRect(t.caretX(caret.line, caret.col), y, h, adv, leftward, t.style(t).CaretShape), true
 }
 
 // RestartBlink implements CaretBlinker.

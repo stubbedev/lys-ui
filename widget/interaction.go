@@ -149,19 +149,36 @@ func gateTouchAxis(w Widget, dx, dy *float64) {
 // the caret sits past the text's end.
 const caretWidth = 8
 
-// caretShapeRect is the caret's rect in its CSS shape: the 2px bar,
-// the block as wide as the cluster past the caret, the underscore
-// along the text area's bottom. adv is that cluster's width, 0 past
-// the end.
-func caretShapeRect(x, y, h, adv int, shape style.CaretShape) render.Rect {
+// caretCluster is the width of the cluster past caret on sh, 0 past
+// the line's end, and whether it lies left of the caret: a right-to-left
+// cluster, or past the end a right-to-left line.
+func caretCluster(sh *render.ShapedText, buf [][2]float64, caret int) (adv int, leftward bool) {
+	bands := sh.AppendCaretBands(buf, caret, caret+1)
+	if len(bands) == 0 {
+		return 0, sh.RTL()
+	}
+	band := bands[len(bands)-1]
+	return int(band[1] - band[0] + 0.5), band[0]+band[1] < 2*sh.CaretX(caret)
+}
+
+// caretShapeRect is the caret's rect in its CSS shape at x, on the side
+// of x the cluster past the caret lies: the 2px bar, the block as wide
+// as that cluster, the underscore along the text area's bottom. adv is
+// that cluster's width, 0 past the end.
+func caretShapeRect(x, y, h, adv int, leftward bool, shape style.CaretShape) render.Rect {
+	var r render.Rect
 	switch shape {
 	case style.CaretBlock:
-		return render.Rect{X: x, Y: y, W: max(adv, 2), H: h}
+		r = render.Rect{X: x, Y: y, W: max(adv, 2), H: h}
 	case style.CaretUnderscore:
-		return render.Rect{X: x, Y: y + h - 2, W: max(adv, caretWidth), H: 2}
+		r = render.Rect{X: x, Y: y + h - 2, W: max(adv, caretWidth), H: 2}
 	default:
-		return render.Rect{X: x, Y: y, W: 2, H: h}
+		r = render.Rect{X: x, Y: y, W: 2, H: h}
 	}
+	if leftward {
+		r.X -= r.W
+	}
+	return r
 }
 
 // editableText reports whether w is a text field the user can edit

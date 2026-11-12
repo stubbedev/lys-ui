@@ -1324,14 +1324,9 @@ func (e *Entry) caretRect(sh *render.ShapedText) (render.Rect, bool) {
 	if caret < 0 || !e.focused || e.caretHidden {
 		return render.Rect{}, false
 	}
-	adv := 0
-	if caret < len(e.runes) {
-		for _, band := range sh.AppendCaretBands(e.bands[:0], caret, caret+1) {
-			adv = int(band[1] - band[0] + 0.5)
-		}
-	}
+	adv, leftward := caretCluster(sh, e.bands[:0], caret)
 	y, h := caretExtents(sh, e.baseline(sh, e.contentRect()))
-	return caretShapeRect(e.caretX(sh, caret), y, h, adv, e.style(e).CaretShape), true
+	return caretShapeRect(e.caretX(sh, caret), y, h, adv, leftward, e.style(e).CaretShape), true
 }
 
 // RestartBlink implements CaretBlinker.
