@@ -3,7 +3,6 @@ package clipboard
 import (
 	"bytes"
 	"errors"
-	"io"
 	"os"
 	"syscall"
 	"testing"
@@ -238,13 +237,9 @@ func TestSendDeadlineEndsAStuckConsumer(t *testing.T) {
 	shortTransferTimeout(t)
 	c := testClipboard(t)
 	c.content = transfer.Text(string(bytes.Repeat([]byte("p"), 1<<20)))
-	r, w := fdtest.RawPipe(t)
-	defer r.Close()
-	c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: w})
-	data, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
-	}
+	data := fdtest.Receive(t, func(w uintptr) {
+		c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: transfer.MimeText, Fd: w})
+	})
 	if len(data) == 0 {
 		t.Error("the consumer read nothing before EOF")
 	}

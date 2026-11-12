@@ -434,23 +434,7 @@ func TestAPrimaryClaimDoesNotMarkClipboardOffersOwn(t *testing.T) {
 // sendSync plays a receiver asking for mime and returns what it got.
 func sendSync(t *testing.T, d *Device, src wireSource, mime string) string {
 	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer r.Close()
-	fd, err := syscall.Dup(int(w.Fd()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = w.Close()
-	d.send(src, mime, uintptr(fd), nil)
-	_ = r.SetReadDeadline(time.Now().Add(10 * time.Second))
-	got, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatalf("receiver read: %v", err)
-	}
-	return string(got)
+	return string(fdtest.Receive(t, func(w uintptr) { d.send(src, mime, w, nil) }))
 }
 
 func TestAClaimServesItsPayloadPerMime(t *testing.T) {

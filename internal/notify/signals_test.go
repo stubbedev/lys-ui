@@ -52,25 +52,6 @@ func receive[T any](t *testing.T, ch <-chan T, what string) T {
 	panic("unreachable")
 }
 
-func awaitOne[T any](t *testing.T, got chan T, emit func()) T {
-	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		emit()
-		for range 2000 {
-			select {
-			case v := <-got:
-				return v
-			default:
-				runtime.Gosched()
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("the broadcast signal never reached the notifier")
-	panic("unreachable")
-}
-
 func TestClassicBroadcastSignalsArrive(t *testing.T) {
 	bus := dbustest.Session(t)
 	conn := bus.Conn(t)
@@ -86,20 +67,17 @@ func TestClassicBroadcastSignalsArrive(t *testing.T) {
 	n.OnClosed(func(_ string, reason CloseReason) { closes <- reason })
 	id := n.Notify(Notification{Title: "t"})
 	receive(t, d.sent, "the Notify call at the daemon")
-	got := awaitOne(t, actions, func() {
-		if err := conn.Emit(classicPath, classicActionInvoked.Name(), uint32(7), "open"); err != nil {
-			t.Error(err)
-		}
-	})
-	if got != id+"/open" {
+	awaitClassicID(t, n, 7, true, "the notifier never took the daemon's reply id 7")
+	if err := conn.Emit(classicPath, classicActionInvoked.Name(), uint32(7), "open"); err != nil {
+		t.Fatal(err)
+	}
+	if got := receive(t, actions, "the daemon's ActionInvoked"); got != id+"/open" {
 		t.Errorf("action = %q, want %q", got, id+"/open")
 	}
-	reason := awaitOne(t, closes, func() {
-		if err := conn.Emit(classicPath, classicNotificationClosed.Name(), uint32(7), uint32(ReasonDismissed)); err != nil {
-			t.Error(err)
-		}
-	})
-	if reason != ReasonDismissed {
+	if err := conn.Emit(classicPath, classicNotificationClosed.Name(), uint32(7), uint32(ReasonDismissed)); err != nil {
+		t.Fatal(err)
+	}
+	if reason := receive(t, closes, "the daemon's NotificationClosed"); reason != ReasonDismissed {
 		t.Errorf("reason = %d", reason)
 	}
 }
@@ -118,12 +96,10 @@ func TestPortalBroadcastSignalsArrive(t *testing.T) {
 	n.OnAction(func(id, action string) { actions <- id + "/" + action })
 	id := n.Notify(Notification{Title: "t"})
 	receive(t, d.sent, "the Notify call at the daemon")
-	got := awaitOne(t, actions, func() {
-		if err := conn.Emit(portalPath, portalActionInvoked.Name(), id, "open", []dbus.Variant{}); err != nil {
-			t.Error(err)
-		}
-	})
-	if got != id+"/open" {
+	if err := conn.Emit(portalPath, portalActionInvoked.Name(), id, "open", []dbus.Variant{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := receive(t, actions, "the portal's ActionInvoked"); got != id+"/open" {
 		t.Errorf("action = %q, want %q", got, id+"/open")
 	}
 }
@@ -193,13 +169,8 @@ func TestSignalsCloseTheirDescriptors(t *testing.T) {
 	}
 	await := func(want string) {
 		t.Helper()
-		select {
-		case got := <-actions:
-			if got != want {
-				t.Fatalf("action %q, want %q", got, want)
-			}
-		case <-time.After(3 * time.Second):
-			t.Fatalf("the daemon's ActionInvoked %q never arrived", want)
+		if got := receive(t, actions, "the daemon's ActionInvoked "+strconv.Quote(want)); got != want {
+			t.Fatalf("action %q, want %q", got, want)
 		}
 	}
 	emit(conn, "warm")

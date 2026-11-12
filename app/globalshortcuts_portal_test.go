@@ -51,7 +51,7 @@ func TestPortalShortcutsFireTheLiveShortcut(t *testing.T) {
 // A Response with a non-zero code is the user's denial.
 func TestPortalDenialIsErrGlobalShortcutDenied(t *testing.T) {
 	a, _, m := shortcutApp(t)
-	close(m.hold)
+	m.release()
 	var (
 		err      error
 		answered bool
@@ -82,6 +82,7 @@ const (
 type mockShortcuts struct {
 	d       *mockDesktop
 	hold    chan struct{}
+	release func()
 	entered chan struct{}
 	binds   atomic.Int32
 	mu      sync.Mutex
@@ -118,13 +119,15 @@ func (m *mockShortcuts) BindShortcuts(msg dbus.Message, sender dbus.Sender, _ db
 func shortcutApp(t *testing.T) (*Application, *mockDesktop, *mockShortcuts) {
 	t.Helper()
 	d := startMockDesktop(t)
-	m := &mockShortcuts{d: d, hold: make(chan struct{}), entered: make(chan struct{}, 8)}
+	hold := make(chan struct{})
+	m := &mockShortcuts{d: d, hold: hold, release: sync.OnceFunc(func() { close(hold) }), entered: make(chan struct{}, 8)}
 	if err := d.conn.Export(m, "/org/freedesktop/portal/desktop", portalShortcutsIface); err != nil {
 		t.Fatal(err)
 	}
 	a := testApp(nil)
 	a.sess = &wlsession.Session{}
 	t.Cleanup(a.shortcuts.shutdown)
+	t.Cleanup(m.release)
 	return a, d, m
 }
 
@@ -142,16 +145,12 @@ func TestRegisterGlobalShortcutReturnsWhileThePortalIsStuck(t *testing.T) {
 		}, func(s *GlobalShortcut, e error) { got, err, answered = s, e, true })
 	})
 	a.pump(time.Now())
-	select {
-	case <-m.entered:
-	case <-time.After(10 * time.Second):
-		t.Fatal("the worker never reached the portal")
-	}
+	await(t, m.entered, "the worker reaching the portal")
 	a.pump(time.Now())
 	if answered || m.binds.Load() != 0 {
 		t.Fatalf("answered %v with %d binds while the portal held the session", answered, m.binds.Load())
 	}
-	close(m.hold)
+	m.release()
 	pumpUntil(t, a, func() bool { return answered })
 	if err != nil || got == nil {
 		t.Fatalf("registration = %v, %v", got, err)
@@ -174,22 +173,14 @@ func TestRegisterGlobalShortcutReturnsWhileThePortalIsStuck(t *testing.T) {
 
 func TestGlobalShortcutsAvailableAsksOffTheLoop(t *testing.T) {
 	a, _, _ := shortcutApp(t)
-	held := make(chan struct{})
-	entered := make(chan struct{})
-	if !a.shortcuts.post(a, func() {
-		close(entered)
-		<-held
-	}) {
-		t.Fatal("the worker refused the holding job")
-	}
-	<-entered
+	release := holdWorker(t, func(job func()) bool { return a.shortcuts.post(a, job) })
 	var up, answered bool
 	a.GlobalShortcutsAvailable(func(v bool) { up, answered = v, true })
 	a.pump(time.Now())
 	if answered {
 		t.Fatal("answered while the worker was held")
 	}
-	close(held)
+	release()
 	pumpUntil(t, a, func() bool { return answered })
 	if !up {
 		t.Error("the mock portal owns its name, want available")
@@ -198,14 +189,7 @@ func TestGlobalShortcutsAvailableAsksOffTheLoop(t *testing.T) {
 
 func TestRegisterGlobalShortcutBusyBehindAStuckPortal(t *testing.T) {
 	a, _, _ := shortcutApp(t)
-	held := make(chan struct{})
-	defer close(held)
-	entered := make(chan struct{})
-	a.shortcuts.post(a, func() {
-		close(entered)
-		<-held
-	})
-	<-entered
+	holdWorker(t, func(job func()) bool { return a.shortcuts.post(a, job) })
 	for a.shortcuts.post(a, func() {}) {
 	}
 	var got error

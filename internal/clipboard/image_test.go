@@ -7,7 +7,6 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
-	"io"
 	"testing"
 
 	"github.com/stubbedev/lys-lib/third_party/wayland/wl"
@@ -54,11 +53,8 @@ func TestImageSendByMime(t *testing.T) {
 	c := testClipboard(t)
 	c.content = content
 	send := func(mime string) []byte {
-		r, w := fdtest.RawPipe(t)
-		defer r.Close()
-		c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: mime, Fd: w})
-		data, _ := io.ReadAll(r)
-		return data
+		t.Helper()
+		return fdtest.Receive(t, func(w uintptr) { c.HandleDataSourceSend(wl.DataSourceSendEvent{MimeType: mime, Fd: w}) })
 	}
 	var want bytes.Buffer
 	if err := png.Encode(&want, img); err != nil {

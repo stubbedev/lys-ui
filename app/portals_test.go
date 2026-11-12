@@ -274,24 +274,37 @@ func TestSessionStateChangesReachTheLoopAndQueryEndIsAnswered(t *testing.T) {
 	}
 }
 
-func stuckPortals(t *testing.T, a *Application) (release func()) {
+const portalPatience = 10 * time.Second
+
+func await(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(portalPatience):
+		t.Fatalf("%s did not happen within %v", what, portalPatience)
+	}
+}
+
+func holdWorker(t *testing.T, post func(func()) bool) (release func()) {
 	t.Helper()
 	held, entered := make(chan struct{}), make(chan struct{})
-	if !a.desktop().queue.Post(func() {
+	release = sync.OnceFunc(func() { close(held) })
+	if !post(func() {
 		close(entered)
 		<-held
 	}) {
 		t.Fatal("the worker refused the holding job")
 	}
-	<-entered
-	return sync.OnceFunc(func() { close(held) })
+	t.Cleanup(release)
+	await(t, entered, "the worker taking the holding job")
+	return release
 }
 
 func TestPortalCallsReturnWhileThePortalIsStuck(t *testing.T) {
 	d := startMockDesktop(t)
 	a := testApp(nil)
 	defer a.desktop().close()
-	release := stuckPortals(t, a)
+	release := holdWorker(t, a.desktop().queue.Post)
 	defer release()
 	var answers []string
 	a.Invoke(func() {
@@ -376,7 +389,7 @@ func TestPortalBusyWhenTheQueueIsFull(t *testing.T) {
 	a := testApp(nil)
 	d := a.desktop()
 	defer d.close()
-	release := stuckPortals(t, a)
+	release := holdWorker(t, a.desktop().queue.Post)
 	defer release()
 	for d.queue.Post(func() {}) {
 	}

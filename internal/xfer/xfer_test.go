@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/stubbedev/lys-ui/internal/fdtest"
 )
 
 // peerStream plays the foreign client at the far end of a transfer
@@ -142,54 +144,29 @@ func TestReadTimesOutOnASilentPeer(t *testing.T) {
 	}
 }
 
-// rawPipe creates a pipe the Go runtime has never seen: both ends are
-// plain blocking descriptors, like the dup the compositor hands a
-// source client. DeadlineWriter relies on being the first to register
-// the descriptor with the runtime poller, which an os.Pipe end already
-// is.
-func rawPipe(t *testing.T) (r, w *os.File) {
-	t.Helper()
-	var fds [2]int
-	if err := syscall.Pipe2(fds[:], 0); err != nil {
-		t.Fatal(err)
-	}
-	r = os.NewFile(uintptr(fds[0]), "test-raw-pipe-r")
-	w = os.NewFile(uintptr(fds[1]), "test-raw-pipe-w")
-	t.Cleanup(func() {
-		_ = r.Close()
-		_ = w.Close()
-	})
-	return r, w
-}
-
 func TestDeadlineWriterDeliversAndCloses(t *testing.T) {
-	r, w := rawPipe(t)
-
-	f, err := DeadlineWriter(w.Fd(), 5*time.Second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := io.WriteString(f, "payload"); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	buf := make([]byte, 64)
-	n, _ := r.Read(buf)
-	if string(buf[:n]) != "payload" {
-		t.Errorf("consumer read %q, want the payload", buf[:n])
-	}
-	if _, err := r.Read(buf); err == nil {
-		t.Error("write end still open after Close: the consumer would never see EOF")
+	got := fdtest.Receive(t, func(w uintptr) {
+		f, err := DeadlineWriter(w, 5*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(f, "payload"); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if string(got) != "payload" {
+		t.Errorf("consumer read %q, want the payload", got)
 	}
 }
 
 func TestDeadlineWriterCutsOffAConsumerThatNeverReads(t *testing.T) {
-	_, w := rawPipe(t) // the read end is never touched
+	r, w := fdtest.RawPipe(t) // the read end is never touched
+	defer r.Close()
 
-	f, err := DeadlineWriter(w.Fd(), 100*time.Millisecond)
+	f, err := DeadlineWriter(w, 100*time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,10 +189,10 @@ func TestDeadlineWriterCutsOffAConsumerThatNeverReads(t *testing.T) {
 }
 
 func TestDeadlineWriterEndsOnEPIPE(t *testing.T) {
-	r, w := rawPipe(t)
+	r, w := fdtest.RawPipe(t)
 	r.Close() // the consumer hung up before reading
 
-	f, err := DeadlineWriter(w.Fd(), 5*time.Second)
+	f, err := DeadlineWriter(w, 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,46 +256,37 @@ func TestTransfersBoundAndStop(t *testing.T) {
 func TestRefusedSendClosesTheDescriptor(t *testing.T) {
 	var tr Transfers
 	tr.Stop()
-	r, w := rawPipe(t)
-	wfd, err := syscall.Dup(int(w.Fd()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	err = tr.Send(uintptr(wfd), time.Hour, func(io.Writer) error { return nil }, func(error) {})
-	if !errors.Is(err, ErrStopped) {
-		t.Fatalf("send after Stop = %v, want ErrStopped", err)
-	}
-	if n, err := r.Read(make([]byte, 1)); n != 0 || !errors.Is(err, io.EOF) {
-		t.Errorf("consumer read %d bytes, %v; want EOF", n, err)
+	got := fdtest.Receive(t, func(w uintptr) {
+		err := tr.Send(w, time.Hour, func(io.Writer) error { return nil }, func(error) {})
+		if !errors.Is(err, ErrStopped) {
+			t.Fatalf("send after Stop = %v, want ErrStopped", err)
+		}
+	})
+	if len(got) != 0 {
+		t.Errorf("consumer read %q from a refused send, want EOF", got)
 	}
 }
 
 func TestSendRunsOffTheCaller(t *testing.T) {
 	var tr Transfers
-	r, w := rawPipe(t)
-	wfd, err := syscall.Dup(int(w.Fd()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
+	defer tr.Stop()
 	release := make(chan struct{})
-	err = tr.Send(uintptr(wfd), time.Hour, func(w io.Writer) error {
-		<-release
-		_, err := w.Write([]byte("late"))
-		return err
-	}, func(err error) { t.Errorf("send: %v", err) })
-	if err != nil {
-		t.Fatal(err)
+	data := fdtest.Receive(t, func(w uintptr) {
+		err := tr.Send(w, time.Hour, func(w io.Writer) error {
+			select {
+			case <-release:
+			case <-time.After(10 * time.Second):
+				return errors.New("the send was still waiting for its release after 10s: Send ran on its caller")
+			}
+			_, err := w.Write([]byte("late"))
+			return err
+		}, func(err error) { t.Errorf("send: %v", err) })
+		if err != nil {
+			t.Fatal(err)
+		}
+		close(release)
+	})
+	if string(data) != "late" {
+		t.Errorf("consumer read %q, want the late write", data)
 	}
-	close(release)
-	data, err := io.ReadAll(r)
-	if err != nil || string(data) != "late" {
-		t.Errorf("consumer read %q, %v", data, err)
-	}
-	tr.Stop()
 }

@@ -94,12 +94,17 @@ func awaitReceive(t *testing.T, c *Controller, offer offerAPI, mime string) rece
 	t.Helper()
 	ch := make(chan receiveResult, 1)
 	c.receive(offer, mime, func(data []byte, err error) { ch <- receiveResult{data, err} })
+	return awaitDelivery(t, ch, "the drop payload")
+}
+
+func awaitDelivery[T any](t *testing.T, ch <-chan T, what string) T {
+	t.Helper()
 	select {
-	case r := <-ch:
-		return r
+	case v := <-ch:
+		return v
 	case <-time.After(10 * time.Second):
-		t.Fatal("the drop payload never delivered")
-		return receiveResult{}
+		t.Fatalf("%s never delivered", what)
+		panic("unreachable")
 	}
 }
 
@@ -172,7 +177,7 @@ func TestDropReturnsBeforeASilentSource(t *testing.T) {
 	default:
 	}
 	c.Stop()
-	if err := <-delivered; err == nil {
+	if err := awaitDelivery(t, delivered, "the stopped drop's result"); err == nil {
 		t.Error("a stopped transfer delivered no error")
 	}
 	if offer.finished != 0 {
