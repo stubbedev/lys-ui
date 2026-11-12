@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: stubbedev/lys-ci/.github/actions/nix-setup@bf3da3ebd3253f33f2f7696b4284986772da635f
+      - uses: stubbedev/lys-ci/.github/actions/nix-setup@fc87539c0a5bd989cfc802c6112ad31a6daf8db4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: formatting + golangci-lint
@@ -65,7 +65,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: stubbedev/lys-ci/.github/actions/nix-setup@bf3da3ebd3253f33f2f7696b4284986772da635f
+      - uses: stubbedev/lys-ci/.github/actions/nix-setup@fc87539c0a5bd989cfc802c6112ad31a6daf8db4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: formatting gate
@@ -100,7 +100,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: stubbedev/lys-ci/.github/actions/nix-setup@bf3da3ebd3253f33f2f7696b4284986772da635f
+      - uses: stubbedev/lys-ci/.github/actions/nix-setup@fc87539c0a5bd989cfc802c6112ad31a6daf8db4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Race detector gate
@@ -123,7 +123,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: stubbedev/lys-ci/.github/actions/nix-setup@bf3da3ebd3253f33f2f7696b4284986772da635f
+      - uses: stubbedev/lys-ci/.github/actions/nix-setup@fc87539c0a5bd989cfc802c6112ad31a6daf8db4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Nix package (vendorHash, sandboxed build and tests)
@@ -142,7 +142,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: stubbedev/lys-ci/.github/actions/nix-setup@bf3da3ebd3253f33f2f7696b4284986772da635f
+      - uses: stubbedev/lys-ci/.github/actions/nix-setup@fc87539c0a5bd989cfc802c6112ad31a6daf8db4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Hyprland compositor-in-the-loop gate (private VM)
