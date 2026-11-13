@@ -3,7 +3,7 @@ module github.com/stubbedev/lys-ui
 go 1.27.4
 
 require (
-	github.com/stubbedev/lys-lib v0.3.22-0.20261113170333-4bcfdbc3aa6e
+	github.com/stubbedev/lys-lib v0.3.22-0.20261113172706-c588c8a0edf8
 	github.com/stubbedev/memory-go v0.5.0
 	golang.org/x/image v0.47.0
 	golang.org/x/sys v0.49.0

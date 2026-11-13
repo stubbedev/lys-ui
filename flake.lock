@@ -106,11 +106,11 @@
         "nixpkgs-mesa": "nixpkgs-mesa"
       },
       "locked": {
-        "lastModified": 1794589413,
-        "narHash": "sha256-6ZFqwM8meLhRZSj9EhpBtVVl1upiTr62N+ElJlWRONA=",
+        "lastModified": 1794590826,
+        "narHash": "sha256-ARfAEwobl09V18/7QrIdKy1r/iv6e7/jrheqhmERcR0=",
         "owner": "stubbedev",
         "repo": "lys-lib",
-        "rev": "4bcfdbc3aa6e37450b029e95e0b3bf2a40bed311",
+        "rev": "c588c8a0edf8bbfe9fa021a31003acdbc5f0a380",
         "type": "github"
       },
       "original": {
